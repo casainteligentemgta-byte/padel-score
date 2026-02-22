@@ -1,0 +1,123 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum TournamentType {
+  AMERICANO_INDIVIDUAL
+  AMERICANO_DUPLA
+  KNOCKOUT
+  ROUND_ROBIN
+}
+
+enum TournamentCategory {
+  MALE
+  FEMALE
+  MIXED
+  PRIMERA
+  SEGUNDA
+  TERCERA
+  CUARTA
+  QUINTA
+  SEXTA
+  SEPTIMA
+  MAS_45
+  SUMA_7
+  SUMA_8
+  SUMA_9
+  SUMA_10
+  SUMA_11
+}
+
+enum MatchStatus {
+  PENDING
+  LIVE
+  FINISHED
+  CANCELLED
+}
+
+model Complex {
+  id          String   @id @default(uuid())
+  name        String
+  location    String
+  totalCourts Int          @map("total_courts")
+  courts      Court[]
+  tournaments Tournament[]
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  @@map("complexes")
+}
+
+model Court {
+  id        String   @id @default(uuid())
+  complexId String   @map("complex_id")
+  name      String
+  complex   Complex  @relation(fields: [complexId], references: [id])
+  matches   Match[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("courts")
+}
+
+model Tournament {
+  id             String             @id @default(uuid())
+  name           String
+  type           TournamentType
+  category       TournamentCategory
+  startDate      DateTime           @map("start_date")
+  endDate        DateTime           @map("end_date")
+  clubHoursStart String             @map("club_hours_start")
+  clubHoursEnd   String             @map("club_hours_end")
+  bufferMinutes  Int                @default(15) @map("buffer_minutes")
+  complexId      String?            @map("complex_id")
+  complex        Complex?           @relation(fields: [complexId], references: [id])
+  matches        Match[]
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  @@map("tournaments")
+}
+
+model Team {
+  id        String   @id @default(uuid())
+  player1Id String   @map("player1_id")
+  player2Id String   @map("player2_id")
+  level     Float
+  matches1  Match[]  @relation("Team1")
+  matches2  Match[]  @relation("Team2")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("teams")
+}
+
+model Match {
+  id            String      @id @default(uuid())
+  tournamentId  String      @map("tournament_id")
+  courtId       String      @map("court_id")
+  team1Id       String      @map("team1_id")
+  team2Id       String      @map("team2_id")
+  scheduledTime DateTime    @map("scheduled_time")
+  status        MatchStatus @default(PENDING)
+  score         String?
+  actualStartTime DateTime? @map("actual_start_time")
+  actualEndTime   DateTime? @map("actual_end_time")
+  tournament    Tournament  @relation(fields: [tournamentId], references: [id])
+  court         Court       @relation(fields: [courtId], references: [id])
+  team1         Team        @relation("Team1", fields: [team1Id], references: [id])
+  team2         Team        @relation("Team2", fields: [team2Id], references: [id])
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  @@map("matches")
+}
