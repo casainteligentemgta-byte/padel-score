@@ -14,7 +14,8 @@ import {
     Home,
     Shield,
     Monitor,
-    LayoutDashboard
+    LayoutDashboard,
+    Megaphone
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -28,15 +29,15 @@ export default function Sidebar() {
     const menuItems = [
         { name: 'Inicio', href: '/', icon: Home },
         { name: 'Torneos', href: '/tournaments', icon: Trophy },
-        { name: 'Agentes AI', href: '/agents', icon: Sparkles },
-        { name: 'Agregar Jugador', href: '/players/register', icon: UserPlus },
-        { name: 'Jugadores', href: '/players', icon: Users },
-        { name: 'Screen Padel', href: '/admin/monitor', icon: Monitor },
     ];
 
     const adminItems = [
-        { name: 'Jugadores (Master)', href: '/players', icon: Users },
-        { name: 'Monitor Canchas', href: '/admin/monitor', icon: Monitor }, // Nuevo item
+        { name: 'Generador Maestro', href: '/admin/master-generator', icon: Sparkles },
+        { name: 'Agentes AI', href: '/agents', icon: Sparkles },
+        { name: 'Agregar Jugador', href: '/players/register', icon: UserPlus },
+        { name: 'Jugadores', href: '/players', icon: Users },
+        { name: 'Publicidad', href: '/admin/ads', icon: Megaphone },
+        { name: 'Monitor Canchas', href: '/admin/monitor', icon: Monitor },
         { name: 'Gestión Usuarios', href: '/admin/users', icon: Settings },
         { name: 'Vigilancia (Logs)', href: '/admin/logs', icon: Shield },
     ];
