@@ -24,7 +24,7 @@ import { useAuth } from '@/lib/AuthContext';
 export default function RefereeScoreboard({ params }: { params: Promise<{ id: string, matchId: string }> }) {
     const { id, matchId } = use(params);
     const router = useRouter();
-    const { user, authLoading } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const [tournament, setTournament] = useState<any>(null);
     const [match, setMatch] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -279,11 +279,23 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         <div className="flex flex-col items-center gap-4">
                             <div
                                 onClick={toggleServingTeam}
-                                className={`relative w-28 h-28 rounded-full border-4 transition-all duration-500 cursor-pointer overflow-hidden ${server.team === 1 && server.player === 1 ? 'border-padel-primary shadow-[0_0_30px_#ccff0033]' : 'border-white/5 opacity-40 hover:opacity-100'}`}
+                                className={`relative w-28 h-28 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 1 && server.player === 1 ? 'border-padel-primary scale-110 shadow-[0_0_40px_rgba(204,255,0,0.4)] z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
                             >
-                                <img src={match.team1.p1Photo || `https://ui-avatars.com/api/?name=${match.team1.p1}&background=222&color=fff`} className="w-full h-full object-cover" />
+                                <div className="w-full h-full rounded-full overflow-hidden">
+                                    <img src={match.team1.p1Photo || `https://ui-avatars.com/api/?name=${match.team1.p1}&background=222&color=fff`} className="w-full h-full object-cover" />
+                                </div>
                                 {server.team === 1 && server.player === 1 && (
-                                    <div className="absolute inset-0 bg-padel-primary/10 animate-pulse" />
+                                    <>
+                                        <div className="absolute inset-0 bg-padel-primary/10 animate-pulse rounded-full" />
+                                        <motion.div
+                                            animate={{ y: [0, -8, 0], scale: [1, 0.9, 1] }}
+                                            transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }}
+                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 bg-padel-primary rounded-full shadow-[0_5px_15px_rgba(204,255,0,0.6)] flex items-center justify-center border-4 border-black z-30 overflow-hidden"
+                                        >
+                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 rotate-45" />
+                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 -rotate-45" />
+                                        </motion.div>
+                                    </>
                                 )}
                             </div>
                             <div className="text-center">
@@ -298,11 +310,23 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         <div className="flex flex-col items-center gap-4">
                             <div
                                 onClick={toggleServingTeam}
-                                className={`relative w-28 h-28 rounded-full border-4 transition-all duration-500 cursor-pointer overflow-hidden ${server.team === 1 && server.player === 2 ? 'border-padel-primary shadow-[0_0_30px_#ccff0033]' : 'border-white/5 opacity-40 hover:opacity-100'}`}
+                                className={`relative w-28 h-28 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 1 && server.player === 2 ? 'border-padel-primary scale-110 shadow-[0_0_40px_rgba(204,255,0,0.4)] z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
                             >
-                                <img src={match.team1.p2Photo || `https://ui-avatars.com/api/?name=${match.team1.p2}&background=222&color=fff`} className="w-full h-full object-cover" />
+                                <div className="w-full h-full rounded-full overflow-hidden">
+                                    <img src={match.team1.p2Photo || `https://ui-avatars.com/api/?name=${match.team1.p2}&background=222&color=fff`} className="w-full h-full object-cover" />
+                                </div>
                                 {server.team === 1 && server.player === 2 && (
-                                    <div className="absolute inset-0 bg-padel-primary/10 animate-pulse" />
+                                    <>
+                                        <div className="absolute inset-0 bg-padel-primary/10 animate-pulse rounded-full" />
+                                        <motion.div
+                                            animate={{ y: [0, -8, 0], scale: [1, 0.9, 1] }}
+                                            transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }}
+                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 bg-padel-primary rounded-full shadow-[0_5px_15px_rgba(204,255,0,0.6)] flex items-center justify-center border-4 border-black z-30 overflow-hidden"
+                                        >
+                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 rotate-45" />
+                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 -rotate-45" />
+                                        </motion.div>
+                                    </>
                                 )}
                             </div>
                             <div className="text-center">
@@ -374,11 +398,23 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         <div className="flex flex-col items-center gap-4">
                             <div
                                 onClick={toggleServingTeam}
-                                className={`relative w-28 h-28 rounded-full border-4 transition-all duration-500 cursor-pointer overflow-hidden ${server.team === 2 && server.player === 1 ? 'border-padel-primary shadow-[0_0_30px_#ccff0033]' : 'border-white/5 opacity-40 hover:opacity-100'}`}
+                                className={`relative w-28 h-28 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 2 && server.player === 1 ? 'border-padel-primary scale-110 shadow-[0_0_40px_rgba(204,255,0,0.4)] z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
                             >
-                                <img src={match.team2.p1Photo || `https://ui-avatars.com/api/?name=${match.team2.p1}&background=222&color=fff`} className="w-full h-full object-cover" />
+                                <div className="w-full h-full rounded-full overflow-hidden">
+                                    <img src={match.team2.p1Photo || `https://ui-avatars.com/api/?name=${match.team2.p1}&background=222&color=fff`} className="w-full h-full object-cover" />
+                                </div>
                                 {server.team === 2 && server.player === 1 && (
-                                    <div className="absolute inset-0 bg-padel-primary/10 animate-pulse" />
+                                    <>
+                                        <div className="absolute inset-0 bg-padel-primary/10 animate-pulse rounded-full" />
+                                        <motion.div
+                                            animate={{ y: [0, -8, 0], scale: [1, 0.9, 1] }}
+                                            transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }}
+                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 bg-padel-primary rounded-full shadow-[0_5px_15px_rgba(204,255,0,0.6)] flex items-center justify-center border-4 border-black z-30 overflow-hidden"
+                                        >
+                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 rotate-45" />
+                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 -rotate-45" />
+                                        </motion.div>
+                                    </>
                                 )}
                             </div>
                             <div className="text-center">
@@ -393,11 +429,23 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         <div className="flex flex-col items-center gap-4">
                             <div
                                 onClick={toggleServingTeam}
-                                className={`relative w-28 h-28 rounded-full border-4 transition-all duration-500 cursor-pointer overflow-hidden ${server.team === 2 && server.player === 2 ? 'border-padel-primary shadow-[0_0_30px_#ccff0033]' : 'border-white/5 opacity-40 hover:opacity-100'}`}
+                                className={`relative w-28 h-28 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 2 && server.player === 2 ? 'border-padel-primary scale-110 shadow-[0_0_40px_rgba(204,255,0,0.4)] z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
                             >
-                                <img src={match.team2.p2Photo || `https://ui-avatars.com/api/?name=${match.team2.p2}&background=222&color=fff`} className="w-full h-full object-cover" />
+                                <div className="w-full h-full rounded-full overflow-hidden">
+                                    <img src={match.team2.p2Photo || `https://ui-avatars.com/api/?name=${match.team2.p2}&background=222&color=fff`} className="w-full h-full object-cover" />
+                                </div>
                                 {server.team === 2 && server.player === 2 && (
-                                    <div className="absolute inset-0 bg-padel-primary/10 animate-pulse" />
+                                    <>
+                                        <div className="absolute inset-0 bg-padel-primary/10 animate-pulse rounded-full" />
+                                        <motion.div
+                                            animate={{ y: [0, -8, 0], scale: [1, 0.9, 1] }}
+                                            transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }}
+                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 bg-padel-primary rounded-full shadow-[0_5px_15px_rgba(204,255,0,0.6)] flex items-center justify-center border-4 border-black z-30 overflow-hidden"
+                                        >
+                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 rotate-45" />
+                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 -rotate-45" />
+                                        </motion.div>
+                                    </>
                                 )}
                             </div>
                             <div className="text-center">

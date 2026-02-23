@@ -613,16 +613,6 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        {canManageTournament && (
-                            <Link
-                                href={`/tournaments/${id}/control`}
-                                target="_blank"
-                                className="flex items-center gap-2 px-4 py-2 bg-padel-primary/10 border border-padel-primary/20 rounded-xl text-padel-primary hover:bg-padel-primary/20 transition-all font-black text-[10px] uppercase italic tracking-widest"
-                            >
-                                <Monitor className="w-4 h-4" />
-                                <span className="hidden sm:inline">Dirección</span>
-                            </Link>
-                        )}
                         <button
                             onClick={() => setIsShareModalOpen(true)}
                             className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
@@ -962,16 +952,31 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                             <div className="flex items-center justify-between gap-4">
                                                                 <div className="flex items-center gap-3 min-w-0 flex-1">
                                                                     <div className="flex gap-1 flex-shrink-0">
-                                                                        <div className="w-11 h-11 rounded-full border border-white/10 overflow-hidden bg-gray-900 shadow-lg">
-                                                                            {match.team1?.photo1 ? <img src={match.team1.photo1} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-600">1</div>}
-                                                                        </div>
-                                                                        <div className="w-11 h-11 rounded-full border border-white/10 overflow-hidden bg-gray-900 shadow-lg">
-                                                                            {match.team1?.photo2 ? <img src={match.team1.photo2} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-600">2</div>}
-                                                                        </div>
+                                                                        {[1, 2].map((pIdx) => {
+                                                                            const isServing = match.status === MatchStatus.LIVE && match.server?.team === 1 && match.server?.player === pIdx;
+                                                                            const photo = pIdx === 1 ? match.team1?.photo1 : match.team1?.photo2;
+                                                                            return (
+                                                                                <div key={pIdx} className={`relative w-11 h-11 rounded-full border transition-all duration-500 ${isServing ? 'border-padel-primary scale-110 shadow-[0_0_15px_rgba(204,255,0,0.5)] z-10' : 'border-white/10 opacity-60'}`}>
+                                                                                    <div className="w-full h-full rounded-full overflow-hidden bg-gray-900 shadow-lg">
+                                                                                        {photo ? <img src={photo} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-600">{pIdx}</div>}
+                                                                                    </div>
+                                                                                    {isServing && (
+                                                                                        <motion.div
+                                                                                            animate={{ y: [0, -4, 0], scale: [1, 0.9, 1] }}
+                                                                                            transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }}
+                                                                                            className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-padel-primary rounded-full shadow-[0_0_8px_#ccff00] z-20 border border-black flex items-center justify-center overflow-hidden"
+                                                                                        >
+                                                                                            <div className="absolute inset-0 border-[0.5px] border-black/10 rounded-full scale-75 rotate-45" />
+                                                                                            <div className="absolute inset-0 border-[0.5px] border-black/10 rounded-full scale-75 -rotate-45" />
+                                                                                        </motion.div>
+                                                                                    )}
+                                                                                </div>
+                                                                            );
+                                                                        })}
                                                                     </div>
                                                                     <div className="flex flex-col min-w-0 leading-none gap-1">
-                                                                        <span className="text-[13px] font-black italic uppercase text-white truncate tracking-tighter">{t1p1}</span>
-                                                                        {t1p2 && <span className="text-[10px] font-bold italic uppercase text-white/30 truncate tracking-tighter">{t1p2}</span>}
+                                                                        <span className="text-[11px] font-black italic uppercase text-white truncate tracking-tighter">{t1p1}</span>
+                                                                        {t1p2 && <span className="text-[9px] font-bold italic uppercase text-white/30 truncate tracking-tighter">{t1p2}</span>}
                                                                     </div>
                                                                 </div>
                                                                 <div className={`text-4xl font-black italic ${match.status === MatchStatus.LIVE || match.status === MatchStatus.FINISHED ? 'text-padel-primary' : 'text-white/10'} flex-shrink-0`}>{match.games?.t1 || 0}</div>
@@ -983,16 +988,31 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                             <div className="flex items-center justify-between gap-4">
                                                                 <div className="flex items-center gap-3 min-w-0 flex-1">
                                                                     <div className="flex gap-1 flex-shrink-0">
-                                                                        <div className="w-11 h-11 rounded-full border border-white/10 overflow-hidden bg-gray-900 shadow-lg">
-                                                                            {match.team2?.photo1 ? <img src={match.team2.photo1} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-600">3</div>}
-                                                                        </div>
-                                                                        <div className="w-11 h-11 rounded-full border border-white/10 overflow-hidden bg-gray-900 shadow-lg">
-                                                                            {match.team2?.photo2 ? <img src={match.team2.photo2} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-600">4</div>}
-                                                                        </div>
+                                                                        {[1, 2].map((pIdx) => {
+                                                                            const isServing = match.status === MatchStatus.LIVE && match.server?.team === 2 && match.server?.player === pIdx;
+                                                                            const photo = pIdx === 1 ? match.team2?.photo1 : match.team2?.photo2;
+                                                                            return (
+                                                                                <div key={pIdx} className={`relative w-11 h-11 rounded-full border transition-all duration-500 ${isServing ? 'border-padel-primary scale-110 shadow-[0_0_15px_rgba(204,255,0,0.5)] z-10' : 'border-white/10 opacity-60'}`}>
+                                                                                    <div className="w-full h-full rounded-full overflow-hidden bg-gray-900 shadow-lg">
+                                                                                        {photo ? <img src={photo} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-600">{pIdx === 1 ? 3 : 4}</div>}
+                                                                                    </div>
+                                                                                    {isServing && (
+                                                                                        <motion.div
+                                                                                            animate={{ y: [0, -4, 0], scale: [1, 0.9, 1] }}
+                                                                                            transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }}
+                                                                                            className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-padel-primary rounded-full shadow-[0_0_8px_#ccff00] z-20 border border-black flex items-center justify-center overflow-hidden"
+                                                                                        >
+                                                                                            <div className="absolute inset-0 border-[0.5px] border-black/10 rounded-full scale-75 rotate-45" />
+                                                                                            <div className="absolute inset-0 border-[0.5px] border-black/10 rounded-full scale-75 -rotate-45" />
+                                                                                        </motion.div>
+                                                                                    )}
+                                                                                </div>
+                                                                            );
+                                                                        })}
                                                                     </div>
                                                                     <div className="flex flex-col min-w-0 leading-none gap-1">
-                                                                        <span className="text-[13px] font-black italic uppercase text-white truncate tracking-tighter">{t2p1}</span>
-                                                                        {t2p2 && <span className="text-[10px] font-bold italic uppercase text-white/30 truncate tracking-tighter">{t2p2}</span>}
+                                                                        <span className="text-[11px] font-black italic uppercase text-white truncate tracking-tighter">{t2p1}</span>
+                                                                        {t2p2 && <span className="text-[9px] font-bold italic uppercase text-white/30 truncate tracking-tighter">{t2p2}</span>}
                                                                     </div>
                                                                 </div>
                                                                 <div className={`text-4xl font-black italic ${match.status === MatchStatus.LIVE || match.status === MatchStatus.FINISHED ? 'text-white/20' : 'text-white/10'} flex-shrink-0`}>{match.games?.t2 || 0}</div>
@@ -1083,12 +1103,21 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                         onClick={() => updateMatchScore(selectedMatch.id, selectedMatch.sets, selectedMatch.games, selectedMatch.points, { team: tIdx as 1 | 2, player: pIdx as 1 | 2 })}
                                                                         className="relative group"
                                                                     >
-                                                                        <div className={`w-12 h-12 rounded-full border-2 overflow-hidden transition-all ${selectedMatch.server?.team === tIdx && selectedMatch.server?.player === pIdx ? 'border-padel-primary scale-110 shadow-[0_0_15px_rgba(204,255,0,0.3)]' : 'border-white/10 opacity-50 gray-scale hover:opacity-100 hover:gray-scale-0'}`}>
-                                                                            <img src={`https://ui-avatars.com/api/?name=P${pIdx}&background=333&color=fff`} className="w-full h-full object-cover" />
+                                                                        <div className={`relative w-12 h-12 rounded-full border-2 transition-all duration-500 ${selectedMatch.server?.team === tIdx && selectedMatch.server?.player === pIdx ? 'border-padel-primary scale-110 shadow-[0_0_15px_rgba(204,255,0,0.3)] z-10' : 'border-white/10 opacity-40 hover:opacity-100 italic'}`}>
+                                                                            <div className="w-full h-full rounded-full overflow-hidden bg-white/5">
+                                                                                <img src={`https://ui-avatars.com/api/?name=P${pIdx}&background=333&color=fff`} className="w-full h-full object-cover" />
+                                                                            </div>
+                                                                            {selectedMatch.server?.team === tIdx && selectedMatch.server?.player === pIdx && (
+                                                                                <motion.div
+                                                                                    animate={{ y: [0, -4, 0], scale: [1, 0.9, 1] }}
+                                                                                    transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }}
+                                                                                    className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-4 bg-padel-primary rounded-full shadow-[0_0_8px_#ccff00] z-20 border-2 border-black flex items-center justify-center overflow-hidden"
+                                                                                >
+                                                                                    <div className="absolute inset-0 border-[0.5px] border-black/10 rounded-full scale-75 rotate-45" />
+                                                                                    <div className="absolute inset-0 border-[0.5px] border-black/10 rounded-full scale-75 -rotate-45" />
+                                                                                </motion.div>
+                                                                            )}
                                                                         </div>
-                                                                        {selectedMatch.server?.team === tIdx && selectedMatch.server?.player === pIdx && (
-                                                                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-padel-primary rounded-full border-2 border-black animate-pulse shadow-[0_0_8px_#ccff00]" />
-                                                                        )}
                                                                     </button>
                                                                 ))}
                                                             </div>

@@ -324,8 +324,21 @@ export default function NewTournamentPage() {
         }
     };
 
-    const nextStep = () => setStep(s => Math.min(s + 1, 6));
-    const prevStep = () => setStep(s => Math.max(s - 1, 1));
+    const nextStep = () => {
+        if (step === 3 && tournamentData.type !== TournamentType.ROUND_ROBIN) {
+            setStep(5);
+        } else {
+            setStep(s => Math.min(s + 1, 7));
+        }
+    };
+
+    const prevStep = () => {
+        if (step === 5 && tournamentData.type !== TournamentType.ROUND_ROBIN) {
+            setStep(3);
+        } else {
+            setStep(s => Math.max(s - 1, 1));
+        }
+    };
 
     const addTeam = () => {
         setTournamentData(prev => ({
@@ -432,32 +445,41 @@ export default function NewTournamentPage() {
                                 Smart <span className="text-white">Padel</span> <span className="text-white text-[10px] opacity-30 tracking-widest ml-1">Studio</span>
                             </h1>
                         </div>
-                        <p className="text-gray-500 mt-1 text-[10px] uppercase font-bold tracking-widest italic">Paso {step}/6 • {step === 2 ? 'Club y Canchas' : tournamentData.name || 'Nuevo Torneo'}</p>
+                        <p className="text-gray-500 mt-1 text-[10px] uppercase font-bold tracking-widest italic">Paso {step}/7 • {step === 2 ? 'Club y Canchas' : step === 4 ? 'Configuración Técnica' : tournamentData.name || 'Nuevo Torneo'}</p>
                     </div>
 
                     <div className="flex items-center gap-4 w-full md:w-auto">
                         <div className="flex gap-2 flex-1 md:w-64">
-                            {[1, 2, 3, 4, 5, 6].map(i => (
-                                <div
-                                    key={i}
-                                    className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${step >= i ? 'bg-padel-primary shadow-[0_0_10px_rgba(204,255,0,0.5)]' : 'bg-white/10'}`}
-                                />
-                            ))}
+                            {[1, 2, 3, 4, 5, 6, 7].map(i => {
+                                let isActive = step >= i;
+                                // Handle visual skip for non-Round Robin
+                                if (tournamentData.type !== TournamentType.ROUND_ROBIN) {
+                                    if (step === 3 && i === 4) isActive = false;
+                                    if (step >= 5 && i === 4) isActive = true;
+                                }
+                                return (
+                                    <div
+                                        key={i}
+                                        className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${isActive ? 'bg-padel-primary shadow-[0_0_10px_rgba(204,255,0,0.5)]' : 'bg-white/10'}`}
+                                    />
+                                );
+                            })}
                         </div>
 
-                        {step > 1 && step < 6 && (step === 2 || step === 4) && (
+                        {step > 1 && step < 7 && (step === 2 || step === 3 || step === 4 || step === 5 || step === 6) && (
                             <motion.button
                                 initial={{ opacity: 0, scale: 0.8 }}
                                 animate={{
-                                    opacity: (step === 2 && tournamentData.courtNames.length === 0) ? 0 : 1,
-                                    scale: (step === 2 && tournamentData.courtNames.length === 0) ? 0.8 : 1,
-                                    display: (step === 2 && tournamentData.courtNames.length === 0) ? 'none' : 'flex'
+                                    opacity: (step === 2 && tournamentData.courtNames.length === 0) || (step === 3 && !tournamentData.type) ? 0 : 1,
+                                    scale: (step === 2 && tournamentData.courtNames.length === 0) || (step === 3 && !tournamentData.type) ? 0.8 : 1,
+                                    display: (step === 2 && tournamentData.courtNames.length === 0) || (step === 3 && !tournamentData.type) ? 'none' : 'flex'
                                 }}
                                 onClick={nextStep}
                                 whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(204,255,0,0.6), 0 0 80px rgba(204,255,0,0.3)', filter: 'brightness(1.1)' }}
                                 whileTap={{ scale: 0.95 }}
                                 disabled={
-                                    (step === 4 && !tournamentData.startDate)
+                                    (step === 5 && !tournamentData.startDate) ||
+                                    (step === 3 && !tournamentData.type)
                                 }
                                 className="flex items-center gap-2 bg-padel-primary text-black px-6 py-2.5 rounded-xl font-black text-xs uppercase italic tracking-tighter transition-all shadow-[0_0_20px_rgba(204,255,0,0.2)] disabled:opacity-50 disabled:grayscale"
                             >
@@ -465,7 +487,7 @@ export default function NewTournamentPage() {
                             </motion.button>
                         )}
 
-                        {step === 6 && (
+                        {step === 7 && (
                             <motion.button
                                 onClick={generateTournament}
                                 whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(204,255,0,0.6), 0 0 80px rgba(204,255,0,0.3)', filter: 'brightness(1.1)' }}
@@ -724,6 +746,8 @@ export default function NewTournamentPage() {
                                             key={type.id}
                                             onClick={() => {
                                                 setTournamentData({ ...tournamentData, type: type.id as any });
+                                                if (type.id === TournamentType.ROUND_ROBIN) setStep(4);
+                                                else setStep(5);
                                             }}
                                             className={`group relative overflow-hidden rounded-3xl border-2 transition-all p-8 flex items-center justify-between gap-6 ${tournamentData.type === type.id
                                                 ? 'border-padel-primary bg-padel-primary/5 shadow-[0_0_30px_rgba(204,255,0,0.1)]'
@@ -755,134 +779,128 @@ export default function NewTournamentPage() {
                                     ))}
                                 </div>
 
-                                {/* Technical Configuration for Round Robin */}
-                                {tournamentData.type === TournamentType.ROUND_ROBIN && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] p-8 space-y-8 shadow-2xl relative overflow-hidden"
-                                    >
-                                        <div className="absolute top-0 right-0 p-8 opacity-5">
-                                            <Trophy className="w-32 h-32 text-padel-primary" />
-                                        </div>
-
-                                        <div className="relative z-10 flex items-center gap-4 border-b border-white/5 pb-6">
-                                            <div className="p-3 bg-padel-primary/20 rounded-xl">
-                                                <Info className="text-padel-primary w-6 h-6" />
-                                            </div>
-                                            <div>
-                                                <h4 className="text-xl font-black italic uppercase text-white tracking-tighter">Panel de Dirección de Competición</h4>
-                                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Configura los reglamentos técnicos del Round Robin</p>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                                            {/* Group Size */}
-                                            <div className="space-y-4">
-                                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Tamaño de Grupos</label>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    {[3, 4].map(size => (
-                                                        <button
-                                                            key={size}
-                                                            onClick={() => setTournamentData({ ...tournamentData, groupSize: size })}
-                                                            className={`py-4 rounded-xl font-black italic text-sm transition-all border ${tournamentData.groupSize === size
-                                                                ? 'bg-padel-primary border-padel-primary text-black'
-                                                                : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
-                                                        >
-                                                            {size} PAREJAS
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                                <p className="text-[8px] text-gray-600 font-bold uppercase leading-tight italic px-1">
-                                                    * El sistema balanceará las parejas sobrantes automáticamente.
-                                                </p>
-                                            </div>
-
-                                            {/* Match Format */}
-                                            <div className="space-y-4">
-                                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Formato de Partido</label>
-                                                <div className="grid grid-cols-1 gap-2">
-                                                    {[
-                                                        { id: 'ONE_SET_6', label: '1 Set (a 6 juegos)' },
-                                                        { id: 'ONE_SET_9', label: '1 Set (a 9 juegos)' },
-                                                        { id: 'TWO_SHORT_SETS', label: '2 Sets Cortos (a 4) + MTB' },
-                                                        { id: 'TWO_NORMAL_SETS', label: '2 Sets Normales (a 6) + MTB' },
-                                                    ].map(format => (
-                                                        <button
-                                                            key={format.id}
-                                                            onClick={() => setTournamentData({ ...tournamentData, matchFormat: format.id as any })}
-                                                            className={`py-3 px-4 rounded-xl font-bold italic text-[10px] text-left transition-all border uppercase tracking-wider ${tournamentData.matchFormat === format.id
-                                                                ? 'bg-padel-primary border-padel-primary text-black'
-                                                                : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
-                                                        >
-                                                            {format.label}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            {/* Scoring System */}
-                                            <div className="space-y-4">
-                                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Sistema de Puntuación</label>
-                                                <div className="grid grid-cols-1 gap-2">
-                                                    {[
-                                                        { id: 'GOLDEN_POINT', label: 'Punto de Oro', desc: 'Sin ventaja en el 40-40' },
-                                                        { id: 'TRADITIONAL', label: 'Ventaja Tradicional', desc: 'Sistema clásico de ventajas' },
-                                                    ].map(sys => (
-                                                        <button
-                                                            key={sys.id}
-                                                            onClick={() => setTournamentData({ ...tournamentData, scoringSystem: sys.id as any })}
-                                                            className={`p-4 rounded-xl text-left transition-all border ${tournamentData.scoringSystem === sys.id
-                                                                ? 'bg-padel-primary border-padel-primary text-black shadow-lg scale-[1.02]'
-                                                                : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
-                                                        >
-                                                            <span className="block font-black italic text-xs uppercase mb-1">{sys.label}</span>
-                                                            <span className={`block text-[8px] font-bold uppercase opacity-60 ${tournamentData.scoringSystem === sys.id ? 'text-black' : 'text-gray-600'}`}>
-                                                                {sys.desc}
-                                                            </span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="pt-6 border-t border-white/5">
-                                            <motion.button
-                                                onClick={() => setStep(4)}
-                                                whileHover={{ scale: 1.01, boxShadow: '0 0 40px rgba(204,255,0,0.5), 0 0 80px rgba(204,255,0,0.2)', filter: 'brightness(1.1)' }}
-                                                whileTap={{ scale: 0.95 }}
-                                                className="w-full py-4 bg-padel-primary text-black rounded-2xl font-black text-xs uppercase italic tracking-widest transition-all shadow-xl shadow-padel-primary/10"
-                                            >
-                                                Siguiente
-                                            </motion.button>
-                                        </div>
-                                    </motion.div>
-                                )}
-
-                                {!tournamentData.type && (
-                                    <div className="h-40 flex items-center justify-center border-2 border-dashed border-white/5 rounded-3xl">
-                                        <p className="text-gray-600 font-black italic uppercase text-[10px] tracking-widest">Selecciona un formato para continuar</p>
-                                    </div>
-                                )}
-
-                                {tournamentData.type && tournamentData.type !== TournamentType.ROUND_ROBIN && (
-                                    <div className="flex justify-center pt-8">
-                                        <motion.button
-                                            onClick={() => setStep(4)}
-                                            whileHover={{ scale: 1.05, boxShadow: '0 0 50px rgba(204,255,0,0.6), 0 0 100px rgba(204,255,0,0.3)', filter: 'brightness(1.1)' }}
-                                            whileTap={{ scale: 0.95 }}
-                                            className="px-12 py-4 bg-padel-primary text-black rounded-2xl font-black text-xs uppercase italic tracking-widest transition-all shadow-xl shadow-padel-primary/10"
-                                        >
-                                            Siguiente
-                                        </motion.button>
-                                    </div>
-                                )}
+                                <div className="h-4 pb-4" />
                             </motion.div>
                         )}
 
                         {step === 4 && (
                             <motion.div
                                 key="step4"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="space-y-6"
+                            >
+                                <div className="text-center space-y-1 mb-4 overflow-hidden relative">
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        className="relative z-10"
+                                    >
+                                        <h3 className="text-[60px] md:text-[100px] font-black italic text-white/[0.03] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap tracking-tighter leading-none select-none pointer-events-none uppercase">
+                                            REGLAMENTO
+                                        </h3>
+                                        <h2 className="text-3xl font-black italic tracking-tighter uppercase text-white relative z-10">
+                                            Paso 4: <span className="text-padel-primary">Configuración Técnica</span>
+                                        </h2>
+                                    </motion.div>
+                                </div>
+
+                                <motion.div
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] p-8 space-y-8 shadow-2xl relative overflow-hidden"
+                                >
+                                    <div className="absolute top-0 right-0 p-8 opacity-5">
+                                        <Trophy className="w-32 h-32 text-padel-primary" />
+                                    </div>
+
+                                    <div className="relative z-10 flex items-center gap-4 border-b border-white/5 pb-6">
+                                        <div className="p-3 bg-padel-primary/20 rounded-xl">
+                                            <Info className="text-padel-primary w-6 h-6" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xl font-black italic uppercase text-white tracking-tighter">Panel de Dirección de Competición</h4>
+                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Configura los reglamentos técnicos del Round Robin</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                        {/* Group Size */}
+                                        <div className="space-y-4">
+                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Tamaño de Grupos</label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {[3, 4].map(size => (
+                                                    <button
+                                                        key={size}
+                                                        onClick={() => setTournamentData({ ...tournamentData, groupSize: size })}
+                                                        className={`py-4 rounded-xl font-black italic text-sm transition-all border ${tournamentData.groupSize === size
+                                                            ? 'bg-padel-primary border-padel-primary text-black'
+                                                            : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
+                                                    >
+                                                        {size} PAREJAS
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <p className="text-[8px] text-gray-600 font-bold uppercase leading-tight italic px-1">
+                                                * El sistema balanceará las parejas sobrantes automáticamente.
+                                            </p>
+                                        </div>
+
+                                        {/* Match Format */}
+                                        <div className="space-y-4">
+                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Formato de Partido</label>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                {[
+                                                    { id: 'ONE_SET_6', label: '1 Set (a 6 juegos)' },
+                                                    { id: 'ONE_SET_9', label: '1 Set (a 9 juegos)' },
+                                                    { id: 'TWO_SHORT_SETS', label: '2 Sets Cortos (a 4) + MTB' },
+                                                    { id: 'TWO_NORMAL_SETS', label: '2 Sets Normales (a 6) + MTB' },
+                                                ].map(format => (
+                                                    <button
+                                                        key={format.id}
+                                                        onClick={() => setTournamentData({ ...tournamentData, matchFormat: format.id as any })}
+                                                        className={`py-3 px-4 rounded-xl font-bold italic text-[10px] text-left transition-all border uppercase tracking-wider ${tournamentData.matchFormat === format.id
+                                                            ? 'bg-padel-primary border-padel-primary text-black'
+                                                            : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
+                                                    >
+                                                        {format.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Scoring System */}
+                                        <div className="space-y-4">
+                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Sistema de Puntuación</label>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                {[
+                                                    { id: 'GOLDEN_POINT', label: 'Punto de Oro', desc: 'Sin ventaja en el 40-40' },
+                                                    { id: 'TRADITIONAL', label: 'Ventaja Tradicional', desc: 'Sistema clásico de ventajas' },
+                                                ].map(sys => (
+                                                    <button
+                                                        key={sys.id}
+                                                        onClick={() => setTournamentData({ ...tournamentData, scoringSystem: sys.id as any })}
+                                                        className={`p-4 rounded-xl text-left transition-all border ${tournamentData.scoringSystem === sys.id
+                                                            ? 'bg-padel-primary border-padel-primary text-black shadow-lg scale-[1.02]'
+                                                            : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
+                                                    >
+                                                        <span className="block font-black italic text-xs uppercase mb-1">{sys.label}</span>
+                                                        <span className={`block text-[8px] font-bold uppercase opacity-60 ${tournamentData.scoringSystem === sys.id ? 'text-black' : 'text-gray-600'}`}>
+                                                            {sys.desc}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            </motion.div>
+                        )}
+
+                        {step === 5 && (
+                            <motion.div
+                                key="step5"
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
@@ -898,7 +916,7 @@ export default function NewTournamentPage() {
                                             HORARIOS
                                         </h3>
                                         <h2 className="text-2xl md:text-3xl font-black italic tracking-tighter uppercase text-white relative z-10">
-                                            Paso 4: <span className="text-padel-primary">Fecha y Horarios</span>
+                                            Paso 5: <span className="text-padel-primary">Fecha y Horarios</span>
                                         </h2>
                                     </motion.div>
                                 </div>
@@ -988,9 +1006,9 @@ export default function NewTournamentPage() {
                             </motion.div>
                         )}
 
-                        {step === 5 && (
+                        {step === 6 && (
                             <motion.div
-                                key="step5"
+                                key="step6"
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
@@ -1006,7 +1024,7 @@ export default function NewTournamentPage() {
                                             CATEGORIA
                                         </h3>
                                         <h2 className="text-3xl font-black italic tracking-tighter uppercase text-white relative z-10">
-                                            Paso 5: <span className="text-padel-primary">Categoría</span>
+                                            Paso 6: <span className="text-padel-primary">Categoría</span>
                                         </h2>
                                     </motion.div>
                                 </div>
@@ -1018,7 +1036,7 @@ export default function NewTournamentPage() {
                                                 key={cat.id}
                                                 onClick={() => {
                                                     setTournamentData({ ...tournamentData, category: cat.id });
-                                                    setStep(6);
+                                                    setStep(7);
                                                 }}
                                                 className={`p-5 rounded-[1.5rem] border-2 text-center transition-all group flex flex-col items-center gap-2 ${tournamentData.category === cat.id
                                                     ? 'border-padel-primary bg-padel-primary/10 shadow-[0_0_20px_rgba(204,255,0,0.15)]'
@@ -1036,9 +1054,9 @@ export default function NewTournamentPage() {
                             </motion.div>
                         )}
 
-                        {step === 6 && (
+                        {step === 7 && (
                             <motion.div
-                                key="step6"
+                                key="step7"
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
@@ -1054,7 +1072,7 @@ export default function NewTournamentPage() {
                                             PAREJAS
                                         </h3>
                                         <h2 className="text-3xl font-black italic tracking-tighter uppercase text-white relative z-10">
-                                            Paso 6: <span className="text-padel-primary">Parejas</span>
+                                            Paso 7: <span className="text-padel-primary">Parejas</span>
                                         </h2>
                                     </motion.div>
                                 </div>
@@ -1271,6 +1289,6 @@ export default function NewTournamentPage() {
                     </motion.div>
                 )}
             </AnimatePresence>
-        </div >
+        </div>
     );
 }
