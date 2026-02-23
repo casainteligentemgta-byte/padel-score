@@ -74,8 +74,8 @@ export async function POST(req: Request) {
         const tournament = await prisma.tournament.create({
             data: {
                 name,
-                type: type as TournamentType,
-                category: category as TournamentCategory,
+                type: type as any,
+                category: category as any,
                 startDate: new Date(startDate),
                 endDate: new Date(startDate),
                 clubHoursStart,
@@ -109,7 +109,7 @@ export async function POST(req: Request) {
             team1Id: newTeamIds[m.team1Index - 1],
             team2Id: newTeamIds[m.team2Index - 1],
             scheduledTime: m.scheduledTime,
-            status: m.status
+            status: m.status as any
         }));
 
         await prisma.match.createMany({

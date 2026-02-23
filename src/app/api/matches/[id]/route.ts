@@ -15,7 +15,7 @@ export async function PATCH(
         const updatedMatch = await prisma.match.update({
             where: { id },
             data: {
-                status: status as MatchStatus,
+                status: status as any,
                 score,
                 actualStartTime: actualStartTime ? new Date(actualStartTime) : undefined,
                 actualEndTime: actualEndTime ? new Date(actualEndTime) : undefined,
