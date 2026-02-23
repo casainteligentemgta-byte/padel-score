@@ -93,13 +93,30 @@ export default function LoginPage() {
             >
                 <div className="text-center mb-10">
                     <Link href="/" className="inline-block mb-6">
-                        <div className="w-16 h-16 bg-padel-primary rounded-2xl flex items-center justify-center rotate-3 shadow-2xl shadow-padel-primary/40">
-                            <ShieldCheck className="w-10 h-10 text-black" />
+                        <div className="flex items-center justify-center gap-3">
+                            <motion.div
+                                animate={{
+                                    y: [0, -15, 0],
+                                    scaleY: [1, 0.8, 1],
+                                    scaleX: [1, 1.1, 1]
+                                }}
+                                transition={{
+                                    duration: 0.8,
+                                    repeat: Infinity,
+                                    ease: "easeInOut"
+                                }}
+                                className="w-8 h-8 bg-padel-primary rounded-full shadow-[0_5px_15px_rgba(204,255,0,0.4)] relative overflow-hidden flex-shrink-0"
+                            >
+                                <div className="absolute inset-0 border-2 border-black/10 rounded-full scale-110 -translate-x-1" />
+                                <div className="absolute inset-0 border-2 border-black/10 rounded-full scale-110 translate-x-2 translate-y-2" />
+                            </motion.div>
+                            <span className="text-4xl font-black italic uppercase tracking-tighter text-white">
+                                SMART <span className="text-padel-primary">PADEL</span>
+                            </span>
                         </div>
                     </Link>
-                    <h1 className="text-4xl font-black italic uppercase tracking-tighter text-white">
-                        {isLogin ? 'Bienvenido de ' : 'Únete a '}
-                        <span className="text-padel-primary">Padel Score</span>
+                    <h1 className="text-lg font-bold text-gray-500 uppercase tracking-widest mt-2">
+                        {isLogin ? 'Bienvenido de Nuevo' : 'Únete a la Élite'}
                     </h1>
                     <p className="text-gray-500 font-medium mt-2">
                         {isLogin ? 'Accede a tu panel de gestión deportiva.' : 'Comienza a organizar tus torneos hoy mismo.'}

@@ -265,4 +265,94 @@ export class ScheduleEngine {
 
         return updatedMatches;
     }
+
+    /**
+     * Genera la estructura de un cuadro de eliminación directa con nombres de ronda automáticos.
+     */
+    static generateBracket(advancingTeamsIndices: number[], numCourts: number, matchDuration: number, buffer: number, startDate: Date, startTime: string) {
+        const numTeams = advancingTeamsIndices.length;
+        if (numTeams < 2) return { matches: [] };
+
+        // Determinar el tamaño del cuadro (potencia de 2)
+        const rounds = Math.ceil(Math.log2(numTeams));
+        const bracketSize = Math.pow(2, rounds);
+
+        const bracketMatches: any[] = [];
+        let currentTime = new Date(startDate);
+        const [h, m] = (startTime || "08:00").split(':').map(Number);
+        currentTime.setHours(h, m, 0, 0);
+
+        // Generar Primera Ronda con seeding estándar (distribución de llaves)
+        const firstRoundMatchesCount = bracketSize / 2;
+
+        // Función para generar el orden de seeding dinámicamente
+        const getSeedingOrder = (size: number): number[] => {
+            let seeds = [1, 2];
+            while (seeds.length < size) {
+                let nextSeeds = [];
+                for (let s of seeds) {
+                    nextSeeds.push(s);
+                    nextSeeds.push(seeds.length * 2 + 1 - s);
+                }
+                seeds = nextSeeds;
+            }
+            return seeds;
+        };
+
+        const seedingOrder = getSeedingOrder(bracketSize);
+        const pairs: any[] = [];
+        for (let i = 0; i < firstRoundMatchesCount; i++) {
+            const s1 = seedingOrder[i * 2];
+            const s2 = seedingOrder[i * 2 + 1];
+
+            // Mapear semillas a índices de equipos (si existen)
+            const team1 = advancingTeamsIndices[s1 - 1] !== undefined ? advancingTeamsIndices[s1 - 1] : -1;
+            const team2 = advancingTeamsIndices[s2 - 1] !== undefined ? advancingTeamsIndices[s2 - 1] : -1;
+
+            pairs.push({ t1: team1, t2: team2 });
+        }
+
+        const getRoundName = (matchesInRound: number) => {
+            if (matchesInRound === 1) return 'FINAL';
+            if (matchesInRound === 2) return 'SEMIFINALES';
+            if (matchesInRound === 4) return 'CUARTOS DE FINAL';
+            if (matchesInRound === 8) return 'OCTAVOS DE FINAL';
+            if (matchesInRound === 16) return '16VOS DE FINAL';
+            if (matchesInRound === 32) return '32VOS DE FINAL';
+            return `RONDA DE ${matchesInRound * 2}`;
+        };
+
+        let matchCounter = 0;
+        for (let r = 1; r <= rounds; r++) {
+            const matchesInRound = Math.pow(2, rounds - r);
+            const roundName = getRoundName(matchesInRound);
+
+            for (let p = 1; p <= matchesInRound; p++) {
+                const isFirstRound = r === 1;
+                const match: any = {
+                    id: `bracket-r${r}-p${p}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                    team1Index: isFirstRound ? pairs[p - 1]?.t1 || -1 : -1,
+                    team2Index: isFirstRound ? pairs[p - 1]?.t2 || -1 : -1,
+                    status: MatchStatus.PENDING,
+                    stage: 'MAIN_DRAW',
+                    roundName: roundName,
+                    bracketPosition: { round: r, position: p },
+                    scheduledTime: new Date(currentTime),
+                    courtIndex: matchCounter % numCourts
+                };
+
+                bracketMatches.push(match);
+                matchCounter++;
+
+                if (matchCounter % numCourts === 0) {
+                    currentTime.setMinutes(currentTime.getMinutes() + matchDuration + buffer);
+                }
+            }
+            if (matchCounter % numCourts !== 0) {
+                currentTime.setMinutes(currentTime.getMinutes() + matchDuration + buffer);
+            }
+        }
+
+        return { matches: bracketMatches };
+    }
 }

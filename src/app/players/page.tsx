@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import BottomNav from '@/components/BottomNav';
 import { Suspense } from 'react';
+import { formatDNI } from '@/lib/formatters';
 
 import Sidebar from '@/components/Sidebar';
 
@@ -281,6 +282,15 @@ function PlayersListContent() {
                                             type="text"
                                             value={editingPlayer.lastName}
                                             onChange={e => setEditingPlayer({ ...editingPlayer, lastName: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Cédula / DNI</label>
+                                        <input
+                                            type="text"
+                                            value={editingPlayer.dni || ''}
+                                            onChange={e => setEditingPlayer({ ...editingPlayer, dni: formatDNI(e.target.value) })}
                                             className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all"
                                         />
                                     </div>

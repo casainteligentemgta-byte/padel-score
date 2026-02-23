@@ -31,7 +31,7 @@ export default function LandingPage() {
                         <div className="absolute inset-0 border-2 border-black/10 rounded-full scale-110 -translate-x-1" />
                         <div className="absolute inset-0 border-2 border-black/10 rounded-full scale-110 translate-x-2 translate-y-2" />
                     </motion.div>
-                    PADEL <span className="text-padel-primary">SMART</span>
+                    SMART <span className="text-padel-primary">PADEL</span>
                 </div>
                 <div className="flex-1 md:flex-none flex justify-end">
                     <LoginButton />
@@ -46,7 +46,7 @@ export default function LandingPage() {
 
                     <div className="relative z-10">
                         <h1 className="text-5xl md:text-7xl font-black italic tracking-tighter uppercase mb-4 drop-shadow-2xl">
-                            PADEL <span className="text-padel-primary">SMART</span>
+                            SMART <span className="text-padel-primary">PADEL</span>
                         </h1>
                         <p className="text-lg md:text-xl text-gray-400 max-w-xl mb-8 leading-relaxed">
                             La plataforma inteligente para gestionar torneos profesionales.
@@ -105,9 +105,7 @@ export default function LandingPage() {
             </div>
 
             {/* Subtle Footer */}
-            <div className="mt-4 text-center text-[10px] text-gray-600 uppercase tracking-[0.2em]">
-                Optimizado para iPad Landscape • PADEL SMART Pro v1.0
-            </div>
+            Optimizado para iPad Landscape • SMART PADEL Pro v1.0
         </div>
     );
 }

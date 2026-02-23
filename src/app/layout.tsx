@@ -8,8 +8,8 @@ const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
 const publicSans = Public_Sans({ subsets: ["latin"], variable: "--font-public-sans" });
 
 export const metadata: Metadata = {
-    title: "PADEL SMART | Tournament Manager",
-    description: "La plataforma definitiva para gestionar torneos de pádel.",
+    title: "Smart Padel | Tournament Manager",
+    description: "La plataforma inteligente para gestionar torneos de pádel.",
 };
 
 export default function RootLayout({

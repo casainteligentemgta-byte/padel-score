@@ -87,6 +87,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 setUser(firebaseUser);
                 if (firebaseUser) {
                     await fetchProfile(firebaseUser.uid);
+                    // Asegurar que casainteligentemgta@gmail.com sea ADMIN si se loguea
+                    if (firebaseUser.email === 'casainteligentemgta@gmail.com' && profile?.role !== ROLES.ADMIN) {
+                        const updatedProfile = { ...profile, role: ROLES.ADMIN };
+                        await dataService.setUserProfile(firebaseUser.uid, updatedProfile);
+                        setProfile(updatedProfile);
+                    }
                 } else {
                     setProfile(null);
                 }
@@ -101,7 +107,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         return () => unsub();
-    }, []);
+    }, [profile?.role]); // Added profile?.role to dependencies to react to role changes
 
     const signInWithGoogle = async () => {
         const res = await signInWithPopup(auth, googleProvider);
@@ -121,8 +127,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const res = await createUserWithEmailAndPassword(auth, email, pass);
         if (res.user) {
             await updateProfile(res.user, { displayName: name });
+            const isAbsoluteAdmin = email === 'casainteligentemgta@gmail.com';
             const newProfile = {
-                role: ROLES.PLAYER,
+                role: isAbsoluteAdmin ? ROLES.ADMIN : ROLES.PLAYER,
                 email: email,
                 name: name,
                 createdAt: new Date().toISOString()
@@ -137,7 +144,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setProfile(null);
     };
 
-    const isAdmin = profile?.role === ROLES.ADMIN;
+    const isAdmin = profile?.role === ROLES.ADMIN || user?.email === 'casainteligentemgta@gmail.com';
     const isPlayer = profile?.role === ROLES.PLAYER;
     const isMarker = profile?.role === ROLES.MARKER;
 

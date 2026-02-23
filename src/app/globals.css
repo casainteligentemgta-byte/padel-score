@@ -46,7 +46,7 @@ body {
   }
 
   .ipad-screen-container {
-    @apply max-w-[1280px] mx-auto h-screen lg:h-[100dvh] flex flex-col p-4 lg:p-6 overflow-hidden;
+    @apply max-w-[1280px] mx-auto h-[100dvh] flex flex-col p-4 lg:p-6 overflow-hidden;
   }
 
   .ipad-scroll-area {

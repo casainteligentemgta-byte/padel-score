@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { dataService } from '@/lib/dataService';
 import { useAuth } from '@/lib/AuthContext';
+import { formatDNI } from '@/lib/formatters';
 
 export default function PlayerRegistrationPage() {
     const router = useRouter();
@@ -54,7 +55,11 @@ export default function PlayerRegistrationPage() {
     });
 
     const updateField = (field: string, value: any) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+        if (field === 'dni') {
+            setFormData(prev => ({ ...prev, [field]: formatDNI(value) }));
+        } else {
+            setFormData(prev => ({ ...prev, [field]: value }));
+        }
     };
 
     // --- PHOTO LOGIC ---

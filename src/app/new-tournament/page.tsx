@@ -19,7 +19,8 @@ import {
     RefreshCw,
     ChevronDown,
     Search,
-    X
+    X,
+    Info
 } from 'lucide-react';
 import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
@@ -43,6 +44,9 @@ export default function NewTournamentPage() {
         gender: '' as 'MALE' | 'FEMALE' | 'MIXED' | '',
         category: TournamentCategory.CUARTA,
         pointsGoal: 24,
+        groupSize: 3,
+        matchFormat: 'ONE_SET_6' as 'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS',
+        scoringSystem: 'GOLDEN_POINT' as 'GOLDEN_POINT' | 'TRADITIONAL',
         startDate: new Date().toISOString().split('T')[0],
         startTime: '08:00',
         endTime: '22:00',
@@ -53,8 +57,8 @@ export default function NewTournamentPage() {
         teams: [
             {
                 id: 1,
-                p1: { id: '', name: '', lastName: '', age: '', photo: '' },
-                p2: { id: '', name: '', lastName: '', age: '', photo: '' }
+                p1: { id: '', name: '', lastName: '', age: '', photo: '', phone: '' },
+                p2: { id: '', name: '', lastName: '', age: '', photo: '', phone: '' }
             }
         ]
     });
@@ -158,34 +162,123 @@ export default function NewTournamentPage() {
         try {
             // Calculate duration based on logic table
             let matchDuration = 20;
-            if (tournamentData.pointsGoal === 16) matchDuration = 10;
-            else if (tournamentData.pointsGoal === 24) matchDuration = 15;
-            else if (tournamentData.pointsGoal === 32) matchDuration = 22;
-            else if (tournamentData.pointsGoal === 40) matchDuration = 30;
+            if (tournamentData.type === TournamentType.ROUND_ROBIN) {
+                switch (tournamentData.matchFormat) {
+                    case 'ONE_SET_6': matchDuration = 30; break;
+                    case 'ONE_SET_9': matchDuration = 45; break;
+                    case 'TWO_SHORT_SETS': matchDuration = 60; break;
+                    case 'TWO_NORMAL_SETS': matchDuration = 90; break;
+                    default: matchDuration = 40;
+                }
+            } else {
+                if (tournamentData.pointsGoal === 16) matchDuration = 10;
+                else if (tournamentData.pointsGoal === 24) matchDuration = 15;
+                else if (tournamentData.pointsGoal === 32) matchDuration = 22;
+                else if (tournamentData.pointsGoal === 40) matchDuration = 30;
+            }
 
-            // Generate matches automatically
-            console.log('[NewTournament] Generating schedule...');
-            const schedule = ScheduleEngine.generateSchedule({
-                tournamentId: 'temporary', // Will be inside the doc
-                numTeams: tournamentData.teams.length,
-                numCourts: tournamentData.courtNames.length || 4,
-                clubHoursStart: tournamentData.startTime || "08:00",
-                clubHoursEnd: tournamentData.endTime || "22:00",
-                startDate: tournamentData.startDate ? new Date(tournamentData.startDate) : new Date(),
-                matchDurationMinutes: matchDuration,
-                bufferMinutes: 2, // Margen de cambio fijo de 2 min
-                type: tournamentData.type
-            });
+            let enrichedMatches: any[] = [];
+            let groupAssignments: { [key: string]: string[] } = {};
 
-            const enrichedMatches = (schedule.matches || []).map((m: any, idx: number) => {
-                return {
-                    id: `match-${idx}-${Date.now()}`,
-                    ...m,
-                    // No guardamos nombres ni fotos aquí para evitar exceder el límite de 1MB de Firestore
-                    courtName: tournamentData.courtNames?.[m.courtIndex] || `Pista ${m.courtIndex + 1}`,
-                    status: 'PENDING'
-                };
-            }).sort((a, b) => {
+            if (tournamentData.type === TournamentType.ROUND_ROBIN) {
+                // Round Robin Group Logic
+                const teams = [...tournamentData.teams];
+                const groupSize = tournamentData.groupSize || 3;
+                const numGroups = Math.floor(teams.length / groupSize);
+
+                let currentTeams = [...teams];
+                const groups: any[][] = [];
+
+                // Initialize groups
+                for (let i = 0; i < numGroups; i++) groups.push([]);
+
+                // Distribute teams
+                let groupIdx = 0;
+                while (currentTeams.length > 0) {
+                    groups[groupIdx % numGroups].push(currentTeams.shift());
+                    groupIdx++;
+                }
+
+                // Generate Group Matches
+                const groupNames = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+                let allPairings: any[] = [];
+
+                groups.forEach((groupTeams, gIdx) => {
+                    const groupName = groupNames[gIdx];
+                    groupAssignments[groupName] = groupTeams.map(t => String(t.id));
+
+                    // Generate pairings for this group
+                    for (let i = 0; i < groupTeams.length; i++) {
+                        for (let j = i + 1; j < groupTeams.length; j++) {
+                            allPairings.push({
+                                team1: groupTeams[i],
+                                team2: groupTeams[j],
+                                groupName: groupName
+                            });
+                        }
+                    }
+                });
+
+                // Schedule these pairings
+                const schedule = ScheduleEngine.generateSchedule({
+                    tournamentId: 'temporary',
+                    numTeams: tournamentData.teams.length, // Not strictly used for pairings here
+                    numCourts: tournamentData.courtNames.length || 4,
+                    clubHoursStart: tournamentData.startTime || "08:00",
+                    clubHoursEnd: tournamentData.endTime || "22:00",
+                    startDate: tournamentData.startDate ? new Date(tournamentData.startDate) : new Date(),
+                    matchDurationMinutes: matchDuration,
+                    bufferMinutes: 2,
+                    type: tournamentData.type
+                });
+
+                // Assign our group pairings to the schedule slots
+                enrichedMatches = (schedule.matches || []).map((m: any, idx: number) => {
+                    if (idx < allPairings.length) {
+                        const pairing = allPairings[idx];
+                        // Find indexes in original teams array
+                        const t1Idx = tournamentData.teams.findIndex(t => t.id === pairing.team1.id);
+                        const t2Idx = tournamentData.teams.findIndex(t => t.id === pairing.team2.id);
+
+                        return {
+                            id: `match-${idx}-${Date.now()}`,
+                            team1Index: t1Idx + 1,
+                            team2Index: t2Idx + 1,
+                            scheduledTime: m.scheduledTime,
+                            courtIndex: m.courtIndex,
+                            courtName: tournamentData.courtNames?.[m.courtIndex] || `Pista ${m.courtIndex + 1}`,
+                            status: 'PENDING',
+                            groupName: pairing.groupName
+                        };
+                    }
+                    return null;
+                }).filter(m => m !== null);
+
+            } else {
+                // Original Generation Logic
+                const schedule = ScheduleEngine.generateSchedule({
+                    tournamentId: 'temporary',
+                    numTeams: tournamentData.teams.length,
+                    numCourts: tournamentData.courtNames.length || 4,
+                    clubHoursStart: tournamentData.startTime || "08:00",
+                    clubHoursEnd: tournamentData.endTime || "22:00",
+                    startDate: tournamentData.startDate ? new Date(tournamentData.startDate) : new Date(),
+                    matchDurationMinutes: matchDuration,
+                    bufferMinutes: 2,
+                    type: tournamentData.type
+                });
+
+                enrichedMatches = (schedule.matches || []).map((m: any, idx: number) => {
+                    return {
+                        id: `match-${idx}-${Date.now()}`,
+                        ...m,
+                        courtName: tournamentData.courtNames?.[m.courtIndex] || `Pista ${m.courtIndex + 1}`,
+                        status: 'PENDING'
+                    };
+                });
+            }
+
+            enrichedMatches.sort((a, b) => {
                 const timeDiff = new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime();
                 if (timeDiff !== 0) return timeDiff;
                 return a.courtIndex - b.courtIndex;
@@ -206,6 +299,10 @@ export default function NewTournamentPage() {
                 teams: tournamentData.teams,
                 matches: enrichedMatches,
                 pointsGoal: tournamentData.pointsGoal,
+                groupSize: tournamentData.groupSize,
+                matchFormat: tournamentData.matchFormat,
+                scoringSystem: tournamentData.scoringSystem,
+                groupAssignments: groupAssignments,
                 status: 'En Curso'
             };
 
@@ -235,8 +332,8 @@ export default function NewTournamentPage() {
             ...prev,
             teams: [...prev.teams, {
                 id: Date.now(),
-                p1: { id: '', name: '', lastName: '', age: '', photo: '' },
-                p2: { id: '', name: '', lastName: '', age: '', photo: '' }
+                p1: { id: '', name: '', lastName: '', age: '', photo: '', phone: '' },
+                p2: { id: '', name: '', lastName: '', age: '', photo: '', phone: '' }
             }]
         }));
     };
@@ -290,60 +387,101 @@ export default function NewTournamentPage() {
     };
 
     return (
-        <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit">
+        <div className="ipad-screen-container h-screen overflow-hidden flex flex-col bg-[#0a0a0a] text-white font-outfit">
             {/* Header */}
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-4 relative pl-24 md:pl-28 pr-6 pt-6">
-                <div className="flex flex-col items-center md:items-start text-center md:text-left">
-                    <div className="flex items-center">
-                        <motion.div
-                            animate={{
-                                y: [0, -10, 0],
-                                scaleY: [1, 0.8, 1],
-                                scaleX: [1, 1.1, 1]
-                            }}
-                            transition={{
-                                duration: 0.8,
-                                repeat: Infinity,
-                                ease: "easeInOut"
-                            }}
-                            className="w-5 h-5 bg-padel-primary rounded-full mr-3 shadow-[0_5px_15px_rgba(204,255,0,0.4)] relative overflow-hidden flex-shrink-0"
-                        >
-                            <div className="absolute inset-0 border-2 border-black/10 rounded-full scale-110 -translate-x-1" />
-                            <div className="absolute inset-0 border-2 border-black/10 rounded-full scale-110 translate-x-2 translate-y-2" />
-                        </motion.div>
-                        <h1 className="text-2xl md:text-3xl font-black italic text-padel-primary tracking-tighter uppercase leading-none">
-                            Padel Score <span className="text-white text-sm opacity-50">Studio</span>
-                        </h1>
-                    </div>
-                    <p className="text-gray-500 mt-1 text-[10px] uppercase font-bold tracking-widest italic">Paso {step}/6 • {step === 2 ? 'Club y Canchas' : tournamentData.name || 'Nuevo Torneo'}</p>
-                </div>
+            <div className="flex items-center gap-4 mb-2 relative p-4 bg-black/20 rounded-b-3xl flex-shrink-0">
+                <button
+                    onClick={prevStep}
+                    className={`w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-all ${step === 1 ? 'hidden' : ''}`}
+                >
+                    <ChevronLeft className="w-5 h-5" />
+                </button>
 
-                <div className="flex items-center gap-4 w-full md:w-auto">
-                    <div className="flex gap-2 flex-1 md:w-64">
-                        {[1, 2, 3, 4, 5, 6].map(i => (
-                            <div
-                                key={i}
-                                className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${step >= i ? 'bg-padel-primary shadow-[0_0_10px_rgba(204,255,0,0.5)]' : 'bg-white/10'}`}
-                            />
-                        ))}
+                <button
+                    onClick={() => {
+                        if (confirm('¿Deseas salir de la creación del torneo? Perderás los cambios no guardados.')) {
+                            router.push('/');
+                        }
+                    }}
+                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 hover:border-white/20 transition-all group"
+                    title="Salir"
+                >
+                    <X className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
+                </button>
+
+                <div className="flex-1 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="flex flex-col items-center md:items-start text-center md:text-left">
+                        <div className="flex items-center">
+                            <motion.div
+                                animate={{
+                                    y: [0, -10, 0],
+                                    scaleY: [1, 0.8, 1],
+                                    scaleX: [1, 1.1, 1]
+                                }}
+                                transition={{
+                                    duration: 0.8,
+                                    repeat: Infinity,
+                                    ease: "easeInOut"
+                                }}
+                                className="w-5 h-5 bg-padel-primary rounded-full mr-3 shadow-[0_5px_15px_rgba(204,255,0,0.4)] relative overflow-hidden flex-shrink-0"
+                            >
+                                <div className="absolute inset-0 border-2 border-black/10 rounded-full scale-110 -translate-x-1" />
+                                <div className="absolute inset-0 border-2 border-black/10 rounded-full scale-110 translate-x-2 translate-y-2" />
+                            </motion.div>
+                            <h1 className="text-2xl md:text-3xl font-black italic text-padel-primary tracking-tighter uppercase leading-none">
+                                Smart <span className="text-white">Padel</span> <span className="text-white text-[10px] opacity-30 tracking-widest ml-1">Studio</span>
+                            </h1>
+                        </div>
+                        <p className="text-gray-500 mt-1 text-[10px] uppercase font-bold tracking-widest italic">Paso {step}/6 • {step === 2 ? 'Club y Canchas' : tournamentData.name || 'Nuevo Torneo'}</p>
                     </div>
 
-                    <button
-                        onClick={() => {
-                            if (confirm('¿Deseas salir de la creación del torneo? Perderás los cambios no guardados.')) {
-                                router.push('/');
-                            }
-                        }}
-                        className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 hover:border-white/20 transition-all group"
-                        title="Salir"
-                    >
-                        <X className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
-                    </button>
+                    <div className="flex items-center gap-4 w-full md:w-auto">
+                        <div className="flex gap-2 flex-1 md:w-64">
+                            {[1, 2, 3, 4, 5, 6].map(i => (
+                                <div
+                                    key={i}
+                                    className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${step >= i ? 'bg-padel-primary shadow-[0_0_10px_rgba(204,255,0,0.5)]' : 'bg-white/10'}`}
+                                />
+                            ))}
+                        </div>
+
+                        {step > 1 && step < 6 && (step === 2 || step === 4) && (
+                            <motion.button
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{
+                                    opacity: (step === 2 && tournamentData.courtNames.length === 0) ? 0 : 1,
+                                    scale: (step === 2 && tournamentData.courtNames.length === 0) ? 0.8 : 1,
+                                    display: (step === 2 && tournamentData.courtNames.length === 0) ? 'none' : 'flex'
+                                }}
+                                onClick={nextStep}
+                                whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(204,255,0,0.6), 0 0 80px rgba(204,255,0,0.3)', filter: 'brightness(1.1)' }}
+                                whileTap={{ scale: 0.95 }}
+                                disabled={
+                                    (step === 4 && !tournamentData.startDate)
+                                }
+                                className="flex items-center gap-2 bg-padel-primary text-black px-6 py-2.5 rounded-xl font-black text-xs uppercase italic tracking-tighter transition-all shadow-[0_0_20px_rgba(204,255,0,0.2)] disabled:opacity-50 disabled:grayscale"
+                            >
+                                Siguiente <ChevronRight className="w-4 h-4" />
+                            </motion.button>
+                        )}
+
+                        {step === 6 && (
+                            <motion.button
+                                onClick={generateTournament}
+                                whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(204,255,0,0.6), 0 0 80px rgba(204,255,0,0.3)', filter: 'brightness(1.1)' }}
+                                whileTap={{ scale: 0.95 }}
+                                disabled={loading || !tournamentData.name || tournamentData.courtNames.length === 0}
+                                className="flex items-center gap-2 bg-padel-primary text-black px-6 py-2.5 rounded-xl font-black text-xs uppercase italic tracking-tighter transition-all shadow-[0_0_20px_rgba(204,255,0,0.2)] disabled:opacity-50 disabled:grayscale"
+                            >
+                                {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <>Finalizar <Trophy className="w-4 h-4" /></>}
+                            </motion.button>
+                        )}
+                    </div>
                 </div>
             </div>
 
             <div className="ipad-scroll-area flex-1 min-h-0">
-                <div className="max-w-4xl mx-auto pt-2 pb-32">
+                <div className="max-w-4xl mx-auto pt-1 pb-4 px-4 overflow-hidden">
                     <AnimatePresence mode="wait">
                         {step === 1 && (
                             <motion.div
@@ -353,11 +491,19 @@ export default function NewTournamentPage() {
                                 exit={{ opacity: 0, y: -20 }}
                                 className="space-y-8"
                             >
-                                <div className="text-center space-y-2 mb-10">
-                                    <h2 className="text-4xl font-black italic tracking-tighter uppercase text-white">
-                                        Paso 1: <span className="text-padel-primary">Género</span>
-                                    </h2>
-                                    <p className="text-gray-500 font-medium">¿Para quién es este torneo?</p>
+                                <div className="text-center space-y-1 mb-4 overflow-hidden relative">
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        className="relative z-10"
+                                    >
+                                        <h3 className="text-[60px] md:text-[100px] font-black italic text-white/[0.03] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap tracking-tighter leading-none select-none pointer-events-none uppercase">
+                                            GENERO
+                                        </h3>
+                                        <h2 className="text-3xl font-black italic tracking-tighter uppercase text-white relative z-10">
+                                            Paso 1: <span className="text-padel-primary">Género</span>
+                                        </h2>
+                                    </motion.div>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
@@ -366,16 +512,21 @@ export default function NewTournamentPage() {
                                         { id: 'FEMALE', label: 'Femenino', icon: User },
                                         { id: 'MIXED', label: 'Mixto', icon: Users },
                                     ].map((g) => (
-                                        <button
+                                        <motion.button
                                             key={g.id}
-                                            onClick={() => setTournamentData({ ...tournamentData, gender: g.id as any })}
-                                            className={`relative group transition-all duration-500 rounded-[2.5rem] p-1 ${tournamentData.gender === g.id ? 'bg-padel-primary shadow-[0_0_40px_rgba(204,255,0,0.2)]' : 'bg-white/10 hover:bg-white/20'}`}
+                                            whileHover={{ scale: 1.05, boxShadow: '0 0 80px rgba(204,255,0,0.5), 0 0 150px rgba(204,255,0,0.2)', filter: 'brightness(1.1)' }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={() => {
+                                                setTournamentData({ ...tournamentData, gender: g.id as any });
+                                                nextStep();
+                                            }}
+                                            className={`relative group transition-all duration-500 rounded-[2.5rem] p-1 ${tournamentData.gender === g.id ? 'bg-padel-primary shadow-[0_0_40px_rgba(204,255,0,0.2)]' : 'bg-white/10 border border-transparent hover:border-padel-primary/50'}`}
                                         >
-                                            <div className={`h-full w-full rounded-[2.4rem] p-10 flex flex-col items-center gap-6 transition-all duration-500 ${tournamentData.gender === g.id ? 'bg-[#111]' : 'bg-[#1a1a1a]'}`}>
-                                                <div className={`p-6 rounded-full transition-all duration-500 ${tournamentData.gender === g.id ? 'bg-padel-primary/20 scale-110' : 'bg-white/5 group-hover:bg-white/10'}`}>
-                                                    <g.icon className={`w-12 h-12 transition-colors ${tournamentData.gender === g.id ? 'text-padel-primary' : 'text-gray-600'}`} />
+                                            <div className={`h-full w-full rounded-[2.4rem] p-10 flex flex-col items-center gap-6 transition-all duration-500 ${tournamentData.gender === g.id ? 'bg-[#111]' : 'bg-[#1a1a1a] group-hover:bg-[#111]'}`}>
+                                                <div className={`p-6 rounded-full transition-all duration-500 ${tournamentData.gender === g.id ? 'bg-padel-primary/20 scale-110' : 'bg-white/5 group-hover:bg-padel-primary/10 group-hover:scale-110'}`}>
+                                                    <g.icon className={`w-12 h-12 transition-colors ${tournamentData.gender === g.id ? 'text-padel-primary' : 'text-gray-600 group-hover:text-padel-primary'}`} />
                                                 </div>
-                                                <span className={`text-2xl font-black italic uppercase tracking-tighter transition-all ${tournamentData.gender === g.id ? 'text-white' : 'text-gray-500 group-hover:text-gray-300'}`}>
+                                                <span className={`text-2xl font-black italic uppercase tracking-tighter transition-all ${tournamentData.gender === g.id ? 'text-white' : 'text-gray-500 group-hover:text-white'}`}>
                                                     {g.label}
                                                 </span>
                                                 {tournamentData.gender === g.id && (
@@ -384,9 +535,10 @@ export default function NewTournamentPage() {
                                                     </div>
                                                 )}
                                             </div>
-                                        </button>
+                                        </motion.button>
                                     ))}
                                 </div>
+
                             </motion.div>
                         )}
 
@@ -398,35 +550,28 @@ export default function NewTournamentPage() {
                                 exit={{ opacity: 0, x: -20 }}
                                 className="space-y-4"
                             >
-                                <div className="text-center space-y-0.5">
-                                    <div className="flex justify-center -mb-2">
-                                        <svg viewBox="0 0 400 300" className="w-24 h-16 text-padel-primary fill-padel-primary transition-all duration-700 hover:scale-105 filter drop-shadow-[0_0_20px_rgba(204,255,0,0.5)] opacity-40">
-                                            {/* Isla de Margarita - Trazo Realista */}
-                                            <path
-                                                d="M174,115 C170,110 160,105 150,110 C130,120 100,125 85,135 C75,140 75,150 80,165 C85,185 95,200 115,205 C135,210 155,200 170,190 L195,175 C205,170 215,185 230,205 C245,225 270,240 300,230 C320,225 340,235 320,195 C310,175 305,170 340,175 C360,178 375,155 350,120 C335,100 315,60 300,45 C285,30 275,50 270,80 C265,110 260,135 230,145 L200,140 L174,115 Z"
-                                                className="fill-padel-primary"
-                                            />
-                                            {/* Cubagua */}
-                                            <path
-                                                d="M170,235 C160,235 155,245 165,255 C175,265 195,260 195,245 C195,235 185,235 170,235 Z"
-                                                className="fill-padel-primary/80"
-                                            />
-                                            {/* Coche */}
-                                            <path
-                                                d="M260,240 C250,240 245,255 260,265 C275,275 295,265 290,245 C285,235 275,240 260,240 Z"
-                                                className="fill-padel-primary/80"
-                                            />
-                                        </svg>
-                                    </div>
-                                    <h2 className="text-xl font-black italic tracking-tighter uppercase text-white">
-                                        Paso 2: <span className="text-padel-primary">Club</span>
-                                    </h2>
+                                <div className="text-center space-y-1 mb-4 overflow-hidden relative">
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        className="relative z-10"
+                                    >
+                                        <h3 className="text-[60px] md:text-[100px] font-black italic text-white/[0.03] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap tracking-tighter leading-none select-none pointer-events-none uppercase">
+                                            MARGARITA
+                                        </h3>
+                                        <h2 className="text-3xl font-black italic tracking-tighter uppercase text-white relative z-10">
+                                            Paso 2: <span className="text-padel-primary">Lugar</span>
+                                        </h2>
+
+                                    </motion.div>
                                 </div>
 
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                     {COMPLEXES.map((c) => (
-                                        <button
+                                        <motion.button
                                             key={c.name}
+                                            whileHover={{ scale: 1.02, boxShadow: '0 0 30px rgba(204,255,0,0.3)', filter: 'brightness(1.1)' }}
+                                            whileTap={{ scale: 0.98 }}
                                             onClick={() => {
                                                 setTournamentData({
                                                     ...tournamentData,
@@ -435,15 +580,20 @@ export default function NewTournamentPage() {
                                                     courtNames: []
                                                 });
                                             }}
-                                            className={`p-2 rounded-xl border text-left transition-all ${tournamentData.complexName === c.name ? 'border-padel-primary bg-padel-primary/10' : 'border-white/5 bg-white/5 hover:border-white/10'}`}
+                                            className={`p-4 rounded-xl border text-left transition-all ${tournamentData.complexName === c.name ? 'border-padel-primary bg-padel-primary/10' : 'border-white/5 bg-white/5 hover:border-white/10'}`}
                                         >
-                                            <span className={`block text-[9px] font-black italic uppercase transition-colors leading-tight ${tournamentData.complexName === c.name ? 'text-padel-primary' : 'text-gray-400'}`}>
-                                                {c.name}
+                                            <span className={`block text-lg font-black italic uppercase transition-colors leading-tight mb-1 ${tournamentData.complexName === c.name ? 'text-padel-primary' : 'text-gray-400'}`}>
+                                                {c.name.includes('Sun Sol') ? (
+                                                    <>
+                                                        <span className="block">Sun Sol</span>
+                                                        <span className="block text-xs opacity-60 font-bold tracking-tight -mt-1 uppercase">{c.name.replace('Sun Sol ', '')}</span>
+                                                    </>
+                                                ) : c.name}
                                             </span>
-                                            <span className="text-[7px] text-gray-500 font-bold flex items-center gap-1 mt-0.5">
-                                                <MapPin className="w-1.5 h-1.5 text-gray-700" /> {c.courts} canchas
+                                            <span className="text-[8px] text-gray-500 font-bold flex items-center gap-1">
+                                                <MapPin className="w-2 h-2 text-gray-700" /> {c.courts} canchas
                                             </span>
-                                        </button>
+                                        </motion.button>
                                     ))}
                                 </div>
 
@@ -451,21 +601,23 @@ export default function NewTournamentPage() {
                                     <motion.div
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        className="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-2"
+                                        className="bg-white/5 p-2 rounded-xl border border-white/10 space-y-1.5"
                                     >
-                                        <div className="flex justify-between items-center">
-                                            <h3 className="text-[9px] font-black italic uppercase text-gray-400 tracking-widest flex items-center gap-2">
+                                        <div className="flex justify-between items-center px-1">
+                                            <h3 className="text-[8px] font-black italic uppercase text-gray-400 tracking-widest flex items-center gap-2">
                                                 Canchas ({tournamentData.complexName})
                                             </h3>
-                                            <span className="text-[9px] text-padel-primary font-bold italic uppercase">{tournamentData.courtNames.length} seleccionadas</span>
+                                            <span className="text-[8px] text-padel-primary font-bold italic uppercase">{tournamentData.courtNames.length} seleccionadas</span>
                                         </div>
                                         <div className="grid grid-cols-6 md:grid-cols-10 lg:grid-cols-12 gap-1.5">
                                             {Array.from({ length: COMPLEXES.find(c => c.name === tournamentData.complexName)?.courts || 0 }).map((_, i) => {
                                                 const courtLabel = `Pista ${i + 1}`;
                                                 const isSelected = tournamentData.courtNames.includes(courtLabel);
                                                 return (
-                                                    <button
+                                                    <motion.button
                                                         key={i}
+                                                        whileTap={{ scale: 0.9 }}
+                                                        whileHover={{ scale: 1.1, filter: 'brightness(1.2)' }}
                                                         onClick={() => {
                                                             const newNames = isSelected
                                                                 ? tournamentData.courtNames.filter(n => n !== courtLabel)
@@ -477,12 +629,12 @@ export default function NewTournamentPage() {
                                                             setTournamentData({ ...tournamentData, courtNames: newNames });
                                                         }}
                                                         className={`py-1.5 rounded-lg text-[9px] font-black italic transition-all border ${isSelected
-                                                            ? 'bg-padel-primary border-padel-primary text-black shadow-[0_0_10px_rgba(204,255,0,0.3)]'
+                                                            ? 'bg-padel-primary border-padel-primary text-black shadow-[0_0_15px_rgba(204,255,0,0.4)]'
                                                             : 'bg-black/40 border-white/10 text-gray-500 hover:border-white/20'
                                                             }`}
                                                     >
                                                         {i + 1}
-                                                    </button>
+                                                    </motion.button>
                                                 );
                                             })}
                                         </div>
@@ -499,50 +651,59 @@ export default function NewTournamentPage() {
                                 exit={{ opacity: 0, x: -20 }}
                                 className="space-y-6"
                             >
-                                <div className="text-center space-y-1">
-                                    <h2 className="text-xl font-black italic tracking-tighter uppercase text-white">
-                                        Paso 3: <span className="text-padel-primary">Formato</span>
-                                    </h2>
+                                <div className="text-center space-y-1 mb-2 overflow-hidden relative">
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        className="relative z-10"
+                                    >
+                                        <h3 className="text-[60px] md:text-[100px] font-black italic text-white/[0.03] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap tracking-tighter leading-none select-none pointer-events-none uppercase">
+                                            FORMATO
+                                        </h3>
+                                        <h2 className="text-3xl font-black italic tracking-tighter uppercase text-white relative z-10">
+                                            Paso 3: <span className="text-padel-primary">Formato</span>
+                                        </h2>
+
+
+                                    </motion.div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-4xl mx-auto">
                                     {[
                                         {
                                             id: TournamentType.AMERICANO_INDIVIDUAL,
                                             title: 'Americano',
-                                            description: 'Parejas rotativas, todos juegan con todos. Sistema dinámico por niveles.',
+                                            description: 'Parejas rotativas, todos juegan con todos. Sistema dinámico.',
                                             icon: (
-                                                <svg viewBox="0 0 100 100" className="w-12 h-12 text-padel-primary">
+                                                <svg viewBox="0 0 100 100" className="w-16 h-16 text-padel-primary">
                                                     <path d="M50 20 A30 30 0 1 1 50 80 A30 30 0 1 1 50 20" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="10 5" />
                                                     <circle cx="50" cy="20" r="5" fill="currentColor" />
                                                     <circle cx="80" cy="50" r="5" fill="currentColor" />
                                                     <circle cx="50" cy="80" r="5" fill="currentColor" />
                                                     <circle cx="20" cy="50" r="5" fill="currentColor" />
-                                                    <path d="M55 20 L45 20 M80 45 L80 55 M45 80 L55 80 M20 55 L20 45" stroke="currentColor" strokeWidth="2" />
                                                 </svg>
                                             ),
-                                            options: ['12 Puntos', '14 Puntos', '16 Puntos', '24 Puntos']
+                                            options: ['12 Pt', '16 Pt', '24 Pt']
                                         },
                                         {
                                             id: TournamentType.AMERICANO_DUPLA,
-                                            title: 'Americano Dupla Fija',
-                                            description: 'Parejas estables, sistema de puntuación acumulada por victoria.',
+                                            title: 'Dupla Fija',
+                                            description: 'Parejas estables, sistema de puntuación acumulada.',
                                             icon: (
-                                                <svg viewBox="0 0 100 100" className="w-12 h-12 text-padel-primary">
+                                                <svg viewBox="0 0 100 100" className="w-16 h-16 text-padel-primary">
                                                     <rect x="30" y="30" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" />
                                                     <rect x="55" y="30" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" />
                                                     <path d="M40 55 L40 75 M62 55 L62 75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                                    <path d="M40 75 L35 70 M40 75 L45 70 M62 75 L57 70 M62 75 L67 70" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                                                 </svg>
                                             ),
-                                            options: ['12 Puntos', '16 Puntos', '24 Puntos']
+                                            options: ['12 Pt', '16 Pt', '24 Pt']
                                         },
                                         {
                                             id: TournamentType.KNOCKOUT,
-                                            title: 'Cuadro Eliminatorio',
-                                            description: 'Llaves de eliminación directa. Quien pierde sale del torneo.',
+                                            title: 'Eliminatorio',
+                                            description: 'Llaves de eliminación directa. El perdedor queda fuera.',
                                             icon: (
-                                                <svg viewBox="0 0 100 100" className="w-12 h-12 text-padel-primary">
+                                                <svg viewBox="0 0 100 100" className="w-16 h-16 text-padel-primary">
                                                     <path d="M20 30 H40 V50 H20 M20 70 H40 V50 M40 50 H60 V50 M60 40 V60 M60 50 H80" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                                                 </svg>
                                             )
@@ -550,68 +711,172 @@ export default function NewTournamentPage() {
                                         {
                                             id: TournamentType.ROUND_ROBIN,
                                             title: 'Round Robin',
-                                            description: 'Fase de grupos, todos contra todos en el grupo. Clasifica el mejor.',
+                                            description: 'Fase de grupos, todos contra todos. Clasifica el mejor.',
                                             icon: (
-                                                <svg viewBox="0 0 100 100" className="w-12 h-12 text-padel-primary">
+                                                <svg viewBox="0 0 100 100" className="w-16 h-16 text-padel-primary">
                                                     <rect x="25" y="25" width="50" height="50" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
                                                     <path d="M25 25 L75 75 M25 75 L75 25" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                                    <circle cx="25" cy="25" r="3" fill="currentColor" />
-                                                    <circle cx="75" cy="25" r="3" fill="currentColor" />
-                                                    <circle cx="25" cy="75" r="3" fill="currentColor" />
-                                                    <circle cx="75" cy="75" r="3" fill="currentColor" />
                                                 </svg>
                                             )
                                         }
                                     ].map((type) => (
                                         <button
                                             key={type.id}
-                                            onClick={() => setTournamentData({ ...tournamentData, type: type.id as any })}
-                                            className={`group relative overflow-hidden rounded-3xl border-2 transition-all p-5 flex items-center justify-between gap-4 ${tournamentData.type === type.id
+                                            onClick={() => {
+                                                setTournamentData({ ...tournamentData, type: type.id as any });
+                                            }}
+                                            className={`group relative overflow-hidden rounded-3xl border-2 transition-all p-8 flex items-center justify-between gap-6 ${tournamentData.type === type.id
                                                 ? 'border-padel-primary bg-padel-primary/5 shadow-[0_0_30px_rgba(204,255,0,0.1)]'
-                                                : 'border-white/5 bg-white/5 hover:border-white/10 hover:translate-x-1'
+                                                : 'border-white/5 bg-white/5 hover:border-white/10 hover:scale-[1.02]'
                                                 }`}
                                         >
-                                            <div className="flex-1 text-left space-y-1">
-                                                <h3 className={`text-lg font-black italic uppercase tracking-tighter ${tournamentData.type === type.id ? 'text-white' : 'text-gray-400'}`}>
+                                            <div className="flex-1 text-left space-y-2">
+                                                <h3 className={`text-2xl font-black italic uppercase tracking-tighter ${tournamentData.type === type.id ? 'text-white' : 'text-gray-400'}`}>
                                                     {type.title}
                                                 </h3>
-                                                <p className={`text-[10px] font-medium leading-tight ${tournamentData.type === type.id ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                <p className={`text-[11px] font-medium leading-tight max-w-[200px] ${tournamentData.type === type.id ? 'text-gray-400' : 'text-gray-600'}`}>
                                                     {type.description}
                                                 </p>
 
                                                 {type.options && tournamentData.type === type.id && (
-                                                    <div className="flex gap-1 mt-2">
+                                                    <div className="flex gap-1.5 mt-3">
                                                         {type.options.map(opt => (
-                                                            <span key={opt} className="bg-padel-primary text-black text-[8px] font-black uppercase px-2 py-1 rounded-full italic tracking-tighter">
+                                                            <span key={opt} className="bg-padel-primary text-black text-[9px] font-black uppercase px-3 py-1 rounded-full italic tracking-tighter shadow-lg">
                                                                 {opt}
                                                             </span>
                                                         ))}
                                                     </div>
                                                 )}
                                             </div>
-                                            <div className={`transition-all duration-500 ${tournamentData.type === type.id ? 'scale-110 opacity-100' : 'opacity-40 group-hover:opacity-70'}`}>
+                                            <div className={`transition-all duration-500 ${tournamentData.type === type.id ? 'scale-125 opacity-100' : 'opacity-40 group-hover:opacity-70 group-hover:scale-110'}`}>
                                                 {type.icon}
                                             </div>
                                         </button>
                                     ))}
                                 </div>
 
-                                <motion.div
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    className="max-w-3xl mx-auto mt-6 bg-white/5 p-4 rounded-2xl border border-white/10 space-y-3"
-                                >
-                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1 flex items-center gap-2">
-                                        <Trophy className="w-3 h-3 text-padel-primary" /> Nombre del Torneo
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="Ej. Torneo Relámpago Margarita 2024"
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold focus:border-padel-primary transition-all outline-none text-white italic"
-                                        value={tournamentData.name}
-                                        onChange={e => setTournamentData({ ...tournamentData, name: e.target.value })}
-                                    />
-                                </motion.div>
+                                {/* Technical Configuration for Round Robin */}
+                                {tournamentData.type === TournamentType.ROUND_ROBIN && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] p-8 space-y-8 shadow-2xl relative overflow-hidden"
+                                    >
+                                        <div className="absolute top-0 right-0 p-8 opacity-5">
+                                            <Trophy className="w-32 h-32 text-padel-primary" />
+                                        </div>
+
+                                        <div className="relative z-10 flex items-center gap-4 border-b border-white/5 pb-6">
+                                            <div className="p-3 bg-padel-primary/20 rounded-xl">
+                                                <Info className="text-padel-primary w-6 h-6" />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-xl font-black italic uppercase text-white tracking-tighter">Panel de Dirección de Competición</h4>
+                                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Configura los reglamentos técnicos del Round Robin</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                            {/* Group Size */}
+                                            <div className="space-y-4">
+                                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Tamaño de Grupos</label>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {[3, 4].map(size => (
+                                                        <button
+                                                            key={size}
+                                                            onClick={() => setTournamentData({ ...tournamentData, groupSize: size })}
+                                                            className={`py-4 rounded-xl font-black italic text-sm transition-all border ${tournamentData.groupSize === size
+                                                                ? 'bg-padel-primary border-padel-primary text-black'
+                                                                : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
+                                                        >
+                                                            {size} PAREJAS
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <p className="text-[8px] text-gray-600 font-bold uppercase leading-tight italic px-1">
+                                                    * El sistema balanceará las parejas sobrantes automáticamente.
+                                                </p>
+                                            </div>
+
+                                            {/* Match Format */}
+                                            <div className="space-y-4">
+                                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Formato de Partido</label>
+                                                <div className="grid grid-cols-1 gap-2">
+                                                    {[
+                                                        { id: 'ONE_SET_6', label: '1 Set (a 6 juegos)' },
+                                                        { id: 'ONE_SET_9', label: '1 Set (a 9 juegos)' },
+                                                        { id: 'TWO_SHORT_SETS', label: '2 Sets Cortos (a 4) + MTB' },
+                                                        { id: 'TWO_NORMAL_SETS', label: '2 Sets Normales (a 6) + MTB' },
+                                                    ].map(format => (
+                                                        <button
+                                                            key={format.id}
+                                                            onClick={() => setTournamentData({ ...tournamentData, matchFormat: format.id as any })}
+                                                            className={`py-3 px-4 rounded-xl font-bold italic text-[10px] text-left transition-all border uppercase tracking-wider ${tournamentData.matchFormat === format.id
+                                                                ? 'bg-padel-primary border-padel-primary text-black'
+                                                                : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
+                                                        >
+                                                            {format.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Scoring System */}
+                                            <div className="space-y-4">
+                                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Sistema de Puntuación</label>
+                                                <div className="grid grid-cols-1 gap-2">
+                                                    {[
+                                                        { id: 'GOLDEN_POINT', label: 'Punto de Oro', desc: 'Sin ventaja en el 40-40' },
+                                                        { id: 'TRADITIONAL', label: 'Ventaja Tradicional', desc: 'Sistema clásico de ventajas' },
+                                                    ].map(sys => (
+                                                        <button
+                                                            key={sys.id}
+                                                            onClick={() => setTournamentData({ ...tournamentData, scoringSystem: sys.id as any })}
+                                                            className={`p-4 rounded-xl text-left transition-all border ${tournamentData.scoringSystem === sys.id
+                                                                ? 'bg-padel-primary border-padel-primary text-black shadow-lg scale-[1.02]'
+                                                                : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
+                                                        >
+                                                            <span className="block font-black italic text-xs uppercase mb-1">{sys.label}</span>
+                                                            <span className={`block text-[8px] font-bold uppercase opacity-60 ${tournamentData.scoringSystem === sys.id ? 'text-black' : 'text-gray-600'}`}>
+                                                                {sys.desc}
+                                                            </span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="pt-6 border-t border-white/5">
+                                            <motion.button
+                                                onClick={() => setStep(4)}
+                                                whileHover={{ scale: 1.01, boxShadow: '0 0 40px rgba(204,255,0,0.5), 0 0 80px rgba(204,255,0,0.2)', filter: 'brightness(1.1)' }}
+                                                whileTap={{ scale: 0.95 }}
+                                                className="w-full py-4 bg-padel-primary text-black rounded-2xl font-black text-xs uppercase italic tracking-widest transition-all shadow-xl shadow-padel-primary/10"
+                                            >
+                                                Siguiente
+                                            </motion.button>
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                                {!tournamentData.type && (
+                                    <div className="h-40 flex items-center justify-center border-2 border-dashed border-white/5 rounded-3xl">
+                                        <p className="text-gray-600 font-black italic uppercase text-[10px] tracking-widest">Selecciona un formato para continuar</p>
+                                    </div>
+                                )}
+
+                                {tournamentData.type && tournamentData.type !== TournamentType.ROUND_ROBIN && (
+                                    <div className="flex justify-center pt-8">
+                                        <motion.button
+                                            onClick={() => setStep(4)}
+                                            whileHover={{ scale: 1.05, boxShadow: '0 0 50px rgba(204,255,0,0.6), 0 0 100px rgba(204,255,0,0.3)', filter: 'brightness(1.1)' }}
+                                            whileTap={{ scale: 0.95 }}
+                                            className="px-12 py-4 bg-padel-primary text-black rounded-2xl font-black text-xs uppercase italic tracking-widest transition-all shadow-xl shadow-padel-primary/10"
+                                        >
+                                            Siguiente
+                                        </motion.button>
+                                    </div>
+                                )}
                             </motion.div>
                         )}
 
@@ -621,92 +886,102 @@ export default function NewTournamentPage() {
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
-                                className="space-y-8"
+                                className="space-y-2"
                             >
-                                <div className="text-center space-y-1 mb-4">
-                                    <h2 className="text-xl font-black italic tracking-tighter uppercase text-white">
-                                        Paso 4: <span className="text-padel-primary">Fecha y Horarios</span>
-                                    </h2>
+                                <div className="text-center space-y-0.5 mb-2 overflow-hidden relative">
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        className="relative z-10"
+                                    >
+                                        <h3 className="text-[50px] md:text-[80px] font-black italic text-white/[0.03] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap tracking-tighter leading-none select-none pointer-events-none uppercase">
+                                            HORARIOS
+                                        </h3>
+                                        <h2 className="text-2xl md:text-3xl font-black italic tracking-tighter uppercase text-white relative z-10">
+                                            Paso 4: <span className="text-padel-primary">Fecha y Horarios</span>
+                                        </h2>
+                                    </motion.div>
                                 </div>
 
-                                <div className="glass p-8 space-y-8">
-                                    <div className="space-y-4">
-                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1 flex items-center gap-2">
-                                            <Calendar className="w-4 h-4 text-padel-primary" /> Seleccionar Fecha
-                                        </label>
-
-                                        <div className="max-w-sm mx-auto bg-black/40 border border-white/10 rounded-[2rem] p-4 space-y-3">
-                                            <div className="flex justify-between items-center px-1">
-                                                <button
-                                                    onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1))}
-                                                    className="p-1.5 hover:bg-white/5 rounded-full transition-colors"
-                                                >
-                                                    <ChevronLeft className="w-4 h-4 text-padel-primary" />
-                                                </button>
-                                                <h3 className="text-sm font-black italic uppercase text-white tracking-widest">
-                                                    {new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(viewDate)}
-                                                </h3>
-                                                <button
-                                                    onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1))}
-                                                    className="p-1.5 hover:bg-white/5 rounded-full transition-colors"
-                                                >
-                                                    <ChevronRight className="w-4 h-4 text-padel-primary" />
-                                                </button>
-                                            </div>
-
-                                            <div className="grid grid-cols-7 gap-1">
-                                                {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => (
-                                                    <div key={`${d}-${i}`} className="text-center text-[9px] font-black text-gray-700 py-1">{d}</div>
-                                                ))}
-                                                {getDaysInMonth(viewDate.getFullYear(), viewDate.getMonth()).map((date, i) => {
-                                                    if (!date) return <div key={`empty-${i}`} />;
-
-                                                    const dateString = date.toISOString().split('T')[0];
-                                                    const isSelected = tournamentData.startDate === dateString;
-                                                    const isToday = new Date().toISOString().split('T')[0] === dateString;
-
-                                                    return (
-                                                        <button
-                                                            key={dateString}
-                                                            onClick={() => setTournamentData({ ...tournamentData, startDate: dateString })}
-                                                            className={`
-                                                            h-8 w-full rounded-lg flex items-center justify-center text-[11px] font-bold transition-all
-                                                            ${isSelected
-                                                                    ? 'bg-padel-primary text-black scale-105 shadow-[0_0_15px_rgba(204,255,0,0.3)]'
-                                                                    : 'hover:bg-white/10 text-gray-500 hover:text-white'}
-                                                            ${isToday && !isSelected ? 'text-padel-primary bg-padel-primary/5' : ''}
-                                                        `}
-                                                        >
-                                                            {date.getDate()}
-                                                        </button>
-                                                    );
-                                                })}
+                                <div className="glass p-2 md:p-4">
+                                    <div className="flex flex-col md:flex-row gap-3 items-start">
+                                        {/* Calendar Column */}
+                                        <div className="w-full md:w-1/2 space-y-2">
+                                            <label className="text-[9px] font-black uppercase text-gray-500 tracking-widest pl-1 flex items-center gap-2">
+                                                <Calendar className="w-3.5 h-3.5 text-padel-primary" /> Fecha
+                                            </label>
+                                            <div className="bg-black/40 border border-white/10 rounded-[1.25rem] p-2.5 space-y-1.5">
+                                                <div className="flex justify-between items-center px-1">
+                                                    <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1))} className="p-0.5 hover:bg-white/5 rounded-full transition-colors"><ChevronLeft className="w-3.5 h-3.5 text-padel-primary" /></button>
+                                                    <h3 className="text-[9px] font-black italic uppercase text-white tracking-widest">{new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(viewDate)}</h3>
+                                                    <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1))} className="p-0.5 hover:bg-white/5 rounded-full transition-colors"><ChevronRight className="w-3.5 h-3.5 text-padel-primary" /></button>
+                                                </div>
+                                                <div className="grid grid-cols-7 gap-0.5">
+                                                    {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => (<div key={i} className="text-center text-[6px] font-black text-gray-700 py-0.5">{d}</div>))}
+                                                    {getDaysInMonth(viewDate.getFullYear(), viewDate.getMonth()).map((date, i) => {
+                                                        if (!date) return <div key={i} />;
+                                                        const dateString = date.toISOString().split('T')[0];
+                                                        const isSelected = tournamentData.startDate === dateString;
+                                                        return (
+                                                            <button
+                                                                key={dateString}
+                                                                onClick={() => setTournamentData({ ...tournamentData, startDate: dateString })}
+                                                                className={`aspect-square rounded-md text-[8px] font-black transition-all ${isSelected ? 'bg-padel-primary text-black scale-105 shadow-[0_0_8px_rgba(204,255,0,0.3)]' : 'text-gray-400 hover:bg-white/5'}`}
+                                                            >
+                                                                {date.getDate()}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
 
-                                    <div className="grid md:grid-cols-2 gap-8">
-                                        <div className="space-y-4">
-                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1 flex items-center gap-2">
-                                                <Clock className="w-4 h-4 text-padel-primary" /> Hora de Inicio
-                                            </label>
-                                            <input
-                                                type="time"
-                                                className="input-field w-full text-xl font-black bg-black/40"
-                                                value={tournamentData.startTime}
-                                                onChange={e => setTournamentData({ ...tournamentData, startTime: e.target.value })}
-                                            />
-                                        </div>
-                                        <div className="space-y-4">
-                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1 flex items-center gap-2">
-                                                <Clock className="w-4 h-4 text-padel-primary" /> Hora de Fin
-                                            </label>
-                                            <input
-                                                type="time"
-                                                className="input-field w-full text-xl font-black bg-black/40"
-                                                value={tournamentData.endTime}
-                                                onChange={e => setTournamentData({ ...tournamentData, endTime: e.target.value })}
-                                            />
+                                        {/* Name & Times Column */}
+                                        <div className="w-full md:w-1/2 space-y-3">
+                                            <div className="space-y-1.5">
+                                                <label className="text-[9px] font-black uppercase text-gray-500 tracking-widest pl-1 flex items-center gap-2">
+                                                    <Trophy className="w-3.5 h-3.5 text-padel-primary" /> Nombre
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Nombre del Torneo"
+                                                    value={tournamentData.name}
+                                                    onChange={(e) => setTournamentData({ ...tournamentData, name: e.target.value })}
+                                                    className="w-full bg-black/40 border border-white/10 rounded-xl p-2.5 text-sm font-black text-white italic tracking-tight uppercase outline-none focus:border-padel-primary transition-all placeholder:text-gray-700"
+                                                />
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[9px] font-black uppercase text-gray-500 tracking-widest pl-1 flex items-center gap-2">
+                                                        <Clock className="w-3.5 h-3.5 text-padel-primary" /> Inicio
+                                                    </label>
+                                                    <input
+                                                        type="time"
+                                                        value={tournamentData.startTime}
+                                                        onChange={(e) => setTournamentData({ ...tournamentData, startTime: e.target.value })}
+                                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-2.5 text-base font-black text-padel-primary outline-none focus:border-padel-primary transition-colors"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[9px] font-black uppercase text-gray-500 tracking-widest pl-1 flex items-center gap-2">
+                                                        <Clock className="w-3.5 h-3.5 text-padel-primary" /> Fin
+                                                    </label>
+                                                    <input
+                                                        type="time"
+                                                        value={tournamentData.endTime}
+                                                        onChange={(e) => setTournamentData({ ...tournamentData, endTime: e.target.value })}
+                                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-2.5 text-base font-black text-padel-primary outline-none focus:border-padel-primary transition-colors"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="p-2.5 bg-padel-primary/5 border border-padel-primary/20 rounded-xl flex items-center gap-3">
+                                                <Info className="w-3.5 h-3.5 text-padel-primary shrink-0" />
+                                                <p className="text-[7px] text-gray-500 font-bold uppercase leading-tight italic">
+                                                    Partidos automáticos en este rango.
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -721,33 +996,41 @@ export default function NewTournamentPage() {
                                 exit={{ opacity: 0, x: -20 }}
                                 className="glass p-8 space-y-8"
                             >
-                                <div className="text-center mb-4">
-                                    <h2 className="text-xl font-black italic tracking-tighter uppercase text-white">
-                                        Paso 5: <span className="text-padel-primary">Categoría</span>
-                                    </h2>
+                                <div className="text-center space-y-1 mb-4 overflow-hidden relative">
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        className="relative z-10"
+                                    >
+                                        <h3 className="text-[60px] md:text-[100px] font-black italic text-white/[0.03] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap tracking-tighter leading-none select-none pointer-events-none uppercase">
+                                            CATEGORIA
+                                        </h3>
+                                        <h2 className="text-3xl font-black italic tracking-tighter uppercase text-white relative z-10">
+                                            Paso 5: <span className="text-padel-primary">Categoría</span>
+                                        </h2>
+                                    </motion.div>
                                 </div>
 
                                 <div className="space-y-6">
-
-                                    <div className="space-y-4 pt-6">
-                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Nivel de Juego</label>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                            {LEVEL_CATEGORIES.map((cat) => (
-                                                <button
-                                                    key={cat.id}
-                                                    onClick={() => setTournamentData({ ...tournamentData, category: cat.id })}
-                                                    className={`p-5 rounded-[1.5rem] border-2 text-center transition-all group flex flex-col items-center gap-2 ${tournamentData.category === cat.id
-                                                        ? 'border-padel-primary bg-padel-primary/10 shadow-[0_0_20px_rgba(204,255,0,0.15)]'
-                                                        : 'border-white/5 bg-white/5 hover:border-white/10'
-                                                        }`}
-                                                >
-                                                    <Trophy className={`w-5 h-5 transition-colors ${tournamentData.category === cat.id ? 'text-padel-primary' : 'text-gray-700'}`} />
-                                                    <span className={`block text-[10px] font-black italic uppercase transition-colors ${tournamentData.category === cat.id ? 'text-white' : 'text-gray-500 group-hover:text-gray-300'}`}>
-                                                        {cat.label}
-                                                    </span>
-                                                </button>
-                                            ))}
-                                        </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        {LEVEL_CATEGORIES.map((cat) => (
+                                            <button
+                                                key={cat.id}
+                                                onClick={() => {
+                                                    setTournamentData({ ...tournamentData, category: cat.id });
+                                                    setStep(6);
+                                                }}
+                                                className={`p-5 rounded-[1.5rem] border-2 text-center transition-all group flex flex-col items-center gap-2 ${tournamentData.category === cat.id
+                                                    ? 'border-padel-primary bg-padel-primary/10 shadow-[0_0_20px_rgba(204,255,0,0.15)]'
+                                                    : 'border-white/5 bg-white/5 hover:border-white/10'
+                                                    }`}
+                                            >
+                                                <Trophy className={`w-5 h-5 transition-colors ${tournamentData.category === cat.id ? 'text-padel-primary' : 'text-gray-700'}`} />
+                                                <span className={`block text-[10px] font-black italic uppercase transition-colors ${tournamentData.category === cat.id ? 'text-white' : 'text-gray-500 group-hover:text-gray-300'}`}>
+                                                    {cat.label}
+                                                </span>
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
                             </motion.div>
@@ -761,14 +1044,31 @@ export default function NewTournamentPage() {
                                 exit={{ opacity: 0, x: -20 }}
                                 className="glass p-5 md:p-8 space-y-6 md:space-y-8"
                             >
+                                <div className="text-center space-y-1 mb-4 overflow-hidden relative">
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        className="relative z-10"
+                                    >
+                                        <h3 className="text-[60px] md:text-[100px] font-black italic text-white/[0.03] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap tracking-tighter leading-none select-none pointer-events-none uppercase">
+                                            PAREJAS
+                                        </h3>
+                                        <h2 className="text-3xl font-black italic tracking-tighter uppercase text-white relative z-10">
+                                            Paso 6: <span className="text-padel-primary">Parejas</span>
+                                        </h2>
+                                    </motion.div>
+                                </div>
+
                                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                                     <div className="flex items-center gap-4">
                                         <div className="p-3 bg-padel-primary/20 rounded-xl">
                                             <Users className="text-padel-primary w-6 h-6" />
                                         </div>
-                                        <div>
-                                            <h2 className="text-2xl font-bold italic tracking-tight uppercase leading-none">Parejas Registradas</h2>
-                                            <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">Total: {tournamentData.teams.length}</p>
+                                        <div className="flex flex-col min-w-0">
+                                            <h3 className="text-xl md:text-2xl font-black italic tracking-tight uppercase text-white leading-tight">
+                                                {tournamentData.name || 'Sin nombre'}
+                                            </h3>
+                                            <p className="text-[10px] text-gray-500 font-bold uppercase mt-1 pl-1">Parejas Registradas: {tournamentData.teams.length}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3 w-full md:w-auto">
@@ -785,8 +1085,8 @@ export default function NewTournamentPage() {
                                                     if (count > currentCount) {
                                                         const extra = Array.from({ length: count - currentCount }).map(() => ({
                                                             id: Date.now() + Math.random(),
-                                                            p1: { id: '', name: '', lastName: '', age: '', photo: '' },
-                                                            p2: { id: '', name: '', lastName: '', age: '', photo: '' }
+                                                            p1: { id: '', name: '', lastName: '', age: '', photo: '', phone: '' },
+                                                            p2: { id: '', name: '', lastName: '', age: '', photo: '', phone: '' }
                                                         }));
                                                         setTournamentData({ ...tournamentData, teams: [...tournamentData.teams, ...extra] });
                                                     } else if (count < currentCount && count > 0) {
@@ -819,35 +1119,7 @@ export default function NewTournamentPage() {
                                                     <span className="bg-padel-primary text-black font-black px-4 py-1 rounded-full text-[10px] uppercase italic tracking-tighter">
                                                         Pareja {idx + 1}
                                                     </span>
-                                                    {/* Selector de Grupos existentes */}
-                                                    <select
-                                                        className="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[10px] uppercase font-bold text-padel-primary outline-none focus:border-padel-primary"
-                                                        onChange={(e) => {
-                                                            const group = availableGroups.find(g => g.id === e.target.value);
-                                                            if (group && group.participantIds) {
-                                                                const p1Data = availableParticipants.find(p => p.id === group.participantIds[0]);
-                                                                const p2Data = availableParticipants.find(p => p.id === group.participantIds[1]);
 
-                                                                if (p1Data) {
-                                                                    updateTeamMember(team.id, 'p1', 'id', p1Data.id);
-                                                                    updateTeamMember(team.id, 'p1', 'name', p1Data.name);
-                                                                    updateTeamMember(team.id, 'p1', 'lastName', p1Data.lastName || '');
-                                                                    if (p1Data.photo) updateTeamMember(team.id, 'p1', 'photo', p1Data.photo);
-                                                                }
-                                                                if (p2Data) {
-                                                                    updateTeamMember(team.id, 'p2', 'id', p2Data.id);
-                                                                    updateTeamMember(team.id, 'p2', 'name', p2Data.name);
-                                                                    updateTeamMember(team.id, 'p2', 'lastName', p2Data.lastName || '');
-                                                                    if (p2Data.photo) updateTeamMember(team.id, 'p2', 'photo', p2Data.photo);
-                                                                }
-                                                            }
-                                                        }}
-                                                    >
-                                                        <option value="">Cargar Grupo/Equipo</option>
-                                                        {availableGroups.map(g => (
-                                                            <option key={g.id} value={g.id}>{g.name}</option>
-                                                        ))}
-                                                    </select>
                                                 </div>
                                                 <button
                                                     onClick={() => removeTeam(team.id)}
@@ -931,45 +1203,7 @@ export default function NewTournamentPage() {
                 </div>
             </div>
 
-            {/* Navigation Bar */}
-            <div className="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-2xl border-t border-white/10 p-6 z-50">
-                <div className="max-w-4xl mx-auto flex items-center justify-between gap-6">
-                    <button
-                        onClick={prevStep}
-                        disabled={step === 1}
-                        className={`flex items-center gap-3 px-8 py-5 rounded-2xl font-black text-xs uppercase italic transition-all ${step === 1 ? 'opacity-0 pointer-events-none' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
-                    >
-                        <ChevronLeft className="w-5 h-5" /> Anterior
-                    </button>
 
-                    <div className="flex gap-3">
-                        {[1, 2, 3, 4, 5, 6].map((i) => (
-                            <div key={i} className={`h-1.5 rounded-full transition-all duration-700 ${step === i ? 'w-12 bg-padel-primary shadow-[0_0_15px_rgba(204,255,0,0.5)]' : 'w-2 bg-white/5'}`} />
-                        ))}
-                    </div>
-
-                    {step === 6 ? (
-                        <button
-                            onClick={generateTournament}
-                            disabled={loading || !tournamentData.name || tournamentData.courtNames.length === 0}
-                            className="flex items-center gap-4 bg-padel-primary text-black px-12 py-5 rounded-[2.5rem] font-black text-sm uppercase italic tracking-tighter hover:scale-105 active:scale-95 transition-all shadow-[0_0_40px_rgba(204,255,0,0.3)] disabled:opacity-50 disabled:grayscale"
-                        >
-                            {loading ? <RefreshCw className="w-6 h-6 animate-spin" /> : <>Crear Torneo <Trophy className="w-6 h-6" /></>}
-                        </button>
-                    ) : (
-                        <button
-                            onClick={nextStep}
-                            disabled={
-                                (step === 1 && !tournamentData.gender) ||
-                                (step === 2 && (tournamentData.courtNames.length === 0))
-                            }
-                            className="flex items-center gap-4 bg-padel-primary text-black px-12 py-5 rounded-[2.5rem] font-black text-sm uppercase italic tracking-tighter hover:scale-105 active:scale-95 transition-all shadow-[0_0_40px_rgba(204,255,0,0.3)] disabled:opacity-50"
-                        >
-                            Continuar <ChevronRight className="w-6 h-6" />
-                        </button>
-                    )}
-                </div>
-            </div>
 
             {/* Selector de jugadores desde la base */}
             <AnimatePresence>
@@ -1014,6 +1248,7 @@ export default function NewTournamentPage() {
                                                         updateTeamMember(teamId, playerKey, 'name', p.name);
                                                         updateTeamMember(teamId, playerKey, 'lastName', p.lastName || '');
                                                         if (p.photo) updateTeamMember(teamId, playerKey, 'photo', p.photo);
+                                                        if (p.phone) updateTeamMember(teamId, playerKey, 'phone', p.phone);
                                                         setIsPlayerModalOpen(false);
                                                     }
                                                 }}
@@ -1036,6 +1271,6 @@ export default function NewTournamentPage() {
                     </motion.div>
                 )}
             </AnimatePresence>
-        </div>
+        </div >
     );
 }

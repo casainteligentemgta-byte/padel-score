@@ -60,6 +60,10 @@ export interface Tournament {
     endDate: Date;
     clubHoursStart: string; // HH:mm
     clubHoursEnd: string;   // HH:mm
+    groupSize?: number;
+    matchFormat?: 'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS';
+    scoringSystem?: 'GOLDEN_POINT' | 'TRADITIONAL';
+    groupAssignments?: { [groupName: string]: string[] }; // groupName -> list of teamIds
 }
 
 export interface Team {
@@ -72,12 +76,28 @@ export interface Team {
 export interface Match {
     id: string;
     tournamentId: string;
-    courtId: string;
-    team1Id: string;
-    team2Id: string;
-    scheduledTime: Date;
+    courtId?: string;
+    courtIndex?: number;
+    team1Id?: string;
+    team2Id?: string;
+    team1Index: number; // 1-based
+    team2Index: number; // 1-based
+    scheduledTime: string | Date;
+    actualStartTime?: Date;
+    actualEndTime?: Date;
     status: MatchStatus;
-    score?: string; // e.g. "6-4, 7-5"
+    score?: string;
+    sets?: { t1: number, t2: number };
+    games?: { t1: number, t2: number };
+    points?: { t1: string, t2: string }; // '0', '15', '30', '40', 'AD'
+    server?: { team: 1 | 2, player: 1 | 2 }; // 1 o 2 (pareja) y 1 o 2 (jugador dentro de esa pareja)
+    groupName?: string;
+    stage?: 'GROUP_STAGE' | 'MAIN_DRAW' | 'CONSOLATION';
+    roundName?: string;
+    bracketPosition?: {
+        round: number;
+        position: number;
+    };
 }
 
 export interface ScheduleConfig {

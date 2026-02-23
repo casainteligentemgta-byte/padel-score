@@ -10,7 +10,9 @@ import {
     Users,
     Settings,
     LogOut,
-    Home
+    Sparkles,
+    Home,
+    Shield
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -24,13 +26,15 @@ export default function Sidebar() {
     const menuItems = [
         { name: 'Inicio', href: '/', icon: Home },
         { name: 'Mis Torneos', href: '/tournaments', icon: Trophy },
+        { name: 'Agentes AI', href: '/agents', icon: Sparkles },
         { name: 'Agregar Jugador', href: '/players/register', icon: UserPlus },
         { name: 'Mi Base', href: '/players', icon: Users },
     ];
 
     const adminItems = [
         { name: 'Jugadores (Master)', href: '/players', icon: Users },
-        { name: 'Gestión Accesos', href: '/admin/users', icon: Settings },
+        { name: 'Gestión Usuarios', href: '/admin/users', icon: Settings },
+        { name: 'Vigilancia (Logs)', href: '/admin/logs', icon: Shield },
     ];
 
     return (
@@ -60,7 +64,7 @@ export default function Sidebar() {
                             animate={{ x: 0 }}
                             exit={{ x: '-100%' }}
                             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                            className="fixed top-0 left-0 bottom-0 w-[280px] bg-[#0a0a0a] border-r border-white/10 z-[120] p-6 flex flex-col"
+                            className="fixed top-0 left-0 bottom-0 w-[280px] bg-black/40 backdrop-blur-2xl border-r border-white/10 z-[120] p-6 flex flex-col shadow-[20px_0_50px_rgba(0,0,0,0.5)]"
                         >
                             <div className="flex justify-between items-center mb-6 flex-shrink-0">
                                 <div className="text-xl font-black italic uppercase tracking-tighter text-white flex items-center">
@@ -76,7 +80,7 @@ export default function Sidebar() {
                                         }}
                                         className="w-4 h-4 bg-padel-primary rounded-full mr-2 shadow-[0_4px_10px_rgba(204,255,0,0.3)]"
                                     />
-                                    PADEL <span className="text-padel-primary">SMART</span>
+                                    SMART <span className="text-padel-primary">PADEL</span>
                                 </div>
                                 <button
                                     onClick={() => setIsOpen(false)}
@@ -95,10 +99,15 @@ export default function Sidebar() {
                                                 key={item.name}
                                                 href={item.href}
                                                 onClick={() => setIsOpen(false)}
-                                                className="flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-400 hover:bg-padel-primary/10 hover:text-padel-primary transition-all group"
                                             >
-                                                <item.icon className="w-4 h-4 transition-transform group-hover:scale-110" />
-                                                <span className="font-bold text-[12px] tracking-tight uppercase italic">{item.name}</span>
+                                                <motion.div
+                                                    whileHover={{ x: 5, backgroundColor: 'rgba(204,255,0,0.1)' }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    className="flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-400 hover:text-padel-primary transition-all group"
+                                                >
+                                                    <item.icon className="w-4 h-4 transition-transform group-hover:scale-110" />
+                                                    <span className="font-bold text-[12px] tracking-tight uppercase italic">{item.name}</span>
+                                                </motion.div>
                                             </Link>
                                         ))}
                                     </div>

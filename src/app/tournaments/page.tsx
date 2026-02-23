@@ -88,7 +88,7 @@ export default function MyTournamentsPage() {
             </div>
 
             <div className="ipad-scroll-area pb-32">
-                <div className="max-w-6xl mx-auto">
+                <div className="max-w-6xl mx-auto min-h-[calc(100%+1px)]">
                     {tournaments.length === 0 ? (
                         <div className="glass p-12 text-center border-dashed border-2 border-white/5 space-y-6">
                             <div className="inline-flex p-6 rounded-full bg-white/5 text-gray-600 mb-4">
@@ -105,60 +105,88 @@ export default function MyTournamentsPage() {
                         </div>
                     ) : (
                         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {tournaments.map((t, idx) => (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: idx * 0.1 }}
-                                    key={t.id}
-                                    className="group"
-                                >
-                                    <Link href={`/tournaments/${t.id}`}>
-                                        <div className="glass p-8 h-full border-white/5 hover:border-padel-primary/30 transition-all cursor-pointer relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-20 transition-opacity">
-                                                <Trophy className="w-20 h-20" />
-                                            </div>
+                            {(() => {
+                                // Group tournaments by date and location
+                                const groups: { [key: string]: any[] } = {};
+                                tournaments.forEach(t => {
+                                    const key = `${t.startDate || 'no-date'}_${t.complexName || 'Margarita Padel'}`;
+                                    if (!groups[key]) groups[key] = [];
+                                    groups[key].push(t);
+                                });
 
-                                            <div className="flex items-center justify-between mb-4">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="px-2 py-1 bg-padel-primary/10 text-padel-primary text-[8px] font-black rounded uppercase tracking-widest leading-none">
-                                                        {(t.type || 'AMERICANO_INDIVIDUAL').replace('_', ' ')}
+                                return Object.entries(groups).map(([key, groupTournaments], gIdx) => {
+                                    const first = groupTournaments[0];
+                                    const isGrouped = groupTournaments.length > 1;
+
+                                    return (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: gIdx * 0.1 }}
+                                            key={key}
+                                            className="group relative"
+                                        >
+                                            <div className="glass p-8 h-full border-white/5 hover:border-padel-primary/30 transition-all relative overflow-hidden flex flex-col">
+                                                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-20 transition-opacity">
+                                                    <Trophy className="w-20 h-20" />
+                                                </div>
+
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="px-2 py-1 bg-padel-primary/10 text-padel-primary text-[8px] font-black rounded uppercase tracking-widest leading-none">
+                                                            {isGrouped ? 'EVENTO UNIFICADO' : (first.type || 'AMERICANO_INDIVIDUAL').replace('_', ' ')}
+                                                        </div>
+                                                        {!isGrouped && (
+                                                            <div className="px-2 py-1 bg-white/5 text-gray-400 text-[8px] font-black rounded uppercase tracking-widest leading-none">
+                                                                {first.category}
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                    <div className="px-2 py-1 bg-white/5 text-gray-400 text-[8px] font-black rounded uppercase tracking-widest leading-none">
-                                                        {t.category}
+                                                </div>
+
+                                                <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-4 group-hover:text-padel-primary transition-colors">
+                                                    {isGrouped ? `Torneo ${first.complexName || 'Margarita Padel'}` : first.name}
+                                                </h3>
+
+                                                <div className="space-y-3 mb-6">
+                                                    <div className="flex items-center gap-3 text-gray-500 text-xs">
+                                                        <Calendar className="w-4 h-4 text-padel-primary" />
+                                                        <span>{first.startDate ? new Date(first.startDate).toLocaleDateString() : 'Sin fecha'}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-3 text-gray-500 text-xs">
+                                                        <MapPin className="w-4 h-4 text-padel-primary" />
+                                                        <span>{first.complexName || 'Margarita Padel'}</span>
                                                     </div>
                                                 </div>
-                                                <button
-                                                    onClick={(e) => handleDelete(e, t.id)}
-                                                    className="relative z-10 p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
 
-                                            <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-4 group-hover:text-padel-primary transition-colors">
-                                                {t.name}
-                                            </h3>
-
-                                            <div className="space-y-3">
-                                                <div className="flex items-center gap-3 text-gray-500 text-xs">
-                                                    <Calendar className="w-4 h-4 text-padel-primary" />
-                                                    <span>{t.startDate ? new Date(t.startDate).toLocaleDateString() : 'Sin fecha'}</span>
+                                                <div className="mt-auto space-y-2">
+                                                    {groupTournaments.map(t => (
+                                                        <Link key={t.id} href={`/tournaments/${t.id}`}>
+                                                            <div className="flex items-center justify-between p-3 bg-white/5 hover:bg-padel-primary/10 rounded-xl border border-white/5 hover:border-padel-primary/30 transition-all group/btn">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-2 h-2 rounded-full bg-padel-primary" />
+                                                                    <span className="text-[10px] font-black uppercase italic tracking-wider text-gray-300 group-hover/btn:text-padel-primary">
+                                                                        Categoría {t.category}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <button
+                                                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(e, t.id); }}
+                                                                        className="p-1.5 rounded-lg text-gray-700 hover:text-red-500 transition-colors"
+                                                                    >
+                                                                        <Trash2 className="w-3 h-3" />
+                                                                    </button>
+                                                                    <ChevronRight className="w-4 h-4 text-padel-primary" />
+                                                                </div>
+                                                            </div>
+                                                        </Link>
+                                                    ))}
                                                 </div>
-                                                <div className="flex items-center gap-3 text-gray-500 text-xs">
-                                                    <MapPin className="w-4 h-4 text-padel-primary" />
-                                                    <span>{t.complexName || 'Margarita Padel'}</span>
-                                                </div>
                                             </div>
-
-                                            <div className="mt-8 flex justify-between items-center">
-                                                <span className="text-[10px] font-black uppercase text-gray-600 tracking-[0.2em]">Ver Panel</span>
-                                                <ChevronRight className="w-5 h-5 text-padel-primary group-hover:translate-x-1 transition-transform" />
-                                            </div>
-                                        </div>
-                                    </Link>
-                                </motion.div>
-                            ))}
+                                        </motion.div>
+                                    );
+                                });
+                            })()}
                         </div>
                     )}
 
