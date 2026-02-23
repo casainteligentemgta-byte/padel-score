@@ -1,14 +1,36 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Users, Calendar, ArrowRight, Play, Sparkles } from 'lucide-react';
+import { Trophy, Users, Calendar, ArrowRight, Play, Sparkles, ExternalLink } from 'lucide-react';
 import LoginButton from '@/components/LoginButton';
-
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
+import { dataService } from '@/lib/dataService';
 
 export default function LandingPage() {
+    const [ads, setAds] = useState<any[]>([]);
+    const [currentAd, setCurrentAd] = useState<any>(null);
+
+    useEffect(() => {
+        const fetchAds = async () => {
+            try {
+                const allAds = await dataService.getAds();
+                const activeAds = allAds.filter((ad: any) => ad.active);
+                setAds(activeAds);
+                if (activeAds.length > 0) {
+                    // Pick a random ad
+                    const randomIndex = Math.floor(Math.random() * activeAds.length);
+                    setCurrentAd(activeAds[randomIndex]);
+                }
+            } catch (error) {
+                console.error("Error fetching ads:", error);
+            }
+        };
+        fetchAds();
+    }, []);
+
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white relative">
             <Sidebar />
@@ -105,24 +127,58 @@ export default function LandingPage() {
                         </Link>
                     </div>
 
-                    {/* Publicity Banner - Full Width or Centered */}
+                    {/* Publicity Banner - Dynamic */}
                     <div className="col-span-12 mt-2 h-24 md:h-32 rounded-2xl glass overflow-hidden border border-white/10 relative group">
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10">
-                            <div className="flex items-center gap-3">
-                                <div className="px-3 py-1 bg-padel-primary/20 border border-padel-primary/30 rounded text-[8px] font-black uppercase text-padel-primary tracking-widest">Ad</div>
-                                <span className="text-xs font-bold uppercase tracking-widest text-gray-400 group-hover:text-white transition-colors">Espacio Publicitario Disponible</span>
-                            </div>
-                        </div>
-                        {/* Placeholder for Video */}
-                        <video
-                            autoPlay
-                            muted
-                            loop
-                            playsInline
-                            className="w-full h-full object-cover opacity-30 group-hover:opacity-60 transition-opacity"
-                        >
-                            <source src="/ads-placeholder.mp4" type="video/mp4" />
-                        </video>
+                        {currentAd ? (
+                            <a href={currentAd.targetUrl || "#"} target={currentAd.targetUrl ? "_blank" : "_self"} className="block w-full h-full">
+                                <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/20 to-transparent z-10 flex items-center px-8">
+                                    <div className="flex items-center gap-4">
+                                        <div className="px-3 py-1 bg-padel-primary text-black rounded text-[8px] font-black uppercase tracking-widest">Patrocinado</div>
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-black uppercase italic tracking-tighter text-white">{currentAd.title}</span>
+                                            {currentAd.targetUrl && (
+                                                <span className="text-[10px] text-padel-primary font-bold flex items-center gap-1"> Ver Más <ExternalLink className="w-2 h-2" /></span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                {currentAd.type === 'video' ? (
+                                    <video
+                                        autoPlay
+                                        muted
+                                        loop
+                                        playsInline
+                                        className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity"
+                                    >
+                                        <source src={currentAd.imageUrl} type="video/mp4" />
+                                    </video>
+                                ) : (
+                                    <img
+                                        src={currentAd.imageUrl}
+                                        alt={currentAd.title}
+                                        className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity"
+                                    />
+                                )}
+                            </a>
+                        ) : (
+                            <>
+                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10">
+                                    <div className="flex items-center gap-3">
+                                        <div className="px-3 py-1 bg-padel-primary/20 border border-padel-primary/30 rounded text-[8px] font-black uppercase text-padel-primary tracking-widest">Ad</div>
+                                        <span className="text-xs font-bold uppercase tracking-widest text-gray-400 group-hover:text-white transition-colors">Espacio Publicitario Disponible</span>
+                                    </div>
+                                </div>
+                                <video
+                                    autoPlay
+                                    muted
+                                    loop
+                                    playsInline
+                                    className="w-full h-full object-cover opacity-30 group-hover:opacity-60 transition-opacity"
+                                >
+                                    <source src="/ads-placeholder.mp4" type="video/mp4" />
+                                </video>
+                            </>
+                        )}
                     </div>
                 </div>
 

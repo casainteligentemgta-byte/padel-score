@@ -12,6 +12,8 @@ import {
     setDoc,
     serverTimestamp
 } from 'firebase/firestore';
+import { storage } from './firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export const dataService = {
     // Torneos
@@ -147,6 +149,32 @@ export const dataService = {
         const q = query(collection(db, 'users'));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+    },
+
+    // Publicidad / Ads
+    async createAd(data: any, ownerId: string) {
+        return await addDoc(collection(db, 'ads'), {
+            ...data,
+            ownerId,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        });
+    },
+
+    async getAds() {
+        const q = query(collection(db, 'ads'));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    },
+
+    async deleteAd(id: string) {
+        return await deleteDoc(doc(db, 'ads', id));
+    },
+
+    async uploadFile(file: File, path: string) {
+        const fileRef = ref(storage, path);
+        await uploadBytes(fileRef, file);
+        return await getDownloadURL(fileRef);
     }
 };
 
