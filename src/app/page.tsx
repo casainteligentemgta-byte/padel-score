@@ -42,15 +42,15 @@ export default function LandingPage() {
 
                 <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
                     {/* Hero Section - Left Side */}
-                    <div className="lg:col-span-12 xl:col-span-7 relative glass overflow-hidden flex flex-col justify-center p-8 md:p-12 min-h-[400px]">
+                    <div className="lg:col-span-12 xl:col-span-7 relative glass overflow-hidden flex flex-col justify-center p-8 md:p-10 min-h-[350px]">
                         {/* Background Animation / Blur */}
                         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-padel-primary/20 blur-[120px] rounded-full animate-pulse" />
 
                         <div className="relative z-10">
-                            <h1 className="text-5xl md:text-7xl font-black italic tracking-tighter uppercase mb-4 drop-shadow-2xl">
+                            <h1 className="text-5xl md:text-6xl font-black italic tracking-tighter uppercase mb-2 drop-shadow-2xl">
                                 SMART <span className="text-padel-primary">PADEL</span>
                             </h1>
-                            <p className="text-lg md:text-xl text-gray-400 max-w-xl mb-8 leading-relaxed">
+                            <p className="text-base text-gray-400 max-w-xl mb-6 leading-relaxed">
                                 La plataforma inteligente para gestionar torneos profesionales.
                                 Generación automática de brackets y resultados en tiempo real.
                             </p>
@@ -58,56 +58,75 @@ export default function LandingPage() {
                             <div className="flex flex-wrap gap-4">
                                 <Link
                                     href="/new-tournament"
-                                    className="bg-padel-primary text-black px-8 py-4 rounded-xl font-black text-lg flex items-center justify-center gap-3 hover:scale-105 transition-transform"
+                                    className="bg-padel-primary text-black px-6 py-3 rounded-xl font-black text-base flex items-center justify-center gap-3 hover:scale-105 transition-transform"
                                 >
-                                    CREAR TORNEO <Trophy className="w-6 h-6" />
+                                    CREAR TORNEO <Trophy className="w-5 h-5" />
                                 </Link>
                                 <Link
                                     href="/tournaments"
-                                    className="bg-white/5 border border-white/10 px-8 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 hover:bg-white/10 transition-all">
+                                    className="bg-white/5 border border-white/10 px-6 py-3 rounded-xl font-bold text-base flex items-center justify-center gap-3 hover:bg-white/10 transition-all">
                                     TORNEOS <Play className="w-5 h-5 fill-current" />
                                 </Link>
                             </div>
                         </div>
 
                         {/* Stats Footer in Hero Card */}
-                        <div className="mt-12 flex gap-8 text-gray-500 font-bold uppercase tracking-widest text-xs">
+                        <div className="mt-8 flex gap-8 text-gray-500 font-bold uppercase tracking-widest text-[10px]">
                             <div className="flex items-center gap-2">
-                                <Users className="w-4 h-4" /> +10k Jugadores
+                                <Users className="w-3 h-3" /> +10k Jugadores
                             </div>
                             <div className="flex items-center gap-2">
-                                <Trophy className="w-4 h-4" /> 500+ Clubes
+                                <Trophy className="w-3 h-3" /> 500+ Clubes
                             </div>
                         </div>
                     </div>
 
                     {/* Quick Access - Right Side */}
-                    <div className="lg:col-span-12 xl:col-span-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 xl:grid-rows-4 gap-4">
-
-                        <Link href="/tournaments" className="glass p-6 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center">
-                            <h3 className="text-xl font-bold mb-2 flex items-center justify-between">
-                                Brackets en Vivo <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform" />
+                    <div className="lg:col-span-12 xl:col-span-5 flex flex-col gap-4">
+                        <Link href="/tournaments" className="glass p-5 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center flex-1">
+                            <h3 className="text-lg font-bold mb-1 flex items-center justify-between">
+                                Brackets en Vivo <ArrowRight className="w-4 h-4 group-hover:translate-x-2 transition-transform" />
                             </h3>
-                            <p className="text-sm text-gray-400">Resultados instantáneos y actualización automática para todos.</p>
+                            <p className="text-xs text-gray-400">Resultados instantáneos y actualización automática.</p>
                         </Link>
 
-                        <Link href="/expenses" className="glass p-6 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center">
-                            <h3 className="text-xl font-bold mb-2 flex items-center justify-between">
-                                Control de Gastos <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform" />
+                        <Link href="/expenses" className="glass p-5 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center flex-1">
+                            <h3 className="text-lg font-bold mb-1 flex items-center justify-between">
+                                Control de Gastos <ArrowRight className="w-4 h-4 group-hover:translate-x-2 transition-transform" />
                             </h3>
-                            <p className="text-sm text-gray-400">Lleva la contabilidad: inscripciones, premios y gastos operativos.</p>
+                            <p className="text-xs text-gray-400">Lleva la contabilidad: inscripciones y premios.</p>
                         </Link>
 
-                        <Link href="/agents" className="glass p-6 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center border-padel-primary/20">
-                            <h3 className="text-xl font-padel text-padel-primary mb-2 flex items-center justify-between">
-                                AGENTES AI <Sparkles className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                        <Link href="/agents" className="glass p-5 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center border-padel-primary/20 flex-1">
+                            <h3 className="text-lg font-padel text-padel-primary mb-1 flex items-center justify-between">
+                                AGENTES AI <Sparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" />
                             </h3>
-                            <p className="text-sm text-gray-400 italic">Consulta a nuestros expertos en ROI, Diseño y Redes Sociales.</p>
+                            <p className="text-xs text-gray-400 italic">Consulta a nuestros expertos en ROI y Diseño.</p>
                         </Link>
+                    </div>
+
+                    {/* Publicity Banner - Full Width or Centered */}
+                    <div className="col-span-12 mt-2 h-24 md:h-32 rounded-2xl glass overflow-hidden border border-white/10 relative group">
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10">
+                            <div className="flex items-center gap-3">
+                                <div className="px-3 py-1 bg-padel-primary/20 border border-padel-primary/30 rounded text-[8px] font-black uppercase text-padel-primary tracking-widest">Ad</div>
+                                <span className="text-xs font-bold uppercase tracking-widest text-gray-400 group-hover:text-white transition-colors">Espacio Publicitario Disponible</span>
+                            </div>
+                        </div>
+                        {/* Placeholder for Video */}
+                        <video
+                            autoPlay
+                            muted
+                            loop
+                            playsInline
+                            className="w-full h-full object-cover opacity-30 group-hover:opacity-60 transition-opacity"
+                        >
+                            <source src="/ads-placeholder.mp4" type="video/mp4" />
+                        </video>
                     </div>
                 </div>
 
-                <div className="mt-12 pb-24 text-center text-[10px] font-black uppercase tracking-[0.3em] text-gray-600 italic">
+                <div className="mt-6 pb-24 text-center text-[10px] font-black uppercase tracking-[0.3em] text-gray-600 italic">
                     Optimizado para iPad Landscape • SMART PADEL Pro v1.0
                 </div>
             </div>

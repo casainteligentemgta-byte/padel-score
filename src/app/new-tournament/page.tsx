@@ -184,7 +184,7 @@ export default function NewTournamentPage() {
                 // Round Robin Group Logic
                 const teams = [...tournamentData.teams];
                 const groupSize = tournamentData.groupSize || 3;
-                const numGroups = Math.floor(teams.length / groupSize);
+                const numGroups = Math.max(1, Math.round(teams.length / groupSize));
 
                 let currentTeams = [...teams];
                 const groups: any[][] = [];
@@ -219,14 +219,17 @@ export default function NewTournamentPage() {
                     }
                 });
 
+                const [y, m, d] = (tournamentData.startDate || "").split('-').map(Number);
+                const startDateLocal = y ? new Date(y, m - 1, d) : new Date();
+
                 // Schedule these pairings
                 const schedule = ScheduleEngine.generateSchedule({
                     tournamentId: 'temporary',
                     numTeams: tournamentData.teams.length, // Not strictly used for pairings here
-                    numCourts: tournamentData.courtNames.length || 4,
+                    numCourts: Math.max(1, tournamentData.courtNames.length),
                     clubHoursStart: tournamentData.startTime || "08:00",
                     clubHoursEnd: tournamentData.endTime || "22:00",
-                    startDate: tournamentData.startDate ? new Date(tournamentData.startDate) : new Date(),
+                    startDate: startDateLocal,
                     matchDurationMinutes: matchDuration,
                     bufferMinutes: 2,
                     type: tournamentData.type
@@ -255,14 +258,17 @@ export default function NewTournamentPage() {
                 }).filter(m => m !== null);
 
             } else {
+                const [y, m, d] = (tournamentData.startDate || "").split('-').map(Number);
+                const startDateLocal = y ? new Date(y, m - 1, d) : new Date();
+
                 // Original Generation Logic
                 const schedule = ScheduleEngine.generateSchedule({
                     tournamentId: 'temporary',
                     numTeams: tournamentData.teams.length,
-                    numCourts: tournamentData.courtNames.length || 4,
+                    numCourts: Math.max(1, tournamentData.courtNames.length),
                     clubHoursStart: tournamentData.startTime || "08:00",
                     clubHoursEnd: tournamentData.endTime || "22:00",
-                    startDate: tournamentData.startDate ? new Date(tournamentData.startDate) : new Date(),
+                    startDate: startDateLocal,
                     matchDurationMinutes: matchDuration,
                     bufferMinutes: 2,
                     type: tournamentData.type
@@ -283,6 +289,12 @@ export default function NewTournamentPage() {
                 if (timeDiff !== 0) return timeDiff;
                 return a.courtIndex - b.courtIndex;
             });
+
+            if (enrichedMatches.length === 0) {
+                alert('No se pudieron generar partidos en el rango horario seleccionado. Por favor amplía el horario o reduce la duración de los sets.');
+                setLoading(false);
+                return;
+            }
 
             const tournamentToSave = {
                 name: tournamentData.name,
@@ -311,7 +323,7 @@ export default function NewTournamentPage() {
             console.log('[NewTournament] Document created with ID:', docRef.id);
 
             clearTimeout(generationTimeout);
-            alert('¡Torneo y calendario generados con éxito!');
+            alert(`¡Torneo y calendario generados con éxito! (${enrichedMatches.length} partidos)`);
             console.log('[NewTournament] Redirecting to dashboard...');
             router.push(`/tournaments/${docRef.id}`);
         } catch (err: any) {
@@ -466,18 +478,19 @@ export default function NewTournamentPage() {
                             })}
                         </div>
 
-                        {step > 1 && step < 7 && (step === 2 || step === 3 || step === 4 || step === 5 || step === 6) && (
+                        {step >= 1 && step < 7 && (step === 1 || step === 2 || step === 3 || step === 4 || step === 5 || step === 6) && (
                             <motion.button
                                 initial={{ opacity: 0, scale: 0.8 }}
                                 animate={{
-                                    opacity: (step === 2 && tournamentData.courtNames.length === 0) || (step === 3 && !tournamentData.type) ? 0 : 1,
-                                    scale: (step === 2 && tournamentData.courtNames.length === 0) || (step === 3 && !tournamentData.type) ? 0.8 : 1,
-                                    display: (step === 2 && tournamentData.courtNames.length === 0) || (step === 3 && !tournamentData.type) ? 'none' : 'flex'
+                                    opacity: (step === 1 && (!tournamentData.name || !tournamentData.gender)) || (step === 2 && tournamentData.courtNames.length === 0) || (step === 3 && !tournamentData.type) ? 0 : 1,
+                                    scale: (step === 1 && (!tournamentData.name || !tournamentData.gender)) || (step === 2 && tournamentData.courtNames.length === 0) || (step === 3 && !tournamentData.type) ? 0.8 : 1,
+                                    display: (step === 1 && (!tournamentData.name || !tournamentData.gender)) || (step === 2 && tournamentData.courtNames.length === 0) || (step === 3 && !tournamentData.type) ? 'none' : 'flex'
                                 }}
                                 onClick={nextStep}
                                 whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(204,255,0,0.6), 0 0 80px rgba(204,255,0,0.3)', filter: 'brightness(1.1)' }}
                                 whileTap={{ scale: 0.95 }}
                                 disabled={
+                                    (step === 1 && (!tournamentData.name || !tournamentData.gender)) ||
                                     (step === 5 && !tournamentData.startDate) ||
                                     (step === 3 && !tournamentData.type)
                                 }
@@ -528,37 +541,51 @@ export default function NewTournamentPage() {
                                     </motion.div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-                                    {[
-                                        { id: 'MALE', label: 'Masculino', icon: User },
-                                        { id: 'FEMALE', label: 'Femenino', icon: User },
-                                        { id: 'MIXED', label: 'Mixto', icon: Users },
-                                    ].map((g) => (
-                                        <motion.button
-                                            key={g.id}
-                                            whileHover={{ scale: 1.05, boxShadow: '0 0 80px rgba(204,255,0,0.5), 0 0 150px rgba(204,255,0,0.2)', filter: 'brightness(1.1)' }}
-                                            whileTap={{ scale: 0.95 }}
-                                            onClick={() => {
-                                                setTournamentData({ ...tournamentData, gender: g.id as any });
-                                                nextStep();
-                                            }}
-                                            className={`relative group transition-all duration-500 rounded-[2.5rem] p-1 ${tournamentData.gender === g.id ? 'bg-padel-primary shadow-[0_0_40px_rgba(204,255,0,0.2)]' : 'bg-white/10 border border-transparent hover:border-padel-primary/50'}`}
-                                        >
-                                            <div className={`h-full w-full rounded-[2.4rem] p-10 flex flex-col items-center gap-6 transition-all duration-500 ${tournamentData.gender === g.id ? 'bg-[#111]' : 'bg-[#1a1a1a] group-hover:bg-[#111]'}`}>
-                                                <div className={`p-6 rounded-full transition-all duration-500 ${tournamentData.gender === g.id ? 'bg-padel-primary/20 scale-110' : 'bg-white/5 group-hover:bg-padel-primary/10 group-hover:scale-110'}`}>
-                                                    <g.icon className={`w-12 h-12 transition-colors ${tournamentData.gender === g.id ? 'text-padel-primary' : 'text-gray-600 group-hover:text-padel-primary'}`} />
-                                                </div>
-                                                <span className={`text-2xl font-black italic uppercase tracking-tighter transition-all ${tournamentData.gender === g.id ? 'text-white' : 'text-gray-500 group-hover:text-white'}`}>
-                                                    {g.label}
-                                                </span>
-                                                {tournamentData.gender === g.id && (
-                                                    <div className="absolute top-6 right-6">
-                                                        <CheckCircle2 className="text-padel-primary w-6 h-6" />
+                                <div className="max-w-4xl mx-auto space-y-6">
+                                    <div className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] p-8 space-y-4">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1 flex items-center gap-2">
+                                            <Trophy className="w-3.5 h-3.5 text-padel-primary" /> Nombre del Torneo
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="EJ: AMERICANO NOCTURNO ELITE"
+                                            value={tournamentData.name}
+                                            onChange={(e) => setTournamentData({ ...tournamentData, name: e.target.value })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-2xl font-black text-white italic tracking-tight uppercase outline-none focus:border-padel-primary transition-all placeholder:text-gray-800"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        {[
+                                            { id: 'MALE', label: 'Masculino', icon: User },
+                                            { id: 'FEMALE', label: 'Femenino', icon: User },
+                                            { id: 'MIXED', label: 'Mixto', icon: Users },
+                                        ].map((g) => (
+                                            <motion.button
+                                                key={g.id}
+                                                whileHover={{ scale: 1.05, boxShadow: '0 0 80px rgba(204,255,0,0.5), 0 0 150px rgba(204,255,0,0.2)', filter: 'brightness(1.1)' }}
+                                                whileTap={{ scale: 0.95 }}
+                                                onClick={() => {
+                                                    setTournamentData({ ...tournamentData, gender: g.id as any });
+                                                }}
+                                                className={`relative group transition-all duration-500 rounded-[2.5rem] p-1 ${tournamentData.gender === g.id ? 'bg-padel-primary shadow-[0_0_40px_rgba(204,255,0,0.2)]' : 'bg-white/10 border border-transparent hover:border-padel-primary/50'}`}
+                                            >
+                                                <div className={`h-full w-full rounded-[2.4rem] p-10 flex flex-col items-center gap-6 transition-all duration-500 ${tournamentData.gender === g.id ? 'bg-[#111]' : 'bg-[#1a1a1a] group-hover:bg-[#111]'}`}>
+                                                    <div className={`p-6 rounded-full transition-all duration-500 ${tournamentData.gender === g.id ? 'bg-padel-primary/20 scale-110' : 'bg-white/5 group-hover:bg-padel-primary/10 group-hover:scale-110'}`}>
+                                                        <g.icon className={`w-12 h-12 transition-colors ${tournamentData.gender === g.id ? 'text-padel-primary' : 'text-gray-600 group-hover:text-padel-primary'}`} />
                                                     </div>
-                                                )}
-                                            </div>
-                                        </motion.button>
-                                    ))}
+                                                    <span className={`text-2xl font-black italic uppercase tracking-tighter transition-all ${tournamentData.gender === g.id ? 'text-white' : 'text-gray-500 group-hover:text-white'}`}>
+                                                        {g.label}
+                                                    </span>
+                                                    {tournamentData.gender === g.id && (
+                                                        <div className="absolute top-6 right-6">
+                                                            <CheckCircle2 className="text-padel-primary w-6 h-6" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </motion.button>
+                                        ))}
+                                    </div>
                                 </div>
 
                             </motion.div>
@@ -843,7 +870,7 @@ export default function NewTournamentPage() {
                                                 ))}
                                             </div>
                                             <p className="text-[8px] text-gray-600 font-bold uppercase leading-tight italic px-1">
-                                                * El sistema balanceará las parejas sobrantes automáticamente.
+                                                * Los grupos se conforman por 3 o 4 parejas cada uno. El sistema balanceará las sobrantes.
                                             </p>
                                         </div>
 
@@ -956,16 +983,15 @@ export default function NewTournamentPage() {
 
                                         {/* Name & Times Column */}
                                         <div className="w-full md:w-1/2 space-y-3">
-                                            <div className="space-y-1.5">
+                                            <div className="space-y-1.5 opacity-50 pointer-events-none">
                                                 <label className="text-[9px] font-black uppercase text-gray-500 tracking-widest pl-1 flex items-center gap-2">
-                                                    <Trophy className="w-3.5 h-3.5 text-padel-primary" /> Nombre
+                                                    <Trophy className="w-3.5 h-3.5 text-padel-primary" /> Nombre (Definido en Paso 1)
                                                 </label>
                                                 <input
                                                     type="text"
-                                                    placeholder="Nombre del Torneo"
                                                     value={tournamentData.name}
-                                                    onChange={(e) => setTournamentData({ ...tournamentData, name: e.target.value })}
-                                                    className="w-full bg-black/40 border border-white/10 rounded-xl p-2.5 text-sm font-black text-white italic tracking-tight uppercase outline-none focus:border-padel-primary transition-all placeholder:text-gray-700"
+                                                    readOnly
+                                                    className="w-full bg-black/20 border border-white/5 rounded-xl p-2.5 text-sm font-black text-white/50 italic tracking-tight uppercase outline-none"
                                                 />
                                             </div>
 

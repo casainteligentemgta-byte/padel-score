@@ -8,7 +8,8 @@ import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     signOut,
-    updateProfile
+    updateProfile,
+    sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
 import { dataService, ROLES } from '@/lib/dataService';
@@ -20,6 +21,8 @@ interface AuthContextType {
     signInWithGoogle: () => Promise<void>;
     signInWithEmail: (email: string, pass: string) => Promise<void>;
     signUpWithEmail: (email: string, pass: string, name: string) => Promise<void>;
+    forgotPassword: (email: string) => Promise<void>;
+    enableDevMode: () => void;
     logout: () => Promise<void>;
     isAdmin: boolean;
     isPlayer: boolean;
@@ -33,6 +36,8 @@ const AuthContext = createContext<AuthContextType>({
     signInWithGoogle: async () => { },
     signInWithEmail: async () => { },
     signUpWithEmail: async () => { },
+    forgotPassword: async () => { },
+    enableDevMode: () => { },
     logout: async () => { },
     isAdmin: false,
     isPlayer: false,
@@ -59,11 +64,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const fetchProfile = async (uid: string) => {
         try {
+            console.log("AuthContext: Fetching profile for", uid);
             const data = await dataService.getUserProfile(uid);
             if (data) {
                 setProfile(data);
+                return data;
             } else {
                 // Si no existe perfil, lo creamos por defecto como jugador
+                console.log("AuthContext: Profile not found, creating default");
                 const newProfile = {
                     role: ROLES.PLAYER,
                     email: auth.currentUser?.email || '',
@@ -72,9 +80,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 };
                 await dataService.setUserProfile(uid, newProfile);
                 setProfile(newProfile);
+                return newProfile;
             }
         } catch (error) {
-            console.error("Error fetching user profile:", error);
+            console.error("AuthContext: Error fetching user profile:", error);
+            // Non-blocking fallback
+            setProfile((prev: any) => prev || { role: ROLES.PLAYER, name: 'Usuario (Offline)' });
         }
     };
 
@@ -83,7 +94,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
         // Safety timeout to prevent permanent hang
         const safetyTimeout = setTimeout(() => {
-            setLoading(prev => {
+            setLoading((prev: boolean) => {
                 if (prev) {
                     console.warn("AuthContext: Safety timeout reached. Forcing load (fallback).");
                     return false;
@@ -170,6 +181,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
     };
 
+    const forgotPassword = async (email: string) => {
+        await sendPasswordResetEmail(auth, email);
+    };
+
     const logout = async () => {
         await signOut(auth);
         setProfile(null);
@@ -187,6 +202,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             signInWithGoogle,
             signInWithEmail,
             signUpWithEmail,
+            forgotPassword,
+            enableDevMode,
             logout,
             isAdmin,
             isPlayer,

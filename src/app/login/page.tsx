@@ -19,7 +19,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function LoginPage() {
-    const { signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth();
+    const [success, setSuccess] = useState<string | null>(null);
+    const { signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
     const router = useRouter();
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
@@ -34,6 +35,7 @@ export default function LoginPage() {
     const handleGoogleSignIn = async () => {
         setLoading(true);
         setError(null);
+        setSuccess(null);
         try {
             await signInWithGoogle();
             router.push('/');
@@ -43,6 +45,29 @@ export default function LoginPage() {
                 setError('Google Sign-In requiere configuración de dominio o deploy. Prueba con Email/Contraseña o el Modo Simulación en local.');
             } else {
                 setError('Error al conectar con Google. Por favor intenta de nuevo.');
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleForgotPassword = async () => {
+        if (!formData.email) {
+            setError('Por favor, ingresa tu email primero para restablecer la contraseña.');
+            return;
+        }
+        setLoading(true);
+        setError(null);
+        setSuccess(null);
+        try {
+            await forgotPassword(formData.email);
+            setSuccess('Se ha enviado un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.');
+        } catch (err: any) {
+            console.error(err);
+            if (err.code === 'auth/user-not-found') {
+                setError('No existe una cuenta con este correo.');
+            } else {
+                setError('Error al enviar el correo de recuperación. Revisa tu conexión.');
             }
         } finally {
             setLoading(false);
@@ -64,14 +89,14 @@ export default function LoginPage() {
             console.error(err);
             if (err.code === 'auth/configuration-not-found') {
                 setError('El servicio de Autenticación no está activado en tu proyecto de Firebase. Por favor, actívalo en la Consola de Firebase > Authentication > Sign-in method.');
-            } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-                setError('Credenciales incorrectas.');
+            } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+                setError('Credenciales incorrectas (Email o Contraseña).');
             } else if (err.code === 'auth/email-already-in-use') {
                 setError('El email ya está registrado.');
             } else if (err.code === 'auth/weak-password') {
                 setError('La contraseña debe tener al menos 6 caracteres.');
             } else {
-                setError('Error en la autenticación. Revisa tu conexión.');
+                setError('Error en la autenticación. Revisa tu conexión o credenciales.');
             }
         } finally {
             setLoading(false);
@@ -184,7 +209,11 @@ export default function LoginPage() {
                             <div className="flex justify-between items-end mr-4">
                                 <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-4">Contraseña</label>
                                 {isLogin && (
-                                    <button type="button" className="text-[9px] font-black text-gray-600 hover:text-padel-primary uppercase tracking-widest">
+                                    <button
+                                        type="button"
+                                        onClick={handleForgotPassword}
+                                        className="text-[9px] font-black text-gray-600 hover:text-padel-primary uppercase tracking-widest"
+                                    >
                                         ¿Olvidaste tu contraseña?
                                     </button>
                                 )}
@@ -210,6 +239,17 @@ export default function LoginPage() {
                             >
                                 <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                                 <p className="text-xs text-red-200/80 font-medium leading-relaxed">{error}</p>
+                            </motion.div>
+                        )}
+
+                        {success && (
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className="p-4 bg-padel-primary/10 border border-padel-primary/20 rounded-2xl flex items-start gap-3"
+                            >
+                                <CheckCircle2 className="w-5 h-5 text-padel-primary shrink-0 mt-0.5" />
+                                <p className="text-xs text-padel-primary font-medium leading-relaxed">{success}</p>
                             </motion.div>
                         )}
 
@@ -243,10 +283,14 @@ export default function LoginPage() {
                     <p className="text-xs text-gray-700 font-bold uppercase tracking-widest">
                         ¿Problemas persistentes?
                         <button
-                            onClick={() => (window as any).enableDevMode?.()}
+                            onClick={() => {
+                                console.log("Manual trigger: enableDevMode");
+                                enableDevMode();
+                                router.push('/');
+                            }}
                             className="text-padel-primary hover:underline ml-2"
                         >
-                            Simular Sesión (Dev)
+                            Entrar en Modo Simulación
                         </button>
                     </p>
                     <p className="text-[10px] text-gray-800 font-medium max-w-xs mx-auto">

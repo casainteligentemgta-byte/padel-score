@@ -120,7 +120,7 @@ function PlayersListContent() {
                     <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
                         <span className="text-padel-primary">Jugadores</span>
                     </h1>
-                    <p className="text-gray-500 mt-2 font-medium">Gestiona los perfiles y estadísticas de tus atletas.</p>
+                    <p className="text-gray-500 mt-2 font-medium">Gestiona los perfiles y estadísticas de tus jugadores.</p>
                 </div>
                 <Link
                     href="/players/register"

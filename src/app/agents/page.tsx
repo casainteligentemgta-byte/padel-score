@@ -21,12 +21,42 @@ import {
     X as CloseIcon
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
+import { useAuth } from '@/lib/AuthContext';
+import { dataService } from '@/lib/dataService';
+import { useEffect } from 'react';
 
 export default function AgentCenter() {
+    const { user } = useAuth();
     const [selectedAgent, setSelectedAgent] = useState<any | null>(null);
     const [message, setMessage] = useState('');
     const [messages, setMessages] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [contextData, setContextData] = useState<any>(null);
+
+    // Cargar contexto de la app para los agentes
+    useEffect(() => {
+        const loadContext = async () => {
+            if (!user) return;
+            try {
+                const [tournaments, expenses, participants] = await Promise.all([
+                    dataService.getMyTournaments(user.uid),
+                    dataService.getMyExpenses(user.uid),
+                    dataService.getMyParticipants(user.uid)
+                ]);
+                setContextData({
+                    tournaments,
+                    expenses,
+                    participants,
+                    totalTournaments: tournaments.length,
+                    totalExpenses: expenses.reduce((acc: number, curr: any) => acc + (Number(curr.amount) || 0), 0),
+                    totalPlayers: participants.length
+                });
+            } catch (error) {
+                console.error("Error loading agent context:", error);
+            }
+        };
+        loadContext();
+    }, [user]);
 
     const handleSendMessage = async () => {
         if (!message.trim() || !selectedAgent || isLoading) return;
@@ -42,25 +72,122 @@ export default function AgentCenter() {
         setIsLoading(true);
 
         try {
-            // Simular respuesta del agente según su personalidad
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // El agente "piensa"
+            setIsLoading(true);
+
+            // Simular red neuronal procesando
+            await new Promise(resolve => setTimeout(resolve, 2000));
 
             let responseContent = "";
+            const lowerMsg = message.toLowerCase();
+
             switch (selectedAgent.id) {
                 case 'aura':
-                    responseContent = "He analizado tu solicitud desde una perspectiva de diseño. Recomiendo aumentar el contraste en las áreas táctiles y asegurar que el feedback visual sea inmediato. ¿Quieres que audite una pantalla específica?";
+                    if (lowerMsg.includes('color') || lowerMsg.includes('estilo') || lowerMsg.includes('apariencia')) {
+                        responseContent = "He analizado la paleta actual. Recomiendo mantener la base Dark Mode (#0A0A0A) con acentos en Padel Primary (#CCFF00) para maximizar el contraste en pistas con mucha luz. He detectado que el 90% de los usuarios prefieren botones de acción en la zona inferior derecha en iPad.";
+                    } else if (lowerMsg.includes('página') || lowerMsg.includes('sección') || lowerMsg.includes('layout')) {
+                        responseContent = "Desde una perspectiva estética, tu layout actual es 'Industrial High-End'. Sugiero añadir micro-interacciones de 200ms en los estados 'hover' de las tarjetas de los torneos para aumentar la sensación de calidad.";
+                    } else {
+                        responseContent = "Entiendo perfectamente lo que buscas. Mi algoritmo de diseño sugiere que simplificar la navegación secundaria mejorará el flujo de inscripción. ¿Quieres que simule un nuevo layout de cabecera?";
+                    }
                     break;
                 case 'midas':
-                    responseContent = "He revisado los últimos datos financieros. La rentabilidad actual está un 5% por debajo del objetivo debido a los costos operativos. Sugiero optimizar la ocupación de las pistas en horas valle.";
+                    if (contextData) {
+                        const { totalTournaments, totalExpenses, totalPlayers } = contextData;
+                        const avgPerTournament = totalTournaments > 0 ? (totalExpenses / totalTournaments).toFixed(2) : 0;
+
+                        const prefixes = [
+                            "He profundizado en los registros financieros y esto es lo que encontré: ",
+                            "Tras auditar tu base de datos en tiempo real, mi reporte es el siguiente: ",
+                            "Aquí tienes el análisis financiero solicitado: ",
+                            "He sincronizado los KPIs de tu club. "
+                        ];
+                        const randomPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+
+                        if (lowerMsg.includes('resumen') || lowerMsg.includes('estado') || lowerMsg.includes('todo')) {
+                            responseContent = `${randomPrefix} Gestionamos ${totalTournaments} competencias con un flujo de gastos de $${totalExpenses.toLocaleString()}. El promedio de costo por torneo es de $${avgPerTournament}.`;
+                        } else if (message.match(/\d+/) && (lowerMsg.includes('ganancia') || lowerMsg.includes('proyec') || lowerMsg.includes('calcula') || lowerMsg.includes('precio') || lowerMsg.includes('inscrip'))) {
+                            const match = message.match(/\d+/);
+                            const price = match ? parseInt(match[0]) : 0;
+                            const projectedRevenue = price * totalPlayers;
+                            const projectedProfit = projectedRevenue - totalExpenses;
+                            responseContent = `${randomPrefix} Con un precio de inscripción de $${price} y tus ${totalPlayers} jugadores registrados, el ingreso bruto proyectado es de $${projectedRevenue.toLocaleString()}. Restando tus gastos acumulados ($${totalExpenses.toLocaleString()}), tendrías una utilidad neta de $${projectedProfit.toLocaleString()}. ¿Te parece un margen razonable?`;
+                        } else if (lowerMsg.includes('premio') || lowerMsg.includes('trofeo') || lowerMsg.includes('recompensa')) {
+                            const match = message.match(/\d+/);
+                            const prizeRatio = 0.35; // Sugerencia del 35% de los gastos para premios
+                            if (match) {
+                                const prizeAmount = parseInt(match[0]);
+                                const impact = (prizeAmount / (totalExpenses || 1)) * 100;
+                                responseContent = `${randomPrefix} Destinar $${prizeAmount.toLocaleString()} a premios representaría un ${impact.toFixed(1)}% adicional sobre tus gastos registrados. Para mantener un ROI saludable, te sugiero que los premios no excedan el 40% de la recaudación total estimada.`;
+                            } else {
+                                const suggestedPrize = totalExpenses * prizeRatio;
+                                responseContent = `${randomPrefix} Históricamente, un presupuesto de premios equilibrado para tus eventos sería de unos $${suggestedPrize.toLocaleString()}. Esto permite entregar trofeos de alta calidad y un incentivo económico sin comprometer la rentabilidad. ¿Tienes un monto en mente?`;
+                            }
+                        } else if (lowerMsg.includes('cancha') || lowerMsg.includes('pista') || lowerMsg.includes('alquiler') || lowerMsg.includes('arriendo')) {
+                            const match = message.match(/\d+/);
+                            if (match) {
+                                const hourlyRate = parseInt(match[0]);
+                                const estimatedHours = 12; // Estimación base para un americano pequeño
+                                const totalCourtCost = hourlyRate * estimatedHours;
+                                const weight = (totalCourtCost / (totalExpenses || 1)) * 100;
+                                responseContent = `${randomPrefix} Alquilar pistas a $${hourlyRate}/hora para un torneo estándar (aprox. 12h de juego) sumaría un costo de $${totalCourtCost}. Esto representa el ${weight.toFixed(1)}% de tu presupuesto actual de gastos. Si logras un convenio de $${(hourlyRate * 0.8).toFixed(0)} enviando más de 3 torneos al mes, el ROI subiría notablemente.`;
+                            } else {
+                                responseContent = `${randomPrefix} El costo de las canchas suele ser el gasto más fuerte (entre 40% y 60% del total). En el mercado actual, un precio entre $15 y $25 por hora es competitivo. ¿A cuánto te están dejando la hora de pista para que pueda calcularte el punto de equilibrio?`;
+                            }
+                        } else if (lowerMsg.includes('pelota') || lowerMsg.includes('tubo') || lowerMsg.includes('bola')) {
+                            const match = message.match(/\d+/);
+                            const tubesNeeded = Math.ceil(totalPlayers / 4); // 1 tubo por cada 4 jugadores (un grupo de rotación)
+                            if (match) {
+                                const tubePrice = parseInt(match[0]);
+                                const totalBallCost = tubesNeeded * tubePrice;
+                                responseContent = `${randomPrefix} Para tus ${totalPlayers} jugadores, estimo que necesitas unos ${tubesNeeded} tubos de pelotas. A un precio de $${tubePrice} por tubo, tu gasto total sería de $${totalBallCost}. Si compras el cajón (24 tubos), podrías bajar el costo unitario un 15%.`;
+                            } else {
+                                const estimatedTubePrice = 6; // Precio estimado base
+                                const estimatedBallCost = tubesNeeded * estimatedTubePrice;
+                                responseContent = `${randomPrefix} Basado en tus ${totalPlayers} jugadores, vas a requerir aproximadamente ${tubesNeeded} tubos de pelotas para un torneo fluido. Si el tubo cuesta unos $${estimatedTubePrice}, estamos hablando de un gasto de $${estimatedBallCost}. ¿A qué precio consigues el tubo tú?`;
+                            }
+                        } else if (lowerMsg.includes('agua') || lowerMsg.includes('hidrata') || lowerMsg.includes('bebida') || lowerMsg.includes('comida') || lowerMsg.includes('snack')) {
+                            const match = message.match(/\d+/);
+                            const litersPerPlayer = 1.5; // Consumo estimado de hidratación por jugador por torneo
+                            const totalLiters = totalPlayers * litersPerPlayer;
+                            const packsNeeded = Math.ceil(totalLiters / 12); // Packs de 12 botellas de 1.5L
+                            if (match) {
+                                const packPrice = parseInt(match[0]);
+                                const totalHydrationCost = packsNeeded * packPrice;
+                                responseContent = `${randomPrefix} Para cubrir la hidratación de tus ${totalPlayers} jugadores (estimando ${litersPerPlayer}L por persona), necesitarás unos ${packsNeeded} packs de agua. A $${packPrice} el pack, el costo total es de $${totalHydrationCost}. ¿Quieres que incluya también un presupuesto para frutas/snacks?`;
+                            } else {
+                                const estimatedPackPrice = 8; // Precio estimado de pack de agua
+                                const estimatedHydrationCost = packsNeeded * estimatedPackPrice;
+                                responseContent = `${randomPrefix} He calculado que tus ${totalPlayers} jugadores consumirán unos ${totalLiters.toFixed(0)} litros de agua. Esto equivale a unos ${packsNeeded} packs. Con un precio de mercado de $${estimatedPackPrice}/pack, el presupuesto de hidratación debería rondar los $${estimatedHydrationCost}.`;
+                            }
+                        } else if (lowerMsg.includes('cuanto') || lowerMsg.includes('plata') || lowerMsg.includes('dinero')) {
+                            responseContent = `${randomPrefix} El balance actual refleja un gasto operativo total de $${totalExpenses.toLocaleString()}. Si optimizamos un 5% la compra de insumos, podríamos aumentar el margen neto en el próximo torneo.`;
+                        } else if (lowerMsg.includes('jugador') || lowerMsg.includes('inscrip')) {
+                            responseContent = `${randomPrefix} Con ${totalPlayers} jugadores registrados, el potencial de ingresos por inscripciones es alto. Sugiero un modelo de 'Early Bird' para asegurar el 80% del aforo 5 días antes del evento.`;
+                        } else if (lowerMsg.includes('ahorro') || lowerMsg.includes('reducir') || lowerMsg.includes('costo')) {
+                            responseContent = `${randomPrefix} He detectado que los costos logísticos representan el 20% del total. Negociar con proveedores de pelotas por volumen podría reducir este KPI en un 8%.`;
+                        } else if (lowerMsg.includes('torneo') || lowerMsg.includes('competencia')) {
+                            responseContent = `${randomPrefix} Basado en tus ${totalTournaments} torneos, la rentabilidad media se mantiene estable. ¿Quieres que proyecte los gastos para el torneo ${totalTournaments + 1}?`;
+                        } else {
+                            responseContent = `${randomPrefix} Tu ecosistema financiero está saludable. Tenemos $${totalExpenses.toLocaleString()} en gastos rastreados sobre ${totalTournaments} eventos. ¿Deseas un desglose detallado de alguna categoría en particular?`;
+                        }
+                    } else {
+                        responseContent = "Estoy sincronizando los últimos movimientos de tu cuenta para darte un reporte preciso. Vuelve a preguntarme en unos segundos.";
+                    }
                     break;
                 case 'coach':
-                    responseContent = "Basado en el historial de los jugadores, la pareja A tiene un 65% de probabilidad de victoria si mantienen su porcentaje de primeros servicios. ¿Quieres ver el desglose técnico?";
+                    if (contextData) {
+                        const players = contextData.totalPlayers;
+                        responseContent = `He procesado el rendimiento de tus ${players} jugadores. Detecto que el 40% de los partidos se definen en el Punto de Oro. Mi recomendación técnica es ajustar los brackets para que los jugadores de 4ta categoría tengan más tiempo de descanso entre rondas.`;
+                    } else {
+                        responseContent = "Estoy analizando los patrones de juego de tus torneos. La inteligencia colectiva del club sugiere que los partidos nocturnos son un 20% más competitivos. ¿Quieres ver el ranking AI de jugadores?";
+                    }
                     break;
                 case 'reporter':
-                    responseContent = "¡Qué partido! Estoy redactando una crónica épica destacando la remontada del segundo set. Estará lista en un momento para compartir en tus redes sociales.";
+                    responseContent = "¡Acabo de recibir los datos del último set! Estoy redactando un post para redes sociales con tono épico. 'Duelo de titanes en la pista central...'. ¿Quieres que lo exporte a formato WhatsApp con emojis deportivos?";
                     break;
                 default:
-                    responseContent = `Hola, soy ${selectedAgent.name}. Estoy procesando tu solicitud sobre "${message}". ¿En qué más puedo ayudarte?`;
+                    responseContent = `Hola, soy ${selectedAgent.name}. He procesado tu solicitud: "${message}". Basado en mi entrenamiento, la mejor opción es proceder con un análisis detallado de los KPIs de tu club.`;
             }
 
             const agentMessage = {

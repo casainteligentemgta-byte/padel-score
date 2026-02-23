@@ -159,13 +159,16 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                 return;
             }
 
+            const [y, m, d] = (tournament.startDate || "").split('-').map(Number);
+            const startDateLocal = y ? new Date(y, m - 1, d) : new Date();
+
             const schedule = ScheduleEngine.generateSchedule({
                 tournamentId: id,
                 numTeams: tournament.teams.length,
                 numCourts: tournament.totalCourts || 4,
                 clubHoursStart: tournament.startTime || "08:00",
                 clubHoursEnd: tournament.endTime || "22:00",
-                startDate: tournament.startDate ? new Date(tournament.startDate) : new Date(),
+                startDate: startDateLocal,
                 matchDurationMinutes: tournament.type === TournamentType.ROUND_ROBIN ? 45 : 90,
                 bufferMinutes: tournament.bufferMinutes || 15,
                 type: tournament.type || TournamentType.AMERICANO_INDIVIDUAL
@@ -719,6 +722,17 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                         </p>
                                                     </div>
                                                 </div>
+                                                {tournament?.type === TournamentType.ROUND_ROBIN && (
+                                                    <div className="flex items-start gap-4">
+                                                        <div className="mt-1 w-2 h-2 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
+                                                        <div>
+                                                            <h5 className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Tamaño de Grupos</h5>
+                                                            <p className="text-sm font-bold italic uppercase tracking-wider text-white">
+                                                                {tournament?.groupSize ? `Grupos de ${tournament.groupSize} parejas` : 'Variable'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div className="space-y-6">

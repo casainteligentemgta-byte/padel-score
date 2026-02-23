@@ -77,7 +77,7 @@ export default function MyTournamentsPage() {
                     <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
                         <span className="text-padel-primary">Torneos</span>
                     </h1>
-                    <p className="text-gray-500 mt-2 font-medium">Gestiona tus competencias creadas en Firebase.</p>
+                    <p className="text-gray-500 mt-2 font-medium uppercase tracking-widest text-[10px]">Gestiona tus competencias.</p>
                 </div>
                 <Link
                     href="/new-tournament"

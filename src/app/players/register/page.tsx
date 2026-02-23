@@ -168,7 +168,7 @@ export default function PlayerRegistrationPage() {
                         >
                             <ArrowLeft className="w-5 h-5 text-gray-400" />
                         </button>
-                        <h1 className="text-lg font-black italic uppercase tracking-tighter">Registro <span className="text-[#ccff00]">Atleta</span></h1>
+                        <h1 className="text-lg font-black italic uppercase tracking-tighter">Registro <span className="text-[#ccff00]">Jugador</span></h1>
                         <div className="w-10"></div>
                     </div>
 
@@ -246,16 +246,16 @@ export default function PlayerRegistrationPage() {
                                             <input
                                                 type="text"
                                                 placeholder="V-28.847.234"
-                                                className="w-full bg-white/10 border border-white/5 rounded-2xl px-4 py-4 text-sm font-bold focus:border-[#ccff00] outline-none transition-all"
+                                                className="w-full bg-white/10 border border-white/5 rounded-2xl px-4 py-4 text-sm font-bold focus:border-[#ccff00] outline-none transition-all h-[54px]"
                                                 value={formData.dni}
                                                 onChange={e => updateField('dni', e.target.value)}
                                             />
                                         </div>
                                         <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Nacimiento</label>
+                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Fecha de Nacimiento</label>
                                             <input
                                                 type="date"
-                                                className="w-full bg-white/10 border border-white/5 rounded-2xl px-4 py-4 text-sm font-bold focus:border-[#ccff00] outline-none transition-all"
+                                                className="w-full bg-white/10 border border-white/5 rounded-2xl px-4 py-4 text-sm font-bold focus:border-[#ccff00] outline-none transition-all h-[54px] [color-scheme:dark]"
                                                 value={formData.birthDate}
                                                 onChange={e => updateField('birthDate', e.target.value)}
                                             />
@@ -473,7 +473,7 @@ export default function PlayerRegistrationPage() {
                                         )}
                                     </div>
                                     <div>
-                                        <h4 className="font-black italic uppercase tracking-tighter text-xl">{formData.name || 'Nuevo'} {formData.lastName || 'Atleta'}</h4>
+                                        <h4 className="font-black italic uppercase tracking-tighter text-xl">{formData.name || 'Nuevo'} {formData.lastName || 'Jugador'}</h4>
                                         <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Listo para el alta en PADEL SMART</p>
                                     </div>
                                 </div>

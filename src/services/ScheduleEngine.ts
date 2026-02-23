@@ -182,12 +182,21 @@ export class ScheduleEngine {
         const [startH, startM] = (startStr || "08:00").split(':').map(Number);
         const [endH, endM] = (endStr || "22:00").split(':').map(Number);
 
-        // Crear fechas basadas en el startDate original para evitar desajustes de zona horaria
+        // Create dates carefully to avoid timezone-related day shifts
+        // We want the slots to be on the same "local day" as the startDate
         const currentDay = new Date(startDate);
         currentDay.setHours(startH, startM, 0, 0);
 
-        const limitDay = new Date(startDate);
+        // If the date shift moved us to another day due to UTC vs Local, 
+        // we should ideally have the date-only part correctly.
+        // But since we are setting hours locally, it's safer to ensure we use the same day.
+        const limitDay = new Date(currentDay);
         limitDay.setHours(endH, endM, 0, 0);
+
+        // If endTime is e.g. 02:00 and startTime is 08:00, it might mean the next day
+        if (limitDay <= currentDay) {
+            limitDay.setDate(limitDay.getDate() + 1);
+        }
 
         console.log(`[ScheduleEngine] Generating slots from ${currentDay.toISOString()} to ${limitDay.toISOString()}`);
 
