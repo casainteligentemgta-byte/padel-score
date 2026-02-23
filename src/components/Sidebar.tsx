@@ -12,7 +12,8 @@ import {
     LogOut,
     Sparkles,
     Home,
-    Shield
+    Shield,
+    Monitor
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -33,6 +34,7 @@ export default function Sidebar() {
 
     const adminItems = [
         { name: 'Jugadores (Master)', href: '/players', icon: Users },
+        { name: 'Monitor Canchas', href: '/admin/monitor', icon: Monitor }, // Nuevo item
         { name: 'Gestión Usuarios', href: '/admin/users', icon: Settings },
         { name: 'Vigilancia (Logs)', href: '/admin/logs', icon: Shield },
     ];
