@@ -47,13 +47,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // MODO DESARROLLADOR: Habilitar una sesión falsa para simulación si es necesario
     const enableDevMode = () => {
         const mockUser = {
-            uid: 'dev-user-123',
-            displayName: 'Simulated Admin',
-            email: 'dev@padelscore.pro',
-            photoURL: 'https://ui-avatars.com/api/?name=Simulated+Admin&background=C1FF00&color=000'
+            uid: 'CMWhNg0MYIgiczQGkGGLl1tKn6A2',
+            displayName: 'Luis Mata (Owner)',
+            email: 'casainteligentemgta@gmail.com',
+            photoURL: 'https://ui-avatars.com/api/?name=Luis+Mata&background=C1FF00&color=000'
         } as User;
         setUser(mockUser);
-        setProfile({ role: ROLES.ADMIN, name: 'Simulated Admin' });
+        setProfile({ role: ROLES.ADMIN, name: 'Luis Mata' });
         setLoading(false);
     };
 
