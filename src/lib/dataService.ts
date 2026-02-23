@@ -39,6 +39,11 @@ export const dataService = {
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     },
 
+    async listAllTournaments() {
+        const snapshot = await getDocs(collection(db, 'tournaments'));
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    },
+
     async getTournament(id: string) {
         const docRef = doc(db, 'tournaments', id);
         const snap = await getDoc(docRef);

@@ -83,7 +83,7 @@ export default function LandingPage() {
 
                     {/* Quick Access - Right Side */}
                     <div className="lg:col-span-12 xl:col-span-5 flex flex-col gap-4">
-                        <Link href="/tournaments" className="glass p-5 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center flex-1">
+                        <Link href="/live" className="glass p-5 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center flex-1">
                             <h3 className="text-lg font-bold mb-1 flex items-center justify-between">
                                 Brackets en Vivo <ArrowRight className="w-4 h-4 group-hover:translate-x-2 transition-transform" />
                             </h3>
