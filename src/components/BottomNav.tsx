@@ -23,7 +23,7 @@ export default function BottomNav() {
     ];
 
     return (
-        <footer className="fixed bottom-0 left-0 right-0 bg-[#0a0a0a]/90 backdrop-blur-xl border-t border-white/5 px-6 pb-8 pt-4 z-[100]">
+        <footer className="absolute bottom-0 left-0 right-0 bg-[#0a0a0a]/90 backdrop-blur-xl border-t border-white/5 px-6 pb-8 pt-4 z-[100]">
             <div className="max-w-md mx-auto flex justify-between items-center">
                 {tabs.map((tab) => {
                     const isActive = pathname === tab.href || (tab.href !== '#' && pathname.startsWith(tab.match));
