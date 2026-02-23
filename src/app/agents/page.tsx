@@ -206,7 +206,10 @@ export default function AgentCenter() {
 
                                     <div className="flex justify-between items-start mb-8">
                                         <div className={`p-4 rounded-2xl bg-gradient-to-br ${agent.color} shadow-lg`}>
-                                            <agent.icon className="w-8 h-8 text-white" />
+                                            {(() => {
+                                                const Icon = agent.icon;
+                                                return <Icon className="w-8 h-8 text-white" />;
+                                            })()}
                                         </div>
                                         <div className="flex flex-col items-end">
                                             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-padel-primary bg-padel-primary/10 px-3 py-1 rounded-full mb-2">
@@ -296,7 +299,10 @@ export default function AgentCenter() {
                                 <div className="p-8 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
                                     <div className="flex items-center gap-6">
                                         <div className={`p-4 rounded-2xl bg-gradient-to-br ${selectedAgent.color} shadow-lg shadow-black/40`}>
-                                            <selectedAgent.icon className="w-8 h-8 text-white" />
+                                            {(() => {
+                                                const Icon = selectedAgent.icon;
+                                                return <Icon className="w-8 h-8 text-white" />;
+                                            })()}
                                         </div>
                                         <div>
                                             <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white flex items-center gap-3">
@@ -352,7 +358,10 @@ export default function AgentCenter() {
                                     )}
 
                                     <div className="flex flex-col items-center justify-center text-center opacity-20 py-8 mt-auto">
-                                        <selectedAgent.icon className="w-12 h-12 mb-4 text-gray-600" />
+                                        {(() => {
+                                            const Icon = selectedAgent.icon;
+                                            return <Icon className="w-12 h-12 mb-4 text-gray-600" />;
+                                        })()}
                                         <p className="text-sm font-black italic uppercase tracking-tighter">Fin de la conversación</p>
                                     </div>
                                 </div>

@@ -9,7 +9,7 @@ import Sidebar from '@/components/Sidebar';
 
 export default function LandingPage() {
     return (
-        <div className="h-screen bg-[#0a0a0a] text-white overflow-hidden flex flex-col p-6 relative">
+        <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col p-6 relative">
             <Sidebar />
 
             {/* Header / Brand */}
