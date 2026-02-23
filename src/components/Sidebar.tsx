@@ -13,7 +13,8 @@ import {
     Sparkles,
     Home,
     Shield,
-    Monitor
+    Monitor,
+    LayoutDashboard
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -30,6 +31,7 @@ export default function Sidebar() {
         { name: 'Agentes AI', href: '/agents', icon: Sparkles },
         { name: 'Agregar Jugador', href: '/players/register', icon: UserPlus },
         { name: 'Jugadores', href: '/players', icon: Users },
+        { name: 'Screen Padel', href: '/admin/monitor', icon: Monitor },
     ];
 
     const adminItems = [

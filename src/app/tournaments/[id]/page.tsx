@@ -99,6 +99,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
 
                             return {
                                 ...m,
+                                court: m.court || (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined),
                                 team1: {
                                     name: team1 ? `${getPlayerName(team1.p1, m.team1Index, 1)} / ${getPlayerName(team1.p2, m.team1Index, 2)}` : (m.team1Index <= 0 ? 'Por definir' : `Equipo ${m.team1Index}`),
                                     p1Name: team1 ? getPlayerName(team1.p1, m.team1Index, 1) : null,
@@ -179,6 +180,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                     id: `match-${idx}-${Date.now()}`,
                     ...m,
                     stage: tournament.type === TournamentType.ROUND_ROBIN ? 'GROUP_STAGE' : undefined,
+                    court: m.courtIndex + 1,
                     courtName: tournament.courtNames?.[m.courtIndex] || `Pista ${m.courtIndex + 1}`,
                     status: MatchStatus.PENDING
                 };

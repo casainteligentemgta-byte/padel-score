@@ -19,6 +19,11 @@ import {
     Camera,
     Paperclip,
     Calendar,
+    Shield,
+    BarChart3,
+    Mic2,
+    Play,
+    Video,
     X as CloseIcon
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
@@ -107,10 +112,43 @@ export default function AgentCenter() {
 
     const agents = [
         {
+            id: 'safeguard',
+            name: 'SafeGuard Pro',
+            role: 'Seguridad & Analista',
+            description: 'Protección antihack y análisis de integridad de datos. Detecta anomalías y optimiza la base de datos del club.',
+            icon: Shield,
+            color: 'from-blue-600 to-cyan-400',
+            glow: 'rgba(37, 99, 235, 0.5)',
+            stats: ['Firewall: Activo', 'Data Integrity: 100%', 'Analítica: Pro'],
+            action: 'Auditar Sistema'
+        },
+        {
+            id: 'media',
+            name: 'Media Master',
+            role: 'Prensa & Creador',
+            description: 'Narrador deportivo y creador de contenido viral. Genera guiones para TikTok, Reels y crónicas para prensa.',
+            icon: Play,
+            color: 'from-red-500 to-pink-500',
+            glow: 'rgba(239, 68, 68, 0.5)',
+            stats: ['Scripts: AI', 'Virality: Alta', 'Plataformas: 5'],
+            action: 'Crear Contenido'
+        },
+        {
+            id: 'stats',
+            name: 'Stats Guru',
+            role: 'Estadísticas Pro',
+            description: 'Deep dive en métricas de juego, rankings y rendimiento histórico. Predicciones basadas en Big Data.',
+            icon: BarChart3,
+            color: 'from-padel-primary to-green-600',
+            glow: 'rgba(204, 255, 0, 0.5)',
+            stats: ['Precisión: 94%', 'Rankings: Live', 'Big Data: Sí'],
+            action: 'Ver Estadísticas'
+        },
+        {
             id: 'organizer',
             name: 'Padel Organizer',
             role: 'Logística & Fixtures',
-            description: 'Experto en formatos: Americanos (sencillo/dupla fija), Round Robin y Eliminatoria Directa. Optimiza tiempos y pistas.',
+            description: 'Experto en formatos: Americanos, Round Robin y Eliminatorias. Optimiza tiempos y disponibilidad de pistas.',
             icon: Calendar,
             color: 'from-orange-400 to-red-600',
             glow: 'rgba(251, 146, 60, 0.5)',
@@ -118,48 +156,26 @@ export default function AgentCenter() {
             action: 'Planificar Torneo'
         },
         {
-            id: 'aura',
-            name: 'Aura Design',
-            role: 'UX/UI & Aesthetics',
-            description: 'Especialista en interfaces táctiles para iPad y Móvil. Optimiza la ergonomía y asegura un look premium y futurista.',
-            icon: Palette,
-            color: 'from-fuchsia-400 to-purple-600',
-            glow: 'rgba(192, 38, 211, 0.5)',
-            stats: ['Touch Area: 44px+', 'Aesthetics: 10/10', 'Feedback: Tactile'],
-            action: 'Auditar Diseño'
-        },
-        {
             id: 'midas',
             name: 'Agente Midas',
             role: 'Finanzas & ROI',
-            description: 'Analiza la rentabilidad de tus torneos, gastos de pelotas, pistas y utilidad neta en tiempo real.',
+            description: 'Analiza la rentabilidad bruta y neta de tus torneos. Gestión de gastos y proyecciones financieras.',
             icon: DollarSign,
             color: 'from-amber-400 to-orange-600',
             glow: 'rgba(251, 191, 36, 0.5)',
-            stats: ['ROI: +24%', 'Gastos: $1.2k', 'Utilidad: $4.5k'],
+            stats: ['ROI: Analítico', 'Gastos: Monitor', 'Utilidad: On-tap'],
             action: 'Analizar Finanzas'
         },
         {
-            id: 'coach',
-            name: 'AI Coach',
-            role: 'Rendimiento Técnico',
-            description: 'Detector de patrones de juego. Predice ganadores y analiza el rendimiento histórico de cada jugador.',
-            icon: Target,
-            color: 'from-blue-400 to-indigo-600',
-            glow: 'rgba(59, 130, 246, 0.5)',
-            stats: ['Precisión: 89%', 'Partidos: 450', 'Jugadores: 120'],
-            action: 'Ver Perfiles AI'
-        },
-        {
-            id: 'reporter',
-            name: 'Padel Reporter',
-            role: 'Social & Crónicas',
-            description: 'Redacta crónicas épicas automáticamente para WhatsApp e Instagram tras finalizar cada partido.',
-            icon: Newspaper,
-            color: 'from-emerald-400 to-teal-600',
-            glow: 'rgba(16, 185, 129, 0.5)',
-            stats: ['Post: 1min', 'Vistas: +5k', 'Engagement: 12%'],
-            action: 'Generar Crónica'
+            id: 'aura',
+            name: 'Aura Design',
+            role: 'UX/UI & Aesthetics',
+            description: 'Especialista en interfaces futuristas. Asegura que el look & feel del club sea premium y ergonómico.',
+            icon: Palette,
+            color: 'from-fuchsia-400 to-purple-600',
+            glow: 'rgba(192, 38, 211, 0.5)',
+            stats: ['Aesthetics: 10/10', 'Design: Sci-Fi', 'UI: NextGen'],
+            action: 'Auditar Diseño'
         }
     ];
 

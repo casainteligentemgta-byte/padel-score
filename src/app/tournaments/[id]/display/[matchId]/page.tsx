@@ -52,6 +52,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                         const team2 = found.team2Index > 0 ? tourneyData.teams?.[found.team2Index - 1] : null;
                         setMatch({
                             ...found,
+                            court: found.court || (found.courtIndex !== undefined ? found.courtIndex + 1 : undefined),
                             t1Name: team1 ? `${team1.p1.name} / ${team1.p2.name}` : 'TBD',
                             t2Name: team2 ? `${team2.p1.name} / ${team2.p2.name}` : 'TBD',
                         });
@@ -137,21 +138,24 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                             </div>
 
                             {/* QR CODE SECTION */}
-                            <div className="flex items-center gap-8">
-                                <div className="text-right">
-                                    <p className="text-xs font-black uppercase tracking-widest text-gray-500 mb-2">Ver Brackets & Resultados</p>
-                                    <div className="bg-white p-2 rounded-xl inline-block shadow-[0_0_30px_rgba(255,255,255,0.1)]">
-                                        <QRCodeSVG value={`${window.location.origin}/tournaments/${id}`} size={80} level="H" includeMargin={false} />
+                            <div className="flex items-center gap-12">
+                                <div className="flex flex-col items-end">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <QrCode className="w-4 h-4 text-gray-500" />
+                                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Live Brackets</p>
+                                    </div>
+                                    <div className="bg-white p-3 rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.5)] transform -rotate-1 hover:rotate-0 transition-transform">
+                                        <QRCodeSVG value={`${window.location.origin}/tournaments/${id}`} size={90} level="H" />
                                     </div>
                                 </div>
-                                <div className="text-right border-l border-white/10 pl-8">
-                                    <div className="flex items-center gap-4 justify-end">
-                                        <div className="w-4 h-4 rounded-full bg-red-600 animate-pulse shadow-[0_0_20px_rgba(220,38,38,0.5)]" />
-                                        <span className={`text-3xl font-black italic uppercase tracking-widest ${isFinal ? 'text-[#FFD700]' : 'text-white'}`}>
-                                            {isFinal ? 'GRAN FINAL' : 'EN VIVO'}
+                                <div className="text-right border-l-2 border-white/5 pl-12">
+                                    <div className="flex items-center gap-4 justify-end mb-1">
+                                        <div className="w-3 h-3 rounded-full bg-red-600 animate-pulse shadow-[0_0_20px_rgba(220,38,38,0.8)]" />
+                                        <span className={`text-4xl font-black italic uppercase tracking-tighter ${isFinal ? 'text-[#FFD700]' : 'text-white'}`}>
+                                            {isFinal ? 'GRAN FINAL' : 'DIRECTO'}
                                         </span>
                                     </div>
-                                    <p className="text-xl font-bold text-gray-600 uppercase mt-2">Margarita Padel Club</p>
+                                    <p className="text-xl font-bold text-gray-600 uppercase tracking-widest">Margarita Padel Center</p>
                                 </div>
                             </div>
                         </div>
@@ -169,11 +173,12 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                             </div>
 
                             {/* Teams Grid */}
-                            <div className="grid grid-cols-12 items-center gap-8">
+                            <div className="grid grid-cols-12 items-center gap-4 lg:gap-12">
                                 {/* Team 1 */}
-                                <div className="col-span-5 flex flex-col items-end gap-6">
-                                    <div className="flex flex-col items-end">
-                                        <h2 className="text-6xl lg:text-8xl font-black italic uppercase tracking-tighter text-white text-right leading-tight">
+                                <div className="col-span-5 flex flex-col items-end gap-10">
+                                    <div className="flex flex-col items-end relative">
+                                        <div className="absolute -right-8 inset-y-0 w-2 bg-gradient-to-b from-transparent via-white/20 to-transparent rounded-full" />
+                                        <h2 className="text-7xl lg:text-[7rem] font-black italic uppercase tracking-tighter text-white text-right leading-[0.85] filter drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)]">
                                             {match.t1Name.split(' / ')[0]}<br />
                                             <span style={{ color: primaryColor }}>{match.t1Name.split(' / ')[1]}</span>
                                         </h2>
@@ -181,72 +186,120 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     <div className="flex gap-4">
                                         {[1, 2, 3].map(setNum => {
                                             const currentSet = (match.sets?.t1 || 0) + (match.sets?.t2 || 0) + 1;
+                                            const isPast = setNum < currentSet;
+                                            const isCurrent = setNum === currentSet;
                                             return (
-                                                <div key={setNum} className={`w-20 h-24 lg:w-28 lg:h-32 rounded-[2.5rem] flex flex-col items-center justify-center border-4 transition-all ${setNum === currentSet ? 'bg-white/10 border-white/30 scale-110 shadow-xl' : 'bg-transparent border-white/5 opacity-30'}`}>
-                                                    <span className="text-[10px] font-black uppercase text-gray-500 mb-2">Set {setNum}</span>
-                                                    <span className={`text-5xl lg:text-6xl font-black italic ${setNum === currentSet ? 'text-white' : 'text-white/20'}`}>
-                                                        {setNum < currentSet ? (match.games_sets?.[setNum - 1]?.t1 || 0) : setNum === currentSet ? (match.games?.t1 || 0) : '-'}
-                                                    </span>
+                                                <div key={setNum} className={`w-24 h-32 lg:w-32 lg:h-40 rounded-[3rem] flex flex-col items-center justify-center border-2 transition-all duration-500 overflow-hidden relative ${isCurrent ? 'bg-white/10 border-white/20 scale-110 shadow-2xl z-20' : 'bg-black/20 border-white/5 opacity-40'}`}>
+                                                    {isCurrent && <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />}
+                                                    <span className="text-[10px] font-black uppercase text-gray-500 mb-2 tracking-widest">SET {setNum}</span>
+                                                    <motion.span
+                                                        key={isCurrent ? match.games?.t1 : match.games_sets?.[setNum - 1]?.t1}
+                                                        initial={isCurrent ? { scale: 1.5, opacity: 0 } : {}}
+                                                        animate={{ scale: 1, opacity: 1 }}
+                                                        className={`text-6xl lg:text-7xl font-black italic ${isCurrent ? 'text-white' : 'text-white/40'}`}
+                                                    >
+                                                        {isPast ? (match.games_sets?.[setNum - 1]?.t1 || 0) : isCurrent ? (match.games?.t1 || 0) : '-'}
+                                                    </motion.span>
                                                 </div>
                                             );
                                         })}
                                     </div>
                                 </div>
 
-                                {/* Points Center */}
-                                <div className="col-span-2 flex flex-col items-center justify-center h-full">
-                                    <div className={`w-full aspect-square flex flex-col items-center justify-center border-x-[12px] border-black/30 relative shadow-2xl ${isFinal ? 'bg-[#FFD700] shadow-[#FFD700]/20' : ''}`} style={!isFinal ? { backgroundColor: primaryColor } : {}}>
-                                        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-black via-transparent to-transparent" />
-                                        <span className="text-2xl font-black italic text-black/40 uppercase tracking-tighter mb-4 z-10">PUNTOS</span>
-                                        <div className="flex items-center gap-4 z-10">
-                                            <AnimatePresence mode="wait">
-                                                <motion.span
-                                                    key={match.points?.t1}
-                                                    initial={{ y: 20, opacity: 0 }}
-                                                    animate={{ y: 0, opacity: 1 }}
-                                                    className="text-8xl lg:text-[10rem] font-black italic text-black tracking-tighter leading-none"
+                                {/* Points Center Hub */}
+                                <div className="col-span-2 flex flex-col items-center justify-center relative min-h-[500px]">
+                                    {/* Serve Indicator Glows */}
+                                    <div className="absolute inset-x-0 top-0 bottom-0 pointer-events-none">
+                                        <AnimatePresence>
+                                            {match.server?.team === 1 && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }}
+                                                    className="absolute left-[-100px] inset-y-0 w-32 bg-gradient-to-r from-[#ccff0022] to-transparent blur-3xl"
+                                                />
+                                            )}
+                                            {match.server?.team === 2 && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }}
+                                                    className="absolute right-[-100px] inset-y-0 w-32 bg-gradient-to-l from-[#ccff0022] to-transparent blur-3xl"
+                                                />
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+
+                                    <div className="relative group w-full">
+                                        <div className="absolute inset-[-4px] bg-white/5 rounded-[4rem] blur-xl opacity-50 group-hover:opacity-100 transition-opacity" />
+                                        <div className={`w-full aspect-[4/5] lg:aspect-square flex flex-col items-center justify-center rounded-[3.5rem] border-4 border-white/10 relative overflow-hidden shadow-2xl ${isFinal ? 'bg-gradient-to-br from-[#FFD700] to-[#B8860B]' : 'bg-gradient-to-br from-[#111] to-[#000]'}`}>
+
+                                            {/* Digital Scanline Effect */}
+                                            <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%] pointer-events-none opacity-20" />
+
+                                            {!isFinal && <div className="absolute top-0 inset-x-0 h-1" style={{ backgroundColor: primaryColor }} />}
+
+                                            <span className={`text-xl lg:text-2xl font-black italic mb-6 z-10 tracking-[0.4em] ${isFinal ? 'text-black/60' : 'text-white/20'}`}>PUNTOS</span>
+
+                                            <div className="flex items-center gap-2 lg:gap-6 z-10">
+                                                <AnimatePresence mode="popLayout">
+                                                    <motion.span
+                                                        key={match.points?.t1}
+                                                        initial={{ y: 40, opacity: 0, scale: 0.8 }}
+                                                        animate={{ y: 0, opacity: 1, scale: 1 }}
+                                                        exit={{ y: -40, opacity: 0, scale: 0.8 }}
+                                                        className={`text-8xl lg:text-[11rem] font-black italic tracking-tighter leading-none ${isFinal ? 'text-black' : 'text-white'}`}
+                                                    >
+                                                        {match.points?.t1 || '0'}
+                                                    </motion.span>
+                                                </AnimatePresence>
+                                                <span className={`text-4xl lg:text-6xl font-black italic opacity-20 ${isFinal ? 'text-black' : 'text-white'}`}>:</span>
+                                                <AnimatePresence mode="popLayout">
+                                                    <motion.span
+                                                        key={match.points?.t2}
+                                                        initial={{ y: 40, opacity: 0, scale: 0.8 }}
+                                                        animate={{ y: 0, opacity: 1, scale: 1 }}
+                                                        exit={{ y: -40, opacity: 0, scale: 0.8 }}
+                                                        className={`text-8xl lg:text-[11rem] font-black italic tracking-tighter leading-none ${isFinal ? 'text-black' : 'text-white'}`}
+                                                    >
+                                                        {match.points?.t2 || '0'}
+                                                    </motion.span>
+                                                </AnimatePresence>
+                                            </div>
+
+                                            {/* Golden Point Alert */}
+                                            {(match.points?.t1 === '40' && match.points?.t2 === '40') && (
+                                                <motion.div
+                                                    animate={{ opacity: [0.3, 1, 0.3], scale: [0.95, 1, 0.95] }}
+                                                    transition={{ repeat: Infinity, duration: 1 }}
+                                                    className="absolute bottom-10 px-6 py-1 bg-red-600 text-white text-[10px] font-black uppercase tracking-[0.5em] rounded-full"
                                                 >
-                                                    {match.points?.t1 || '0'}
-                                                </motion.span>
-                                            </AnimatePresence>
-                                            <span className="text-5xl font-black italic text-black/20">:</span>
-                                            <AnimatePresence mode="wait">
-                                                <motion.span
-                                                    key={match.points?.t2}
-                                                    initial={{ y: 20, opacity: 0 }}
-                                                    animate={{ y: 0, opacity: 1 }}
-                                                    className="text-8xl lg:text-[10rem] font-black italic text-black tracking-tighter leading-none"
-                                                >
-                                                    {match.points?.t2 || '0'}
-                                                </motion.span>
-                                            </AnimatePresence>
+                                                    Punto de Oro
+                                                </motion.div>
+                                            )}
                                         </div>
                                     </div>
 
-                                    {/* Serving Indicator */}
-                                    <div className="mt-8 flex items-center gap-12">
-                                        <motion.div
-                                            animate={match.server?.team === 1 ? { scale: [1, 1.5, 1], opacity: 1 } : { opacity: 0.1 }}
-                                            transition={{ repeat: Infinity, duration: 1.5 }}
-                                            className="w-5 h-5 rounded-full"
-                                            style={{ backgroundColor: primaryColor, boxShadow: `0 0 30px ${primaryColor}` }}
-                                        />
-                                        <div className="bg-white/5 px-4 py-1 rounded-full border border-white/10">
-                                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Service</span>
+                                    {/* Service Logic */}
+                                    <div className="absolute -bottom-16 flex items-center gap-16">
+                                        <div className="flex items-center gap-3">
+                                            <motion.div
+                                                animate={match.server?.team === 1 ? { scale: [1, 1.4, 1], rotate: [0, 90, 0] } : { scale: 0.5, opacity: 0.2 }}
+                                                className="w-4 h-4 bg-padel-primary rounded-sm shadow-[0_0_20px_#ccff00]"
+                                            />
+                                            <span className={`text-[10px] font-black uppercase tracking-widest ${match.server?.team === 1 ? 'text-white' : 'text-white/20'}`}>SAQUE</span>
                                         </div>
-                                        <motion.div
-                                            animate={match.server?.team === 2 ? { scale: [1, 1.5, 1], opacity: 1 } : { opacity: 0.1 }}
-                                            transition={{ repeat: Infinity, duration: 1.5 }}
-                                            className="w-5 h-5 rounded-full"
-                                            style={{ backgroundColor: primaryColor, boxShadow: `0 0 30px ${primaryColor}` }}
-                                        />
+                                        <div className="flex items-center gap-3">
+                                            <span className={`text-[10px] font-black uppercase tracking-widest ${match.server?.team === 2 ? 'text-white' : 'text-white/20'}`}>SAQUE</span>
+                                            <motion.div
+                                                animate={match.server?.team === 2 ? { scale: [1, 1.4, 1], rotate: [0, 90, 0] } : { scale: 0.5, opacity: 0.2 }}
+                                                className="w-4 h-4 bg-padel-primary rounded-sm shadow-[0_0_20px_#ccff00]"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
                                 {/* Team 2 */}
-                                <div className="col-span-5 flex flex-col items-start gap-6">
-                                    <div className="flex flex-col items-start">
-                                        <h2 className="text-6xl lg:text-8xl font-black italic uppercase tracking-tighter text-white text-left leading-tight">
+                                <div className="col-span-5 flex flex-col items-start gap-10">
+                                    <div className="flex flex-col items-start relative">
+                                        <div className="absolute -left-8 inset-y-0 w-2 bg-gradient-to-b from-transparent via-white/20 to-transparent rounded-full" />
+                                        <h2 className="text-7xl lg:text-[7rem] font-black italic uppercase tracking-tighter text-white text-left leading-[0.85] filter drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)]">
                                             {match.t2Name.split(' / ')[0]}<br />
                                             <span style={{ color: primaryColor }}>{match.t2Name.split(' / ')[1]}</span>
                                         </h2>
@@ -254,12 +307,20 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     <div className="flex gap-4">
                                         {[1, 2, 3].map(setNum => {
                                             const currentSet = (match.sets?.t1 || 0) + (match.sets?.t2 || 0) + 1;
+                                            const isPast = setNum < currentSet;
+                                            const isCurrent = setNum === currentSet;
                                             return (
-                                                <div key={setNum} className={`w-20 h-24 lg:w-28 lg:h-32 rounded-[2.5rem] flex flex-col items-center justify-center border-4 transition-all ${setNum === currentSet ? 'bg-white/10 border-white/30 scale-110 shadow-xl' : 'bg-transparent border-white/5 opacity-30'}`}>
-                                                    <span className="text-[10px] font-black uppercase text-gray-500 mb-2">Set {setNum}</span>
-                                                    <span className={`text-5xl lg:text-6xl font-black italic ${setNum === currentSet ? 'text-white' : 'text-white/20'}`}>
-                                                        {setNum < currentSet ? (match.games_sets?.[setNum - 1]?.t2 || 0) : setNum === currentSet ? (match.games?.t2 || 0) : '-'}
-                                                    </span>
+                                                <div key={setNum} className={`w-24 h-32 lg:w-32 lg:h-40 rounded-[3rem] flex flex-col items-center justify-center border-2 transition-all duration-500 overflow-hidden relative ${isCurrent ? 'bg-white/10 border-white/20 scale-110 shadow-2xl z-20' : 'bg-black/20 border-white/5 opacity-40'}`}>
+                                                    {isCurrent && <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />}
+                                                    <span className="text-[10px] font-black uppercase text-gray-500 mb-2 tracking-widest">SET {setNum}</span>
+                                                    <motion.span
+                                                        key={isCurrent ? match.games?.t2 : match.games_sets?.[setNum - 1]?.t2}
+                                                        initial={isCurrent ? { scale: 1.5, opacity: 0 } : {}}
+                                                        animate={{ scale: 1, opacity: 1 }}
+                                                        className={`text-6xl lg:text-7xl font-black italic ${isCurrent ? 'text-white' : 'text-white/40'}`}
+                                                    >
+                                                        {isPast ? (match.games_sets?.[setNum - 1]?.t2 || 0) : isCurrent ? (match.games?.t2 || 0) : '-'}
+                                                    </motion.span>
                                                 </div>
                                             );
                                         })}
@@ -304,10 +365,31 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                         ) : adMedia[currentAdIdx] ? (
                             <img src={adMedia[currentAdIdx]} className="w-full h-full object-contain p-12 lg:p-32" />
                         ) : (
-                            <div className="text-center space-y-8">
-                                <Megaphone className="w-32 h-32 text-padel-primary mx-auto animate-bounce" />
-                                <h1 className="text-6xl font-black italic uppercase tracking-tighter">Espacio Reservado</h1>
-                                <p className="text-2xl font-bold uppercase tracking-widest text-[#fb923c]">Patrocinador en espera</p>
+                            <div className="text-center space-y-12 relative z-10">
+                                <motion.div
+                                    animate={{
+                                        scale: [1, 1.1, 1],
+                                        rotate: [0, 5, -5, 0]
+                                    }}
+                                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                                    className="w-48 h-48 bg-padel-primary/10 rounded-full flex items-center justify-center mx-auto border-4 border-padel-primary/20 backdrop-blur-xl shadow-[0_0_100px_rgba(204,255,0,0.1)]"
+                                >
+                                    <Megaphone className="w-24 h-24 text-padel-primary filter drop-shadow-[0_0_20px_rgba(204,255,0,0.5)]" />
+                                </motion.div>
+                                <div className="space-y-4">
+                                    <h1 className="text-8xl font-black italic uppercase tracking-tighter text-white leading-none">
+                                        Espacio <span className="text-padel-primary">Publicitario</span><br />
+                                        <span className="text-5xl opacity-40">Disponible</span>
+                                    </h1>
+                                    <p className="text-2xl font-bold uppercase tracking-[0.5em] text-[#fb923c] animate-pulse">
+                                        Tu marca aquí • Padel Smart TV
+                                    </p>
+                                </div>
+                                <div className="flex items-center justify-center gap-8 pt-8">
+                                    <div className="h-px w-24 bg-gradient-to-r from-transparent to-white/20" />
+                                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Contactar a Dirección</span>
+                                    <div className="h-px w-24 bg-gradient-to-l from-transparent to-white/20" />
+                                </div>
                             </div>
                         )}
 

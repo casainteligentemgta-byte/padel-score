@@ -93,6 +93,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
                         setMatch({
                             ...foundMatch,
+                            court: foundMatch.court || (foundMatch.courtIndex !== undefined ? foundMatch.courtIndex + 1 : undefined),
                             team1: {
                                 ...getPlayerNames(team1, foundMatch.team1Index),
                                 p1Photo: team1?.p1?.photo || null,

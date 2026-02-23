@@ -18,7 +18,8 @@ import {
     Maximize2,
     Volume2,
     MonitorPlay,
-    Tv
+    Tv,
+    Megaphone
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
@@ -64,6 +65,7 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
 
                         return {
                             ...m,
+                            court: m.court || (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined),
                             team1: {
                                 name: team1 ? `${getPlayerName(team1.p1, m.team1Index, 1)} y ${getPlayerName(team1.p2, m.team1Index, 2)}` : (m.team1Index <= 0 ? 'Por definir' : `Equipo ${m.team1Index}`),
                                 photo1: team1?.p1.photo || null,
@@ -148,8 +150,15 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                             </div>
                         </div>
                         <Link
-                            href={`/tournaments/${id}/control/broadcasting`}
+                            href={`/tournaments/${id}/control/ads`}
                             className="w-12 h-12 flex items-center justify-center bg-padel-primary/10 border border-padel-primary/20 rounded-2xl hover:bg-padel-primary/20 transition-all text-padel-primary group"
+                            title="Gestión de Publicidad"
+                        >
+                            <Megaphone className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                        </Link>
+                        <Link
+                            href={`/tournaments/${id}/control/broadcasting`}
+                            className="w-12 h-12 flex items-center justify-center bg-white/5 border border-white/5 rounded-2xl hover:bg-white/10 transition-all text-gray-400 group"
                             title="Configurar Streamer y Pizarra"
                         >
                             <Tv className="w-5 h-5 group-hover:scale-110 transition-transform" />

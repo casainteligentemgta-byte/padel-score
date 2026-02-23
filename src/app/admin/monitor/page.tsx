@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
-import { Monitor, Layout, Maximize2, Radio, ExternalLink, Clock, Zap, Megaphone, Trophy } from 'lucide-react';
+import { Monitor, Layout, Maximize2, Radio, ExternalLink, Clock, Zap, Megaphone, Trophy, Link as LinkIcon, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
@@ -16,6 +16,7 @@ export default function AdminMonitorPage() {
     const [now, setNow] = useState(new Date());
     const [generatingId, setGeneratingId] = useState<string | null>(null);
     const [chronicle, setChronicle] = useState<{ title: string, text: string } | null>(null);
+    const [copiedCourt, setCopiedCourt] = useState<number | null>(null);
 
     const calculateProb = (m: any) => {
         const t1Sets = m.sets?.t1 || 0;
@@ -84,6 +85,7 @@ export default function AdminMonitorPage() {
                         const team2 = m.team2Index > 0 ? tournament.teams?.[m.team2Index - 1] : null;
                         const mData = {
                             ...m,
+                            court: m.court || (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined),
                             tournamentName: tournament.name,
                             tournamentId: docSnap.id,
                             category: tournament.category,
@@ -164,6 +166,19 @@ export default function AdminMonitorPage() {
                                                 <span className="text-[9px] font-bold text-gray-600 uppercase">Duración Partido</span>
                                             </div>
                                             <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => {
+                                                        const url = `${window.location.host}/display/court/${m.court}`;
+                                                        navigator.clipboard.writeText(url);
+                                                        setCopiedCourt(m.court);
+                                                        setTimeout(() => setCopiedCourt(null), 2000);
+                                                    }}
+                                                    className="px-4 py-2 bg-white/5 hover:bg-padel-primary hover:text-black rounded-xl border border-white/10 transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                                                    title="Copiar enlace fijo para TV"
+                                                >
+                                                    {copiedCourt === m.court ? <Check className="w-3 h-3 text-black" /> : <LinkIcon className="w-3 h-3" />}
+                                                    {copiedCourt === m.court ? 'Copiado!' : `Enlace Fijo Pista ${m.court}`}
+                                                </button>
                                                 <Link
                                                     href={`/tournaments/${m.tournamentId}/display/${m.id}`}
                                                     target="_blank"
