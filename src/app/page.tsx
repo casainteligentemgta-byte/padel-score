@@ -65,7 +65,7 @@ export default function LandingPage() {
                                 <Link
                                     href="/tournaments"
                                     className="bg-white/5 border border-white/10 px-8 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 hover:bg-white/10 transition-all">
-                                    MIS TORNEOS <Play className="w-5 h-5 fill-current" />
+                                    TORNEOS <Play className="w-5 h-5 fill-current" />
                                 </Link>
                             </div>
                         </div>
@@ -83,12 +83,6 @@ export default function LandingPage() {
 
                     {/* Quick Access - Right Side */}
                     <div className="lg:col-span-12 xl:col-span-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 xl:grid-rows-4 gap-4">
-                        <Link href="/tournaments" className="glass p-6 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center">
-                            <h3 className="text-xl font-bold mb-2 flex items-center justify-between">
-                                Gestión de Pistas <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform" />
-                            </h3>
-                            <p className="text-sm text-gray-400">Optimiza la ocupación con nuestra asignación inteligente.</p>
-                        </Link>
 
                         <Link href="/tournaments" className="glass p-6 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center">
                             <h3 className="text-xl font-bold mb-2 flex items-center justify-between">

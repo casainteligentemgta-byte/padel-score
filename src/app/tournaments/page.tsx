@@ -75,7 +75,7 @@ export default function MyTournamentsPage() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 flex-shrink-0 pl-24 md:pl-28">
                 <div>
                     <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
-                        Mis <span className="text-padel-primary">Torneos</span>
+                        <span className="text-padel-primary">Torneos</span>
                     </h1>
                     <p className="text-gray-500 mt-2 font-medium">Gestiona tus competencias creadas en Firebase.</p>
                 </div>

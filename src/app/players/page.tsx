@@ -118,7 +118,7 @@ function PlayersListContent() {
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 flex-shrink-0 pl-24 md:pl-28">
                 <div>
                     <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
-                        Base de <span className="text-padel-primary">Jugadores</span>
+                        <span className="text-padel-primary">Jugadores</span>
                     </h1>
                     <p className="text-gray-500 mt-2 font-medium">Gestiona los perfiles y estadísticas de tus atletas.</p>
                 </div>

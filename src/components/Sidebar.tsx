@@ -25,10 +25,10 @@ export default function Sidebar() {
 
     const menuItems = [
         { name: 'Inicio', href: '/', icon: Home },
-        { name: 'Mis Torneos', href: '/tournaments', icon: Trophy },
+        { name: 'Torneos', href: '/tournaments', icon: Trophy },
         { name: 'Agentes AI', href: '/agents', icon: Sparkles },
         { name: 'Agregar Jugador', href: '/players/register', icon: UserPlus },
-        { name: 'Mi Base', href: '/players', icon: Users },
+        { name: 'Jugadores', href: '/players', icon: Users },
     ];
 
     const adminItems = [
