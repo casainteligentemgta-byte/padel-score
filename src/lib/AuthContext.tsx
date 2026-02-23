@@ -81,33 +81,64 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     useEffect(() => {
         (window as any).enableDevMode = enableDevMode;
 
-        let unsub = () => { };
-        try {
-            unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-                setUser(firebaseUser);
-                if (firebaseUser) {
-                    await fetchProfile(firebaseUser.uid);
-                    // Asegurar que casainteligentemgta@gmail.com sea ADMIN si se loguea
-                    if (firebaseUser.email === 'casainteligentemgta@gmail.com' && profile?.role !== ROLES.ADMIN) {
-                        const updatedProfile = { ...profile, role: ROLES.ADMIN };
-                        await dataService.setUserProfile(firebaseUser.uid, updatedProfile);
-                        setProfile(updatedProfile);
-                    }
-                } else {
-                    setProfile(null);
+        // Safety timeout to prevent permanent hang
+        const safetyTimeout = setTimeout(() => {
+            setLoading(prev => {
+                if (prev) {
+                    console.warn("AuthContext: Safety timeout reached. Forcing load (fallback).");
+                    return false;
                 }
-                setLoading(false);
-            }, (error) => {
-                console.error("Firebase Auth observer error:", error);
-                setLoading(false);
+                return prev;
             });
-        } catch (e) {
-            console.error("Failed to initialize Firebase Auth listener:", e);
-            setLoading(false);
-        }
+        }, 5000);
 
-        return () => unsub();
-    }, [profile?.role]); // Added profile?.role to dependencies to react to role changes
+        const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+            console.log("AuthContext: onAuthStateChanged", firebaseUser?.email || "No user");
+            clearTimeout(safetyTimeout);
+            setUser(firebaseUser);
+            // Non-blocking for initial load
+            setLoading(false);
+
+            if (firebaseUser) {
+                try {
+                    console.log("AuthContext: Fetching profile for", firebaseUser.uid);
+                    const profileData = await dataService.getUserProfile(firebaseUser.uid);
+                    let currentProfile = profileData;
+
+                    if (!profileData) {
+                        currentProfile = {
+                            role: ROLES.PLAYER,
+                            email: firebaseUser.email || '',
+                            name: firebaseUser.displayName || 'Usuario',
+                            createdAt: new Date().toISOString()
+                        };
+                        await dataService.setUserProfile(firebaseUser.uid, currentProfile);
+                    }
+
+                    // Check for hardcoded Admin
+                    if (firebaseUser.email === 'casainteligentemgta@gmail.com' && currentProfile && currentProfile.role !== ROLES.ADMIN) {
+                        currentProfile.role = ROLES.ADMIN;
+                        await dataService.setUserProfile(firebaseUser.uid, currentProfile);
+                    }
+
+                    setProfile(currentProfile);
+                } catch (error) {
+                    console.error("AuthContext: Error fetching profile:", error);
+                }
+            } else {
+                setProfile(null);
+            }
+        }, (error) => {
+            console.error("AuthContext: Firebase Auth observer error:", error);
+            clearTimeout(safetyTimeout);
+            setLoading(false);
+        });
+
+        return () => {
+            unsub();
+            clearTimeout(safetyTimeout);
+        };
+    }, []);
 
     const signInWithGoogle = async () => {
         const res = await signInWithPopup(auth, googleProvider);

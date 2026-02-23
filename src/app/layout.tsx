@@ -24,7 +24,7 @@ export default function RootLayout({
             </head>
             <body className="font-outfit antialiased">
                 <AuthProvider>
-                    <main className="min-height-screen">
+                    <main className="min-h-screen">
                         {children}
                     </main>
                 </AuthProvider>

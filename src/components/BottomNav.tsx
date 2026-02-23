@@ -8,7 +8,8 @@ import {
     Trophy,
     Users,
     User,
-    PlusCircle
+    PlusCircle,
+    Sparkles
 } from 'lucide-react';
 
 export default function BottomNav() {
@@ -16,8 +17,8 @@ export default function BottomNav() {
 
     const tabs = [
         { name: 'Inicio', href: '/tournaments', icon: Home, match: '/tournaments' },
-        { name: 'Partidos', href: '#', icon: Trophy, match: '/matches' },
         { name: 'Jugadores', href: '/players', icon: Users, match: '/players' },
+        { name: 'Agentes', href: '/agents', icon: Sparkles, match: '/agents' },
         { name: 'Perfil', href: '/players/register', icon: User, match: '/players/register' },
     ];
 

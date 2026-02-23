@@ -34,6 +34,7 @@ export enum TournamentCategory {
 export enum MatchStatus {
     PENDING = 'PENDING',
     LIVE = 'LIVE',
+    PAUSED = 'PAUSED',
     FINISHED = 'FINISHED',
     CANCELLED = 'CANCELLED',
 }
@@ -64,6 +65,17 @@ export interface Tournament {
     matchFormat?: 'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS';
     scoringSystem?: 'GOLDEN_POINT' | 'TRADITIONAL';
     groupAssignments?: { [groupName: string]: string[] }; // groupName -> list of teamIds
+    broadcastingSettings?: {
+        primaryColor?: string;
+        showLiveIndicator?: boolean;
+        sponsors?: { name: string; logoUrl?: string }[];
+        bannerText?: string;
+        adFrequencySeconds?: number;
+        adDurationSeconds?: number;
+        adMediaUrls?: string[]; // URLs specifically for the full-screen display
+        funAnimationsEnabled?: boolean;
+        aiAnimationSearchEnabled?: boolean;
+    };
 }
 
 export interface Team {

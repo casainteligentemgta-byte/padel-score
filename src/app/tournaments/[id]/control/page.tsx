@@ -10,13 +10,15 @@ import {
     LayoutDashboard,
     Play,
     CheckCircle2,
+    Monitor,
     Users,
     ChevronRight,
     MapPin,
     AlertCircle,
     Maximize2,
     Volume2,
-    MonitorPlay
+    MonitorPlay,
+    Tv
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
@@ -145,6 +147,13 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                                 <p className="text-lg font-black italic text-white leading-none">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</p>
                             </div>
                         </div>
+                        <Link
+                            href={`/tournaments/${id}/control/broadcasting`}
+                            className="w-12 h-12 flex items-center justify-center bg-padel-primary/10 border border-padel-primary/20 rounded-2xl hover:bg-padel-primary/20 transition-all text-padel-primary group"
+                            title="Configurar Streamer y Pizarra"
+                        >
+                            <Tv className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                        </Link>
                         <button className="w-12 h-12 flex items-center justify-center bg-white/5 rounded-2xl hover:bg-white/10 transition-colors">
                             <Settings className="w-5 h-5 text-gray-500" />
                         </button>
@@ -240,13 +249,23 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                                         </div>
 
                                         {(isAdmin || isMarker) ? (
-                                            <Link
-                                                href={`/tournaments/${id}/score/${match.id}`}
-                                                className="mt-2 w-full py-2 bg-white/5 border border-white/5 rounded-xl text-[8px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all hover:bg-padel-primary hover:text-black text-center flex items-center justify-center gap-2"
-                                            >
-                                                <MonitorPlay className="w-3 h-3" />
-                                                Pizarra de Árbitro
-                                            </Link>
+                                            <div className="mt-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                <Link
+                                                    href={`/tournaments/${id}/score/${match.id}`}
+                                                    className="flex-1 py-2 bg-white/5 border border-white/5 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all hover:bg-padel-primary hover:text-black text-center flex items-center justify-center gap-2"
+                                                >
+                                                    <MonitorPlay className="w-3 h-3" />
+                                                    Pizarra
+                                                </Link>
+                                                <Link
+                                                    href={`/tournaments/${id}/display/${match.id}`}
+                                                    target="_blank"
+                                                    className="flex-1 py-2 bg-white/5 border border-white/5 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all hover:bg-[#fb923c] hover:text-black text-center flex items-center justify-center gap-2"
+                                                >
+                                                    <Monitor className="w-3 h-3" />
+                                                    TV Pista
+                                                </Link>
+                                            </div>
                                         ) : (
                                             <div className="mt-2 w-full py-2 bg-white/5 border border-white/5 rounded-xl text-[8px] font-black uppercase tracking-widest opacity-20 text-center">
                                                 Solo Selección de Árbitro

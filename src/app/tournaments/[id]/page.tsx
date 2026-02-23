@@ -23,7 +23,8 @@ import {
     Mail,
     X,
     LayoutDashboard,
-    Monitor
+    Monitor,
+    Tv
 } from 'lucide-react';
 import Link from 'next/link';
 import { MatchStatus, TournamentType, ScheduleConfig } from '@/types/tournament';
@@ -613,6 +614,15 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        {canManageMatches && (
+                            <Link
+                                href={`/tournaments/${id}/control`}
+                                className="w-10 h-10 flex items-center justify-center rounded-full bg-padel-primary/10 border border-padel-primary/20 hover:bg-padel-primary/20 transition-all text-padel-primary"
+                                title="Panel de Control (Modo Director)"
+                            >
+                                <LayoutDashboard className="w-5 h-5" />
+                            </Link>
+                        )}
                         <button
                             onClick={() => setIsShareModalOpen(true)}
                             className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
@@ -1032,6 +1042,17 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                             {match.status === MatchStatus.LIVE && (
                                                                 <>
                                                                     <Link href={`/tournaments/${id}/score/${match.id}`} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-[9px] font-black uppercase rounded-xl text-center italic leading-relaxed transition-all">Pizarra</Link>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            const url = `${window.location.origin}/tournaments/${id}/stream/${match.id}`;
+                                                                            navigator.clipboard.writeText(url);
+                                                                            alert('Link de Streamer (OBS) copiado al portapapeles');
+                                                                        }}
+                                                                        className="w-12 py-3 bg-white/5 hover:bg-white/10 text-[#ccff00] rounded-xl flex items-center justify-center transition-all"
+                                                                        title="Copiar URL para OBS/Stream"
+                                                                    >
+                                                                        <Tv className="w-4 h-4" />
+                                                                    </button>
                                                                     <button onClick={() => finishMatch(match.id)} className="flex-[1.5] py-3 bg-padel-primary text-black text-[9px] font-black uppercase rounded-xl italic hover:scale-[1.02] shadow-[0_5px_15px_rgba(204,255,0,0.2)] transition-all">Confirmar</button>
                                                                 </>
                                                             )}

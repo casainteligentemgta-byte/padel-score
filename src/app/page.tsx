@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Users, Calendar, ArrowRight, Play } from 'lucide-react';
+import { Trophy, Users, Calendar, ArrowRight, Play, Sparkles } from 'lucide-react';
 import LoginButton from '@/components/LoginButton';
 
 import Sidebar from '@/components/Sidebar';
@@ -80,26 +80,33 @@ export default function LandingPage() {
                 </div>
 
                 {/* Quick Access - Right Side */}
-                <div className="lg:col-span-12 xl:col-span-5 grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-1 xl:grid-rows-3 gap-4">
-                    <div className="glass p-6 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center">
+                <div className="lg:col-span-12 xl:col-span-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 xl:grid-rows-4 gap-4">
+                    <Link href="/tournaments" className="glass p-6 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center">
                         <h3 className="text-xl font-bold mb-2 flex items-center justify-between">
                             Gestión de Pistas <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform" />
                         </h3>
                         <p className="text-sm text-gray-400">Optimiza la ocupación con nuestra asignación inteligente.</p>
-                    </div>
+                    </Link>
 
-                    <div className="glass p-6 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center">
+                    <Link href="/tournaments" className="glass p-6 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center">
                         <h3 className="text-xl font-bold mb-2 flex items-center justify-between">
                             Brackets en Vivo <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform" />
                         </h3>
                         <p className="text-sm text-gray-400">Resultados instantáneos y actualización automática para todos.</p>
-                    </div>
+                    </Link>
 
                     <Link href="/expenses" className="glass p-6 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center">
                         <h3 className="text-xl font-bold mb-2 flex items-center justify-between">
                             Control de Gastos <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform" />
                         </h3>
                         <p className="text-sm text-gray-400">Lleva la contabilidad: inscripciones, premios y gastos operativos.</p>
+                    </Link>
+
+                    <Link href="/agents" className="glass p-6 group hover:border-padel-primary/50 transition-all cursor-pointer flex flex-col justify-center border-padel-primary/20">
+                        <h3 className="text-xl font-padel text-padel-primary mb-2 flex items-center justify-between">
+                            AGENTES AI <Sparkles className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                        </h3>
+                        <p className="text-sm text-gray-400 italic">Consulta a nuestros expertos en ROI, Diseño y Redes Sociales.</p>
                     </Link>
                 </div>
             </div>
