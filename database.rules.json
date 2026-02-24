@@ -1,0 +1,22 @@
+{
+    "rules": {
+        ".read": false,
+        ".write": false,
+        "canchas": {
+            "$cancha_id": {
+                ".read": "auth != null && (root.child('usuarios_roles').child(auth.uid).child('rol').val() === 'admin' || root.child('usuarios_roles').child(auth.uid).child('rol').val() === 'marker' || data.child('estado').val() === 'en_vivo')",
+                ".write": "auth != null && (root.child('usuarios_roles').child(auth.uid).child('rol').val() === 'admin' || (root.child('usuarios_roles').child(auth.uid).child('rol').val() === 'marker' && root.child('usuarios_roles').child(auth.uid).child('cancha_asignada').val() === $cancha_id))"
+            }
+        },
+        "publicidad_master": {
+            ".read": "auth != null",
+            ".write": "auth != null && root.child('usuarios_roles').child(auth.uid).child('rol').val() === 'admin'"
+        },
+        "usuarios_roles": {
+            "$uid": {
+                ".read": "auth != null && (auth.uid === $uid || root.child('usuarios_roles').child(auth.uid).child('rol').val() === 'admin')",
+                ".write": "auth != null && root.child('usuarios_roles').child(auth.uid).child('rol').val() === 'admin'"
+            }
+        }
+    }
+}

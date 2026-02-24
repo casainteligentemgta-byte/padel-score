@@ -20,14 +20,19 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
+import RefereeRemoteControl from '@/components/RefereeRemoteControl';
+import { Bluetooth, LayoutDashboard, Search, ListFilter } from 'lucide-react';
 
 export default function RefereeScoreboard({ params }: { params: Promise<{ id: string, matchId: string }> }) {
     const { id, matchId } = use(params);
     const router = useRouter();
-    const { user, loading: authLoading } = useAuth();
+    const { user, profile, isAdmin, isMarker, loading: authLoading } = useAuth();
     const [tournament, setTournament] = useState<any>(null);
     const [match, setMatch] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [showMatchSelector, setShowMatchSelector] = useState(false);
+
+    const canControl = isAdmin || isMarker || tournament?.ownerId === user?.uid;
 
     const primaryColor = tournament?.broadcastingSettings?.primaryColor || '#ccff00';
     const [history, setHistory] = useState<any[]>([]);
@@ -268,6 +273,26 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         </div>
     );
 
+    if (!canControl) {
+        return (
+            <div className="h-screen bg-[#0a0a0a] flex items-center justify-center p-10">
+                <div className="max-w-md w-full bg-[#111] border border-white/10 rounded-[2.5rem] p-10 text-center">
+                    <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Monitor className="w-10 h-10 text-red-500" />
+                    </div>
+                    <h2 className="text-2xl font-black italic uppercase tracking-tighter mb-4 text-white">Acceso Restringido</h2>
+                    <p className="text-gray-400 text-sm font-medium mb-8">Solo el personal autorizado (ADMIN o MARKER) puede controlar el marcador de este partido.</p>
+                    <button
+                        onClick={() => router.push(`/tournaments/${id}`)}
+                        className="w-full py-4 bg-white text-black rounded-2xl font-black italic uppercase tracking-widest text-[10px] hover:scale-[1.02] transition-all"
+                    >
+                        Volver al Torneo
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (!match) return <div className="h-screen bg-[#0a0a0a] flex items-center justify-center text-white font-black italic uppercase">Partido no encontrado</div>;
 
     const server = match.server || { team: 1, player: 1 };
@@ -288,16 +313,24 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                 </div>
 
                 <div className="flex gap-4">
+                    <RefereeRemoteControl
+                        onTeamAPoint={() => updateScore('t1', 'plus')}
+                        onTeamBPoint={() => updateScore('t2', 'plus')}
+                        onUndo={() => undoPoint()}
+                    />
+                    <button
+                        onClick={() => setShowMatchSelector(true)}
+                        className="flex items-center gap-3 px-6 py-3 bg-[#262626] border border-white/10 rounded-2xl text-[10px] font-black italic uppercase tracking-widest text-gray-300 hover:bg-[#333] transition-all"
+                    >
+                        <LayoutDashboard className="w-4 h-4" />
+                        Cambiar Cancha
+                    </button>
                     <button
                         onClick={handleMedicalTimeout}
                         className={`flex items-center gap-3 px-6 py-3 border rounded-2xl text-[10px] font-black italic uppercase tracking-widest transition-all ${isMedicalTimeout ? 'bg-[#c2410c] border-[#c2410c] text-white' : 'bg-[#c2410c]/20 border-[#c2410c]/40 text-[#fb923c] hover:bg-[#c2410c]/30'}`}
                     >
                         <Stethoscope className={`w-4 h-4 ${isMedicalTimeout ? 'animate-pulse' : ''}`} />
-                        {isMedicalTimeout ? 'Reanudar Partido' : 'Asistencia Médica'}
-                    </button>
-                    <button className="flex items-center gap-3 px-6 py-3 bg-[#262626] border border-white/10 rounded-2xl text-[10px] font-black italic uppercase tracking-widest text-gray-300 hover:bg-[#333] transition-all">
-                        <Monitor className="w-4 h-4" />
-                        Mesa Técnica
+                        {isMedicalTimeout ? 'Reanudar' : 'Asistencia'}
                     </button>
                 </div>
 
@@ -595,8 +628,9 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                 </button>
             </footer>
 
-            {/* Medical Timeout Overlay */}
+            {/* Overlays */}
             <AnimatePresence>
+                {/* Medical Timeout Overlay */}
                 {isMedicalTimeout && (
                     <motion.div
                         initial={{ opacity: 0 }}
@@ -633,6 +667,67 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                             >
                                 Reanudar Partido
                             </button>
+                        </motion.div>
+                    </motion.div>
+                )}
+
+                {/* Match Selector Overlay */}
+                {showMatchSelector && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex items-center justify-center p-6"
+                        onClick={() => setShowMatchSelector(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            className="bg-[#111] border border-white/10 rounded-[3rem] w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="p-8 border-b border-white/5 flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-2xl font-black italic uppercase tracking-tighter">Selector de Cancha</h3>
+                                    <p className="text-xs font-black italic text-padel-primary uppercase tracking-[0.2em] mt-1">Sincronización en tiempo real</p>
+                                </div>
+                                <button onClick={() => setShowMatchSelector(false)} className="p-3 bg-white/5 rounded-full hover:bg-white/10 transition-all text-gray-500">
+                                    <RotateCcw className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-8 space-y-4">
+                                {tournament?.matches?.filter((m: any) => m.status === MatchStatus.LIVE).map((m: any) => (
+                                    <button
+                                        key={m.id}
+                                        onClick={() => {
+                                            router.push(`/tournaments/${id}/score/${m.id}`);
+                                            setShowMatchSelector(false);
+                                        }}
+                                        className={`w-full p-6 rounded-3xl border text-left transition-all ${m.id === matchId ? 'bg-padel-primary/10 border-padel-primary shadow-[0_0_20px_rgba(204,255,0,0.1)]' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center">
+                                                    <span className="text-lg font-black italic">{m.court || '-'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="block text-[10px] font-black italic text-gray-500 uppercase tracking-widest">Cancha {m.court}</span>
+                                                    <span className="block text-sm font-bold uppercase truncate max-w-[300px]">
+                                                        {tournament.teams?.[m.team1Index - 1]?.p1?.name || 'Eq 1'} vs {tournament.teams?.[m.team2Index - 1]?.p1?.name || 'Eq 2'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {m.id === matchId && (
+                                                <div className="px-3 py-1 bg-padel-primary rounded-full text-[8px] font-black text-black uppercase tracking-widest">Activo</div>
+                                            )}
+                                        </div>
+                                    </button>
+                                ))}
+                                {tournament?.matches?.filter((m: any) => m.status === MatchStatus.LIVE).length === 0 && (
+                                    <div className="text-center py-20 opacity-30 italic font-black uppercase text-sm tracking-widest">No hay partidos en curso</div>
+                                )}
+                            </div>
                         </motion.div>
                     </motion.div>
                 )}

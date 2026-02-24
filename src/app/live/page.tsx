@@ -9,8 +9,11 @@ import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
 import { MatchStatus } from '@/types/tournament';
+import { useSearchParams } from 'next/navigation';
 
 export default function LiveBracketsPage() {
+    const searchParams = useSearchParams();
+    const isTVMode = searchParams.get('tv') === 'true';
     const [matches, setMatches] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -60,9 +63,9 @@ export default function LiveBracketsPage() {
 
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
-            <Sidebar />
+            {!isTVMode && <Sidebar />}
 
-            <div className="ipad-scroll-area flex flex-col p-8 md:p-12 pl-24 md:pl-32">
+            <div className={`ipad-scroll-area flex flex-col p-8 md:p-12 ${isTVMode ? '' : 'pl-24 md:pl-32'}`}>
                 <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 flex-shrink-0 w-full">
                     <div>
                         <div className="flex items-center gap-3 mb-2">
@@ -235,7 +238,7 @@ export default function LiveBracketsPage() {
                 </footer>
             </div>
 
-            <BottomNav />
+            {!isTVMode && <BottomNav />}
         </div>
     );
 }

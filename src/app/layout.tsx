@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Outfit, Public_Sans } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
+import { DynamicBottomNav } from "@/components/DynamicBottomNav";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
@@ -27,6 +28,7 @@ export default function RootLayout({
                     <main className="min-h-screen">
                         {children}
                     </main>
+                    <DynamicBottomNav />
                 </AuthProvider>
             </body>
         </html>

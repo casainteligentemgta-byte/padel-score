@@ -226,17 +226,16 @@ export class ScheduleEngine {
         // Agrupar matches por pista usando courtIndex (o courtId si existe)
         const matchesByCourt: { [key: string]: any[] } = {};
         allMatches.forEach(m => {
-            // FIX: Be explicit with 0 and ensure keys are distinct strings
             const key = (m.courtId !== undefined && m.courtId !== null)
                 ? String(m.courtId)
                 : (m.courtIndex !== undefined && m.courtIndex !== null)
                     ? `idx-${m.courtIndex}`
                     : 'idx-0';
             if (!matchesByCourt[key]) matchesByCourt[key] = [];
-            matchesByCourt[key].push(m);
+            matchesByCourt[key].push({ ...m }); // Create shallow copy to work with
         });
 
-        const updatedMatches: any[] = [];
+        const updates: any[] = [];
 
         Object.values(matchesByCourt).forEach(courtMatches => {
             // Ordenar por tiempo programado original
@@ -261,7 +260,7 @@ export class ScheduleEngine {
 
                         if (Math.abs(newTime.getTime() - originalTime.getTime()) > 60000) {
                             match.scheduledTime = newTime;
-                            updatedMatches.push({ id: match.id, scheduledTime: newTime });
+                            updates.push({ id: match.id, scheduledTime: newTime });
                         }
                     }
 
@@ -272,7 +271,7 @@ export class ScheduleEngine {
             });
         });
 
-        return updatedMatches;
+        return updates;
     }
 
     /**

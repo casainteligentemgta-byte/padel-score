@@ -1,5 +1,7 @@
 {
   "projects": {
     "default": "padel-score-pro-777"
-  }
+  },
+  "targets": {},
+  "etags": {}
 }

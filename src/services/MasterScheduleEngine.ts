@@ -11,6 +11,8 @@ export interface CategoryConfig {
     numTeams: number;
     type: TournamentType;
     teams: any[]; // List of teams with player IDs for conflict detection
+    goldenPoint: boolean;           // Si se juega punto de oro
+    setFormat: 'TIE_BREAK' | 'SUPER_TIE_BREAK' | 'NO_TIE_BREAK'; // Formato del set
 }
 
 export interface MasterScheduleConfig {
@@ -28,10 +30,10 @@ export interface MasterScheduleConfig {
 }
 
 export class MasterScheduleEngine {
+
     static generateMasterSchedule(config: MasterScheduleConfig) {
         const {
             startDate,
-            endDate,
             dailyStartTime,
             dailyEndTime,
             numCourts,
@@ -40,169 +42,126 @@ export class MasterScheduleEngine {
             categories
         } = config;
 
-        // 1. Generate all time slots for all days
-        const start = new Date(startDate + 'T00:00:00');
-        const end = new Date(endDate + 'T23:59:59');
-        const allDays: Date[] = [];
-        let curr = new Date(start);
-        while (curr <= end) {
-            allDays.push(new Date(curr));
-            curr.setDate(curr.getDate() + 1);
+        if (!categories || categories.length === 0) {
+            console.warn('[Engine] No hay categorías configuradas');
+            return { matches: [], notScheduled: 0, totalMatches: 0 };
         }
 
-        const timeSlots: Date[] = [];
-        allDays.forEach(day => {
-            const slots = this.generateTimeSlots(day, dailyStartTime, dailyEndTime, matchDurationMinutes, bufferMinutes);
-            timeSlots.push(...slots);
-        });
-
-        console.log(`[MasterScheduleEngine] Total time slots available: ${timeSlots.length} across ${allDays.length} days`);
-
-        // 2. Generate pairings per category and organize by progression stages
-        // Stage 1: Round Robin / First Rounds
-        // Stage 2: Semis (Implicit if bracket)
-        // Stage 3: Finals (RESERVED AT THE END)
-
-        let allGroupMatches: any[] = [];
-        let allFinalMatches: any[] = [];
+        // ── 1. Generar TODOS los enfrentamientos ──────────────────────────
+        const allMatches: any[] = [];
 
         categories.forEach(cat => {
+            if (!cat.teams || cat.teams.length < 2) {
+                console.warn(`[Engine] Categoría ${cat.category} tiene menos de 2 equipos, ignorada.`);
+                return;
+            }
+
             const pairings = this.generatePairings(cat);
+            console.log(`[Engine] Cat ${cat.gender}-${cat.category}: ${cat.teams.length} equipos → ${pairings.length} partidos`);
 
-            // Distinguish between normal matches and "The Final"
-            // For simplicity in this logic, we'll treat all pairings as "Group Stage" 
-            // and manually identify the "Finals" if it's a Knockout, 
-            // or just take the last pairing if it's small.
-            // Requirement 2: Progression Sincronica.
-            // Requirement 3: Reservar finales.
-
-            const total = pairings.length;
             pairings.forEach((pair, idx) => {
-                let roundName = 'Fase de Grupos';
-                const isKnockout = cat.type === TournamentType.KNOCKOUT;
-                const matchesToGo = total - idx;
-
-                if (isKnockout) {
-                    if (matchesToGo === 1) roundName = 'FINAL';
-                    else if (matchesToGo <= 2) roundName = 'SEMIFINAL';
-                    else if (matchesToGo <= 4) roundName = '4TOS DE FINAL';
-                    else if (matchesToGo <= 8) roundName = '8VOS DE FINAL';
-                    else if (matchesToGo <= 16) roundName = 'R-16';
-                    else roundName = 'ELIMINATORIA';
-                } else if (idx === total - 1) {
-                    roundName = 'FINAL (GD)';
-                }
-
-                const matchObj = {
+                allMatches.push({
                     categoryId: cat.id,
                     categoryName: `${cat.gender} - ${cat.category}`,
                     team1: pair[0],
                     team2: pair[1],
-                    isFinal: matchesToGo === 1,
-                    roundName: roundName,
-                    playerIds: this.getTeamPlayerIds(pair[0], pair[1], cat)
-                };
-
-                if (matchesToGo === 1) {
-                    allFinalMatches.push(matchObj);
-                } else {
-                    allGroupMatches.push(matchObj);
-                }
+                    roundName: 'Fase de Grupos',
+                    playerIds: this.getTeamPlayerIds(pair[0], pair[1]),
+                    isFinal: false,
+                });
             });
         });
 
-        // 3. Scheduling logic with conflict prevention
+        console.log(`[Engine] Total partidos a agendar: ${allMatches.length}`);
+
+        if (allMatches.length === 0) {
+            return { matches: [], notScheduled: 0, totalMatches: 0 };
+        }
+
+        // ── 2. Mezclar para distribuir categorías uniformemente ────────────
+        const pending = this.shuffle([...allMatches]);
+
+        // ── 3. Agendar expandiendo días hasta colocar todos ───────────────
         const scheduledMatches: any[] = [];
         const playerLastSlot: { [playerId: string]: number } = {};
 
-        // Reverse reserve slots for finals
-        const numFinals = allFinalMatches.length;
-        const slotsNeededForFinals = Math.ceil(numFinals / numCourts);
-        const finalsSlotStartIndex = timeSlots.length - slotsNeededForFinals;
+        let globalSlotIdx = 0;
+        let dayOffset = 0;
+        const maxDays = 30; // límite de seguridad: nunca pasar 30 días
 
-        let currentSlotIdx = 0;
-        let pendingMatches = [...allGroupMatches];
+        while (pending.length > 0 && dayOffset < maxDays) {
+            // Generar slots del día actual
+            const dayDate = new Date(startDate + 'T00:00:00');
+            dayDate.setDate(dayDate.getDate() + dayOffset);
 
-        // Shuffle to mix categories
-        pendingMatches = this.shuffle(pendingMatches);
+            const daySlots = this.generateTimeSlots(dayDate, dailyStartTime, dailyEndTime, matchDurationMinutes, bufferMinutes);
 
-        while (pendingMatches.length > 0 && currentSlotIdx < finalsSlotStartIndex) {
-            const slotStart = timeSlots[currentSlotIdx];
-            let courtUsedInSlot = 0;
-
-            for (let c = 0; c < numCourts; c++) {
-                if (pendingMatches.length === 0) break;
-
-                let foundIdx = -1;
-                for (let i = 0; i < pendingMatches.length; i++) {
-                    const m = pendingMatches[i];
-                    if (this.canPlayerPlay(m.playerIds, currentSlotIdx, playerLastSlot)) {
-                        foundIdx = i;
-                        break;
-                    }
-                }
-
-                if (foundIdx !== -1) {
-                    const m = pendingMatches.splice(foundIdx, 1)[0];
-                    scheduledMatches.push({
-                        ...m,
-                        scheduledTime: slotStart.toISOString(),
-                        courtIndex: c,
-                        courtName: (config.courtNames[c] && config.courtNames[c].trim()) ? config.courtNames[c] : `Pista ${c + 1}`,
-                        status: MatchStatus.PENDING
-                    });
-
-                    m.playerIds.forEach((pid: string) => {
-                        playerLastSlot[pid] = currentSlotIdx;
-                    });
-                    courtUsedInSlot++;
-                }
+            if (daySlots.length === 0) {
+                console.warn(`[Engine] El horario ${dailyStartTime}-${dailyEndTime} con duración ${matchDurationMinutes}min+${bufferMinutes}min buffer no genera franjas. Verifica la configuración.`);
+                break;
             }
-            currentSlotIdx++;
-        }
 
-        // 4. Schedule Finals
-        let finalSlotIdx = Math.max(currentSlotIdx, finalsSlotStartIndex);
-        let pendingFinals = [...allFinalMatches];
+            for (const slotStart of daySlots) {
+                if (pending.length === 0) break;
 
-        while (pendingFinals.length > 0 && finalSlotIdx < timeSlots.length) {
-            const slotStart = timeSlots[finalSlotIdx];
-            for (let c = 0; c < numCourts; c++) {
-                if (pendingFinals.length === 0) break;
+                // Intentar llenar cada cancha en este slot
+                for (let c = 0; c < numCourts; c++) {
+                    if (pending.length === 0) break;
 
-                let foundIdx = -1;
-                for (let i = 0; i < pendingFinals.length; i++) {
-                    const m = pendingFinals[i];
-                    if (this.canPlayerPlay(m.playerIds, finalSlotIdx, playerLastSlot)) {
-                        foundIdx = i;
-                        break;
+                    // Buscar partido cuyo jugadores hayan descansado al menos 1 slot
+                    let foundIdx = -1;
+                    for (let i = 0; i < pending.length; i++) {
+                        if (this.canPlay(pending[i].playerIds, globalSlotIdx, playerLastSlot)) {
+                            foundIdx = i;
+                            break;
+                        }
                     }
-                }
 
-                if (foundIdx !== -1) {
-                    const m = pendingFinals.splice(foundIdx, 1)[0];
+                    // Si nadie pasa el filtro de descanso, asignar de todas formas el primero
+                    // (el descanso es preferible pero no puede bloquear eternamente)
+                    if (foundIdx === -1) {
+                        foundIdx = 0;
+                    }
+
+                    const m = pending.splice(foundIdx, 1)[0];
+                    const courtName = (config.courtNames[c] && config.courtNames[c].trim())
+                        ? config.courtNames[c]
+                        : `Pista ${c + 1}`;
+
                     scheduledMatches.push({
                         ...m,
                         scheduledTime: slotStart.toISOString(),
                         courtIndex: c,
-                        courtName: (config.courtNames[c] && config.courtNames[c].trim()) ? config.courtNames[c] : `Pista ${c + 1}`,
+                        courtName,
                         status: MatchStatus.PENDING,
-                        roundName: 'FINAL'
                     });
+
                     m.playerIds.forEach((pid: string) => {
-                        playerLastSlot[pid] = finalSlotIdx;
+                        playerLastSlot[pid] = globalSlotIdx;
                     });
                 }
+
+                globalSlotIdx++;
             }
-            finalSlotIdx++;
+
+            dayOffset++;
         }
+
+        if (pending.length > 0) {
+            console.warn(`[Engine] ${pending.length} partidos no se pudieron agendar (${dayOffset} días usados, límite: ${maxDays})`);
+        }
+
+        console.log(`[Engine] ✅ ${scheduledMatches.length} partidos agendados en ${dayOffset} día(s)`);
 
         return {
             matches: scheduledMatches,
-            notScheduled: pendingMatches.length + pendingFinals.length,
-            totalMatches: scheduledMatches.length
+            notScheduled: pending.length,
+            totalMatches: scheduledMatches.length,
+            daysUsed: dayOffset,
         };
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────
 
     private static generateTimeSlots(day: Date, startStr: string, endStr: string, duration: number, buffer: number): Date[] {
         const slots: Date[] = [];
@@ -215,13 +174,23 @@ export class MasterScheduleEngine {
         const limit = new Date(day);
         limit.setHours(endH, endM, 0, 0);
 
+        // Si el cierre es menor que la apertura → el club cierra al DÍA SIGUIENTE (cruza medianoche)
+        // Ej: abre 07:00, cierra 01:00 → limit es 01:00 del día siguiente
+        if (limit.getTime() <= current.getTime()) {
+            limit.setDate(limit.getDate() + 1);
+        }
+
+        const slotDuration = duration + buffer; // minutos totales por franja
         while (current.getTime() + duration * 60000 <= limit.getTime()) {
             slots.push(new Date(current));
-            current.setMinutes(current.getMinutes() + duration + buffer);
+            current.setMinutes(current.getMinutes() + slotDuration);
         }
+
+        console.log(`[Engine] Franjas generadas para ${day.toDateString()} (${startStr}→${endStr}): ${slots.length} franjas × ${slotDuration}min c/u`);
         return slots;
     }
 
+    /** Round-robin completo: cada equipo juega contra todos los demás */
     private static generatePairings(cat: CategoryConfig): any[][] {
         const pairings: any[][] = [];
         const teams = cat.teams;
@@ -233,28 +202,28 @@ export class MasterScheduleEngine {
         return pairings;
     }
 
-    private static getTeamPlayerIds(t1: any, t2: any, cat: CategoryConfig): string[] {
-        const ids = [];
-        if (t1.p1?.id) ids.push(t1.p1.id);
-        if (t1.p2?.id) ids.push(t1.p2.id);
-        if (t2.p1?.id) ids.push(t2.p1.id);
-        if (t2.p2?.id) ids.push(t2.p2.id);
+    private static getTeamPlayerIds(t1: any, t2: any): string[] {
+        const ids: string[] = [];
+        if (t1?.p1?.id) ids.push(t1.p1.id);
+        if (t1?.p2?.id) ids.push(t1.p2.id);
+        if (t2?.p1?.id) ids.push(t2.p1.id);
+        if (t2?.p2?.id) ids.push(t2.p2.id);
         return ids;
     }
 
-    private static canPlayerPlay(playerIds: string[], currentSlotIdx: number, playerLastSlot: { [pid: string]: number }): boolean {
+    /** Retorna true si todos los jugadores han descansado al menos 1 slot */
+    private static canPlay(playerIds: string[], currentSlotIdx: number, playerLastSlot: { [pid: string]: number }): boolean {
         for (const pid of playerIds) {
             if (playerLastSlot[pid] === undefined) continue;
-            // Requirement 2: Rest 1 slot between matches
             if (currentSlotIdx - playerLastSlot[pid] <= 1) return false;
         }
         return true;
     }
 
-    private static shuffle(array: any[]) {
-        let currentIndex = array.length, randomIndex;
+    private static shuffle<T>(array: T[]): T[] {
+        let currentIndex = array.length;
         while (currentIndex !== 0) {
-            randomIndex = Math.floor(Math.random() * currentIndex);
+            const randomIndex = Math.floor(Math.random() * currentIndex);
             currentIndex--;
             [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
         }

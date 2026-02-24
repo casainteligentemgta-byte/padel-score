@@ -59,11 +59,11 @@ export default function MasterGeneratorPage() {
         complexName: 'Margarita Padel',
         startDate: new Date().toISOString().split('T')[0],
         endDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-        dailyStartTime: '08:00',
-        dailyEndTime: '22:00',
-        numCourts: 6,
-        courtNames: Array.from({ length: 6 }, (_, i) => `Pista ${i + 1}`),
-        matchDurationMinutes: 90,
+        dailyStartTime: '07:00',
+        dailyEndTime: '01:00',
+        numCourts: 3,
+        courtNames: Array.from({ length: 3 }, (_, i) => `Pista ${i + 1}`),
+        matchDurationMinutes: 70,
         bufferMinutes: 10,
         categories: []
     });
@@ -73,6 +73,15 @@ export default function MasterGeneratorPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [hasGenerated, setHasGenerated] = useState(false);
     const [activeGender, setActiveGender] = useState<'MALE' | 'FEMALE' | 'MIXED' | null>(null);
+
+    // Modal de configuración de categoría
+    const [pendingCat, setPendingCat] = useState<{
+        gender: 'MALE' | 'FEMALE' | 'MIXED';
+        category: TournamentCategory;
+    } | null>(null);
+    const [pendingNumTeams, setPendingNumTeams] = useState(8);
+    const [pendingGolden, setPendingGolden] = useState(false);
+    const [pendingSetFormat, setPendingSetFormat] = useState<'TIE_BREAK' | 'SUPER_TIE_BREAK' | 'NO_TIE_BREAK'>('TIE_BREAK');
 
     const router = useRouter();
     const { user } = useAuth();
@@ -113,23 +122,65 @@ export default function MasterGeneratorPage() {
     });
 
     // Quick category templates
+    const openCategoryModal = (gender: 'MALE' | 'FEMALE' | 'MIXED', cat: TournamentCategory) => {
+        // Si ya existe, no re-abrir
+        if (eventData.categories.some(c => c.gender === gender && c.category === cat)) return;
+        setPendingCat({ gender, category: cat });
+        setPendingNumTeams(8);
+        setPendingGolden(false);
+        setPendingSetFormat('TIE_BREAK');
+    };
+
+    const confirmAddCategory = () => {
+        if (!pendingCat) return;
+        const { gender, category } = pendingCat;
+        const existingIdx = eventData.categories.findIndex(c => c.gender === gender && c.category === category);
+
+        if (existingIdx >= 0) {
+            // MODO EDICIÓN: actualizar la categoría existente
+            setEventData(prev => ({
+                ...prev,
+                categories: prev.categories.map((c, i) => {
+                    if (i !== existingIdx) return c;
+                    return {
+                        ...c,
+                        numTeams: pendingNumTeams,
+                        goldenPoint: pendingGolden,
+                        setFormat: pendingSetFormat,
+                        teams: Array.from({ length: pendingNumTeams }, (_, j) => ({
+                            id: `team-${c.id}-${j}`,
+                            p1: { id: `p1-${c.id}-${j}`, name: `Jugador ${j * 2 + 1}` },
+                            p2: { id: `p2-${c.id}-${j}`, name: `Jugador ${j * 2 + 2}` }
+                        }))
+                    };
+                })
+            }));
+        } else {
+            // MODO NUEVO: agregar categoría
+            const id = Math.random().toString(36).substr(2, 9);
+            setEventData(prev => ({
+                ...prev,
+                categories: [...prev.categories, {
+                    id,
+                    gender,
+                    category,
+                    numTeams: pendingNumTeams,
+                    type: TournamentType.ROUND_ROBIN,
+                    goldenPoint: pendingGolden,
+                    setFormat: pendingSetFormat,
+                    teams: Array.from({ length: pendingNumTeams }, (_, i) => ({
+                        id: `team-${id}-${i}`,
+                        p1: { id: `p1-${id}-${i}`, name: `Jugador ${i * 2 + 1}` },
+                        p2: { id: `p2-${id}-${i}`, name: `Jugador ${i * 2 + 2}` }
+                    }))
+                }]
+            }));
+        }
+        setPendingCat(null);
+    };
+
     const addCategory = (gender: 'MALE' | 'FEMALE' | 'MIXED', cat: TournamentCategory) => {
-        const id = Math.random().toString(36).substr(2, 9);
-        setEventData(prev => ({
-            ...prev,
-            categories: [...prev.categories, {
-                id,
-                gender,
-                category: cat,
-                numTeams: 8,
-                type: TournamentType.ROUND_ROBIN,
-                teams: Array.from({ length: 8 }, (_, i) => ({
-                    id: `team-${id}-${i}`,
-                    p1: { id: `p1-${id}-${i}`, name: `Jugador ${i * 2 + 1}` },
-                    p2: { id: `p2-${id}-${i}`, name: `Jugador ${i * 2 + 2}` }
-                }))
-            }]
-        }));
+        openCategoryModal(gender, cat);
     };
 
     const removeCategory = (id: string) => {
@@ -159,21 +210,58 @@ export default function MasterGeneratorPage() {
     };
 
     const handleGenerate = () => {
+        if (eventData.categories.length === 0) {
+            alert('⚠️ Debes añadir al menos una categoría antes de generar el fixture.');
+            return;
+        }
+        const totalTeams = eventData.categories.reduce((acc, c) => acc + (c.teams?.length || 0), 0);
+        if (totalTeams < 2) {
+            alert('⚠️ Cada categoría necesita al menos 2 parejas para generar partidos.');
+            return;
+        }
+
         setIsGenerating(true);
-        // Simulación de procesamiento IA
         setTimeout(() => {
-            const result = MasterScheduleEngine.generateMasterSchedule(eventData);
+            try {
+                const result = MasterScheduleEngine.generateMasterSchedule(eventData);
 
-            // Ordenar cronológicamente antes de mostrar
-            const sorted = [...result.matches].sort((a, b) =>
-                new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()
-            );
+                if (result.totalMatches === 0) {
+                    setIsGenerating(false);
+                    alert(
+                        `⚠️ No se generaron partidos.\n\n` +
+                        `Verifica:\n` +
+                        `• Horario: ${eventData.dailyStartTime} - ${eventData.dailyEndTime}\n` +
+                        `• Duración de partido: ${eventData.matchDurationMinutes} min\n` +
+                        `• Debe haber al menos una franja que quepa.\n\n` +
+                        `Revisa la consola (F12) para más detalles.`
+                    );
+                    return;
+                }
 
-            setGeneratedMatches(sorted);
-            setIsGenerating(false);
-            setHasGenerated(true);
-            setStep(5);
-        }, 1500);
+                // Calcular fecha real de fin según días usados
+                if ((result as any).daysUsed > 0) {
+                    const calculatedEnd = new Date(eventData.startDate + 'T00:00:00');
+                    calculatedEnd.setDate(calculatedEnd.getDate() + (result as any).daysUsed - 1);
+                    setEventData(prev => ({
+                        ...prev,
+                        endDate: calculatedEnd.toISOString().split('T')[0]
+                    }));
+                }
+
+                const sorted = [...result.matches].sort((a, b) =>
+                    new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()
+                );
+
+                setGeneratedMatches(sorted);
+                setHasGenerated(true);
+                setStep(4);
+            } catch (e: any) {
+                console.error('[handleGenerate] Error:', e);
+                alert('Error inesperado al generar: ' + e.message);
+            } finally {
+                setIsGenerating(false);
+            }
+        }, 1200);
     };
 
     const handleFinalSave = async () => {
@@ -221,7 +309,7 @@ export default function MasterGeneratorPage() {
         }
     };
 
-    const nextStep = () => setStep(s => Math.min(s + 1, 5));
+    const nextStep = () => setStep(s => Math.min(s + 1, 4));
     const prevStep = () => setStep(s => Math.max(s - 1, 1));
 
     const getEstimatedEndDate = () => {
@@ -242,8 +330,148 @@ export default function MasterGeneratorPage() {
         return { label: 'RELAJADO', color: 'text-blue-400', bg: 'bg-blue-400/10' };
     };
 
+    const SET_FORMAT_LABELS = {
+        TIE_BREAK: { label: 'Tie-Break', desc: '6-6 → Tie-break a 7', icon: '🎾' },
+        SUPER_TIE_BREAK: { label: 'Super Tie-Break', desc: '6-6 → Super TB a 10', icon: '⚡' },
+        NO_TIE_BREAK: { label: 'Sin Tie-Break', desc: 'Hasta ganar por 2 games', icon: '🔁' },
+    };
+
     return (
         <div className="min-h-screen bg-[#0a0a0b] text-white selection:bg-padel-primary/30">
+
+            {/* ─── Modal Configuración de Categoría ─── */}
+            <AnimatePresence>
+                {pendingCat && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+                        onClick={() => setPendingCat(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20, opacity: 0 }}
+                            animate={{ scale: 1, y: 0, opacity: 1 }}
+                            exit={{ scale: 0.9, y: 20, opacity: 0 }}
+                            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                            className="bg-[#111] border border-zinc-800 rounded-3xl p-8 max-w-md w-full shadow-2xl shadow-black/60 space-y-7"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {/* Header modal */}
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">
+                                        Configurar Categoría
+                                    </p>
+                                    <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white leading-none">
+                                        {pendingCat.category} <span className="text-padel-primary">{catLabels[pendingCat.gender]}</span>
+                                    </h3>
+                                </div>
+                                <button onClick={() => setPendingCat(null)} className="text-zinc-600 hover:text-white transition-colors p-1">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            {/* Número de Parejas */}
+                            <div className="space-y-3">
+                                <label className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+                                    <Users className="w-4 h-4 text-padel-primary" /> Número de Parejas
+                                </label>
+                                <div className="flex items-center gap-4 bg-black/40 border border-zinc-800 rounded-2xl p-4">
+                                    <button
+                                        onClick={() => setPendingNumTeams(t => Math.max(2, t - 1))}
+                                        className="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-lg text-white transition-all active:scale-95"
+                                    >−</button>
+                                    <div className="flex-1 text-center">
+                                        <span className="text-4xl font-black text-padel-primary">{pendingNumTeams}</span>
+                                        <p className="text-[10px] text-zinc-600 font-bold uppercase mt-1">
+                                            ≈ {(pendingNumTeams * (pendingNumTeams - 1)) / 2} partidos
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={() => setPendingNumTeams(t => Math.min(64, t + 1))}
+                                        className="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-lg text-white transition-all active:scale-95"
+                                    >+</button>
+                                </div>
+                                {/* Atajos rápidos */}
+                                <div className="flex gap-2">
+                                    {[4, 6, 8, 10, 12, 16].map(n => (
+                                        <button
+                                            key={n}
+                                            onClick={() => setPendingNumTeams(n)}
+                                            className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${pendingNumTeams === n ? 'bg-padel-primary text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+                                        >
+                                            {n}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Punto de Oro */}
+                            <div className="space-y-3">
+                                <label className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+                                    <Sparkles className="w-4 h-4 text-yellow-400" /> Punto de Oro
+                                </label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {[
+                                        { val: false, label: 'Deuce Normal', desc: 'Ventaja clásica', icon: '⚖️' },
+                                        { val: true, label: 'Punto de Oro', desc: '40-40 → 1 punto decide', icon: '⭐' },
+                                    ].map(opt => (
+                                        <button
+                                            key={String(opt.val)}
+                                            onClick={() => setPendingGolden(opt.val)}
+                                            className={`p-4 rounded-2xl border text-left transition-all ${pendingGolden === opt.val
+                                                ? 'border-padel-primary bg-padel-primary/10 shadow-lg shadow-padel-primary/10'
+                                                : 'border-zinc-800 bg-black/30 hover:border-zinc-700'
+                                                }`}
+                                        >
+                                            <span className="text-xl">{opt.icon}</span>
+                                            <p className="text-xs font-black text-white mt-1">{opt.label}</p>
+                                            <p className="text-[10px] text-zinc-500 mt-0.5">{opt.desc}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Formato de Set */}
+                            <div className="space-y-3">
+                                <label className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+                                    <Layout className="w-4 h-4 text-blue-400" /> Formato al 6-6
+                                </label>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {(Object.entries(SET_FORMAT_LABELS) as [typeof pendingSetFormat, typeof SET_FORMAT_LABELS[keyof typeof SET_FORMAT_LABELS]][]).map(([key, meta]) => (
+                                        <button
+                                            key={key}
+                                            onClick={() => setPendingSetFormat(key)}
+                                            className={`p-3 rounded-xl border flex items-center gap-3 transition-all ${pendingSetFormat === key
+                                                ? 'border-blue-500/60 bg-blue-500/10'
+                                                : 'border-zinc-800 bg-black/30 hover:border-zinc-700'
+                                                }`}
+                                        >
+                                            <span className="text-lg">{meta.icon}</span>
+                                            <div className="text-left">
+                                                <p className="text-xs font-black text-white">{meta.label}</p>
+                                                <p className="text-[10px] text-zinc-500">{meta.desc}</p>
+                                            </div>
+                                            {pendingSetFormat === key && (
+                                                <CheckCircle2 className="w-4 h-4 text-blue-400 ml-auto shrink-0" />
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Confirm */}
+                            <button
+                                onClick={confirmAddCategory}
+                                className="w-full bg-padel-primary hover:bg-white text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-padel-primary/20"
+                            >
+                                <Plus className="w-5 h-5" /> AÑADIR CATEGORÍA
+                            </button>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
             {/* Background Decor */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] bg-padel-primary/5 blur-[120px] rounded-full" />
@@ -267,15 +495,23 @@ export default function MasterGeneratorPage() {
                         <p className="text-zinc-400 font-medium">Programación Multi-Categoría Inteligente</p>
                     </div>
 
-                    <div className="flex items-center gap-4 bg-zinc-900/50 backdrop-blur-xl p-2 rounded-2xl border border-zinc-800">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                            <div
-                                key={s}
-                                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${step === s ? 'bg-padel-primary text-black font-bold scale-110 shadow-lg shadow-padel-primary/25' :
-                                    step > s ? 'bg-zinc-800 text-padel-primary' : 'text-zinc-600'
-                                    }`}
-                            >
-                                {step > s ? <CheckCircle2 className="w-5 h-5" /> : s}
+                    <div className="flex items-center gap-2 bg-zinc-900/50 backdrop-blur-xl p-2 rounded-2xl border border-zinc-800">
+                        {[
+                            { n: 1, label: 'Evento' },
+                            { n: 2, label: 'Categorías' },
+                            { n: 3, label: 'Canchas' },
+                            { n: 4, label: 'Fixture' },
+                        ].map(({ n, label }) => (
+                            <div key={n} className="flex flex-col items-center gap-1 px-3">
+                                <div
+                                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${step === n ? 'bg-padel-primary text-black font-bold scale-110 shadow-lg shadow-padel-primary/25' :
+                                        step > n ? 'bg-zinc-800 text-padel-primary' : 'text-zinc-600'
+                                        }`}
+                                >
+                                    {step > n ? <CheckCircle2 className="w-5 h-5" /> : n}
+                                </div>
+                                <span className={`text-[9px] font-bold uppercase tracking-wider ${step === n ? 'text-padel-primary' : step > n ? 'text-zinc-500' : 'text-zinc-700'
+                                    }`}>{label}</span>
                             </div>
                         ))}
                     </div>
@@ -329,7 +565,7 @@ export default function MasterGeneratorPage() {
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
                                             <div className="space-y-4">
                                                 <label className="text-xs font-bold uppercase tracking-widest text-zinc-500">Fecha Inicio</label>
                                                 <div className="relative">
@@ -342,21 +578,21 @@ export default function MasterGeneratorPage() {
                                                     />
                                                 </div>
                                             </div>
-                                            <div className="space-y-4">
+                                            <div className="flex flex-col space-y-4">
                                                 <label className="text-xs font-bold uppercase tracking-widest text-zinc-500">Duración Estimada</label>
-                                                <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-2xl p-4 flex items-center gap-3">
-                                                    <Sparkles className="w-5 h-5 text-padel-primary animate-pulse" />
+                                                <div className="flex-1 w-full bg-black/50 border border-zinc-700 rounded-2xl p-4 flex items-center gap-3">
+                                                    <Sparkles className="w-5 h-5 text-padel-primary animate-pulse shrink-0" />
                                                     <div>
-                                                        <p className="text-sm font-bold text-white uppercase italic">Calculada por IA</p>
-                                                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-tight">El sistema determinará el fin según los partidos.</p>
+                                                        <p className="text-base font-bold text-white uppercase italic leading-tight">Calculada por IA</p>
+                                                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-tight mt-0.5">El sistema determina el fin según los partidos.</p>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="grid grid-cols-2 gap-6">
                                             <div className="space-y-4">
-                                                <label className="text-xs font-bold uppercase tracking-widest text-zinc-500">Hora Apertura Diaria</label>
+                                                <label className="text-xs font-bold uppercase tracking-widest text-zinc-500">Hora Apertura</label>
                                                 <div className="relative">
                                                     <Clock className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
                                                     <input
@@ -368,7 +604,12 @@ export default function MasterGeneratorPage() {
                                                 </div>
                                             </div>
                                             <div className="space-y-4">
-                                                <label className="text-xs font-bold uppercase tracking-widest text-zinc-500">Hora Cierre Diario</label>
+                                                <label className="text-xs font-bold uppercase tracking-widest text-zinc-500">
+                                                    Hora Cierre
+                                                    {eventData.dailyEndTime < eventData.dailyStartTime &&
+                                                        <span className="ml-2 text-padel-primary">(día siguiente)</span>
+                                                    }
+                                                </label>
                                                 <div className="relative">
                                                     <Clock className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
                                                     <input
@@ -379,6 +620,57 @@ export default function MasterGeneratorPage() {
                                                     />
                                                 </div>
                                             </div>
+                                            <div className="space-y-4">
+                                                <label className="text-xs font-bold uppercase tracking-widest text-zinc-500">Duración Partido (min)</label>
+                                                <input
+                                                    type="number"
+                                                    min={30}
+                                                    max={180}
+                                                    step={5}
+                                                    value={eventData.matchDurationMinutes}
+                                                    onChange={(e) => setEventData({ ...eventData, matchDurationMinutes: parseInt(e.target.value) || 70 })}
+                                                    className="w-full bg-black/50 border border-zinc-700 rounded-2xl p-4 outline-none focus:border-padel-primary font-bold text-center text-xl"
+                                                />
+                                            </div>
+                                            <div className="space-y-4">
+                                                <label className="text-xs font-bold uppercase tracking-widest text-zinc-500">Buffer entre partidos (min)</label>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={60}
+                                                    step={5}
+                                                    value={eventData.bufferMinutes}
+                                                    onChange={(e) => setEventData({ ...eventData, bufferMinutes: parseInt(e.target.value) || 10 })}
+                                                    className="w-full bg-black/50 border border-zinc-700 rounded-2xl p-4 outline-none focus:border-padel-primary font-bold text-center text-xl"
+                                                />
+                                            </div>
+                                        </div>
+                                        {/* Resumen horario */}
+                                        <div className="bg-black/30 rounded-2xl p-4 flex flex-wrap gap-4 text-xs font-bold">
+                                            <span className="text-zinc-500 uppercase">Franja por partido:</span>
+                                            <span className="text-padel-primary">{eventData.matchDurationMinutes + eventData.bufferMinutes} min totales</span>
+                                            <span className="text-zinc-600">·</span>
+                                            <span className="text-zinc-500 uppercase">Franjas/día/pista:</span>
+                                            <span className="text-padel-primary">
+                                                {(() => {
+                                                    const [sh, sm] = eventData.dailyStartTime.split(':').map(Number);
+                                                    const [eh, em] = eventData.dailyEndTime.split(':').map(Number);
+                                                    let totalMins = (eh * 60 + em) - (sh * 60 + sm);
+                                                    if (totalMins <= 0) totalMins += 24 * 60;
+                                                    return Math.floor(totalMins / (eventData.matchDurationMinutes + eventData.bufferMinutes));
+                                                })()}
+                                            </span>
+                                            <span className="text-zinc-600">·</span>
+                                            <span className="text-zinc-500 uppercase">Partidos/día total:</span>
+                                            <span className="text-white">
+                                                {(() => {
+                                                    const [sh, sm] = eventData.dailyStartTime.split(':').map(Number);
+                                                    const [eh, em] = eventData.dailyEndTime.split(':').map(Number);
+                                                    let totalMins = (eh * 60 + em) - (sh * 60 + sm);
+                                                    if (totalMins <= 0) totalMins += 24 * 60;
+                                                    return Math.floor(totalMins / (eventData.matchDurationMinutes + eventData.bufferMinutes)) * eventData.numCourts;
+                                                })()} partidos/día
+                                            </span>
                                         </div>
                                     </div>
                                 </motion.section>
@@ -492,31 +784,46 @@ export default function MasterGeneratorPage() {
                                         <h3 className="text-lg font-bold uppercase tracking-widest text-zinc-500">Categorías Seleccionadas</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {sortedSelectedCategories.map((cat, idx) => (
-                                                <div key={cat.id} className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 flex items-center justify-between group hover:border-padel-primary/30 transition-all shadow-xl">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center`} style={{ backgroundColor: COLORS[idx % COLORS.length] + '20', color: COLORS[idx % COLORS.length] }}>
-                                                            {cat.gender === 'MALE' ? '♂️' : cat.gender === 'FEMALE' ? '♀️' : '🚻'}
+                                                <div key={cat.id} className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 group hover:border-padel-primary/30 transition-all shadow-xl space-y-4">
+                                                    {/* Row 1: icon + name + actions */}
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm`} style={{ backgroundColor: COLORS[idx % COLORS.length] + '20', color: COLORS[idx % COLORS.length] }}>
+                                                                {cat.gender === 'MALE' ? '♂️' : cat.gender === 'FEMALE' ? '♀️' : '🚻'}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-black text-base leading-none">{cat.category}</p>
+                                                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{catLabels[cat.gender]}</p>
+                                                            </div>
                                                         </div>
-                                                        <div>
-                                                            <p className="font-bold text-lg">{cat.category}</p>
-                                                            <p className="text-xs text-zinc-500 uppercase tracking-widest">{catLabels[cat.gender]}</p>
+                                                        <div className="flex items-center gap-1">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setPendingCat({ gender: cat.gender as 'MALE' | 'FEMALE' | 'MIXED', category: cat.category });
+                                                                    setPendingNumTeams(cat.numTeams);
+                                                                    setPendingGolden(cat.goldenPoint ?? false);
+                                                                    setPendingSetFormat((cat.setFormat as any) ?? 'TIE_BREAK');
+                                                                }}
+                                                                className="text-zinc-600 hover:text-padel-primary transition-colors p-1.5 hover:bg-padel-primary/10 rounded-lg"
+                                                            >
+                                                                <Settings className="w-4 h-4" />
+                                                            </button>
+                                                            <button onClick={() => removeCategory(cat.id)} className="text-zinc-600 hover:text-red-500 transition-colors p-1.5 hover:bg-red-500/10 rounded-lg">
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
                                                         </div>
                                                     </div>
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="flex flex-col items-center gap-1">
-                                                            <span className="text-[10px] font-bold text-zinc-500 uppercase">Parejas</span>
-                                                            <input
-                                                                type="number"
-                                                                min="2"
-                                                                max="128"
-                                                                value={cat.numTeams}
-                                                                onChange={(e) => updateCategoryTeams(cat.id, parseInt(e.target.value) || 2)}
-                                                                className="w-16 bg-black/50 border border-zinc-800 rounded-lg py-1 px-2 text-center text-sm font-black text-padel-primary focus:border-padel-primary outline-none transition-all"
-                                                            />
-                                                        </div>
-                                                        <button onClick={() => removeCategory(cat.id)} className="text-zinc-600 hover:text-red-500 transition-colors p-2 hover:bg-red-500/10 rounded-lg">
-                                                            <Trash2 className="w-5 h-5" />
-                                                        </button>
+                                                    {/* Row 2: config badges */}
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="text-[10px] font-black uppercase bg-padel-primary/10 text-padel-primary border border-padel-primary/20 px-2 py-0.5 rounded-md">
+                                                            {cat.numTeams} parejas
+                                                        </span>
+                                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${cat.goldenPoint ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 'bg-zinc-800 text-zinc-500 border-zinc-700'}`}>
+                                                            {cat.goldenPoint ? '⭐ Punto de Oro' : '⚖️ Deuce'}
+                                                        </span>
+                                                        <span className="text-[10px] font-black uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-md">
+                                                            {cat.setFormat === 'TIE_BREAK' ? '🎾 Tie-Break' : cat.setFormat === 'SUPER_TIE_BREAK' ? '⚡ Super TB' : '🔁 Sin TB'}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             ))}
@@ -641,64 +948,58 @@ export default function MasterGeneratorPage() {
                                                 * Nota: Solo se generarán partidos en las pistas listadas arriba.
                                             </p>
                                         </div>
-                                    </div>
-                                </motion.section>
-                            )}
 
-                            {step === 4 && (
-                                <motion.section
-                                    key="step4"
-                                    initial={{ opacity: 0, x: 20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    className="space-y-8"
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <h2 className="text-2xl font-bold italic uppercase">Distribución de Parejas</h2>
-                                        <div className="bg-padel-primary/10 text-padel-primary px-4 py-2 rounded-xl border border-padel-primary/20 text-xs font-bold uppercase">
-                                            {eventData.categories.reduce((acc, c) => acc + c.numTeams, 0)} Parejas Totales
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-4">
-                                        {eventData.categories.map((cat, idx) => (
-                                            <div key={cat.id} className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 group hover:border-padel-primary/20 transition-all">
-                                                <div className="flex items-center justify-between mb-6">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold" style={{ backgroundColor: COLORS[idx % COLORS.length] + '20', color: COLORS[idx % COLORS.length] }}>
-                                                            {cat.gender === 'MALE' ? '♂' : cat.gender === 'FEMALE' ? '♀' : '🚻'}
+                                        {/* ── Panel de Pre-Generación ────────────────────── */}
+                                        {eventData.categories.length > 0 && (
+                                            <div className="bg-padel-primary/5 border border-padel-primary/20 rounded-3xl p-6 space-y-4">
+                                                <div className="flex items-center gap-3">
+                                                    <Sparkles className="w-5 h-5 text-padel-primary" />
+                                                    <h3 className="font-black uppercase tracking-tighter text-sm text-padel-primary">Resumen Pre-Generación</h3>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div className="bg-black/30 rounded-2xl p-4 text-center">
+                                                        <div className="text-2xl font-black text-white">
+                                                            {eventData.categories.reduce((acc, c) => acc + (c.numTeams * (c.numTeams - 1)) / 2, 0)}
                                                         </div>
-                                                        <h4 className="font-black italic uppercase text-lg">{cat.category} <span className="text-zinc-500 text-xs ml-2">({cat.gender})</span></h4>
+                                                        <div className="text-[10px] text-zinc-500 uppercase font-bold mt-1">Partidos totales</div>
                                                     </div>
-                                                    <div className="flex gap-2">
-                                                        <button className="p-2 bg-zinc-800 rounded-lg hover:text-padel-primary transition-colors">
-                                                            <UserPlus className="w-4 h-4" />
-                                                        </button>
+                                                    <div className="bg-black/30 rounded-2xl p-4 text-center">
+                                                        <div className="text-2xl font-black text-white">{eventData.numCourts}</div>
+                                                        <div className="text-[10px] text-zinc-500 uppercase font-bold mt-1">Canchas disponibles</div>
+                                                    </div>
+                                                    <div className="bg-black/30 rounded-2xl p-4 text-center">
+                                                        <div className="text-2xl font-black text-white">{eventData.matchDurationMinutes}min</div>
+                                                        <div className="text-[10px] text-zinc-500 uppercase font-bold mt-1">Por partido</div>
+                                                    </div>
+                                                    <div className="bg-black/30 rounded-2xl p-4 text-center">
+                                                        <div className="text-2xl font-black text-white">{eventData.categories.length}</div>
+                                                        <div className="text-[10px] text-zinc-500 uppercase font-bold mt-1">Categorías</div>
                                                     </div>
                                                 </div>
-
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                                    {cat.teams.map((t, tidx) => (
-                                                        <div key={t.id} className="bg-black/30 border border-zinc-800/50 rounded-xl p-3 text-center space-y-1 group/team hover:bg-zinc-800/40 transition-all">
-                                                            <div className="text-[10px] text-zinc-600 font-bold uppercase">Pareja {tidx + 1}</div>
-                                                            <div className="text-xs font-bold text-zinc-300 truncate">{t.p1.name}</div>
-                                                            <div className="text-xs font-bold text-zinc-300 truncate">{t.p2.name}</div>
+                                                <div className="space-y-1">
+                                                    {eventData.categories.map((c, i) => (
+                                                        <div key={c.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-black/20">
+                                                            <span className="font-bold text-zinc-300">{c.gender === 'MALE' ? '♂' : c.gender === 'FEMALE' ? '♀' : '🚻'} {c.category}</span>
+                                                            <span className="text-padel-primary font-black">{c.teams?.length || c.numTeams} parejas · {Math.round((c.numTeams * (c.numTeams - 1)) / 2)} partidos</span>
                                                         </div>
                                                     ))}
                                                 </div>
                                             </div>
-                                        ))}
+                                        )}
+                                        {eventData.categories.length === 0 && (
+                                            <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-4 flex items-center gap-3 text-yellow-500">
+                                                <AlertCircle className="w-5 h-5 shrink-0" />
+                                                <p className="text-xs font-bold">Vuelve al Paso 2 y añade al menos una categoría para poder generar el fixture.</p>
+                                            </div>
+                                        )}
                                     </div>
-
-                                    {eventData.categories.length === 0 && (
-                                        <div className="bg-red-500/5 border border-red-500/10 rounded-2xl p-6 flex items-center gap-4 text-red-500">
-                                            <AlertCircle className="w-6 h-6" />
-                                            <p className="font-bold text-sm">Debes añadir categorías en el paso 2 para configurar las parejas.</p>
-                                        </div>
-                                    )}
                                 </motion.section>
                             )}
 
-                            {step === 5 && hasGenerated && (
+
+
+
+                            {step === 4 && hasGenerated && (
                                 <motion.section
                                     key="results"
                                     initial={{ opacity: 0, scale: 0.95 }}
@@ -819,23 +1120,23 @@ export default function MasterGeneratorPage() {
                             </div>
 
                             <div className="mt-8 pt-8 border-t border-zinc-800 space-y-3">
-                                {step < 4 ? (
+                                {step < 3 ? (
                                     <button
                                         onClick={nextStep}
                                         className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all"
                                     >
                                         Continuar <ChevronRight className="w-5 h-5" />
                                     </button>
-                                ) : step === 4 ? (
+                                ) : step === 3 ? (
                                     <button
                                         onClick={handleGenerate}
                                         disabled={isGenerating}
                                         className="w-full bg-padel-primary hover:bg-white text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
                                     >
                                         {isGenerating ? (
-                                            <>Procesamiento IA...</>
+                                            <>Calculando fixture...</>
                                         ) : (
-                                            <>GENERAR FIXTURE MAESTRO <Sparkles className="w-5 h-5 group-hover:scale-125 transition-transform" /></>
+                                            <>GENERAR FIXTURE <Sparkles className="w-5 h-5 group-hover:scale-125 transition-transform" /></>
                                         )}
                                     </button>
                                 ) : (

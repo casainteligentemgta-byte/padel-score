@@ -21,7 +21,9 @@ export default function AdsManagementPage() {
         title: '',
         imageUrl: '',
         targetUrl: '',
-        active: true
+        active: true,
+        duration: 10,
+        themeColor: '#ccff00'
     });
 
     useEffect(() => {
@@ -70,13 +72,17 @@ export default function AdsManagementPage() {
                 finalImageUrl = await dataService.uploadFile(selectedFile, path);
             }
 
+            const detectedType = selectedFile
+                ? (selectedFile.type.includes('video') ? 'video' : 'image')
+                : (finalImageUrl.toLowerCase().endsWith('.mp4') ? 'video' : 'image');
+
             await dataService.createAd({
                 ...formData,
                 imageUrl: finalImageUrl,
-                type: selectedFile?.type.includes('video') ? 'video' : 'image'
+                type: detectedType
             }, user.uid);
 
-            setFormData({ title: '', imageUrl: '', targetUrl: '', active: true });
+            setFormData({ title: '', imageUrl: '', targetUrl: '', active: true, duration: 10, themeColor: '#ccff00' });
             setSelectedFile(null);
             setPreviewUrl('');
             loadAds();
@@ -141,34 +147,101 @@ export default function AdsManagementPage() {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest ml-1">Archivo Multimedia</label>
-                                    <div className="flex gap-2">
-                                        <label className="flex-1 cursor-pointer">
-                                            <div className="flex items-center justify-center gap-2 w-full bg-zinc-800/50 border border-dashed border-zinc-700 hover:border-padel-primary/50 rounded-xl px-4 py-3 text-xs font-bold transition-all">
-                                                <ImageIcon className="w-4 h-4 text-padel-primary" />
-                                                {selectedFile ? selectedFile.name.substring(0, 15) + '...' : 'SELECCIONAR ARCHIVO'}
-                                            </div>
+                                    <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest ml-1">Tipo de Origen</label>
+                                    <div className="flex gap-2 p-1 bg-zinc-900/80 rounded-xl border border-zinc-800">
+                                        <button
+                                            onClick={() => { setSelectedFile(null); setPreviewUrl(''); }}
+                                            className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${!selectedFile ? 'bg-padel-primary text-black' : 'text-zinc-500 hover:text-white'}`}
+                                        >
+                                            URL Web
+                                        </button>
+                                        <label className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all text-center cursor-pointer ${selectedFile ? 'bg-padel-primary text-black' : 'text-zinc-500 hover:text-white'}`}>
+                                            Subir Archivo
                                             <input type="file" className="hidden" accept="image/*,video/*" onChange={handleFileSelect} />
                                         </label>
                                     </div>
                                 </div>
                             </div>
 
+                            <div className="space-y-4 pt-4 border-t border-zinc-900">
+                                {!selectedFile ? (
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest ml-1">Enlace Directo del Recurso (Video/Imagen)</label>
+                                        <input
+                                            type="text"
+                                            value={formData.imageUrl}
+                                            onChange={(e) => {
+                                                setFormData({ ...formData, imageUrl: e.target.value });
+                                                setPreviewUrl(e.target.value);
+                                            }}
+                                            placeholder="https://ejemplo.com/banner.mp4"
+                                            className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:border-padel-primary/50 outline-none transition-all"
+                                        />
+                                        <p className="text-[9px] text-zinc-600 italic">Pega un enlace directo a un archivo MP4, JPG o PNG.</p>
+                                    </div>
+                                ) : (
+                                    <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-4 flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-padel-primary/10 rounded-lg flex items-center justify-center">
+                                                <ImageIcon className="w-5 h-5 text-padel-primary" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-bold text-white uppercase">{selectedFile.name}</p>
+                                                <p className="text-[10px] text-zinc-500 uppercase">Listo para subir • {(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                                            </div>
+                                        </div>
+                                        <button onClick={() => { setSelectedFile(null); setPreviewUrl(''); }} className="text-[10px] font-black text-red-500 uppercase hover:underline">Cambiar</button>
+                                    </div>
+                                )}
+                            </div>
+
                             {previewUrl && (
-                                <div className="w-full h-40 bg-black/50 rounded-2xl overflow-hidden border border-zinc-800 relative group">
-                                    {selectedFile?.type.includes('video') ? (
-                                        <video src={previewUrl} className="w-full h-full object-cover opacity-50" />
+                                <div className="w-full h-48 bg-black/50 rounded-2xl overflow-hidden border border-zinc-800 relative group shadow-2xl">
+                                    {(selectedFile?.type.includes('video') || previewUrl.toLowerCase().endsWith('.mp4')) ? (
+                                        <video src={previewUrl} className="w-full h-full object-cover opacity-60" autoPlay muted loop />
                                     ) : (
-                                        <img src={previewUrl} alt="Preview" className="w-full h-full object-cover opacity-50" />
+                                        <img src={previewUrl} alt="Preview" className="w-full h-full object-cover opacity-60" />
                                     )}
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-white bg-black/50 px-3 py-1 rounded-full">Vista Previa</p>
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20">
+                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white bg-black/60 px-4 py-1.5 rounded-full backdrop-blur-md border border-white/5">Vista Previa en Tiempo Real</p>
                                     </div>
                                 </div>
                             )}
 
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest ml-1">Duración (segundos)</label>
+                                    <input
+                                        type="number"
+                                        value={formData.duration}
+                                        onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) || 5 })}
+                                        className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:border-padel-primary/50 outline-none transition-all"
+                                        min="1"
+                                        max="60"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest ml-1">Color de Marca</label>
+                                    <div className="flex gap-3">
+                                        <input
+                                            type="color"
+                                            value={formData.themeColor}
+                                            onChange={(e) => setFormData({ ...formData, themeColor: e.target.value })}
+                                            className="w-12 h-12 bg-zinc-900/50 border border-zinc-800 rounded-xl p-1 outline-none cursor-pointer"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={formData.themeColor}
+                                            onChange={(e) => setFormData({ ...formData, themeColor: e.target.value })}
+                                            className="flex-1 bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:border-padel-primary/50 outline-none transition-all font-mono"
+                                            placeholder="#ccff00"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest ml-1">Enlace de Destino (Opcional)</label>
+                                <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest ml-1">Enlace al hacer clic (Web del Cliente)</label>
                                 <input
                                     type="text"
                                     value={formData.targetUrl}
@@ -180,60 +253,96 @@ export default function AdsManagementPage() {
                             <button
                                 onClick={handleSave}
                                 disabled={isSaving}
-                                className={`w-full bg-padel-primary hover:bg-white text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all group shadow-lg shadow-padel-primary/10 ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`w-full bg-padel-primary hover:bg-white text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all group shadow-lg shadow-padel-primary/10 tracking-widest ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
-                                {isSaving ? 'SUBIENDO...' : 'SUBIR Y ACTIVAR'} <Save className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                {isSaving ? (
+                                    <>SOLTANDO MAGIA... <Sparkles className="w-5 h-5 animate-pulse" /></>
+                                ) : (
+                                    <>SUBIR Y ACTIVAR <Save className="w-5 h-5 group-hover:scale-110 transition-transform" /></>
+                                )}
                             </button>
                         </div>
                     </section>
 
                     {/* Current Ads Section */}
                     <section className="space-y-4">
-                        <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-zinc-400">
-                            <CheckCircle2 className="w-5 h-5" /> Anuncios Activos
-                        </h2>
+                        <div className="flex items-center justify-between mb-2">
+                            <h2 className="text-xl font-bold flex items-center gap-2 text-zinc-400">
+                                <CheckCircle2 className="w-5 h-5 text-padel-primary" /> Anuncios en Firebase
+                            </h2>
+                            <button onClick={loadAds} className="text-[10px] font-bold text-zinc-500 uppercase hover:text-padel-primary flex items-center gap-1">
+                                Actualizar Lista
+                            </button>
+                        </div>
 
                         {ads.length === 0 ? (
-                            <div className="border border-dashed border-zinc-800 rounded-3xl p-12 text-center">
-                                <p className="text-zinc-500 text-sm font-bold uppercase">No hay anuncios configurados</p>
+                            <div className="border border-dashed border-zinc-800/50 rounded-3xl p-16 text-center space-y-4 bg-zinc-900/20">
+                                <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center mx-auto border border-zinc-800">
+                                    <ImageIcon className="w-8 h-8 text-zinc-700" />
+                                </div>
+                                <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Aún no hay anuncios en la base de datos</p>
                             </div>
                         ) : (
-                            ads.map((ad) => (
-                                <div key={ad.id} className="glass p-6 flex items-center justify-between group border border-white/5 rounded-3xl hover:border-padel-primary/20 transition-all">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-24 h-16 bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 flex items-center justify-center">
-                                            {ad.type === 'video' ? (
-                                                <div className="text-[8px] font-bold text-padel-primary">VIDEO</div>
-                                            ) : (
-                                                <img src={ad.imageUrl} alt={ad.title} className="w-full h-full object-cover" />
+                            <div className="grid grid-cols-1 gap-4">
+                                {ads.map((ad, idx) => (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: idx * 0.1 }}
+                                        key={ad.id}
+                                        className="relative group h-32 rounded-3xl overflow-hidden glass border border-white/5 hover:border-padel-primary/20 transition-all shadow-2xl"
+                                    >
+                                        <div className="absolute inset-0 bg-gradient-to-r from-black via-black/40 to-transparent z-10 flex items-center px-10">
+                                            <div className="flex items-center gap-6">
+                                                <div className="w-20 h-20 bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800 flex items-center justify-center flex-shrink-0 shadow-xl">
+                                                    {ad.type === 'video' || ad.imageUrl?.toLowerCase().endsWith('.mp4') ? (
+                                                        <video src={ad.imageUrl} className="w-full h-full object-cover" muted />
+                                                    ) : (
+                                                        <img src={ad.imageUrl} alt={ad.title} className="w-full h-full object-cover" />
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-black text-white text-xl uppercase italic tracking-tighter leading-none mb-1">{ad.title}</h4>
+                                                    <div className="flex items-center gap-4">
+                                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${ad.active ? 'bg-padel-primary/20 text-padel-primary border border-padel-primary/30' : 'bg-red-500/20 text-red-500 border border-red-500/30'}`}>
+                                                            {ad.active ? 'Activo' : 'Inactivo'}
+                                                        </span>
+                                                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter">
+                                                            📅 {ad.createdAt?.seconds ? new Date(ad.createdAt.seconds * 1000).toLocaleDateString() : 'Recién creado'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="absolute right-8 top-1/2 -translate-y-1/2 z-20 flex items-center gap-3">
+                                            {ad.targetUrl && (
+                                                <a
+                                                    href={ad.targetUrl}
+                                                    target="_blank"
+                                                    className="w-12 h-12 bg-white/5 hover:bg-padel-primary/20 text-white hover:text-padel-primary rounded-2xl flex items-center justify-center transition-all border border-white/10 hover:border-padel-primary/30 backdrop-blur-md"
+                                                    title="Ver Web"
+                                                >
+                                                    <ExternalLink className="w-5 h-5" />
+                                                </a>
                                             )}
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-white uppercase italic tracking-tighter">{ad.title}</h4>
-                                            <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest">
-                                                {ad.active ? 'Activo' : 'Inactivo'} • {new Date(ad.createdAt?.seconds * 1000).toLocaleDateString()}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => handleDelete(ad.id)}
-                                            className="p-3 bg-zinc-900/50 hover:bg-red-500/20 text-zinc-600 hover:text-red-500 rounded-xl transition-all border border-transparent hover:border-red-500/20"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                        {ad.targetUrl && (
-                                            <a
-                                                href={ad.targetUrl}
-                                                target="_blank"
-                                                className="p-3 bg-zinc-900/50 hover:bg-padel-primary/20 text-zinc-600 hover:text-padel-primary rounded-xl transition-all border border-transparent hover:border-padel-primary/20"
+                                            <button
+                                                onClick={() => handleDelete(ad.id)}
+                                                className="w-12 h-12 bg-red-500/5 hover:bg-red-500 text-red-500 hover:text-white rounded-2xl flex items-center justify-center transition-all border border-red-500/10 hover:border-red-500 shadow-lg shadow-red-500/5"
+                                                title="Eliminar"
                                             >
-                                                <ExternalLink className="w-4 h-4" />
-                                            </a>
+                                                <Trash2 className="w-5 h-5" />
+                                            </button>
+                                        </div>
+
+                                        {ad.type === 'video' || ad.imageUrl?.toLowerCase().endsWith('.mp4') ? (
+                                            <video src={ad.imageUrl} className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-40 transition-opacity" muted />
+                                        ) : (
+                                            <img src={ad.imageUrl} className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-40 transition-opacity" alt="" />
                                         )}
-                                    </div>
-                                </div>
-                            ))
+                                    </motion.div>
+                                ))}
+                            </div>
                         )}
                     </section>
                 </div>
@@ -241,3 +350,4 @@ export default function AdsManagementPage() {
         </div>
     );
 }
+

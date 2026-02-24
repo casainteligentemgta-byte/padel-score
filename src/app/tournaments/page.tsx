@@ -10,6 +10,7 @@ import LoginButton from '@/components/LoginButton';
 import BottomNav from '@/components/BottomNav';
 
 import Sidebar from '@/components/Sidebar';
+import { BouncingBall } from '@/components/BouncingBall';
 
 export default function MyTournamentsPage() {
     const { user, loading: authLoading } = useAuth();
@@ -74,17 +75,15 @@ export default function MyTournamentsPage() {
 
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 flex-shrink-0 pl-24 md:pl-28">
                 <div>
-                    <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
-                        <span className="text-padel-primary">Torneos</span>
-                    </h1>
+                    {/* Título + pelota rebotando */}
+                    <div className="flex items-end gap-3">
+                        <BouncingBall size={38} />
+                        <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
+                            <span className="text-padel-primary">Torneos</span>
+                        </h1>
+                    </div>
                     <p className="text-gray-500 mt-2 font-medium uppercase tracking-widest text-[10px]">Gestiona tus competencias.</p>
                 </div>
-                <Link
-                    href="/new-tournament"
-                    className="bg-padel-primary text-black px-8 py-4 rounded-2xl font-black text-sm flex items-center gap-3 hover:scale-105 transition-transform uppercase italic"
-                >
-                    NUEVO TORNEO <Plus className="w-5 h-5" />
-                </Link>
             </div>
 
             <div className="ipad-scroll-area pb-32">
@@ -96,12 +95,6 @@ export default function MyTournamentsPage() {
                             </div>
                             <h2 className="text-2xl font-bold">No tienes torneos aún</h2>
                             <p className="text-gray-500">Comienza creando tu primer torneo profesional ahora mismo.</p>
-                            <Link
-                                href="/new-tournament"
-                                className="inline-block border border-padel-primary/50 text-padel-primary px-8 py-4 rounded-xl font-black uppercase text-xs"
-                            >
-                                Crear mi primer torneo
-                            </Link>
                         </div>
                     ) : (
                         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">

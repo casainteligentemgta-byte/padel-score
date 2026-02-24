@@ -33,6 +33,7 @@ export default function Sidebar() {
 
     const adminItems = [
         { name: 'Generador Maestro', href: '/admin/master-generator', icon: Sparkles },
+        { name: 'Módulo Pizarras', href: '/admin/boards', icon: LayoutDashboard },
         { name: 'Agentes AI', href: '/agents', icon: Sparkles },
         { name: 'Agregar Jugador', href: '/players/register', icon: UserPlus },
         { name: 'Jugadores', href: '/players', icon: Users },
