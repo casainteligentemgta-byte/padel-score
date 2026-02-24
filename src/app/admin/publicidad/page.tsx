@@ -7,13 +7,13 @@ import { ref as dbRef, onValue, off, set, remove, push } from 'firebase/database
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { rtdb } from '@/lib/rtdb';
 import { storage } from '@/lib/firebase';
-import { setModoPublicidad, toggleCarrusel, setImagenCarrusel, deleteImagenCarrusel, initPublicidadMaster } from '@/lib/rtdbService';
+import { setModoPublicidad, toggleCarrusel, setImagenCarrusel, deleteImagenCarrusel, initPublicidadMaster, setTickerConfig } from '@/lib/rtdbService';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Megaphone, Image as ImageIcon, Clock, Video,
     ToggleLeft, ToggleRight, Trash2, Plus, RefreshCw,
     Upload, CheckCircle2, AlertCircle, Radio, Link as LinkIcon,
-    Play, Film, BookImage, X, Save
+    Play, Film, BookImage, X, Save, MessageSquare
 } from 'lucide-react';
 
 // ── types ───────────────────────────────────────────────────────────────────
@@ -322,6 +322,12 @@ export default function AdminPublicidadPage() {
     const [progInicio, setProgInicio] = useState('');
     const [progFin, setProgFin] = useState('');
 
+    // Ticker / correa informativa
+    const [tickerActivo, setTickerActivo] = useState(false);
+    const [tickerTexto, setTickerTexto] = useState('');
+    const [tickerVelocidad, setTickerVelocidad] = useState(30);
+    const [savingTicker, setSavingTicker] = useState(false);
+
     // UI state
     const [saving, setSaving] = useState(false);
     const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -358,12 +364,17 @@ export default function AdminPublicidadPage() {
         return () => off(r, 'value', h);
     }, [isAdmin]);
 
-    // Sync fijUrl con RTDB
+    // Sync fijUrl y ticker con RTDB
     useEffect(() => {
         if (adData?.fija?.url) setFijUrl(adData.fija.url);
         if (adData?.programada?.url) setProgUrl(adData.programada.url);
         if (adData?.programada?.inicio_unix_ms) setProgInicio(msToLocal(adData.programada.inicio_unix_ms));
         if (adData?.programada?.fin_unix_ms) setProgFin(msToLocal(adData.programada.fin_unix_ms));
+        if (adData?.ticker) {
+            setTickerActivo(adData.ticker.activo ?? false);
+            setTickerTexto(adData.ticker.texto ?? '');
+            setTickerVelocidad(adData.ticker.velocidad_seg ?? 30);
+        }
     }, [adData]);
 
     const notify = (type: 'ok' | 'err', msg: string) => {
@@ -693,6 +704,90 @@ export default function AdminPublicidadPage() {
                     onDelete={(id) => deleteImagenCarrusel(id)}
                     onAddItems={handleUsarEnCarruselMulti}
                 />
+
+                {/* ── Correa Informativa (Ticker) ─────────────────────────── */}
+                <Card title="Correa Informativa" icon={MessageSquare} active={tickerActivo}>
+                    <div className="space-y-3">
+
+                        {/* Toggle activo */}
+                        <div className="flex items-center justify-between px-3 py-2.5 bg-black rounded-xl border border-white/10">
+                            <div>
+                                <p className="font-black uppercase text-[10px] tracking-widest text-white">Mostrar correa</p>
+                                <p className="text-[9px] text-gray-600 mt-0.5">Aparece en la barra inferior de la pantalla</p>
+                            </div>
+                            <button onClick={() => setTickerActivo(v => !v)}>
+                                {tickerActivo
+                                    ? <ToggleRight className="w-9 h-9 text-padel-primary" />
+                                    : <ToggleLeft className="w-9 h-9 text-gray-600" />}
+                            </button>
+                        </div>
+
+                        {/* Texto */}
+                        <div>
+                            <p className="text-[9px] text-gray-500 font-bold mb-1 uppercase tracking-widest">Texto de la correa</p>
+                            <textarea
+                                value={tickerTexto}
+                                onChange={e => setTickerTexto(e.target.value)}
+                                placeholder="Ej: Bienvenidos al torneo · Próximo partido a las 18:00 · Club Smart Padel"
+                                rows={3}
+                                className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-[11px] text-white placeholder-gray-700 focus:outline-none focus:border-padel-primary/40 resize-none"
+                            />
+                            <p className="text-[8px] text-gray-700 mt-1">Usa · para separar items. El texto se repite en bucle.</p>
+                        </div>
+
+                        {/* Velocidad */}
+                        <div>
+                            <div className="flex items-center justify-between mb-1">
+                                <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Velocidad de desplazamiento</p>
+                                <span className="text-[10px] font-black text-padel-primary">{tickerVelocidad}s por ciclo</span>
+                            </div>
+                            <input
+                                type="range"
+                                min={10} max={90} step={5}
+                                value={tickerVelocidad}
+                                onChange={e => setTickerVelocidad(Number(e.target.value))}
+                                className="w-full accent-[#ccff00]"
+                            />
+                            <div className="flex justify-between text-[8px] text-gray-700 font-bold mt-0.5">
+                                <span>Rápido (10s)</span>
+                                <span>Lento (90s)</span>
+                            </div>
+                        </div>
+
+                        {/* Preview */}
+                        {tickerTexto && (
+                            <div className="overflow-hidden rounded-xl border border-white/10 bg-black" style={{ height: '36px' }}>
+                                <div className="flex items-center h-full" style={{ animation: `marquee ${tickerVelocidad}s linear infinite` }}>
+                                    {[0, 1].map(i => (
+                                        <span key={i} className="whitespace-nowrap font-black italic uppercase tracking-tighter text-[11px] px-8"
+                                            style={{ color: '#ccff00' }}>
+                                            {tickerTexto}
+                                        </span>
+                                    ))}
+                                </div>
+                                <style>{`@keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }`}</style>
+                            </div>
+                        )}
+
+                        {/* Guardar */}
+                        <button
+                            onClick={async () => {
+                                setSavingTicker(true);
+                                try {
+                                    await setTickerConfig(tickerActivo, tickerTexto.trim(), tickerVelocidad);
+                                    notify('ok', tickerActivo ? 'Correa activada y guardada' : 'Correa desactivada');
+                                } catch { notify('err', 'Error al guardar correa'); }
+                                finally { setSavingTicker(false); }
+                            }}
+                            disabled={savingTicker}
+                            className="w-full flex items-center justify-center gap-2 bg-padel-primary text-black py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest hover:scale-[1.02] transition-transform disabled:opacity-50"
+                        >
+                            {savingTicker
+                                ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Guardando...</>
+                                : <><Save className="w-3.5 h-3.5" /> Guardar correa</>}
+                        </button>
+                    </div>
+                </Card>
 
             </div>
         </div>

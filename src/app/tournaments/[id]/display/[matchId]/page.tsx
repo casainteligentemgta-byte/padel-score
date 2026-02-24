@@ -3,10 +3,12 @@
 import { useState, useEffect, use, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '@/lib/firebase';
+import { rtdb } from '@/lib/rtdb';
+import { ref, onValue, off } from 'firebase/database';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
-import { Trophy, Zap, Star, Megaphone, QrCode, Volume2 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { useAdBanner } from '@/lib/useAdBanner';
+import { Trophy, Star, Megaphone, Thermometer, Clock } from 'lucide-react';
 
 export default function FullScreenDisplay({ params }: { params: Promise<{ id: string, matchId: string }> }) {
     const { id, matchId } = use(params);
@@ -16,7 +18,35 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const [loading, setLoading] = useState(true);
     const [mode, setMode] = useState<'score' | 'ad'>('score');
     const [currentAdIdx, setCurrentAdIdx] = useState(0);
+    const [clock, setClock] = useState<{ date: string; time: string }>({ date: '', time: '' });
+    const [temp, setTemp] = useState<number | null>(null);
     const prevScore = useRef<string>('');
+    const adBanner = useAdBanner();
+    const [carouselImages, setCarouselImages] = useState<{ url: string; orden: number }[]>([]);
+    const [carouselIdx, setCarouselIdx] = useState(0);
+    const [carouselInterval, setCarouselInterval] = useState(8);
+
+    // ── Marcador en vivo del RTDB (escrito por el marker en tiempo real) ─────
+    const [liveMarcador, setLiveMarcador] = useState<any>(null);
+
+    // Ticker desde RTDB (tiempo real, configurable desde panel publicidad)
+    const [tickerTexto, setTickerTexto] = useState('');
+    const [tickerActivo, setTickerActivo] = useState(false);
+    const [tickerVelocidad, setTickerVelocidad] = useState(30);
+
+    useEffect(() => {
+        const tickerRef = ref(rtdb, 'publicidad_master/ticker');
+        const handler = (snap: any) => {
+            const val = snap.val();
+            if (val) {
+                setTickerActivo(val.activo ?? false);
+                setTickerTexto(val.texto ?? '');
+                setTickerVelocidad(val.velocidad_seg ?? 30);
+            }
+        };
+        onValue(tickerRef, handler);
+        return () => off(tickerRef, 'value', handler);
+    }, []);
 
     // Settings
     const isFinal = match?.roundName?.toLowerCase().includes('final') || match?.roundName?.toLowerCase().includes('definición');
@@ -25,8 +55,54 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const adFreq = tournament?.broadcastingSettings?.adFrequencySeconds || 60;
     const adDur = tournament?.broadcastingSettings?.adDurationSeconds || 10;
     const funEnabled = tournament?.broadcastingSettings?.funAnimationsEnabled !== false;
+    const showLive = tournament?.broadcastingSettings?.showLiveIndicator !== false;
+    const venueName = tournament?.broadcastingSettings?.venueName || '';
 
-    // Audio AI (Speech Synthesis)
+    // ── Carrusel de imágenes (panel publicidad → imagenes) ─────────────────
+    useEffect(() => {
+        const adRef = ref(rtdb, 'publicidad_master');
+        const handler = (snap: any) => {
+            const val = snap.val();
+            if (!val?.imagenes) { setCarouselImages([]); return; }
+            const imgs = Object.values(val.imagenes as Record<string, any>)
+                .filter((img: any) => img.activa && img.url)
+                .sort((a: any, b: any) => a.orden - b.orden) as { url: string; orden: number }[];
+            setCarouselImages(imgs);
+            setCarouselIdx(0);
+            setCarouselInterval(val.carrusel_intervalo_seg || 8);
+        };
+        onValue(adRef, handler);
+        return () => off(adRef, 'value', handler);
+    }, []);
+
+    useEffect(() => {
+        if (carouselImages.length <= 1) return;
+        const id = setInterval(() => setCarouselIdx(prev => (prev + 1) % carouselImages.length), carouselInterval * 1000);
+        return () => clearInterval(id);
+    }, [carouselImages.length, carouselInterval]);
+
+    // Clock — updates every second
+    useEffect(() => {
+        const update = () => {
+            const now = new Date();
+            const date = now.toLocaleDateString('es-VE', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase();
+            const time = now.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+            setClock({ date, time });
+        };
+        update();
+        const id = setInterval(update, 1000);
+        return () => clearInterval(id);
+    }, []);
+
+    // Temperature — Isla de Margarita (Open-Meteo, no API key needed)
+    useEffect(() => {
+        fetch('https://api.open-meteo.com/v1/forecast?latitude=11.0&longitude=-63.9&current_weather=true')
+            .then(r => r.json())
+            .then(data => setTemp(Math.round(data.current_weather?.temperature ?? 0)))
+            .catch(() => { });
+    }, []);
+
+    // Audio
     useEffect(() => {
         if (!match || !match.points) return;
         const currentScore = `${match.points.t1}-${match.points.t2}`;
@@ -38,6 +114,17 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         }
         prevScore.current = currentScore;
     }, [match?.points?.t1, match?.points?.t2]);
+
+    // ── Sincronizar marcador RTDB ───────────────────────────────────────
+    // match.court puede ser 1, 2, 3... → canchaId = 'cancha_1', 'cancha_2'...
+    useEffect(() => {
+        if (!match?.court) return;
+        const canchaId = `cancha_${match.court}`;
+        const marcRef = ref(rtdb, `canchas/${canchaId}/marcador`);
+        const handler = (snap: any) => setLiveMarcador(snap.val());
+        onValue(marcRef, handler);
+        return () => off(marcRef, 'value', handler);
+    }, [match?.court]);
 
     // Data Sync
     useEffect(() => {
@@ -55,11 +142,14 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                         setMatch({
                             ...found,
                             court: found.court || (found.courtIndex !== undefined ? found.courtIndex + 1 : undefined),
+                            t1p1: team1?.p1?.name || 'Jugador 1',
+                            t1p2: team1?.p2?.name || 'Jugador 2',
+                            t2p1: team2?.p1?.name || 'Jugador 1',
+                            t2p2: team2?.p2?.name || 'Jugador 2',
                             t1Name: team1 ? `${team1.p1.name} / ${team1.p2.name}` : 'TBD',
                             t2Name: team2 ? `${team2.p1.name} / ${team2.p2.name}` : 'TBD',
                         });
 
-                        // Siguiente partido en esta pista
                         const next = tourneyData.matches
                             .filter((m: any) => m.court === found.court && m.status === MatchStatus.PENDING)
                             .sort((a: any, b: any) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime())[0];
@@ -81,7 +171,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return () => unsubscribe();
     }, [id, matchId]);
 
-    // Mode Switching logic
+    // Ad switching
     useEffect(() => {
         if (adMedia.length === 0) return;
         const interval = setInterval(() => {
@@ -100,10 +190,75 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         </div>
     );
 
-    return (
-        <div className={`h-screen w-screen text-white overflow-hidden font-outfit relative transition-colors duration-1000 ${isFinal ? 'bg-[#000] border-8 border-[#FFD700]/20' : 'bg-[#050505]'}`}>
+    // ── Valores del marcador: preferir RTDB si hay marcador en vivo ──────────
+    const lm = liveMarcador;
+    const modoPuntos: 'normal' | 'tiebreak' | 'super_tiebreak' = lm?.modo_puntos || 'normal';
+    const isTiebreak = modoPuntos !== 'normal';
 
-            {/* Grand Final FX (Sparkles/Glow) */}
+    // Puntos actuales
+    const ptsT1 = lm ? (lm.puntos?.local ?? '0') : (match.points?.t1 || '0');
+    const ptsT2 = lm ? (lm.puntos?.visitante ?? '0') : (match.points?.t2 || '0');
+
+    // Sets ganados
+    const setsT1 = lm ? (lm.sets?.local ?? 0) : (match.sets?.t1 ?? 0);
+    const setsT2 = lm ? (lm.sets?.visitante ?? 0) : (match.sets?.t2 ?? 0);
+
+    // Games en el set actual
+    const gamesT1 = lm ? (lm.games?.local ?? 0) : (match.games?.t1 ?? 0);
+    const gamesT2 = lm ? (lm.games?.visitante ?? 0) : (match.games?.t2 ?? 0);
+
+    // Set actual (para columnas S1/S2/S3 — solo visible de Firestore)
+    const currentSet = setsT1 + setsT2 + 1;
+
+    // Set boxes helper
+    const SetBoxes = ({ team }: { team: 1 | 2 }) => (
+        <div className="flex items-center gap-[1vw]">
+            {[1, 2, 3].map(setNum => {
+                const isPast = setNum < currentSet;
+                const isCurrent = setNum === currentSet;
+                const val = isPast
+                    ? (match.games_sets?.[setNum - 1]?.[`t${team}`] ?? 0)
+                    : isCurrent
+                        ? (match.games?.[`t${team}`] ?? 0)
+                        : '-';
+                return (
+                    <div
+                        key={setNum}
+                        className={`flex flex-col items-center justify-center border-2 transition-all duration-500 relative overflow-hidden ${isCurrent
+                            ? 'border-white/20 shadow-2xl'
+                            : 'border-white/5 opacity-50'
+                            }`}
+                        style={{
+                            width: 'clamp(36px,5vw,80px)',
+                            height: 'clamp(44px,6.5vw,100px)',
+                            borderRadius: 'clamp(8px,1.2vw,18px)',
+                            background: isCurrent ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.3)',
+                            transform: isCurrent ? 'scale(1.06)' : undefined,
+                        }}
+                    >
+                        {isCurrent && <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />}
+                        <span className="font-black uppercase text-gray-500 tracking-widest" style={{ fontSize: 'clamp(5px,0.5vw,9px)', marginBottom: '2px' }}>SET {setNum}</span>
+                        <motion.span
+                            key={isCurrent ? match.games?.[`t${team}`] : match.games_sets?.[setNum - 1]?.[`t${team}`]}
+                            initial={isCurrent ? { scale: 1.5, opacity: 0 } : {}}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className={`font-black italic ${isCurrent ? 'text-white' : 'text-white/40'}`}
+                            style={{ fontSize: 'clamp(16px,3vw,52px)', lineHeight: 1 }}
+                        >
+                            {val}
+                        </motion.span>
+                    </div>
+                );
+            })}
+        </div>
+    );
+
+    return (
+        <div
+            className={`h-screen w-screen text-white overflow-hidden font-outfit relative flex flex-col transition-colors duration-1000 ${isFinal ? 'bg-[#000] border-8 border-[#FFD700]/20' : 'bg-[#050505]'}`}
+            style={{ padding: 'clamp(6px,1vh,16px) clamp(8px,1.2vw,20px)', gap: 'clamp(4px,0.8vh,12px)' }}
+        >
+            {/* Grand Final ambient glow */}
             {isFinal && (
                 <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
                     <motion.div
@@ -114,6 +269,12 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                 </div>
             )}
 
+            {/* Background blobs */}
+            <div className="absolute inset-0 pointer-events-none z-0 opacity-10">
+                <div className="absolute top-[-10%] left-[-5%] w-[35%] h-[40%] rounded-full blur-[120px]" style={{ backgroundColor: primaryColor }} />
+                <div className="absolute bottom-[-10%] right-[-5%] w-[35%] h-[40%] bg-blue-600 rounded-full blur-[120px]" />
+            </div>
+
             <AnimatePresence mode="wait">
                 {mode === 'score' ? (
                     <motion.div
@@ -121,261 +282,394 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="h-full w-full flex flex-col p-12 lg:p-20 relative"
+                        className="flex flex-col h-full relative z-10"
+                        style={{ gap: 'clamp(4px,0.8vh,12px)' }}
                     >
-                        {/* Background Decoration */}
-                        <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-                            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full blur-[120px]" style={{ backgroundColor: primaryColor }} />
-                            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600 rounded-full blur-[120px]" />
-                        </div>
-
-                        {/* Tournament Header */}
-                        <div className="flex justify-between items-end border-b border-white/10 pb-8 mb-12 relative z-10">
-                            <div>
-                                <h1 className="text-4xl lg:text-5xl font-black italic uppercase tracking-tighter truncate max-w-2xl">
-                                    {isFinal && <span className="text-[#FFD700] mr-4 text-6xl">★</span>}
-                                    {tournament?.name}
-                                </h1>
-                                <p className="text-xl lg:text-2xl font-bold uppercase tracking-[0.4em] text-gray-500 mt-2">{tournament?.category} • Pista {match.court}</p>
-                            </div>
-
-                            {/* QR CODE SECTION */}
-                            <div className="flex items-center gap-12">
-                                <div className="flex flex-col items-end">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <QrCode className="w-4 h-4 text-gray-500" />
-                                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Live Brackets</p>
-                                    </div>
-                                    <div className="bg-white p-3 rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.5)] transform -rotate-1 hover:rotate-0 transition-transform">
-                                        <QRCodeSVG value={`${window.location.origin}/tournaments/${id}`} size={90} level="H" />
-                                    </div>
+                        {/* ══════════════ HEADER BAR ══════════════ */}
+                        <div
+                            className="flex items-center justify-between flex-shrink-0 border border-white/8 bg-white/[0.03] backdrop-blur-sm"
+                            style={{
+                                borderRadius: 'clamp(10px,1.4vw,22px)',
+                                padding: 'clamp(6px,1vh,14px) clamp(10px,1.8vw,28px)',
+                            }}
+                        >
+                            {/* Left: Title + Quinta + Court */}
+                            <div className="flex flex-col justify-center">
+                                <div className="flex items-center gap-2">
+                                    {isFinal && <span className="text-[#FFD700]" style={{ fontSize: 'clamp(10px,1.2vw,18px)' }}>★</span>}
+                                    <h1
+                                        className="font-black italic uppercase tracking-tighter text-white leading-none"
+                                        style={{ fontSize: 'clamp(12px,1.6vw,26px)' }}
+                                    >
+                                        {tournament?.name}
+                                    </h1>
                                 </div>
-                                <div className="text-right border-l-2 border-white/5 pl-12">
-                                    <div className="flex items-center gap-4 justify-end mb-1">
-                                        <div className="w-3 h-3 rounded-full bg-red-600 animate-pulse shadow-[0_0_20px_rgba(220,38,38,0.8)]" />
-                                        <span className={`text-4xl font-black italic uppercase tracking-tighter ${isFinal ? 'text-[#FFD700]' : 'text-white'}`}>
-                                            {isFinal ? 'GRAN FINAL' : 'DIRECTO'}
+                                {/* Quinta — above PISTA, bigger than PISTA smaller than title */}
+                                {tournament?.category && (
+                                    <div className="mt-[4px]">
+                                        <span
+                                            className="font-black italic uppercase tracking-wide"
+                                            style={{ fontSize: 'clamp(10px,1.25vw,21px)', color: primaryColor }}
+                                        >
+                                            {tournament.category}
                                         </span>
                                     </div>
-                                    <p className="text-xl font-bold text-gray-600 uppercase tracking-widest">Margarita Padel Center</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Scoreboard Content */}
-                        <div className="flex-1 flex flex-col justify-center gap-12 relative z-10">
-                            {/* Match Header Info */}
-                            <div className="flex justify-center mb-4">
-                                <div className={`px-10 py-3 ${isFinal ? 'bg-[#FFD700]/10 border-[#FFD700]/30' : 'bg-white/5 border-white/10'} border rounded-full flex items-center gap-4`}>
-                                    {isFinal ? <Star className="w-6 h-6 text-[#FFD700] fill-[#FFD700]" /> : <Trophy className="w-6 h-6 text-amber-500" />}
-                                    <span className={`text-xl font-black italic uppercase tracking-widest ${isFinal ? 'text-[#FFD700]' : 'text-gray-400'}`}>
-                                        {match.roundName || 'FASE DE GRUPOS'}
+                                )}
+                                <div className="flex items-center gap-2 mt-[3px]">
+                                    <span className="font-black uppercase text-gray-400" style={{ fontSize: 'clamp(8px,0.9vw,15px)', letterSpacing: '0.2em' }}>
+                                        PISTA {match.court}
                                     </span>
+                                    {match.roundName && (
+                                        <>
+                                            <span className="text-white/20" style={{ fontSize: 'clamp(8px,0.9vw,15px)' }}>•</span>
+                                            <span className="font-bold uppercase text-gray-500" style={{ fontSize: 'clamp(9px,1vw,17px)', letterSpacing: '0.15em' }}>
+                                                {match.roundName}
+                                            </span>
+                                        </>
+                                    )}
                                 </div>
                             </div>
 
-                            {/* Teams Grid */}
-                            <div className="grid grid-cols-12 items-center gap-4 lg:gap-12">
-                                {/* Team 1 */}
-                                <div className="col-span-5 flex flex-col items-end gap-10">
-                                    <div className="flex flex-col items-end relative">
-                                        <div className="absolute -right-8 inset-y-0 w-2 bg-gradient-to-b from-transparent via-white/20 to-transparent rounded-full" />
-                                        <h2 className="text-7xl lg:text-[7rem] font-black italic uppercase tracking-tighter text-white text-right leading-[0.85] filter drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)]">
-                                            {match.t1Name.split(' / ')[0]}<br />
-                                            <span style={{ color: primaryColor }}>{match.t1Name.split(' / ')[1]}</span>
-                                        </h2>
-                                    </div>
-                                    <div className="flex gap-4">
-                                        {[1, 2, 3].map(setNum => {
-                                            const currentSet = (match.sets?.t1 || 0) + (match.sets?.t2 || 0) + 1;
-                                            const isPast = setNum < currentSet;
-                                            const isCurrent = setNum === currentSet;
-                                            return (
-                                                <div key={setNum} className={`w-24 h-32 lg:w-32 lg:h-40 rounded-[3rem] flex flex-col items-center justify-center border-2 transition-all duration-500 overflow-hidden relative ${isCurrent ? 'bg-white/10 border-white/20 scale-110 shadow-2xl z-20' : 'bg-black/20 border-white/5 opacity-40'}`}>
-                                                    {isCurrent && <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />}
-                                                    <span className="text-[10px] font-black uppercase text-gray-500 mb-2 tracking-widest">SET {setNum}</span>
-                                                    <motion.span
-                                                        key={isCurrent ? match.games?.t1 : match.games_sets?.[setNum - 1]?.t1}
-                                                        initial={isCurrent ? { scale: 1.5, opacity: 0 } : {}}
-                                                        animate={{ scale: 1, opacity: 1 }}
-                                                        className={`text-6xl lg:text-7xl font-black italic ${isCurrent ? 'text-white' : 'text-white/40'}`}
-                                                    >
-                                                        {isPast ? (match.games_sets?.[setNum - 1]?.t1 || 0) : isCurrent ? (match.games?.t1 || 0) : '-'}
-                                                    </motion.span>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
+                            {/* Right: Date / Time / Temp — horizontal pill */}
+                            <div className="flex items-center border border-white/8 bg-white/[0.04] backdrop-blur-sm overflow-hidden"
+                                style={{ borderRadius: 'clamp(10px,1.2vw,20px)' }}>
+                                <div className="flex flex-col items-center justify-center"
+                                    style={{ padding: 'clamp(5px,0.9vh,12px) clamp(14px,1.8vw,28px)', gap: 'clamp(1px,0.2vh,3px)' }}>
+                                    <span className="font-black italic tracking-tighter text-white leading-none"
+                                        style={{ fontSize: 'clamp(16px,2.2vw,36px)' }}>{clock.time}</span>
+                                    <span className="font-bold uppercase text-gray-500 tracking-widest"
+                                        style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>{clock.date}</span>
                                 </div>
-
-                                {/* Points Center Hub */}
-                                <div className="col-span-2 flex flex-col items-center justify-center relative min-h-[500px]">
-                                    {/* Serve Indicator Glows */}
-                                    <div className="absolute inset-x-0 top-0 bottom-0 pointer-events-none">
-                                        <AnimatePresence>
-                                            {match.server?.team === 1 && (
-                                                <motion.div
-                                                    initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }}
-                                                    className="absolute left-[-100px] inset-y-0 w-32 bg-gradient-to-r from-[#ccff0022] to-transparent blur-3xl"
-                                                />
-                                            )}
-                                            {match.server?.team === 2 && (
-                                                <motion.div
-                                                    initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }}
-                                                    className="absolute right-[-100px] inset-y-0 w-32 bg-gradient-to-l from-[#ccff0022] to-transparent blur-3xl"
-                                                />
-                                            )}
-                                        </AnimatePresence>
-                                    </div>
-
-                                    <div className="relative group w-full">
-                                        <div className="absolute inset-[-4px] bg-white/5 rounded-[4rem] blur-xl opacity-50 group-hover:opacity-100 transition-opacity" />
-                                        <div className={`w-full aspect-[4/5] lg:aspect-square flex flex-col items-center justify-center rounded-[3.5rem] border-4 border-white/10 relative overflow-hidden shadow-2xl ${isFinal ? 'bg-gradient-to-br from-[#FFD700] to-[#B8860B]' : 'bg-gradient-to-br from-[#111] to-[#000]'}`}>
-
-                                            {/* Digital Scanline Effect */}
-                                            <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%] pointer-events-none opacity-20" />
-
-                                            {!isFinal && <div className="absolute top-0 inset-x-0 h-1" style={{ backgroundColor: primaryColor }} />}
-
-                                            <span className={`text-xl lg:text-2xl font-black italic mb-6 z-10 tracking-[0.4em] ${isFinal ? 'text-black/60' : 'text-white/20'}`}>PUNTOS</span>
-
-                                            <div className="flex items-center gap-2 lg:gap-6 z-10">
-                                                <AnimatePresence mode="popLayout">
-                                                    <motion.span
-                                                        key={match.points?.t1}
-                                                        initial={{ y: 40, opacity: 0, scale: 0.8 }}
-                                                        animate={{ y: 0, opacity: 1, scale: 1 }}
-                                                        exit={{ y: -40, opacity: 0, scale: 0.8 }}
-                                                        className={`text-8xl lg:text-[11rem] font-black italic tracking-tighter leading-none ${isFinal ? 'text-black' : 'text-white'}`}
-                                                    >
-                                                        {match.points?.t1 || '0'}
-                                                    </motion.span>
-                                                </AnimatePresence>
-                                                <span className={`text-4xl lg:text-6xl font-black italic opacity-20 ${isFinal ? 'text-black' : 'text-white'}`}>:</span>
-                                                <AnimatePresence mode="popLayout">
-                                                    <motion.span
-                                                        key={match.points?.t2}
-                                                        initial={{ y: 40, opacity: 0, scale: 0.8 }}
-                                                        animate={{ y: 0, opacity: 1, scale: 1 }}
-                                                        exit={{ y: -40, opacity: 0, scale: 0.8 }}
-                                                        className={`text-8xl lg:text-[11rem] font-black italic tracking-tighter leading-none ${isFinal ? 'text-black' : 'text-white'}`}
-                                                    >
-                                                        {match.points?.t2 || '0'}
-                                                    </motion.span>
-                                                </AnimatePresence>
-                                            </div>
-
-                                            {/* Golden Point Alert */}
-                                            {(match.points?.t1 === '40' && match.points?.t2 === '40') && (
-                                                <motion.div
-                                                    animate={{ opacity: [0.3, 1, 0.3], scale: [0.95, 1, 0.95] }}
-                                                    transition={{ repeat: Infinity, duration: 1 }}
-                                                    className="absolute bottom-10 px-6 py-1 bg-red-600 text-white text-[10px] font-black uppercase tracking-[0.5em] rounded-full"
-                                                >
-                                                    Punto de Oro
-                                                </motion.div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Service Logic */}
-                                    <div className="absolute -bottom-16 flex items-center gap-16">
-                                        <div className="flex items-center gap-3">
-                                            <motion.div
-                                                animate={match.server?.team === 1 ? { scale: [1, 1.4, 1], rotate: [0, 90, 0] } : { scale: 0.5, opacity: 0.2 }}
-                                                className="w-4 h-4 bg-padel-primary rounded-sm shadow-[0_0_20px_#ccff00]"
-                                            />
-                                            <span className={`text-[10px] font-black uppercase tracking-widest ${match.server?.team === 1 ? 'text-white' : 'text-white/20'}`}>SAQUE</span>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <span className={`text-[10px] font-black uppercase tracking-widest ${match.server?.team === 2 ? 'text-white' : 'text-white/20'}`}>SAQUE</span>
-                                            <motion.div
-                                                animate={match.server?.team === 2 ? { scale: [1, 1.4, 1], rotate: [0, 90, 0] } : { scale: 0.5, opacity: 0.2 }}
-                                                className="w-4 h-4 bg-padel-primary rounded-sm shadow-[0_0_20px_#ccff00]"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Team 2 */}
-                                <div className="col-span-5 flex flex-col items-start gap-10">
-                                    <div className="flex flex-col items-start relative">
-                                        <div className="absolute -left-8 inset-y-0 w-2 bg-gradient-to-b from-transparent via-white/20 to-transparent rounded-full" />
-                                        <h2 className="text-7xl lg:text-[7rem] font-black italic uppercase tracking-tighter text-white text-left leading-[0.85] filter drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)]">
-                                            {match.t2Name.split(' / ')[0]}<br />
-                                            <span style={{ color: primaryColor }}>{match.t2Name.split(' / ')[1]}</span>
-                                        </h2>
-                                    </div>
-                                    <div className="flex gap-4">
-                                        {[1, 2, 3].map(setNum => {
-                                            const currentSet = (match.sets?.t1 || 0) + (match.sets?.t2 || 0) + 1;
-                                            const isPast = setNum < currentSet;
-                                            const isCurrent = setNum === currentSet;
-                                            return (
-                                                <div key={setNum} className={`w-24 h-32 lg:w-32 lg:h-40 rounded-[3rem] flex flex-col items-center justify-center border-2 transition-all duration-500 overflow-hidden relative ${isCurrent ? 'bg-white/10 border-white/20 scale-110 shadow-2xl z-20' : 'bg-black/20 border-white/5 opacity-40'}`}>
-                                                    {isCurrent && <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />}
-                                                    <span className="text-[10px] font-black uppercase text-gray-500 mb-2 tracking-widest">SET {setNum}</span>
-                                                    <motion.span
-                                                        key={isCurrent ? match.games?.t2 : match.games_sets?.[setNum - 1]?.t2}
-                                                        initial={isCurrent ? { scale: 1.5, opacity: 0 } : {}}
-                                                        animate={{ scale: 1, opacity: 1 }}
-                                                        className={`text-6xl lg:text-7xl font-black italic ${isCurrent ? 'text-white' : 'text-white/40'}`}
-                                                    >
-                                                        {isPast ? (match.games_sets?.[setNum - 1]?.t2 || 0) : isCurrent ? (match.games?.t2 || 0) : '-'}
-                                                    </motion.span>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Footer Banners / Sponsors / NEXT UP */}
-                        <div className="mt-12 overflow-hidden h-28 bg-white/5 border border-white/10 rounded-[2.5rem] flex items-center px-16 relative">
-                            <div className="flex items-center gap-16 animate-marquee whitespace-nowrap">
-                                <span className="text-3xl font-black italic uppercase tracking-tighter text-white opacity-20">SMART PADEL PRO SYSTEM</span>
-                                <div className="w-3 h-3 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
-                                <span className="text-3xl font-black italic uppercase tracking-tighter text-padel-primary">
-                                    {tournament?.broadcastingSettings?.bannerText || 'BIENVENIDOS AL MEJOR PADEL DEL MUNDO'}
-                                </span>
-                                {nextMatch && (
+                                {temp !== null && (
                                     <>
-                                        <div className="w-3 h-3 rounded-full bg-white opacity-20" />
-                                        <span className="text-3xl font-bold italic uppercase tracking-tighter text-white px-8 py-2 bg-white/10 rounded-2xl">
-                                            A CONTINUACIÓN EN ESTA PISTA: {nextMatch.t1Name} vs {nextMatch.t2Name}
-                                        </span>
+                                        <div className="self-stretch w-px bg-white/[0.08]" />
+                                        <div className="flex items-center gap-[0.4vw]"
+                                            style={{ padding: 'clamp(5px,0.9vh,12px) clamp(12px,1.6vw,24px)' }}>
+                                            <Thermometer style={{ width: 'clamp(9px,1vw,16px)', height: 'clamp(9px,1vw,16px)', color: primaryColor, flexShrink: 0 }} />
+                                            <span className="font-black italic tracking-tighter"
+                                                style={{ fontSize: 'clamp(14px,1.8vw,30px)', color: primaryColor }}>{temp}°C</span>
+                                        </div>
                                     </>
                                 )}
-                                <div className="w-3 h-3 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
-                                <span className="text-3xl font-black italic uppercase tracking-tighter text-white opacity-20">SMART PADEL PRO SYSTEM</span>
-                                <div className="w-3 h-3 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
-                                <span className="text-3xl font-black italic uppercase tracking-tighter text-white">SÍGUENOS EN @PADELSMART.IO</span>
                             </div>
                         </div>
+
+                        {/* ══════════════ MAIN GRID ══════════════ */}
+                        <div
+                            className="flex-1 grid min-h-0"
+                            style={{
+                                gridTemplateColumns: '1fr 1fr',
+                                gridTemplateRows: 'auto 1fr',
+                                gap: 'clamp(4px,0.8vh,12px)',
+                            }}
+                        >
+                            {/* ── TENNIS SCOREBOARD — spans both columns ── */}
+                            <div
+                                className="border border-white/8 bg-white/[0.025] overflow-hidden flex flex-col"
+                                style={{ gridColumn: '1 / -1', borderRadius: 'clamp(12px,1.6vw,26px)' }}
+                            >
+                                {/* Column headers */}
+                                <div className="flex items-center border-b border-white/[0.05]">
+                                    <div className="flex-1" style={{ padding: 'clamp(3px,0.5vh,7px) clamp(14px,2vw,32px)' }}>
+                                        <span className="font-black uppercase tracking-[0.3em] text-gray-600" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>JUGADOR</span>
+                                    </div>
+                                    {/* Sets S1 S2 S3 */}
+                                    {[1, 2, 3].map(s => (
+                                        <div key={s} className="flex items-center justify-center border-l border-white/[0.05]"
+                                            style={{ width: 'clamp(38px,5.5vw,90px)', padding: 'clamp(3px,0.5vh,7px) 0' }}>
+                                            <span className="font-black uppercase tracking-widest text-gray-600" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>S{s}</span>
+                                        </div>
+                                    ))}
+                                    {/* Games */}
+                                    <div className="flex items-center justify-center border-l border-white/[0.05]"
+                                        style={{ width: 'clamp(44px,6vw,100px)', padding: 'clamp(3px,0.5vh,7px) 0', background: 'rgba(255,255,255,0.03)' }}>
+                                        <span className="font-black uppercase tracking-widest text-gray-500" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>G</span>
+                                    </div>
+                                    {/* Points */}
+                                    <div className="flex flex-col items-center justify-center border-l border-white/[0.05]"
+                                        style={{ width: 'clamp(56px,8vw,128px)', padding: 'clamp(3px,0.5vh,7px) 0', backgroundColor: `${primaryColor}10` }}>
+                                        <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(5px,0.55vw,9px)', color: primaryColor }}>PTS</span>
+                                        {isTiebreak && (
+                                            <span className="font-black uppercase tracking-wider rounded-sm px-[4px] leading-tight"
+                                                style={{
+                                                    fontSize: 'clamp(4px,0.4vw,7px)',
+                                                    backgroundColor: modoPuntos === 'super_tiebreak' ? 'rgba(168,85,247,0.25)' : 'rgba(249,115,22,0.25)',
+                                                    color: modoPuntos === 'super_tiebreak' ? '#c084fc' : '#fb923c',
+                                                    marginTop: '2px',
+                                                }}>
+                                                {modoPuntos === 'super_tiebreak' ? 'SUPER TB' : 'TB'}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* ── Team 1 row ── */}
+                                <div className="flex-1 flex items-center relative border-b border-white/[0.05] overflow-hidden min-h-0">
+                                    <AnimatePresence>
+                                        {(lm?.saque?.equipo === 1 || match.server?.team === 1) && (
+                                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                                className="absolute inset-0 pointer-events-none"
+                                                style={{ background: `radial-gradient(ellipse at 0% 50%, ${primaryColor}14 0%, transparent 60%)` }} />
+                                        )}
+                                    </AnimatePresence>
+                                    <div className="flex-1 flex items-center min-w-0"
+                                        style={{ padding: 'clamp(8px,1.2vh,20px) clamp(14px,2vw,32px)', gap: 'clamp(6px,1vw,18px)' }}>
+                                        {(lm?.saque?.equipo === 1 || match.server?.team === 1) && (
+                                            <motion.div animate={{ scale: [1, 1.4, 1], rotate: [0, 90, 0] }} transition={{ repeat: Infinity, duration: 1.2 }}
+                                                className="flex-shrink-0 rounded-sm"
+                                                style={{ width: 'clamp(7px,0.9vw,14px)', height: 'clamp(7px,0.9vw,14px)', backgroundColor: primaryColor, boxShadow: `0 0 10px ${primaryColor}` }} />
+                                        )}
+                                        <div className="flex flex-col min-w-0 flex-1" style={{ gap: 'clamp(1px,0.2vh,4px)' }}>
+                                            <p className="font-black italic uppercase tracking-tighter text-white leading-none truncate"
+                                                style={{ fontSize: 'clamp(16px,3.2vw,58px)' }}>{lm?.equipo_1?.nombre || match.t1p1}</p>
+                                            <p className="font-black italic uppercase tracking-tighter leading-none truncate"
+                                                style={{ fontSize: 'clamp(10px,1.6vw,28px)', color: primaryColor, opacity: 0.7 }}>{match.t1p2}</p>
+                                        </div>
+                                    </div>
+                                    {/* Sets pasados */}
+                                    {[1, 2, 3].map(s => {
+                                        const isPast = s < currentSet; const isCur = s === currentSet;
+                                        // Sets completados: vienen de Firestore; el set actual no es una columna s
+                                        const val = isPast ? (match.games_sets?.[s - 1]?.t1 ?? 0) : isCur ? '' : '';
+                                        return (
+                                            <div key={s} className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
+                                                style={{ width: 'clamp(38px,5.5vw,90px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
+                                                <motion.span key={String(val)} initial={isCur ? { scale: 1.4, opacity: 0 } : {}} animate={{ scale: 1, opacity: 1 }}
+                                                    className={`font-black italic ${isPast ? 'text-white/60' : 'text-white/10'}`}
+                                                    style={{ fontSize: 'clamp(18px,3.5vw,64px)' }}>{val}</motion.span>
+                                            </div>
+                                        );
+                                    })}
+                                    {/* Games actuales */}
+                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
+                                        style={{ width: 'clamp(44px,6vw,100px)', background: 'rgba(255,255,255,0.03)' }}>
+                                        <AnimatePresence mode="popLayout">
+                                            <motion.span key={gamesT1} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}
+                                                className="font-black italic text-white"
+                                                style={{ fontSize: 'clamp(18px,3.5vw,64px)' }}>
+                                                {gamesT1}
+                                            </motion.span>
+                                        </AnimatePresence>
+                                    </div>
+                                    {/* Puntos */}
+                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
+                                        style={{ width: 'clamp(56px,8vw,128px)', backgroundColor: `${primaryColor}12` }}>
+                                        <AnimatePresence mode="popLayout">
+                                            <motion.span key={ptsT1} initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -16, opacity: 0 }}
+                                                className="font-black italic" style={{ fontSize: 'clamp(16px,2.8vw,50px)', color: primaryColor }}>
+                                                {ptsT1}
+                                            </motion.span>
+                                        </AnimatePresence>
+                                    </div>
+                                </div>
+
+                                {/* ── Team 2 row ── */}
+                                <div className="flex-1 flex items-center relative overflow-hidden min-h-0">
+                                    <AnimatePresence>
+                                        {(lm?.saque?.equipo === 2 || match.server?.team === 2) && (
+                                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                                className="absolute inset-0 pointer-events-none"
+                                                style={{ background: `radial-gradient(ellipse at 0% 50%, ${primaryColor}14 0%, transparent 60%)` }} />
+                                        )}
+                                    </AnimatePresence>
+                                    <div className="flex-1 flex items-center min-w-0"
+                                        style={{ padding: 'clamp(8px,1.2vh,20px) clamp(14px,2vw,32px)', gap: 'clamp(6px,1vw,18px)' }}>
+                                        {(lm?.saque?.equipo === 2 || match.server?.team === 2) && (
+                                            <motion.div animate={{ scale: [1, 1.4, 1], rotate: [0, 90, 0] }} transition={{ repeat: Infinity, duration: 1.2 }}
+                                                className="flex-shrink-0 rounded-sm"
+                                                style={{ width: 'clamp(7px,0.9vw,14px)', height: 'clamp(7px,0.9vw,14px)', backgroundColor: primaryColor, boxShadow: `0 0 10px ${primaryColor}` }} />
+                                        )}
+                                        <div className="flex flex-col min-w-0 flex-1" style={{ gap: 'clamp(1px,0.2vh,4px)' }}>
+                                            <p className="font-black italic uppercase tracking-tighter text-white leading-none truncate"
+                                                style={{ fontSize: 'clamp(16px,3.2vw,58px)' }}>{lm?.equipo_2?.nombre || match.t2p1}</p>
+                                            <p className="font-black italic uppercase tracking-tighter leading-none truncate"
+                                                style={{ fontSize: 'clamp(10px,1.6vw,28px)', color: primaryColor, opacity: 0.7 }}>{match.t2p2}</p>
+                                        </div>
+                                    </div>
+                                    {/* Sets pasados */}
+                                    {[1, 2, 3].map(s => {
+                                        const isPast = s < currentSet; const isCur = s === currentSet;
+                                        const val = isPast ? (match.games_sets?.[s - 1]?.t2 ?? 0) : '';
+                                        return (
+                                            <div key={s} className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
+                                                style={{ width: 'clamp(38px,5.5vw,90px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
+                                                <motion.span key={String(val)} initial={isCur ? { scale: 1.4, opacity: 0 } : {}} animate={{ scale: 1, opacity: 1 }}
+                                                    className={`font-black italic ${isPast ? 'text-white/60' : 'text-white/10'}`}
+                                                    style={{ fontSize: 'clamp(18px,3.5vw,64px)' }}>{val}</motion.span>
+                                            </div>
+                                        );
+                                    })}
+                                    {/* Games actuales */}
+                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
+                                        style={{ width: 'clamp(44px,6vw,100px)', background: 'rgba(255,255,255,0.03)' }}>
+                                        <AnimatePresence mode="popLayout">
+                                            <motion.span key={gamesT2} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}
+                                                className="font-black italic text-white"
+                                                style={{ fontSize: 'clamp(18px,3.5vw,64px)' }}>
+                                                {gamesT2}
+                                            </motion.span>
+                                        </AnimatePresence>
+                                    </div>
+                                    {/* Puntos */}
+                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
+                                        style={{ width: 'clamp(56px,8vw,128px)', backgroundColor: `${primaryColor}12` }}>
+                                        <AnimatePresence mode="popLayout">
+                                            <motion.span key={ptsT2} initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -16, opacity: 0 }}
+                                                className="font-black italic" style={{ fontSize: 'clamp(16px,2.8vw,50px)', color: primaryColor }}>
+                                                {ptsT2}
+                                            </motion.span>
+                                        </AnimatePresence>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* ── Cell 3: Banner Publicitario (bottom-left) ── */}
+                            <div
+                                className="border border-white/8 bg-white/[0.02] relative overflow-hidden flex items-center justify-center"
+                                style={{ borderRadius: 'clamp(12px,1.6vw,26px)' }}
+                            >
+                                <AnimatePresence mode="wait">
+                                    {adBanner.isVisible && adBanner.currentImageUrl ? (
+                                        adBanner.currentImageUrl.endsWith('.mp4') ? (
+                                            <motion.video key={adBanner.currentImageUrl} src={adBanner.currentImageUrl}
+                                                autoPlay muted loop initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                                transition={{ duration: 0.6 }} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <motion.img key={adBanner.currentImageUrl} src={adBanner.currentImageUrl}
+                                                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                                transition={{ duration: 0.6 }} className="w-full h-full object-contain"
+                                                style={{ padding: 'clamp(10px,1.5vh,24px) clamp(14px,2vw,32px)' }} />
+                                        )
+                                    ) : (
+                                        <motion.div key="ad-placeholder" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                            className="flex flex-col items-center justify-center gap-3 w-full h-full">
+                                            <motion.div animate={{ opacity: [0.3, 0.7, 0.3] }} transition={{ repeat: Infinity, duration: 2.5 }}>
+                                                <Megaphone style={{ width: 'clamp(20px,3vw,50px)', height: 'clamp(20px,3vw,50px)', color: primaryColor, opacity: 0.25 }} />
+                                            </motion.div>
+                                            <span className="font-black italic uppercase tracking-[0.3em] text-gray-700" style={{ fontSize: 'clamp(6px,0.7vw,12px)' }}>
+                                                ESPACIO PUBLICITARIO
+                                            </span>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+
+                            {/* ── Cell 4: Carrusel de Imágenes (bottom-right) ── */}
+                            <div
+                                className="border border-white/8 bg-white/[0.02] relative overflow-hidden flex items-center justify-center"
+                                style={{ borderRadius: 'clamp(12px,1.6vw,26px)' }}
+                            >
+                                <AnimatePresence mode="wait">
+                                    {carouselImages.length > 0 ? (
+                                        <motion.img
+                                            key={carouselImages[carouselIdx % carouselImages.length]?.url}
+                                            src={carouselImages[carouselIdx % carouselImages.length]?.url}
+                                            initial={{ opacity: 0, scale: 1.04 }} animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 0.97 }} transition={{ duration: 0.7 }}
+                                            className="w-full h-full object-contain"
+                                            style={{ padding: 'clamp(10px,1.5vh,24px) clamp(14px,2vw,32px)' }}
+                                        />
+                                    ) : (
+                                        <motion.div key="carousel-placeholder" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                                            className="flex flex-col items-center justify-center gap-3 w-full h-full">
+                                            <div className="flex items-end gap-[clamp(3px,0.5vw,8px)]">
+                                                {[0.5, 0.75, 1].map((h, i) => (
+                                                    <motion.div key={i} animate={{ scaleY: [h, 1, h] }}
+                                                        transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }}
+                                                        className="rounded-full"
+                                                        style={{ width: 'clamp(4px,0.5vw,8px)', height: `clamp(${Math.round(h * 14)}px,${h * 1.6}vw,${Math.round(h * 26)}px)`, backgroundColor: primaryColor, opacity: 0.2 + i * 0.1 }} />
+                                                ))}
+                                            </div>
+                                            <span className="font-black italic uppercase tracking-[0.3em] text-gray-700" style={{ fontSize: 'clamp(6px,0.7vw,12px)' }}>
+                                                CARRUSEL IMÁGENES
+                                            </span>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        </div>
+
+                        {/* ══════════════ FOOTER BAR ══════════════ */}
+                        {tickerActivo && tickerTexto ? (
+                            <div
+                                className="flex-shrink-0 overflow-hidden border border-white/10 bg-[#0d0d0d] relative"
+                                style={{
+                                    borderRadius: 'clamp(10px,1.2vw,18px)',
+                                    height: 'clamp(38px,6.5vh,72px)',
+                                }}>
+                                {/* Etiqueta izquierda fija */}
+                                <div
+                                    className="absolute left-0 top-0 bottom-0 z-10 flex items-center px-[clamp(8px,1.2vw,18px)] gap-[clamp(4px,0.5vw,8px)] border-r border-white/10"
+                                    style={{ background: `linear-gradient(90deg, #0d0d0d 70%, transparent)` }}>
+                                    <div
+                                        className="rounded-full animate-pulse"
+                                        style={{ width: 'clamp(6px,0.7vw,10px)', height: 'clamp(6px,0.7vw,10px)', backgroundColor: primaryColor, boxShadow: `0 0 8px ${primaryColor}` }}
+                                    />
+                                    <span
+                                        className="font-black italic uppercase tracking-widest whitespace-nowrap"
+                                        style={{ fontSize: 'clamp(7px,0.8vw,13px)', color: primaryColor }}>
+                                        EN VIVO
+                                    </span>
+                                </div>
+
+                                {/* Scroll continuo */}
+                                <div
+                                    className="flex items-center h-full"
+                                    style={{
+                                        paddingLeft: 'clamp(80px,12vw,160px)',
+                                        animation: `ticker-scroll ${tickerVelocidad}s linear infinite`,
+                                        whiteSpace: 'nowrap',
+                                    }}>
+                                    {/* Dos copias del texto = loop continuo sin salto */}
+                                    {[0, 1].map(i => (
+                                        <span
+                                            key={i}
+                                            className="font-black italic uppercase tracking-tighter inline-block"
+                                            style={{
+                                                fontSize: 'clamp(10px,1.4vw,22px)',
+                                                color: i === 0 ? 'white' : 'rgba(255,255,255,0.5)',
+                                                paddingRight: 'clamp(40px,8vw,120px)',
+                                            }}>
+                                            {tickerTexto}
+                                            {nextMatch && (
+                                                <span
+                                                    className="font-bold"
+                                                    style={{ color: primaryColor, marginLeft: 'clamp(12px,2vw,32px)' }}>
+                                                    &nbsp;&bull;&nbsp;A CONTINUACIÓN: {nextMatch.t1Name} vs {nextMatch.t2Name}
+                                                </span>
+                                            )}
+                                        </span>
+                                    ))}
+                                </div>
+
+                                {/* Gradiente que se desvanece a la derecha */}
+                                <div
+                                    className="absolute right-0 top-0 bottom-0 pointer-events-none"
+                                    style={{ width: 'clamp(40px,6vw,80px)', background: 'linear-gradient(to left, #0d0d0d, transparent)' }}
+                                />
+                            </div>
+                        ) : (
+                            /* Footer placeholder (mismo alto para no saltar) */
+                            <div
+                                className="flex-shrink-0 border border-white/[0.04] bg-white/[0.01]"
+                                style={{ borderRadius: 'clamp(10px,1.2vw,18px)', height: 'clamp(38px,6.5vh,72px)' }}
+                            />
+                        )}
+
                     </motion.div>
                 ) : (
-                    <motion.div
-                        key="ad"
-                        initial={{ opacity: 0, scale: 1.1 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        className="h-full w-full bg-black flex items-center justify-center relative"
-                    >
+                    /* ══════════════ AD MODE ══════════════ */
+                    <motion.div key="ad" initial={{ opacity: 0, scale: 1.1 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                        className="h-full w-full bg-black flex items-center justify-center relative">
                         {adMedia[currentAdIdx]?.endsWith('.mp4') ? (
                             <video src={adMedia[currentAdIdx]} autoPlay muted loop className="w-full h-full object-cover" />
                         ) : adMedia[currentAdIdx] ? (
                             <img src={adMedia[currentAdIdx]} className="w-full h-full object-contain p-12 lg:p-32" />
                         ) : (
                             <div className="text-center space-y-12 relative z-10">
-                                <motion.div
-                                    animate={{
-                                        scale: [1, 1.1, 1],
-                                        rotate: [0, 5, -5, 0]
-                                    }}
+                                <motion.div animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
                                     transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                                    className="w-48 h-48 bg-padel-primary/10 rounded-full flex items-center justify-center mx-auto border-4 border-padel-primary/20 backdrop-blur-xl shadow-[0_0_100px_rgba(204,255,0,0.1)]"
-                                >
+                                    className="w-48 h-48 bg-padel-primary/10 rounded-full flex items-center justify-center mx-auto border-4 border-padel-primary/20 backdrop-blur-xl shadow-[0_0_100px_rgba(204,255,0,0.1)]">
                                     <Megaphone className="w-24 h-24 text-padel-primary filter drop-shadow-[0_0_20px_rgba(204,255,0,0.5)]" />
                                 </motion.div>
                                 <div className="space-y-4">
@@ -394,17 +688,10 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 </div>
                             </div>
                         )}
-
-                        {/* Point Notification Overlay */}
                         {funEnabled && match.points?.t1 === '0' && match.points?.t2 === '0' && (
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0 }}
-                                animate={{ opacity: 1, scale: 1.5 }}
-                                className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                            >
-                                <div className="p-12 bg-padel-primary text-black rounded-full font-black italic text-8xl shadow-[0_0_100px_#ccff00]">
-                                    GAME!
-                                </div>
+                            <motion.div initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1.5 }}
+                                className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <div className="p-12 bg-padel-primary text-black rounded-full font-black italic text-8xl shadow-[0_0_100px_#ccff00]">GAME!</div>
                             </motion.div>
                         )}
                     </motion.div>
@@ -414,11 +701,12 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
             <style jsx global>{`
                 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
                 .font-outfit { font-family: 'Outfit', sans-serif; }
-                @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-                .animate-marquee { animation: marquee 30s linear infinite; }
                 body { background: black; margin: 0; padding: 0; }
+                @keyframes ticker-scroll {
+                    0%   { transform: translateX(0); }
+                    100% { transform: translateX(-50%); }
+                }
             `}</style>
         </div>
     );
 }
-

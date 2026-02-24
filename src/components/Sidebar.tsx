@@ -15,7 +15,8 @@ import {
     Shield,
     Monitor,
     LayoutDashboard,
-    Megaphone
+    Megaphone,
+    Brain
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -35,6 +36,7 @@ export default function Sidebar() {
         { name: 'Generador Maestro', href: '/admin/master-generator', icon: Sparkles },
         { name: 'Módulo Pizarras', href: '/admin/boards', icon: LayoutDashboard },
         { name: 'Agentes AI', href: '/agents', icon: Sparkles },
+        { name: 'Base Conocimiento IA', href: '/admin/knowledge', icon: Brain },
         { name: 'Agregar Jugador', href: '/players/register', icon: UserPlus },
         { name: 'Jugadores', href: '/players', icon: Users },
         { name: 'Publicidad', href: '/admin/ads', icon: Megaphone },

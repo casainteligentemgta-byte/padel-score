@@ -27,6 +27,7 @@ export async function activarCancha(
             sets: { local: 0, visitante: 0 },
             games: { local: 0, visitante: 0 },
             puntos: { local: '0', visitante: '0' },
+            modo_puntos: 'normal' as 'normal' | 'tiebreak' | 'super_tiebreak',
             golden_point: false,
             equipo_1: equipo1,
             equipo_2: equipo2,
@@ -59,6 +60,18 @@ export async function actualizarMarcador(canchaId: string, marcador: Record<stri
     const marcadorRef = ref(rtdb, `canchas/${canchaId}/marcador`);
     await update(marcadorRef, {
         ...marcador,
+        ultimo_update: Date.now(),
+    });
+}
+
+/** Cambia el modo de puntos: normal (0/15/30/40), tiebreak (0‑7) o super_tiebreak (0‑10) */
+export async function setModoPuntos(
+    canchaId: string,
+    modo: 'normal' | 'tiebreak' | 'super_tiebreak'
+) {
+    await update(ref(rtdb, `canchas/${canchaId}/marcador`), {
+        modo_puntos: modo,
+        puntos: { local: '0', visitante: '0' },
         ultimo_update: Date.now(),
     });
 }
@@ -140,7 +153,18 @@ export async function initPublicidadMaster() {
             imagenes: {},
             fija: { url: '' },
             programada: { activa: false, url: '', inicio_unix_ms: 0, fin_unix_ms: 0 },
+            ticker: { activo: false, texto: '', velocidad_seg: 30 },
             ultimo_update: Date.now(),
         });
     }
+}
+
+/** Actualiza la configuración de la correa informativa (ticker) */
+export async function setTickerConfig(activo: boolean, texto: string, velocidad_seg: number) {
+    await update(ref(rtdb, 'publicidad_master/ticker'), {
+        activo,
+        texto,
+        velocidad_seg,
+    });
+    await update(ref(rtdb, 'publicidad_master'), { ultimo_update: Date.now() });
 }

@@ -48,6 +48,8 @@ export default function BroadcastingSettings({ params }: { params: Promise<{ id:
     const [funAnimations, setFunAnimations] = useState(true);
     const [aiSearch, setAiSearch] = useState(false);
     const [uploading, setUploading] = useState<string | null>(null);
+    const [showTicker, setShowTicker] = useState(true);
+    const [venueName, setVenueName] = useState('');
 
     const SAMPLE_VIDEO = "https://assets.mixkit.co/videos/preview/mixkit-man-playing-padel-tennis-41484-large.mp4";
 
@@ -93,6 +95,8 @@ export default function BroadcastingSettings({ params }: { params: Promise<{ id:
                     setAdMediaUrls(data.broadcastingSettings.adMediaUrls || [SAMPLE_VIDEO]);
                     setFunAnimations(data.broadcastingSettings.funAnimationsEnabled !== false);
                     setAiSearch(data.broadcastingSettings.aiAnimationSearchEnabled || false);
+                    setShowTicker(data.broadcastingSettings.showTicker !== false);
+                    setVenueName(data.broadcastingSettings.venueName || '');
                 }
             }
             setLoading(false);
@@ -128,7 +132,9 @@ export default function BroadcastingSettings({ params }: { params: Promise<{ id:
                     adDurationSeconds: adDuration,
                     adMediaUrls: adMediaUrls.length > 0 ? adMediaUrls : [SAMPLE_VIDEO],
                     funAnimationsEnabled: funAnimations,
-                    aiAnimationSearchEnabled: aiSearch
+                    aiAnimationSearchEnabled: aiSearch,
+                    showTicker,
+                    venueName
                 }
             });
             setShowSavedToast(true);
@@ -222,6 +228,61 @@ export default function BroadcastingSettings({ params }: { params: Promise<{ id:
                                     onChange={(e) => setBannerText(e.target.value)}
                                     className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:border-padel-primary transition-all outline-none resize-none h-24"
                                 />
+                            </div>
+                        </section>
+
+                        {/* Ticker / Marquesina */}
+                        <section className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 space-y-6">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-3">
+                                    <Megaphone className="w-5 h-5 text-padel-primary" />
+                                    <h2 className="text-sm font-black italic uppercase tracking-widest">Marquesina / Correa Informativa</h2>
+                                </div>
+                                <button
+                                    onClick={() => setShowTicker(!showTicker)}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-[10px] font-black uppercase transition-all ${showTicker
+                                            ? 'bg-padel-primary/10 border-padel-primary/30 text-padel-primary'
+                                            : 'bg-white/5 border-white/10 text-gray-500'
+                                        }`}
+                                >
+                                    <div className={`w-2.5 h-2.5 rounded-full transition-colors ${showTicker ? 'bg-padel-primary animate-pulse' : 'bg-gray-700'}`} />
+                                    {showTicker ? 'Visible' : 'Oculta'}
+                                </button>
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Nombre del Venue / Club</label>
+                                <input
+                                    type="text"
+                                    placeholder="Ej: Margarita Padel Center"
+                                    value={venueName}
+                                    onChange={(e) => setVenueName(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-6 py-3 text-sm focus:border-padel-primary transition-all outline-none"
+                                />
+                                <p className="text-[8px] text-gray-600 font-bold uppercase tracking-widest">Aparece junto al indicador DIRECTO en la pizarra</p>
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Texto de la Correa</label>
+                                <textarea
+                                    placeholder="Ej: ¡Bienvenidos al Torneo de Verano Margarita 2024! Patrocinado por..."
+                                    value={bannerText}
+                                    onChange={(e) => setBannerText(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:border-padel-primary transition-all outline-none resize-none h-20"
+                                />
+                            </div>
+
+                            {/* Preview ticker */}
+                            <div className={`overflow-hidden rounded-2xl border transition-all ${showTicker ? 'border-padel-primary/20 bg-black' : 'border-white/5 bg-white/[0.02] opacity-40'}`}>
+                                <div className="flex items-center gap-8 whitespace-nowrap px-6 py-3 animate-marquee" style={{ fontSize: '11px' }}>
+                                    <span className="font-black italic uppercase tracking-tighter text-white opacity-30">SMART PADEL PRO SYSTEM</span>
+                                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: primaryColor }} />
+                                    <span className="font-black italic uppercase tracking-tighter" style={{ color: primaryColor }}>
+                                        {bannerText || 'BIENVENIDOS AL MEJOR PADEL DEL MUNDO'}
+                                    </span>
+                                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: primaryColor }} />
+                                    <span className="font-black italic uppercase tracking-tighter text-white opacity-30">SMART PADEL PRO SYSTEM</span>
+                                </div>
                             </div>
                         </section>
 

@@ -63,4 +63,14 @@ body {
     background: #ccff00;
     border-radius: 10px;
   }
+
+  /* Ocultar scrollbar visualmente pero mantener funcionalidad de scroll */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }

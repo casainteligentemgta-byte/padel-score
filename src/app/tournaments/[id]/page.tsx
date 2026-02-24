@@ -98,6 +98,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                 if (teamIdx <= 0) return 'Por definir';
                                 const name = p?.name?.trim();
                                 if (name && name !== '') return name;
+                                // Sequential unique numbering: team 1 → J1/J2, team 2 → J3/J4, etc.
                                 const index = (teamIdx * 2) - (slot === 1 ? 1 : 0);
                                 return `Jugador ${index}`;
                             };
@@ -506,8 +507,8 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
             return m.stage === 'MAIN_DRAW' && getStageLabel(m) === s;
         })) tabs.push(s);
     });
-    tabs.push('Por Comenzar');
     tabs.push('En Vivo');
+    tabs.push('Por Comenzar');
     tabs.push('Finalizados');
     if (!isRoundRobin) tabs.push('Ranking');
     tabs.push('Reglas');
@@ -517,7 +518,28 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const filteredMatches = matches.filter(m => {
         if (activeTab === 'Todos') return true;
         if (activeTab === 'En Vivo') return m.status === MatchStatus.LIVE;
-        if (activeTab === 'Por Comenzar') return m.status === MatchStatus.PENDING;
+        if (activeTab === 'Por Comenzar') {
+            // Usar totalCourts del torneo (fuente de verdad: campo en Firestore)
+            // Fallback: número de partidos actualmente LIVE (canchas realmente ocupadas)
+            const liveCount = matches.filter(m2 => m2.status === MatchStatus.LIVE).length;
+            const numCourts = (tournament as any)?.totalCourts
+                ? Number((tournament as any).totalCourts)
+                : Math.max(1, liveCount);
+            // Tomar los próximos N partidos PENDING, ordenados por scheduledTime asc
+            const pending = matches
+                .filter(m2 => m2.status === MatchStatus.PENDING)
+                .sort((a, b) => {
+                    const toMs = (v: any) => {
+                        if (!v) return 0;
+                        if (typeof v === 'string') return new Date(v).getTime();
+                        if (v?.toDate) return v.toDate().getTime();
+                        return new Date(v).getTime();
+                    };
+                    return toMs(a.scheduledTime) - toMs(b.scheduledTime);
+                })
+                .slice(0, numCourts);
+            return pending.some(p => p.id === m.id);
+        }
         if (activeTab === 'Finalizados') return m.status === MatchStatus.FINISHED;
         if (activeTab === 'Reglas' || activeTab === 'Grupos' || activeTab === 'Ranking') return false;
         // Fase del cuadro
@@ -808,7 +830,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
-                                className="space-y-8"
+                                className="space-y-4"
                             >
                                 {isRoundRobin ? (() => {
                                     // ── ROUND ROBIN: tablas por grupo ─────────────────────
@@ -827,65 +849,159 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                         );
                                     }
 
-                                    const selectedGroupData = groupEntries.find(([name]) => name === activeGroup) || groupEntries[0];
-                                    const [groupName, groupTeams] = selectedGroupData;
+                                    // ── Filtros de categoría/género ─────────────────────
+                                    const categoryLabel = tournament?.category || null;
+                                    const genderLabel = tournament?.gender || null;
+
+                                    // Construir chips: categoría + género del torneo
+                                    const filterChips: { key: string; label: string; color: string }[] = [];
+                                    if (categoryLabel) {
+                                        filterChips.push({ key: 'cat', label: categoryLabel, color: 'from-padel-primary/20 to-padel-primary/5 border-padel-primary/40 text-padel-primary' });
+                                    }
+                                    if (genderLabel) {
+                                        const gcolor = genderLabel.toLowerCase().includes('fem')
+                                            ? 'from-pink-500/20 to-pink-500/5 border-pink-500/40 text-pink-400'
+                                            : genderLabel.toLowerCase().includes('mas')
+                                                ? 'from-blue-500/20 to-blue-500/5 border-blue-500/40 text-blue-400'
+                                                : 'from-purple-500/20 to-purple-500/5 border-purple-500/40 text-purple-400';
+                                        filterChips.push({ key: 'gen', label: genderLabel, color: gcolor });
+                                    }
+                                    // Chips de grupos para scroll ref
+                                    const activeIdx = availableGroups.indexOf(activeGroup || availableGroups[0]);
 
                                     return (
-                                        <div className="space-y-6">
-                                            <div className="flex flex-wrap gap-2 pb-2">
-                                                {availableGroups.map((name) => (
-                                                    <button
-                                                        key={name}
-                                                        onClick={() => setActiveGroup(name)}
-                                                        className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all ${activeGroup === name
-                                                            ? 'bg-padel-primary text-black shadow-[0_10px_20px_rgba(204,255,0,0.2)] scale-105'
-                                                            : 'bg-white/5 text-gray-500 hover:bg-white/10'
-                                                            }`}
-                                                    >
-                                                        Grupo {name}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            <div className="bg-[#1a1a1a] border border-white/10 rounded-[2rem] overflow-hidden shadow-2xl">
-                                                <div className="bg-padel-primary px-6 py-2.5 flex justify-between items-center text-black">
-                                                    <h3 className="font-black italic uppercase tracking-tighter text-xs">Grupo {groupName}</h3>
-                                                    <span className="text-[10px] opacity-60 font-black uppercase tracking-widest italic">Clasificación</span>
+                                        <div className="space-y-3">
+                                            {/* ── Chips categoría/género ── */}
+                                            {filterChips.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 px-1">
+                                                    {filterChips.map(chip => (
+                                                        <div
+                                                            key={chip.key}
+                                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-gradient-to-r text-[9px] font-black uppercase tracking-widest italic ${chip.color}`}
+                                                        >
+                                                            {chip.key === 'cat' && <Trophy className="w-2.5 h-2.5" />}
+                                                            {chip.key === 'gen' && <User className="w-2.5 h-2.5" />}
+                                                            {chip.label}
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                                <div className="p-3">
-                                                    <div className="overflow-x-auto">
-                                                        <table className="w-full">
-                                                            <thead>
-                                                                <tr className="text-[9px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
-                                                                    <th className="text-left py-2 px-2">#</th>
-                                                                    <th className="text-left py-2 px-2">Pareja</th>
-                                                                    <th className="text-center py-2 px-1">PJ</th>
-                                                                    <th className="text-center py-2 px-1">PG</th>
-                                                                    <th className="text-center py-2 px-1">Sets</th>
-                                                                    <th className="text-center py-2 px-1">Pts</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody className="divide-y divide-white/5">
-                                                                {groupTeams.sort((a: any, b: any) => b.points - a.points || b.setsWon - a.setsWon).map((team: any, idx: number) => (
-                                                                    <tr key={team.id} className="text-white group hover:bg-white/[0.02] transition-colors">
-                                                                        <td className="py-2.5 px-2">
-                                                                            <span className={`w-4 h-4 flex items-center justify-center rounded-md text-[8px] font-black italic ${idx < 2 ? 'bg-padel-primary text-black' : 'bg-white/10 text-white/40'}`}>{idx + 1}</span>
-                                                                        </td>
-                                                                        <td className="py-2.5 px-2">
-                                                                            <span className="text-[10px] font-black italic uppercase tracking-tighter group-hover:text-padel-primary transition-colors leading-tight block">
-                                                                                {team.name.replace(/\s+y\s+/i, ' / ')}
-                                                                            </span>
-                                                                        </td>
-                                                                        <td className="py-2.5 px-1 text-center text-[10px] font-bold text-gray-400">{team.played}</td>
-                                                                        <td className="py-2.5 px-1 text-center text-[10px] font-bold text-gray-400">{team.won}</td>
-                                                                        <td className="py-2.5 px-1 text-center text-[9px] font-bold text-gray-400">{team.setsWon}-{team.setsLost}</td>
-                                                                        <td className="py-2.5 px-1 text-center text-[10px] font-black italic text-padel-primary">{team.points}</td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
+                                            )}
+
+                                            {/* ── Botones de grupos (scroll horizontal) ── */}
+                                            <div className="overflow-x-auto no-scrollbar">
+                                                <div className="flex gap-2 pb-1 w-max">
+                                                    {availableGroups.map((name, idx) => (
+                                                        <button
+                                                            key={name}
+                                                            onClick={() => {
+                                                                setActiveGroup(name);
+                                                                // scroll the carousel
+                                                                const container = document.getElementById('groups-carousel');
+                                                                if (container) {
+                                                                    container.scrollTo({ left: idx * container.offsetWidth, behavior: 'smooth' });
+                                                                }
+                                                            }}
+                                                            className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all whitespace-nowrap flex items-center gap-1.5 ${(activeGroup || availableGroups[0]) === name
+                                                                ? 'bg-padel-primary text-black shadow-[0_8px_20px_rgba(204,255,0,0.25)] scale-105'
+                                                                : 'bg-white/5 text-gray-500 hover:bg-white/10 border border-white/10'
+                                                                }`}
+                                                        >
+                                                            <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[8px] font-black ${(activeGroup || availableGroups[0]) === name ? 'bg-black/20' : 'bg-white/10'}`}>{name}</span>
+                                                            Grupo {name}
+                                                        </button>
+                                                    ))}
                                                 </div>
                                             </div>
+
+                                            {/* ── Carrusel de grupos (scroll horizontal con snap) ── */}
+                                            <div
+                                                id="groups-carousel"
+                                                className="overflow-x-auto no-scrollbar"
+                                                style={{ scrollSnapType: 'x mandatory', scrollBehavior: 'smooth' }}
+                                                onScroll={(e) => {
+                                                    const el = e.currentTarget;
+                                                    const idx = Math.round(el.scrollLeft / el.offsetWidth);
+                                                    if (availableGroups[idx] && availableGroups[idx] !== activeGroup) {
+                                                        setActiveGroup(availableGroups[idx]);
+                                                    }
+                                                }}
+                                            >
+                                                <div className="flex" style={{ width: `${groupEntries.length * 100}%` }}>
+                                                    {groupEntries.map(([gName, gTeams]) => (
+                                                        <div
+                                                            key={gName}
+                                                            style={{ width: `${100 / groupEntries.length}%`, scrollSnapAlign: 'start', flexShrink: 0 }}
+                                                            className="pr-0"
+                                                        >
+                                                            <div className="bg-[#1a1a1a] border border-white/10 rounded-[2rem] overflow-hidden shadow-2xl">
+                                                                {/* Header del grupo */}
+                                                                <div className="bg-padel-primary px-6 py-3 flex justify-between items-center text-black">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="w-6 h-6 bg-black/20 rounded-lg flex items-center justify-center text-[10px] font-black">{gName}</div>
+                                                                        <h3 className="font-black italic uppercase tracking-tighter text-sm">Grupo {gName}</h3>
+                                                                    </div>
+                                                                    <span className="text-[9px] opacity-60 font-black uppercase tracking-widest italic">{(gTeams as any[]).length} parejas</span>
+                                                                </div>
+                                                                <div className="p-3">
+                                                                    <div className="overflow-x-auto">
+                                                                        <table className="w-full">
+                                                                            <thead>
+                                                                                <tr className="text-[9px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
+                                                                                    <th className="text-left py-2 px-2">#</th>
+                                                                                    <th className="text-left py-2 px-2">Pareja</th>
+                                                                                    <th className="text-center py-2 px-1">PJ</th>
+                                                                                    <th className="text-center py-2 px-1">PG</th>
+                                                                                    <th className="text-center py-2 px-1">Sets</th>
+                                                                                    <th className="text-center py-2 px-1">Pts</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody className="divide-y divide-white/5">
+                                                                                {(gTeams as any[]).sort((a, b) => b.points - a.points || b.setsWon - a.setsWon).map((team: any, idx: number) => (
+                                                                                    <tr key={team.id} className="text-white group hover:bg-white/[0.02] transition-colors">
+                                                                                        <td className="py-2.5 px-2">
+                                                                                            <span className={`w-4 h-4 flex items-center justify-center rounded-md text-[8px] font-black italic ${idx < 2 ? 'bg-padel-primary text-black' : 'bg-white/10 text-white/40'}`}>{idx + 1}</span>
+                                                                                        </td>
+                                                                                        <td className="py-2.5 px-2">
+                                                                                            <span className="text-[10px] font-black italic uppercase tracking-tighter group-hover:text-padel-primary transition-colors leading-tight block">
+                                                                                                {team.name.replace(/\s+y\s+/i, ' / ')}
+                                                                                            </span>
+                                                                                        </td>
+                                                                                        <td className="py-2.5 px-1 text-center text-[10px] font-bold text-gray-400">{team.played ?? team.matchesPlayed ?? 0}</td>
+                                                                                        <td className="py-2.5 px-1 text-center text-[10px] font-bold text-gray-400">{team.won ?? team.matchesWon ?? 0}</td>
+                                                                                        <td className="py-2.5 px-1 text-center text-[9px] font-bold text-gray-400">{team.setsWon}-{team.setsLost}</td>
+                                                                                        <td className="py-2.5 px-1 text-center text-[10px] font-black italic text-padel-primary">{team.points ?? (team.matchesWon * 3 + team.setsWon)}</td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* ── Indicadores de puntos ── */}
+                                            {availableGroups.length > 1 && (
+                                                <div className="flex justify-center gap-1.5 pt-1">
+                                                    {availableGroups.map((name) => (
+                                                        <button
+                                                            key={name}
+                                                            onClick={() => {
+                                                                setActiveGroup(name);
+                                                                const container = document.getElementById('groups-carousel');
+                                                                const idx = availableGroups.indexOf(name);
+                                                                if (container) container.scrollTo({ left: idx * container.offsetWidth, behavior: 'smooth' });
+                                                            }}
+                                                            className={`transition-all rounded-full ${(activeGroup || availableGroups[0]) === name
+                                                                ? 'w-6 h-1.5 bg-padel-primary'
+                                                                : 'w-1.5 h-1.5 bg-white/20'
+                                                                }`}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 })() : (() => {
@@ -1142,9 +1258,9 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                         {filteredMatches.map((match: any) => {
                                             if (!match || !match.team1 || !match.team2) return null;
 
-                                            const t1p1 = match.team1?.p1Name || (match.team1?.name || '').split('/')[0]?.trim() || 'Jugador 1';
+                                            const t1p1 = match.team1?.p1Name || (match.team1?.name || '').split('/')[0]?.trim();
                                             const t1p2 = match.team1?.p2Name || (match.team1?.name || '').split('/')[1]?.trim();
-                                            const t2p1 = match.team2?.p1Name || (match.team2?.name || '').split('/')[0]?.trim() || 'Jugador 3';
+                                            const t2p1 = match.team2?.p1Name || (match.team2?.name || '').split('/')[0]?.trim();
                                             const t2p2 = match.team2?.p2Name || (match.team2?.name || '').split('/')[1]?.trim();
 
                                             return (
@@ -1155,34 +1271,59 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                     exit={{ opacity: 0, scale: 0.95 }}
                                                     className={`w-full ${isLiveDashboard ? 'h-full flex flex-col' : ''}`}
                                                 >
-                                                    <div className={`bg-[#0a0a0a] rounded-[2rem] overflow-hidden border border-white/5 flex flex-col shadow-xl hover:border-white/10 transition-all ${isLiveDashboard ? 'h-full' : ''}`}>
+                                                    <div className={`bg-[#111111] rounded-[2rem] overflow-hidden border border-white/[0.12] flex flex-col shadow-2xl hover:border-white/25 transition-all ${isLiveDashboard ? 'h-full' : ''}`}>
 
-                                                        {/* ── Header: Pista + Hora ─────────────────────────── */}
-                                                        <div className="px-4 py-2.5 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${match.status === MatchStatus.LIVE ? 'bg-padel-primary animate-pulse shadow-[0_0_8px_#ccff00]' : match.status === MatchStatus.FINISHED ? 'bg-white/20' : 'bg-gray-600'}`} />
-                                                                <span className={`text-[10px] font-black uppercase tracking-widest italic ${match.status === MatchStatus.LIVE ? 'text-padel-primary' : 'text-gray-500'}`}>
-                                                                    Pista {match.court || '-'}
-                                                                </span>
-                                                                {(() => {
-                                                                    const raw = match.time || match.scheduledTime;
-                                                                    if (!raw) return null;
-                                                                    const d = raw?.toDate ? raw.toDate() : new Date(raw);
-                                                                    const hhmm = isNaN(d.getTime()) ? String(raw) : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
-                                                                    return (
-                                                                        <span className="text-[10px] font-bold text-gray-500 tracking-wider">
-                                                                            · {hhmm}
-                                                                        </span>
-                                                                    );
-                                                                })()}
+                                                        {/* ── Header: 2 líneas ─────────────────────────────── */}
+                                                        <div className="px-4 pt-2.5 pb-2 border-b border-white/[0.10] flex flex-col gap-1 bg-white/[0.07]">
+                                                            {/* Línea 1: Pista · Hora + estado/grupo */}
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${match.status === MatchStatus.LIVE ? 'bg-padel-primary animate-pulse shadow-[0_0_8px_#ccff00]' : match.status === MatchStatus.FINISHED ? 'bg-white/20' : 'bg-gray-600'}`} />
+                                                                    <span className={`text-[10px] font-black uppercase tracking-widest italic ${match.status === MatchStatus.LIVE ? 'text-padel-primary' : 'text-gray-500'}`}>
+                                                                        Pista {match.court || '-'}
+                                                                    </span>
+                                                                    {(() => {
+                                                                        const raw = match.time || match.scheduledTime;
+                                                                        if (!raw) return null;
+                                                                        const d = raw?.toDate ? raw.toDate() : new Date(raw);
+                                                                        const hhmm = isNaN(d.getTime()) ? String(raw) : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+                                                                        return (
+                                                                            <span className="text-[10px] font-bold text-gray-500 tracking-wider">· {hhmm}</span>
+                                                                        );
+                                                                    })()}
+                                                                </div>
+                                                                {/* Badge derecho: EN VIVO tiene prioridad, luego Finalizado, luego grupo pendiente */}
+                                                                {match.status === MatchStatus.LIVE ? (
+                                                                    <span className="text-[9px] font-black text-red-400 uppercase italic tracking-widest animate-pulse">● En Vivo</span>
+                                                                ) : match.status === MatchStatus.FINISHED ? (
+                                                                    <span className="text-[9px] font-black text-white/30 uppercase italic tracking-widest">Finalizado</span>
+                                                                ) : match.groupName ? (
+                                                                    <span className="text-[9px] font-black bg-white/10 text-gray-400 px-2 py-0.5 rounded-md italic uppercase border border-white/10">G{match.groupName}</span>
+                                                                ) : null}
                                                             </div>
-                                                            {match.groupName ? (
-                                                                <span className="text-[9px] font-black bg-padel-primary text-black px-2 py-0.5 rounded italic uppercase">G{match.groupName}</span>
-                                                            ) : match.status === MatchStatus.LIVE ? (
-                                                                <span className="text-[9px] font-black text-red-400 uppercase italic tracking-widest animate-pulse">● En Vivo</span>
-                                                            ) : match.status === MatchStatus.FINISHED ? (
-                                                                <span className="text-[9px] font-black text-white/20 uppercase italic tracking-widest">Finalizado</span>
-                                                            ) : null}
+                                                            {/* Línea 2: Chips categoría + género + badge de grupo si está activo */}
+                                                            {(tournament?.category || tournament?.gender || match.groupName) && (
+                                                                <div className="flex items-center gap-1.5">
+                                                                    {match.groupName && (
+                                                                        <span className="text-[8px] font-black bg-padel-primary text-black px-2 py-0.5 rounded italic uppercase tracking-wider">
+                                                                            Grupo {match.groupName}
+                                                                        </span>
+                                                                    )}
+                                                                    {tournament?.category && (
+                                                                        <span className="text-[8px] font-black uppercase tracking-widest text-gray-400 bg-white/[0.10] border border-white/[0.15] px-1.5 py-0.5 rounded">
+                                                                            {tournament.category.replace(/_/g, ' ')}
+                                                                        </span>
+                                                                    )}
+                                                                    {tournament?.gender && (
+                                                                        <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${tournament.gender === 'MALE' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' :
+                                                                            tournament.gender === 'FEMALE' ? 'text-pink-400 bg-pink-500/10 border-pink-500/20' :
+                                                                                'text-purple-400 bg-purple-500/10 border-purple-500/20'
+                                                                            }`}>
+                                                                            {tournament.gender === 'MALE' ? '♂ Masc' : tournament.gender === 'FEMALE' ? '♀ Fem' : '⚥ Mix'}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </div>
 
                                                         {/* ── Body: Pizarra tipo marcador ─────────────────── */}
@@ -1226,7 +1367,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                             return (
                                                                 <div className="flex flex-col">
                                                                     {/* Header columnas */}
-                                                                    <div className="flex h-6 border-b border-white/[0.06] bg-white/[0.01]">
+                                                                    <div className="flex h-6 border-b border-white/[0.12] bg-white/[0.05]">
                                                                         <div className="flex-1" />
                                                                         <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center`}>
                                                                             <span className="text-[8px] font-black uppercase tracking-widest text-white/25">P</span>
@@ -1245,26 +1386,32 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                     </div>
 
                                                                     {/* Team 1 */}
-                                                                    <div className={`flex ${ROW_H} items-stretch border-b border-white/[0.06]`}>
+                                                                    <div className={`flex ${ROW_H} items-stretch border-b border-white/[0.12]`}>
                                                                         {/* Nombres */}
-                                                                        <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
-                                                                            <div className="w-3 flex-shrink-0 flex items-center justify-center">
-                                                                                {isT1Serving && <ServingBall />}
-                                                                            </div>
-                                                                            <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-                                                                                <span className={`text-[11px] font-black italic uppercase tracking-tight leading-none truncate ${isT1Serving ? 'text-white' : 'text-white/65'}`}>
-                                                                                    {fmt(t1p1)}
-                                                                                </span>
-                                                                                {t1p2 && (
-                                                                                    <>
-                                                                                        <span className="text-white/20 text-xs flex-shrink-0">·</span>
-                                                                                        <span className={`text-[11px] font-black italic uppercase tracking-tight leading-none truncate ${isT1Serving ? 'text-white/70' : 'text-white/40'}`}>
-                                                                                            {fmt(t1p2)}
+                                                                        {(() => {
+                                                                            const t1total = (fmt(t1p1) + (t1p2 ? fmt(t1p2) : '')).length;
+                                                                            const fs1 = t1total <= 8 ? '14px' : t1total <= 13 ? '12px' : t1total <= 18 ? '10px' : t1total <= 24 ? '9px' : '8px';
+                                                                            return (
+                                                                                <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
+                                                                                    <div className="w-3 flex-shrink-0 flex items-center justify-center">
+                                                                                        {isT1Serving && <ServingBall />}
+                                                                                    </div>
+                                                                                    <div className="flex items-center gap-1 min-w-0 overflow-hidden flex-wrap">
+                                                                                        <span style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white' : 'text-white/65'}`}>
+                                                                                            {fmt(t1p1)}
                                                                                         </span>
-                                                                                    </>
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
+                                                                                        {t1p2 && (
+                                                                                            <>
+                                                                                                <span className="text-white/20 text-xs flex-shrink-0">·</span>
+                                                                                                <span style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white/70' : 'text-white/40'}`}>
+                                                                                                    {fmt(t1p2)}
+                                                                                                </span>
+                                                                                            </>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                            );
+                                                                        })()}
                                                                         {/* G — puntos */}
                                                                         <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
                                                                             <span className={`font-black italic text-[15px] text-white ${!isActive ? 'opacity-20' : ''}`}>
@@ -1295,24 +1442,30 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                     {/* Team 2 */}
                                                                     <div className={`flex ${ROW_H} items-stretch`}>
                                                                         {/* Nombres */}
-                                                                        <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
-                                                                            <div className="w-3 flex-shrink-0 flex items-center justify-center">
-                                                                                {isT2Serving && <ServingBall />}
-                                                                            </div>
-                                                                            <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-                                                                                <span className={`text-[11px] font-black italic uppercase tracking-tight leading-none truncate ${isT2Serving ? 'text-white' : 'text-white/65'}`}>
-                                                                                    {fmt(t2p1)}
-                                                                                </span>
-                                                                                {t2p2 && (
-                                                                                    <>
-                                                                                        <span className="text-white/20 text-xs flex-shrink-0">·</span>
-                                                                                        <span className={`text-[11px] font-black italic uppercase tracking-tight leading-none truncate ${isT2Serving ? 'text-white/70' : 'text-white/40'}`}>
-                                                                                            {fmt(t2p2)}
+                                                                        {(() => {
+                                                                            const t2total = (fmt(t2p1) + (t2p2 ? fmt(t2p2) : '')).length;
+                                                                            const fs2 = t2total <= 8 ? '14px' : t2total <= 13 ? '12px' : t2total <= 18 ? '10px' : t2total <= 24 ? '9px' : '8px';
+                                                                            return (
+                                                                                <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
+                                                                                    <div className="w-3 flex-shrink-0 flex items-center justify-center">
+                                                                                        {isT2Serving && <ServingBall />}
+                                                                                    </div>
+                                                                                    <div className="flex items-center gap-1 min-w-0 overflow-hidden flex-wrap">
+                                                                                        <span style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white' : 'text-white/65'}`}>
+                                                                                            {fmt(t2p1)}
                                                                                         </span>
-                                                                                    </>
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
+                                                                                        {t2p2 && (
+                                                                                            <>
+                                                                                                <span className="text-white/20 text-xs flex-shrink-0">·</span>
+                                                                                                <span style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white/70' : 'text-white/40'}`}>
+                                                                                                    {fmt(t2p2)}
+                                                                                                </span>
+                                                                                            </>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                            );
+                                                                        })()}
                                                                         {/* G */}
                                                                         <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
                                                                             <span className={`font-black italic text-[15px] text-white ${!isActive ? 'opacity-20' : ''}`}>
@@ -1343,48 +1496,22 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                             );
                                                         })()}
 
-                                                        {/* ── Footer Actions ────────────────────────────────── */}
-                                                        <div className="px-3 py-3 bg-white/[0.01] border-t border-white/5 flex gap-2">
-                                                            {match.status === MatchStatus.LIVE && activeTab !== 'Todos' && (
-                                                                <>
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            const url = `${window.location.origin}/tournaments/${id}/stream/${match.id}`;
-                                                                            navigator.clipboard.writeText(url);
-                                                                            alert('Link de Streamer (OBS) copiado al portapapeles');
-                                                                        }}
-                                                                        className="w-12 py-3 bg-white/5 hover:bg-white/10 text-[#ccff00] rounded-xl flex items-center justify-center transition-all"
-                                                                        title="Copiar URL para OBS/Stream"
-                                                                    >
-                                                                        <Tv className="w-4 h-4" />
-                                                                    </button>
-                                                                    <button onClick={() => finishMatch(match.id)} className="flex-[1.5] py-3 bg-padel-primary text-black text-[9px] font-black uppercase rounded-xl italic hover:scale-[1.02] shadow-[0_5px_15px_rgba(204,255,0,0.2)] transition-all">Confirmar</button>
-                                                                </>
-                                                            )}
-                                                            {match.status === MatchStatus.FINISHED && (
-                                                                <>
-                                                                    <button onClick={() => { setSelectedMatch(match); setIsScoreModalOpen(true); }} className="flex-1 py-3 bg-white/5 text-[9px] font-black uppercase rounded-xl italic opacity-50 hover:opacity-100 transition-all">Corregir</button>
-                                                                    <div className="flex-[1.5] py-3 bg-white/[0.05] text-[9px] font-black uppercase rounded-xl text-center italic text-padel-primary">{(match.sets?.t1 || 0)}-{(match.sets?.t2 || 0)} Final</div>
-                                                                </>
-                                                            )}
-                                                        </div>
-
-                                                        {/* ── Mini-Dock (Admin/Marker only) ─────────────────── */}
-                                                        {canManageMatches && match.status !== MatchStatus.FINISHED && (
-                                                            <div className="grid grid-cols-4 gap-px bg-white/[0.03] border-t border-white/[0.04]">
+                                                        {/* Mini-Dock — visible en "Por Comenzar" para acceso rápido */}
+                                                        {canManageMatches && (activeTab === 'Por Comenzar' || activeTab === 'En Vivo') && match.status !== MatchStatus.FINISHED && (
+                                                            <div className="grid grid-cols-4 gap-1.5 px-3 py-2.5 bg-black/40 border-t border-white/[0.08]">
                                                                 {/* CONTROL */}
                                                                 <Link
                                                                     href={`/tournaments/${id}/score/${match.id}`}
-                                                                    className={`flex flex-col items-center justify-center gap-1 py-2.5 transition-all active:scale-95
+                                                                    className={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl transition-all active:scale-95 border
                                                                         ${match.status === MatchStatus.LIVE
-                                                                            ? 'bg-padel-primary/10 text-padel-primary hover:bg-padel-primary/20'
-                                                                            : 'bg-transparent text-gray-500 hover:bg-white/[0.04] hover:text-white'
+                                                                            ? 'bg-padel-primary/15 text-padel-primary border-padel-primary/40 shadow-[0_0_12px_rgba(204,255,0,0.15)]'
+                                                                            : 'bg-white/[0.06] text-gray-400 hover:bg-padel-primary/10 hover:text-padel-primary border-white/10 hover:border-padel-primary/30'
                                                                         }`}
                                                                 >
                                                                     <div className="relative">
-                                                                        <Zap className="w-3.5 h-3.5" />
+                                                                        <Zap className="w-4 h-4" />
                                                                         {match.status === MatchStatus.LIVE && (
-                                                                            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_5px_red]" />
+                                                                            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shadow-[0_0_5px_#4ade80]" />
                                                                         )}
                                                                     </div>
                                                                     <span className="text-[7px] font-black uppercase tracking-widest">Control</span>
@@ -1394,18 +1521,18 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                 <Link
                                                                     href={`/tournaments/${id}/display/${match.id}`}
                                                                     target="_blank"
-                                                                    className="flex flex-col items-center justify-center gap-1 py-2.5 bg-transparent text-gray-500 hover:bg-white/[0.04] hover:text-white transition-all active:scale-95"
+                                                                    className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl bg-white/[0.06] text-gray-400 hover:bg-blue-500/10 hover:text-blue-400 transition-all active:scale-95 border border-white/10 hover:border-blue-400/30"
                                                                 >
-                                                                    <Monitor className="w-3.5 h-3.5" />
+                                                                    <Monitor className="w-4 h-4" />
                                                                     <span className="text-[7px] font-black uppercase tracking-widest">Pizarra</span>
                                                                 </Link>
 
                                                                 {/* CÁMARA */}
                                                                 <Link
                                                                     href={`/tournaments/${id}/control/broadcasting`}
-                                                                    className="flex flex-col items-center justify-center gap-1 py-2.5 bg-transparent text-gray-500 hover:bg-white/[0.04] hover:text-orange-400 transition-all active:scale-95"
+                                                                    className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl bg-white/[0.06] text-gray-400 hover:bg-orange-500/10 hover:text-orange-400 transition-all active:scale-95 border border-white/10 hover:border-orange-400/30"
                                                                 >
-                                                                    <Camera className="w-3.5 h-3.5" />
+                                                                    <Camera className="w-4 h-4" />
                                                                     <span className="text-[7px] font-black uppercase tracking-widest">Cámara</span>
                                                                 </Link>
 
@@ -1418,14 +1545,14 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                             await updateDoc(doc(db, 'tournaments', id), { matches: stripMatches(updated), updatedAt: new Date() });
                                                                         } catch (e) { console.error(e); }
                                                                     }}
-                                                                    className={`flex flex-col items-center justify-center gap-1 py-2.5 transition-all active:scale-95
+                                                                    className={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl transition-all active:scale-95 border
                                                                         ${match.isStreaming
-                                                                            ? 'bg-red-500/10 text-red-400'
-                                                                            : 'bg-transparent text-gray-500 hover:bg-white/[0.04] hover:text-red-400'
+                                                                            ? 'bg-red-500/15 text-red-400 border-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.15)]'
+                                                                            : 'bg-white/[0.06] text-gray-400 hover:bg-red-500/10 hover:text-red-400 border-white/10 hover:border-red-400/30'
                                                                         }`}
                                                                 >
                                                                     <div className="relative">
-                                                                        <Radio className="w-3.5 h-3.5" />
+                                                                        <Radio className="w-4 h-4" />
                                                                         {match.isStreaming && (
                                                                             <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_5px_red]" />
                                                                         )}

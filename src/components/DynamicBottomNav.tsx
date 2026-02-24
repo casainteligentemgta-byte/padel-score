@@ -27,9 +27,11 @@ export function DynamicBottomNav() {
     const pathname = usePathname();
     const router = useRouter();
 
-    // No mostrar en páginas de display/pizarra ni en login
-    const hiddenPaths = ['/login', '/display', '/display/court'];
-    if (hiddenPaths.some(p => pathname.startsWith(p))) return null;
+    // No mostrar en páginas de display/pizarra, login ni dentro de un torneo específico
+    const hiddenPaths = ['/login', '/display', '/score'];
+    // Ocultar en rutas de torneo individual /tournaments/[id]/... pero NO en /tournaments (listado)
+    const isTournamentDetail = /^\/tournaments\/[^/]+/.test(pathname);
+    if (hiddenPaths.some(p => pathname.includes(p)) || isTournamentDetail) return null;
     if (!user) return null;
 
     // ── Determinar menú según rol ─────────────────────────────────────────

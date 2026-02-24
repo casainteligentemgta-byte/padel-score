@@ -141,7 +141,7 @@ function MiniDock({
 
 // ── Match Card for Control Panel ───────────────────────────────────────────
 function ControlMatchCard({
-    match, tournamentId, canOperate, onStartMatch, onFinishMatch, onToggleStream, isUpdating
+    match, tournamentId, canOperate, onStartMatch, onFinishMatch, onToggleStream, onRevertMatch, isUpdating
 }: {
     match: EnrichedMatch;
     tournamentId: string;
@@ -149,6 +149,7 @@ function ControlMatchCard({
     onStartMatch: (id: string) => void;
     onFinishMatch: (id: string) => void;
     onToggleStream: (id: string, val: boolean) => void;
+    onRevertMatch: (id: string) => void;
     isUpdating: boolean;
 }) {
     const isLive = match.status === MatchStatus.LIVE;
@@ -289,6 +290,13 @@ function ControlMatchCard({
                         → Marcador
                     </Link>
                     <button
+                        onClick={() => onRevertMatch(match.id)}
+                        className="flex-1 py-2 text-center text-[8px] font-black uppercase tracking-widest text-yellow-500/80 hover:bg-yellow-500/10 transition-all border-l border-white/[0.04]"
+                        title="Revertir a Pendiente"
+                    >
+                        ↩ Revertir
+                    </button>
+                    <button
                         onClick={() => onFinishMatch(match.id)}
                         className="flex-1 py-2 text-center text-[8px] font-black uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-all border-l border-white/[0.04]"
                     >
@@ -314,11 +322,12 @@ function ControlMatchCard({
 // ── Phase Section ──────────────────────────────────────────────────────────
 function PhaseSection({
     title, matches, tournamentId, canOperate,
-    onStartMatch, onFinishMatch, onToggleStream, updatingId, isCollapsible, defaultOpen
+    onStartMatch, onFinishMatch, onToggleStream, onRevertMatch, updatingId, isCollapsible, defaultOpen
 }: {
     title: string; matches: EnrichedMatch[]; tournamentId: string;
     canOperate: boolean; onStartMatch: (id: string) => void;
     onFinishMatch: (id: string) => void; onToggleStream: (id: string, val: boolean) => void;
+    onRevertMatch: (id: string) => void;
     updatingId: string | null; isCollapsible?: boolean; defaultOpen?: boolean;
 }) {
     const [open, setOpen] = useState(defaultOpen ?? true);
@@ -356,6 +365,7 @@ function PhaseSection({
                                         onStartMatch={onStartMatch}
                                         onFinishMatch={onFinishMatch}
                                         onToggleStream={onToggleStream}
+                                        onRevertMatch={onRevertMatch}
                                         isUpdating={updatingId === m.id}
                                     />
                                 ))}
@@ -402,7 +412,9 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                     const t2 = m.team2Index > 0 ? data.teams?.[m.team2Index - 1] : null;
                     const pname = (p: any, idx: number, slot: 1 | 2) => {
                         if (idx <= 0) return 'Por definir';
-                        return p?.name?.trim() || `Jugador ${slot}`;
+                        // Sequential unique numbering: team 1 → J1/J2, team 2 → J3/J4, etc.
+                        const num = (idx * 2) - (slot === 1 ? 1 : 0);
+                        return p?.name?.trim() || `Jugador ${num}`;
                     };
                     return {
                         ...m,
@@ -453,6 +465,28 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
         setUpdatingId(matchId);
         try {
             const updated = matches.map(m => m.id === matchId ? { ...m, isStreaming: val } : m);
+            await updateDoc(doc(db, 'tournaments', id), { matches: stripMatches(updated), updatedAt: new Date() });
+        } catch (e) { console.error(e); }
+        finally { setUpdatingId(null); }
+    };
+
+    const revertToPending = async (matchId: string) => {
+        if (!confirm('¿Revertir este partido a Pendiente? Se borrará el marcador actual.')) return;
+        setUpdatingId(matchId);
+        try {
+            const updated = matches.map(m => {
+                if (m.id !== matchId) return m;
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { actualStartTime, startedAt, actualEndTime, isStreaming, ...rest } = m as any;
+                return {
+                    ...rest,
+                    status: MatchStatus.PENDING,
+                    score: '0-0',
+                    sets: { t1: 0, t2: 0 },
+                    games: { t1: 0, t2: 0 },
+                    points: { t1: '0', t2: '0' },
+                };
+            });
             await updateDoc(doc(db, 'tournaments', id), { matches: stripMatches(updated), updatedAt: new Date() });
         } catch (e) { console.error(e); }
         finally { setUpdatingId(null); }
@@ -642,6 +676,7 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                                         onStartMatch={startMatch}
                                         onFinishMatch={finishMatch}
                                         onToggleStream={toggleStream}
+                                        onRevertMatch={revertToPending}
                                         updatingId={updatingId}
                                         defaultOpen={true}
                                     />
@@ -656,6 +691,7 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                                     onStartMatch={startMatch}
                                     onFinishMatch={finishMatch}
                                     onToggleStream={toggleStream}
+                                    onRevertMatch={revertToPending}
                                     updatingId={updatingId}
                                     defaultOpen={true}
                                 />
@@ -686,6 +722,7 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                                         onStartMatch={startMatch}
                                         onFinishMatch={finishMatch}
                                         onToggleStream={toggleStream}
+                                        onRevertMatch={revertToPending}
                                         updatingId={updatingId}
                                         isCollapsible={true}
                                         defaultOpen={true}
@@ -711,6 +748,7 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                                         onStartMatch={startMatch}
                                         onFinishMatch={finishMatch}
                                         onToggleStream={toggleStream}
+                                        onRevertMatch={revertToPending}
                                         updatingId={updatingId}
                                         isCollapsible={true}
                                         defaultOpen={true}

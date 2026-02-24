@@ -9,15 +9,17 @@ import {
     activarCancha,
     desactivarCancha,
     actualizarMarcador,
+    setModoPuntos,
 } from '@/lib/rtdbService';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Crosshair, Wifi, WifiOff, ChevronUp, ChevronDown,
-    Play, Square, RefreshCw, Shield, Trophy, Zap
+    Play, Square, RefreshCw, Shield, Trophy, Zap, Star
 } from 'lucide-react';
 
-const PUNTOS_SECUENCIA = ['0', '15', '30', '40', 'AD'];
+const PUNTOS_NORMAL = ['0', '15', '30', '40', 'AD'];
+const PUNTOS_TB = Array.from({ length: 21 }, (_, i) => String(i)); // 0..20 (más que suficiente)
 const NUM_CANCHAS = 6;
 
 export default function MarkerControlPage({ params }: { params: Promise<{ canchaId: string }> }) {
@@ -100,14 +102,15 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
         if (!marcador) return;
         const puntosActual = marcador.puntos;
         const actual = puntosActual[equipo];
-        const rival = equipo === 'local' ? puntosActual.visitante : puntosActual.local;
+        const modo = marcador.modo_puntos || 'normal';
+        const secuencia = modo === 'normal' ? PUNTOS_NORMAL : PUNTOS_TB;
 
-        const idx = PUNTOS_SECUENCIA.indexOf(actual);
-        let newIdx = Math.max(0, Math.min(PUNTOS_SECUENCIA.length - 1, idx + delta));
-        const nuevoValor = PUNTOS_SECUENCIA[newIdx];
+        const idx = secuencia.indexOf(actual);
+        const baseIdx = idx === -1 ? 0 : idx;
+        const newIdx = Math.max(0, Math.min(secuencia.length - 1, baseIdx + delta));
 
         await actualizarMarcador(canchaId, {
-            puntos: { ...puntosActual, [equipo]: nuevoValor },
+            puntos: { ...puntosActual, [equipo]: secuencia[newIdx] },
         });
     };
 
@@ -274,7 +277,7 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
 
                         {/* Puntos */}
                         <ScoreRow
-                            label="PUNTOS"
+                            label={`PUNTOS${marcador.modo_puntos === 'tiebreak' ? ' — TIEBREAK' : marcador.modo_puntos === 'super_tiebreak' ? ' — SUPER TB' : ''}`}
                             localVal={marcador.puntos.local}
                             visitanteVal={marcador.puntos.visitante}
                             onUpLocal={() => cambiarPunto('local', 1)}
@@ -282,6 +285,36 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
                             onUpVisitante={() => cambiarPunto('visitante', 1)}
                             onDownVisitante={() => cambiarPunto('visitante', -1)}
                         />
+
+                        {/* Modo de puntos: Tiebreak / Super Tiebreak */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                onClick={() => setModoPuntos(
+                                    canchaId,
+                                    marcador.modo_puntos === 'tiebreak' ? 'normal' : 'tiebreak'
+                                )}
+                                className={`py-3 rounded-2xl font-black uppercase italic tracking-widest text-[10px] flex items-center justify-center gap-2 transition-all border-2 ${marcador.modo_puntos === 'tiebreak'
+                                    ? 'bg-orange-500/15 border-orange-500/50 text-orange-400'
+                                    : 'bg-white/5 border-white/10 text-gray-500 hover:border-orange-500/30 hover:text-orange-400'
+                                    }`}
+                            >
+                                <Trophy className="w-3.5 h-3.5" />
+                                {marcador.modo_puntos === 'tiebreak' ? 'TB ACTIVO' : 'Tiebreak'}
+                            </button>
+                            <button
+                                onClick={() => setModoPuntos(
+                                    canchaId,
+                                    marcador.modo_puntos === 'super_tiebreak' ? 'normal' : 'super_tiebreak'
+                                )}
+                                className={`py-3 rounded-2xl font-black uppercase italic tracking-widest text-[10px] flex items-center justify-center gap-2 transition-all border-2 ${marcador.modo_puntos === 'super_tiebreak'
+                                    ? 'bg-purple-500/15 border-purple-500/50 text-purple-400'
+                                    : 'bg-white/5 border-white/10 text-gray-500 hover:border-purple-500/30 hover:text-purple-400'
+                                    }`}
+                            >
+                                <Star className="w-3.5 h-3.5" />
+                                {marcador.modo_puntos === 'super_tiebreak' ? 'SUPER TB ACTIVO' : 'Super TB'}
+                            </button>
+                        </div>
 
                         {/* Golden Point */}
                         <button

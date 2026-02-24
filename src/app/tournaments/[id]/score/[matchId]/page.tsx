@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     ChevronLeft,
@@ -41,16 +41,61 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     const [isMedicalTimeout, setIsMedicalTimeout] = useState(false);
     const [medicalTimeRemaining, setMedicalTimeRemaining] = useState(180); // 3 minutes
 
-    // Timer logic
+    // ── Timer robusto ────────────────────────────────────────────────────────
+    // Usamos refs para que el intervalo no se destruya en cada snapshot de Firestore.
+    // El reloj corre sin pausa desde startMatch() hasta que el último punto es anotado.
+    const timerRef = useRef<any>(null);
+    const prevStatusRef = useRef<string>('');
+
     useEffect(() => {
-        let interval: any;
-        if (match?.status === MatchStatus.LIVE) {
-            interval = setInterval(() => {
-                setDuration(prev => prev + 1);
-            }, 1000);
+        if (!match) return;
+
+        const status = match.status as string;
+
+        // Partido FINALIZADO: detener reloj y fijar duración total
+        if (status === MatchStatus.FINISHED) {
+            if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+            if (match.startedAt && match.finishedAt) {
+                const total = Math.floor((new Date(match.finishedAt).getTime() - new Date(match.startedAt).getTime()) / 1000);
+                setDuration(total);
+            }
+            prevStatusRef.current = status;
+            return;
         }
-        return () => clearInterval(interval);
-    }, [match?.status]);
+
+        // Partido LIVE: arrancar el reloj solo si no estaba ya corriendo
+        if (status === MatchStatus.LIVE) {
+            if (!timerRef.current) {
+                // Sincronizar desde startedAt por si venimos de una recarga
+                if (match.startedAt) {
+                    const elapsed = Math.floor((Date.now() - new Date(match.startedAt).getTime()) / 1000);
+                    setDuration(elapsed);
+                }
+                timerRef.current = setInterval(() => {
+                    setDuration(prev => prev + 1);
+                }, 1000);
+            }
+            prevStatusRef.current = status;
+            return;
+        }
+
+        // Cualquier otro estado (PENDING, etc.): detener si estaba corriendo
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        prevStatusRef.current = status;
+
+        return () => {
+            if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        };
+        // Solo re-ejecutar cuando el status o el startedAt cambian (no en cada snapshot de puntos)
+    }, [match?.status, match?.startedAt, match?.finishedAt]);
+
+    const startMatch = async () => {
+        if (!tournament || !match) return;
+        const updatedMatches = tournament.matches.map((m: any) =>
+            m.id === matchId ? { ...m, status: MatchStatus.LIVE, startedAt: new Date().toISOString() } : m
+        );
+        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+    };
 
     // Medical Timer logic
     useEffect(() => {
@@ -89,10 +134,17 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
                         const getPlayerNames = (team: any, idx: number) => {
                             if (idx <= 0) return { p1: 'Por definir', p2: 'Por definir', full: 'Por definir' };
+                            // Assign sequential unique player numbers: team 1 → J1/J2, team 2 → J3/J4, etc.
+                            const p1Num = (idx * 2) - 1;
+                            const p2Num = (idx * 2);
+                            const p1Name = team?.p1?.name?.trim() || `Jugador ${p1Num}`;
+                            const p2Name = team?.p2?.name?.trim() || `Jugador ${p2Num}`;
+                            const p1Short = team?.p1?.name?.trim() || `J${p1Num}`;
+                            const p2Short = team?.p2?.name?.trim() || `J${p2Num}`;
                             return {
-                                p1: team?.p1?.name || 'Jugador 1',
-                                p2: team?.p2?.name || 'Jugador 2',
-                                full: `${team?.p1?.name || 'J1'} / ${team?.p2?.name || 'J2'}`
+                                p1: p1Name,
+                                p2: p2Name,
+                                full: `${p1Short} / ${p2Short}`
                             };
                         };
 
@@ -195,16 +247,25 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         let newGames = { t1: match.games?.t1 || 0, t2: match.games?.t2 || 0 };
         newGames[side]++;
 
-        // Auto-switch server on game win
+        // ── Rotación de sacador (regla pádel) ────────────────────────────
+        // Tras cada game, saca SIEMPRE el equipo contrario.
+        // Dentro del equipo, los jugadores alternan: P1 la 1ª vez, P2 la 2ª, etc.
+        // Se calcula por el total de games jugados hasta ahora (antes de resetear).
+        const totalGamesPlayed = (match.games?.t1 || 0) + (match.games?.t2 || 0); // games disputados en el set actual antes de este punto
         const currentServer = match.server || { team: 1, player: 1 };
-        let nextServer = { ...currentServer };
-        if (currentServer.player === 1) nextServer.player = 2;
-        else {
-            nextServer.player = 1;
-            nextServer.team = currentServer.team === 1 ? 2 : 1;
-        }
+        const nextTeam = currentServer.team === 1 ? 2 : 1;
+        // Cuántas veces le ha tocado servir al nextTeam: cada dos games cambia de equipo,
+        // así que el jugador alterna en cada turno de ese equipo.
+        // Contamos cuántos turnos de saque ha tenido el nextTeam hasta ahora.
+        // Turno global = totalGamesPlayed (0-indexed). Si es par → equipo inicial saca, impar → otro.
+        // El jugador dentro del equipo alterna cada turno que le toca a ese equipo.
+        const nextTeamServeCount = Math.floor((totalGamesPlayed + 1) / 2); // turnos que le tocan al nextTeam desde inicio
+        const nextPlayer: 1 | 2 = (nextTeamServeCount % 2 === 0) ? 1 : 2;
+        const nextServer = { team: nextTeam as 1 | 2, player: nextPlayer };
+        // ─────────────────────────────────────────────────────────────────
 
         if (newGames[side] >= 6) {
+
             let newSets = { t1: match.sets?.t1 || 0, t2: match.sets?.t2 || 0 };
             newSets[side]++;
 
@@ -228,6 +289,37 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                 } : m
             );
             await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+        }
+    };
+
+    // ── Lógica de selección de sacador ───────────────────────────────────
+    // Un estado local para detectar doble-click rápido
+    const lastClickRef = { team: 0, player: 0, ts: 0 };
+    const DOUBLE_CLICK_MS = 350;
+
+    const setSpecificServer = async (team: number, player: number) => {
+        if (!tournament || !match) return;
+        const updatedMatches = tournament.matches.map((m: any) =>
+            m.id === matchId ? { ...m, server: { team, player } } : m
+        );
+        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+    };
+
+    const handlePlayerIconClick = async (team: number, player: number) => {
+        const now = Date.now();
+        const isSamePlayer = lastClickRef.team === team && lastClickRef.player === player;
+        const isDoubleClick = isSamePlayer && (now - lastClickRef.ts) < DOUBLE_CLICK_MS;
+
+        lastClickRef.team = team;
+        lastClickRef.player = player;
+        lastClickRef.ts = now;
+
+        if (isDoubleClick) {
+            // Doble click: revertir (undo del servidor)
+            await undoPoint();
+        } else {
+            // Single click: asignar este jugador como sacador
+            await setSpecificServer(team, player);
         }
     };
 
@@ -298,14 +390,39 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     const server = match.server || { team: 1, player: 1 };
 
     return (
-        <div className="fixed inset-0 bg-[#0a0a0a] text-white flex flex-col font-sans select-none overflow-hidden touch-none p-6">
+        <div className="fixed inset-0 bg-[#0a0a0a] text-white flex flex-col font-sans select-none overflow-hidden touch-none p-3">
             {/* Top Bar */}
-            <header className="flex items-center justify-between mb-8 px-4">
-                <div className="flex gap-10">
-                    <div className="flex flex-col">
+            <header className="flex items-center justify-between mb-2 px-1">
+                {/* ── Izquierda: Atrás + Reloj/Iniciar + Temperatura ── */}
+                <div className="flex items-center gap-6">
+                    {/* Botón Atrás */}
+                    <button
+                        onClick={() => router.push(`/tournaments/${id}`)}
+                        className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all active:scale-95"
+                        title="Volver al torneo"
+                    >
+                        <ChevronLeft className="w-5 h-5 text-gray-400" />
+                    </button>
+
+                    {/* Reloj + Botón Iniciar */}
+                    <div className="flex flex-col gap-1">
                         <span className="text-[10px] font-black italic text-gray-500 tracking-widest uppercase">Duración</span>
-                        <span className="text-3xl font-black italic text-padel-primary tracking-tighter">{formatDuration(duration)}</span>
+                        {match.status === MatchStatus.FINISHED ? (
+                            <span className="text-3xl font-black italic text-white/40 tracking-tighter">{formatDuration(duration)}</span>
+                        ) : match.status === MatchStatus.LIVE ? (
+                            <span className="text-3xl font-black italic text-padel-primary tracking-tighter tabular-nums">{formatDuration(duration)}</span>
+                        ) : (
+                            /* Estado PENDING: botón de inicio */
+                            <button
+                                onClick={startMatch}
+                                className="flex items-center gap-2 px-4 py-2 bg-padel-primary text-black text-[10px] font-black italic uppercase tracking-widest rounded-xl hover:scale-105 active:scale-95 transition-all shadow-[0_5px_20px_rgba(204,255,0,0.35)]"
+                            >
+                                <Timer className="w-3.5 h-3.5" />
+                                Iniciar Partido
+                            </button>
+                        )}
                     </div>
+
                     <div className="flex flex-col">
                         <span className="text-[10px] font-black italic text-gray-500 tracking-widest uppercase">Temperatura</span>
                         <span className="text-3xl font-black italic text-white tracking-tighter">28°C</span>
@@ -336,23 +453,25 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
                 <div className="flex flex-col items-end">
                     <span className="text-[10px] font-black italic text-gray-500 tracking-widest uppercase">Pista Central</span>
-                    <span className="text-xl font-black italic text-white uppercase tracking-tighter">Finales - Open</span>
+                    <span className="text-xl font-black italic text-white uppercase tracking-tighter">
+                        {[match.roundName || match.groupName, tournament?.category].filter(Boolean).join(' · ') || 'Partido'}
+                    </span>
                 </div>
             </header>
 
             {/* Main Content: Two Teams */}
-            <main className="flex-1 flex gap-6 px-2">
+            <main className="flex-1 flex gap-3 px-1">
                 {/* Team 1 Card */}
-                <div className="flex-1 bg-[#141414] border border-white/5 rounded-[3rem] p-10 flex flex-col items-center relative overflow-hidden group">
+                <div className="flex-1 bg-[#141414] border border-white/5 rounded-[2rem] p-4 flex flex-col items-center relative overflow-hidden group">
                     <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/5 to-transparent opacity-50" />
 
                     {/* Players Header */}
-                    <div className="flex justify-center gap-16 mb-8 relative z-10">
+                    <div className="flex justify-center gap-5 mb-3 relative z-10">
                         {/* Player 1 */}
                         <div className="flex flex-col items-center gap-4">
                             <div
-                                onClick={toggleServingTeam}
-                                className={`relative w-28 h-28 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 1 && server.player === 1 ? 'border-padel-primary scale-110 shadow-[0_0_40px_rgba(204,255,0,0.4)] z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
+                                onClick={() => handlePlayerIconClick(1, 1)}
+                                className={`relative w-16 h-16 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 1 && server.player === 1 ? 'border-padel-primary scale-110 shadow-[0_0_20px_rgba(204,255,0,0.4)] z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
                             >
                                 <div className="w-full h-full rounded-full overflow-hidden">
                                     <img src={match.team1.p1Photo || `https://ui-avatars.com/api/?name=${match.team1.p1}&background=222&color=fff`} className="w-full h-full object-cover" />
@@ -371,19 +490,14 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                     </>
                                 )}
                             </div>
-                            <div className="text-center">
-                                <span className="block text-sm font-black italic uppercase tracking-tighter">{match.team1.p1}</span>
-                                {server.team === 1 && server.player === 1 && (
-                                    <span className="text-[9px] font-black italic text-padel-primary uppercase tracking-[0.2em] mt-1 block">Saca</span>
-                                )}
-                            </div>
+                            <span className="block text-sm font-black italic uppercase tracking-tighter text-center">{match.team1.p1}</span>
                         </div>
 
                         {/* Player 2 */}
                         <div className="flex flex-col items-center gap-4">
                             <div
-                                onClick={toggleServingTeam}
-                                className={`relative w-28 h-28 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 1 && server.player === 2 ? 'scale-110 z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
+                                onClick={() => handlePlayerIconClick(1, 2)}
+                                className={`relative w-16 h-16 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 1 && server.player === 2 ? 'scale-110 z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
                                 style={server.team === 1 && server.player === 2 ? { borderColor: primaryColor, boxShadow: `0 0 40px ${primaryColor}66` } : {}}
                             >
                                 <div className="w-full h-full rounded-full overflow-hidden">
@@ -404,17 +518,12 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                     </>
                                 )}
                             </div>
-                            <div className="text-center">
-                                <span className="block text-sm font-black italic uppercase tracking-tighter">{match.team1.p2}</span>
-                                {server.team === 1 && server.player === 2 && (
-                                    <span className="text-[9px] font-black italic uppercase tracking-[0.2em] mt-1 block" style={{ color: primaryColor }}>Saca</span>
-                                )}
-                            </div>
+                            <span className="block text-sm font-black italic uppercase tracking-tighter text-center">{match.team1.p2}</span>
                         </div>
                     </div>
 
                     {/* Sets Progression */}
-                    <div className="flex gap-4 mb-12 relative z-10">
+                    <div className="flex gap-2 mb-3 relative z-10">
                         {[1, 2, 3].map(setNum => {
                             const currentSet = (match.sets?.t1 || 0) + (match.sets?.t2 || 0) + 1;
                             const isCurrent = setNum === currentSet;
@@ -422,7 +531,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                 <div key={setNum} className="flex flex-col items-center gap-2">
                                     <span className="text-[8px] font-black italic text-gray-500 uppercase tracking-widest">Set {setNum}</span>
                                     <div
-                                        className={`w-12 h-12 rounded-xl border flex items-center justify-center text-xl font-black italic transition-all duration-500 ${isCurrent ? 'text-black scale-110 shadow-lg' : 'bg-white/5 border-white/5 text-gray-500'}`}
+                                        className={`w-7 h-7 rounded-md border flex items-center justify-center text-sm font-black italic transition-all duration-500 ${isCurrent ? 'text-black scale-110 shadow-lg' : 'bg-white/5 border-white/5 text-gray-500'}`}
                                         style={isCurrent ? { backgroundColor: primaryColor, borderColor: primaryColor } : {}}
                                     >
                                         {setNum < currentSet ? match.games?.t1 : isCurrent ? match.games?.t1 : '-'}
@@ -433,11 +542,11 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     </div>
 
                     {/* Points Interaction */}
-                    <div className="flex-1 flex items-center justify-center w-full relative z-10 gap-10">
+                    <div className="flex-1 flex items-center justify-center w-full relative z-10 gap-4">
                         <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={() => updateScore('t1', 'minus')}
-                            className="w-20 h-40 bg-white/5 border border-white/5 rounded-[2rem] flex items-center justify-center hover:bg-white/10 transition-all text-gray-500"
+                            className="w-14 h-28 bg-white/5 border border-white/5 rounded-[1.5rem] flex items-center justify-center hover:bg-white/10 transition-all text-gray-500"
                         >
                             <Minus className="w-8 h-8" />
                         </motion.button>
@@ -449,7 +558,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                     key={match.points?.t1}
                                     initial={{ scale: 0.5, opacity: 0 }}
                                     animate={{ scale: 1, opacity: 1 }}
-                                    className="text-[14rem] font-black italic leading-none tracking-tighter text-white"
+                                    className="text-[6rem] font-black italic leading-none tracking-tighter text-white"
                                 >
                                     {match.points?.t1 || '0'}
                                 </motion.span>
@@ -459,7 +568,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={() => updateScore('t1', 'plus')}
-                            className="w-20 h-40 bg-padel-primary/10 border border-padel-primary/20 rounded-[2rem] flex items-center justify-center hover:bg-padel-primary/20 transition-all text-padel-primary"
+                            className="w-11 h-20 bg-padel-primary/10 border border-padel-primary/20 rounded-2xl flex items-center justify-center hover:bg-padel-primary/20 transition-all text-padel-primary"
                         >
                             <Plus className="w-8 h-8" />
                         </motion.button>
@@ -467,27 +576,18 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                 </div>
 
                 {/* Team 2 Card */}
-                <div className="flex-1 bg-[#141414] border border-white/5 rounded-[3rem] p-10 flex flex-col items-center relative overflow-hidden group">
+                <div className="flex-1 bg-[#141414] border border-white/5 rounded-[2.5rem] p-6 flex flex-col items-center relative overflow-hidden group">
                     <div className="absolute inset-0 bg-gradient-to-bl from-white/5 to-transparent opacity-50" />
 
-                    {/* Golden Point Status Indicator */}
-                    <div className="absolute top-8 right-12 z-20">
-                        <button
-                            onClick={() => setIsGoldenPoint(!isGoldenPoint)}
-                            className={`px-4 py-2 rounded-full border-2 text-[8px] font-black uppercase tracking-widest transition-all ${isGoldenPoint ? 'border-[#ccff00] text-[#ccff00] shadow-[0_0_15px_rgba(204,255,0,0.2)]' : 'border-white/10 text-gray-600'}`}
-                            style={isGoldenPoint ? { borderColor: primaryColor, color: primaryColor, boxShadow: `0 0 15px ${primaryColor}33` } : {}}
-                        >
-                            {isGoldenPoint ? 'Punto de Oro Activo' : 'Punto de Oro'}
-                        </button>
-                    </div>
+
 
                     {/* Players Header */}
-                    <div className="flex justify-center gap-16 mb-8 relative z-10">
+                    <div className="flex justify-center gap-5 mb-3 relative z-10">
                         {/* Player 1 */}
                         <div className="flex flex-col items-center gap-4">
                             <div
-                                onClick={toggleServingTeam}
-                                className={`relative w-28 h-28 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 2 && server.player === 1 ? 'scale-110 z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
+                                onClick={() => handlePlayerIconClick(2, 1)}
+                                className={`relative w-16 h-16 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 2 && server.player === 1 ? 'scale-110 z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
                                 style={server.team === 2 && server.player === 1 ? { borderColor: primaryColor, boxShadow: `0 0 40px ${primaryColor}66` } : {}}
                             >
                                 <div className="w-full h-full rounded-full overflow-hidden">
@@ -495,11 +595,12 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                 </div>
                                 {server.team === 2 && server.player === 1 && (
                                     <>
-                                        <div className="absolute inset-0 bg-padel-primary/10 animate-pulse rounded-full" />
+                                        <div className="absolute inset-0 animate-pulse rounded-full" style={{ backgroundColor: `${primaryColor}1a` }} />
                                         <motion.div
                                             animate={{ y: [0, -8, 0], scale: [1, 0.9, 1] }}
                                             transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }}
-                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 bg-padel-primary rounded-full shadow-[0_5px_15px_rgba(204,255,0,0.6)] flex items-center justify-center border-4 border-black z-30 overflow-hidden"
+                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full flex items-center justify-center border-4 border-black z-30 overflow-hidden"
+                                            style={{ backgroundColor: primaryColor, boxShadow: `0 5px 15px ${primaryColor}99` }}
                                         >
                                             <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 rotate-45" />
                                             <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 -rotate-45" />
@@ -507,30 +608,27 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                     </>
                                 )}
                             </div>
-                            <div className="text-center">
-                                <span className="block text-sm font-black italic uppercase tracking-tighter">{match.team2.p1}</span>
-                                {server.team === 2 && server.player === 1 && (
-                                    <span className="text-[9px] font-black italic text-padel-primary uppercase tracking-[0.2em] mt-1 block">Saca</span>
-                                )}
-                            </div>
+                            <span className="block text-sm font-black italic uppercase tracking-tighter text-center">{match.team2.p1}</span>
                         </div>
 
                         {/* Player 2 */}
                         <div className="flex flex-col items-center gap-4">
                             <div
-                                onClick={toggleServingTeam}
-                                className={`relative w-28 h-28 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 2 && server.player === 2 ? 'border-padel-primary scale-110 shadow-[0_0_40px_rgba(204,255,0,0.4)] z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
+                                onClick={() => handlePlayerIconClick(2, 2)}
+                                className={`relative w-16 h-16 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 2 && server.player === 2 ? 'scale-110 z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
+                                style={server.team === 2 && server.player === 2 ? { borderColor: primaryColor, boxShadow: `0 0 40px ${primaryColor}66` } : {}}
                             >
                                 <div className="w-full h-full rounded-full overflow-hidden">
                                     <img src={match.team2.p2Photo || `https://ui-avatars.com/api/?name=${match.team2.p2}&background=222&color=fff`} className="w-full h-full object-cover" />
                                 </div>
                                 {server.team === 2 && server.player === 2 && (
                                     <>
-                                        <div className="absolute inset-0 bg-padel-primary/10 animate-pulse rounded-full" />
+                                        <div className="absolute inset-0 animate-pulse rounded-full" style={{ backgroundColor: `${primaryColor}1a` }} />
                                         <motion.div
                                             animate={{ y: [0, -8, 0], scale: [1, 0.9, 1] }}
                                             transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }}
-                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 bg-padel-primary rounded-full shadow-[0_5px_15px_rgba(204,255,0,0.6)] flex items-center justify-center border-4 border-black z-30 overflow-hidden"
+                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full flex items-center justify-center border-4 border-black z-30 overflow-hidden"
+                                            style={{ backgroundColor: primaryColor, boxShadow: `0 5px 15px ${primaryColor}99` }}
                                         >
                                             <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 rotate-45" />
                                             <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 -rotate-45" />
@@ -538,24 +636,19 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                     </>
                                 )}
                             </div>
-                            <div className="text-center">
-                                <span className="block text-sm font-black italic uppercase tracking-tighter">{match.team2.p2}</span>
-                                {server.team === 2 && server.player === 2 && (
-                                    <span className="text-[9px] font-black italic text-padel-primary uppercase tracking-[0.2em] mt-1 block">Saca</span>
-                                )}
-                            </div>
+                            <span className="block text-sm font-black italic uppercase tracking-tighter text-center">{match.team2.p2}</span>
                         </div>
                     </div>
 
                     {/* Sets Progression */}
-                    <div className="flex gap-4 mb-12 relative z-10">
+                    <div className="flex gap-2 mb-3 relative z-10">
                         {[1, 2, 3].map(setNum => {
                             const currentSet = (match.sets?.t1 || 0) + (match.sets?.t2 || 0) + 1;
                             const isCurrent = setNum === currentSet;
                             return (
                                 <div key={setNum} className="flex flex-col items-center gap-2">
                                     <span className="text-[8px] font-black italic text-gray-500 uppercase tracking-widest">Set {setNum}</span>
-                                    <div className={`w-12 h-12 rounded-xl border flex items-center justify-center text-xl font-black italic transition-all duration-500 ${isCurrent ? 'bg-padel-primary border-padel-primary text-black scale-110 shadow-lg' : 'bg-white/5 border-white/5 text-gray-500'}`}>
+                                    <div className={`w-7 h-7 rounded-md border flex items-center justify-center text-sm font-black italic transition-all duration-500 ${isCurrent ? 'bg-padel-primary border-padel-primary text-black scale-110 shadow-lg' : 'bg-white/5 border-white/5 text-gray-500'}`}>
                                         {setNum < currentSet ? match.games?.t2 : isCurrent ? match.games?.t2 : '-'}
                                     </div>
                                 </div>
@@ -564,11 +657,11 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     </div>
 
                     {/* Points Interaction */}
-                    <div className="flex-1 flex items-center justify-center w-full relative z-10 gap-10">
+                    <div className="flex-1 flex items-center justify-center w-full relative z-10 gap-4">
                         <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={() => updateScore('t2', 'minus')}
-                            className="w-20 h-40 bg-white/5 border border-white/5 rounded-[2rem] flex items-center justify-center hover:bg-white/10 transition-all text-gray-500"
+                            className="w-11 h-20 bg-white/5 border border-white/5 rounded-2xl flex items-center justify-center hover:bg-white/10 transition-all text-gray-500"
                         >
                             <Minus className="w-8 h-8" />
                         </motion.button>
@@ -580,7 +673,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                     key={match.points?.t2}
                                     initial={{ scale: 0.5, opacity: 0 }}
                                     animate={{ scale: 1, opacity: 1 }}
-                                    className="text-[14rem] font-black italic leading-none tracking-tighter text-white"
+                                    className="text-[6rem] font-black italic leading-none tracking-tighter text-white"
                                 >
                                     {match.points?.t2 || '0'}
                                 </motion.span>
@@ -590,7 +683,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={() => updateScore('t2', 'plus')}
-                            className="w-20 h-40 bg-padel-primary/10 border border-padel-primary/20 rounded-[2rem] flex items-center justify-center hover:bg-padel-primary/20 transition-all text-padel-primary"
+                            className="w-11 h-20 bg-padel-primary/10 border border-padel-primary/20 rounded-2xl flex items-center justify-center hover:bg-padel-primary/20 transition-all text-padel-primary"
                         >
                             <Plus className="w-8 h-8" />
                         </motion.button>
@@ -599,33 +692,11 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             </main>
 
             {/* Bottom Actions */}
-            <footer className="mt-8 flex items-center justify-between px-4 pb-4">
-                <div className="flex gap-8">
-                    <button
-                        onClick={() => router.back()}
-                        className="text-[10px] font-black italic uppercase tracking-widest text-gray-500 hover:text-white transition-colors flex items-center gap-2"
-                    >
-                        <RotateCcw className="w-4 h-4" />
-                        Corregir Sorteo
-                    </button>
-                    <button className="text-[10px] font-black italic uppercase tracking-widest text-gray-500 hover:text-white transition-colors flex items-center gap-2">
-                        <RefreshCw className="w-4 h-4" />
-                        Cambio Lado
-                    </button>
-                </div>
-
-                <div className="flex items-center gap-3 bg-white/5 border border-white/10 px-8 py-3 rounded-[2rem] cursor-pointer hover:bg-white/10 transition-all group" onClick={() => setIsGoldenPoint(!isGoldenPoint)}>
+            <footer className="flex items-center justify-center px-4 pb-3 pt-2">
+                <div className="flex items-center gap-3 bg-white/5 border border-white/10 px-8 py-3 rounded-[2rem] cursor-pointer hover:bg-white/10 transition-all" onClick={() => setIsGoldenPoint(!isGoldenPoint)}>
                     <div className={`w-3 h-3 rounded-full ${isGoldenPoint ? 'bg-padel-primary shadow-[0_0_10px_#ccff00]' : 'bg-gray-600'}`} />
                     <span className="text-[10px] font-black italic uppercase tracking-widest text-gray-300">Punto de Oro: <span className={isGoldenPoint ? 'text-padel-primary' : 'text-gray-500'}>{isGoldenPoint ? 'ON' : 'OFF'}</span></span>
                 </div>
-
-                <button
-                    onClick={() => router.back()}
-                    className="flex items-center gap-4 bg-white text-black px-12 py-5 rounded-[2rem] text-[11px] font-black italic uppercase tracking-[0.2em] shadow-2xl hover:scale-105 active:scale-95 transition-all group"
-                >
-                    Siguiente Juego
-                    <ChevronLeft className="w-5 h-5 rotate-180" />
-                </button>
             </footer>
 
             {/* Overlays */}
