@@ -25,7 +25,9 @@ import {
     LayoutDashboard,
     Zap,
     Monitor,
-    Tv
+    Tv,
+    Radio,
+    Camera
 } from 'lucide-react';
 import Link from 'next/link';
 import { MatchStatus, TournamentType, ScheduleConfig } from '@/types/tournament';
@@ -1162,11 +1164,17 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                 <span className={`text-[10px] font-black uppercase tracking-widest italic ${match.status === MatchStatus.LIVE ? 'text-padel-primary' : 'text-gray-500'}`}>
                                                                     Pista {match.court || '-'}
                                                                 </span>
-                                                                {match.time && (
-                                                                    <span className="text-[10px] font-bold text-gray-600 tracking-wider">
-                                                                        • {formatTime(match.time)}
-                                                                    </span>
-                                                                )}
+                                                                {(() => {
+                                                                    const raw = match.time || match.scheduledTime;
+                                                                    if (!raw) return null;
+                                                                    const d = raw?.toDate ? raw.toDate() : new Date(raw);
+                                                                    const hhmm = isNaN(d.getTime()) ? String(raw) : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+                                                                    return (
+                                                                        <span className="text-[10px] font-bold text-gray-500 tracking-wider">
+                                                                            · {hhmm}
+                                                                        </span>
+                                                                    );
+                                                                })()}
                                                             </div>
                                                             {match.groupName ? (
                                                                 <span className="text-[9px] font-black bg-padel-primary text-black px-2 py-0.5 rounded italic uppercase">G{match.groupName}</span>
@@ -1221,17 +1229,17 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                     <div className="flex h-6 border-b border-white/[0.06] bg-white/[0.01]">
                                                                         <div className="flex-1" />
                                                                         <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center`}>
-                                                                            <span className="text-[8px] font-black uppercase tracking-widest text-white/25">G</span>
+                                                                            <span className="text-[8px] font-black uppercase tracking-widest text-white/25">P</span>
                                                                         </div>
-                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                            <span className="text-[8px] font-black uppercase tracking-widest text-black/40">JG</span>
+                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
+                                                                            <span className="text-[8px] font-black uppercase tracking-widest text-white/60">G</span>
                                                                         </div>
-                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                            <span className="text-[8px] font-black uppercase tracking-widest text-black/40">ST</span>
+                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
+                                                                            <span className="text-[8px] font-black uppercase tracking-widest text-white/60">S</span>
                                                                         </div>
                                                                         {showExtra && (
-                                                                            <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                <span className="text-[8px] font-black uppercase tracking-widest text-black/40">{extraLabel}</span>
+                                                                            <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
+                                                                                <span className="text-[8px] font-black uppercase tracking-widest text-white/60">{extraLabel}</span>
                                                                             </div>
                                                                         )}
                                                                     </div>
@@ -1337,19 +1345,8 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
 
                                                         {/* ── Footer Actions ────────────────────────────────── */}
                                                         <div className="px-3 py-3 bg-white/[0.01] border-t border-white/5 flex gap-2">
-                                                            {match.status === MatchStatus.PENDING && (
+                                                            {match.status === MatchStatus.LIVE && activeTab !== 'Todos' && (
                                                                 <>
-                                                                    <button onClick={() => startMatch(match.id)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-[9px] font-black uppercase rounded-xl italic transition-all">En Vivo</button>
-                                                                    {canManageMatches && (
-                                                                        <Link href={`/tournaments/${id}/score/${match.id}`} className="flex-1 py-3 bg-padel-primary/10 hover:bg-padel-primary/20 text-[9px] font-black uppercase rounded-xl text-center italic leading-relaxed transition-all text-padel-primary border border-padel-primary/30">Controlar Marcador</Link>
-                                                                    )}
-                                                                </>
-                                                            )}
-                                                            {match.status === MatchStatus.LIVE && (
-                                                                <>
-                                                                    {canManageMatches && (
-                                                                        <Link href={`/tournaments/${id}/score/${match.id}`} className="flex-1 py-3 bg-padel-primary/10 hover:bg-padel-primary/20 text-[9px] font-black uppercase rounded-xl text-center italic leading-relaxed transition-all text-padel-primary border border-padel-primary/30">Controlar Marcador</Link>
-                                                                    )}
                                                                     <button
                                                                         onClick={() => {
                                                                             const url = `${window.location.origin}/tournaments/${id}/stream/${match.id}`;
@@ -1371,6 +1368,74 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                 </>
                                                             )}
                                                         </div>
+
+                                                        {/* ── Mini-Dock (Admin/Marker only) ─────────────────── */}
+                                                        {canManageMatches && match.status !== MatchStatus.FINISHED && (
+                                                            <div className="grid grid-cols-4 gap-px bg-white/[0.03] border-t border-white/[0.04]">
+                                                                {/* CONTROL */}
+                                                                <Link
+                                                                    href={`/tournaments/${id}/score/${match.id}`}
+                                                                    className={`flex flex-col items-center justify-center gap-1 py-2.5 transition-all active:scale-95
+                                                                        ${match.status === MatchStatus.LIVE
+                                                                            ? 'bg-padel-primary/10 text-padel-primary hover:bg-padel-primary/20'
+                                                                            : 'bg-transparent text-gray-500 hover:bg-white/[0.04] hover:text-white'
+                                                                        }`}
+                                                                >
+                                                                    <div className="relative">
+                                                                        <Zap className="w-3.5 h-3.5" />
+                                                                        {match.status === MatchStatus.LIVE && (
+                                                                            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_5px_red]" />
+                                                                        )}
+                                                                    </div>
+                                                                    <span className="text-[7px] font-black uppercase tracking-widest">Control</span>
+                                                                </Link>
+
+                                                                {/* PIZARRA */}
+                                                                <Link
+                                                                    href={`/tournaments/${id}/display/${match.id}`}
+                                                                    target="_blank"
+                                                                    className="flex flex-col items-center justify-center gap-1 py-2.5 bg-transparent text-gray-500 hover:bg-white/[0.04] hover:text-white transition-all active:scale-95"
+                                                                >
+                                                                    <Monitor className="w-3.5 h-3.5" />
+                                                                    <span className="text-[7px] font-black uppercase tracking-widest">Pizarra</span>
+                                                                </Link>
+
+                                                                {/* CÁMARA */}
+                                                                <Link
+                                                                    href={`/tournaments/${id}/control/broadcasting`}
+                                                                    className="flex flex-col items-center justify-center gap-1 py-2.5 bg-transparent text-gray-500 hover:bg-white/[0.04] hover:text-orange-400 transition-all active:scale-95"
+                                                                >
+                                                                    <Camera className="w-3.5 h-3.5" />
+                                                                    <span className="text-[7px] font-black uppercase tracking-widest">Cámara</span>
+                                                                </Link>
+
+                                                                {/* EN VIVO toggle */}
+                                                                <button
+                                                                    onClick={async () => {
+                                                                        const updated = matches.map(m => m.id === match.id ? { ...m, isStreaming: !match.isStreaming } : m);
+                                                                        setMatches(updated);
+                                                                        try {
+                                                                            await updateDoc(doc(db, 'tournaments', id), { matches: stripMatches(updated), updatedAt: new Date() });
+                                                                        } catch (e) { console.error(e); }
+                                                                    }}
+                                                                    className={`flex flex-col items-center justify-center gap-1 py-2.5 transition-all active:scale-95
+                                                                        ${match.isStreaming
+                                                                            ? 'bg-red-500/10 text-red-400'
+                                                                            : 'bg-transparent text-gray-500 hover:bg-white/[0.04] hover:text-red-400'
+                                                                        }`}
+                                                                >
+                                                                    <div className="relative">
+                                                                        <Radio className="w-3.5 h-3.5" />
+                                                                        {match.isStreaming && (
+                                                                            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_5px_red]" />
+                                                                        )}
+                                                                    </div>
+                                                                    <span className="text-[7px] font-black uppercase tracking-widest">
+                                                                        {match.isStreaming ? 'En Vivo' : 'Stream'}
+                                                                    </span>
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </motion.section>
                                             );
