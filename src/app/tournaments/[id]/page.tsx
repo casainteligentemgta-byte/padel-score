@@ -24,6 +24,7 @@ import {
     X,
     LayoutDashboard,
     Zap,
+    Gamepad2,
     Monitor,
     Tv,
     Radio,
@@ -518,6 +519,16 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
 
     const ALL_BRACKET_STAGES = ['Fase de Grupo', ...dynamicBracketStages];
 
+    // ── Etiquetas legibles para categorías ────────────────────────────────
+    const CAT_LABEL: Record<string, string> = {
+        MAS_45: '+45', MAS_50: '+50',
+        SUMA_7: 'Suma 7', SUMA_8: 'Suma 8', SUMA_9: 'Suma 9',
+        SUMA_10: 'Suma 10', SUMA_11: 'Suma 11',
+        PRIMERA: '1ª Cat.', SEGUNDA: '2ª Cat.', TERCERA: '3ª Cat.',
+        CUARTA: '4ª Cat.', QUINTA: '5ª Cat.', SEXTA: '6ª Cat.', SEPTIMA: '7ª Cat.',
+    };
+    const formatCat = (cat?: string) => cat ? (CAT_LABEL[cat] ?? cat.replace(/_/g, ' ')) : '';
+
     // ── Tabs en el orden correcto ─────────────────────────────────────────
     const tabs: string[] = [];
     tabs.push('Grupos');
@@ -538,31 +549,87 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     // Deduplicar por si acaso algún valor se repitió
     const uniqueTabs = [...new Set(tabs)];
 
+    // ── Pre-compute "Por Comenzar" data ONCE (fuera del .filter) ─────────────
+    const _toMsT = (v: any): number => {
+        if (!v) return 0;
+        if (typeof v?.toDate === 'function') return v.toDate().getTime();          // Firestore Timestamp
+        if (typeof v?.seconds === 'number') return v.seconds * 1000 + Math.floor((v.nanoseconds ?? 0) / 1e6); // Serialized TS
+        if (typeof v === 'string') return new Date(v).getTime();
+        if (v instanceof Date) return v.getTime();
+        return 0;
+    };
+    const _toMin = (v: any) => Math.floor(_toMsT(v) / 60000);
+
+    // ── Tabla de verdad: canchas reales por complejo ──────────────────────────
+    // Esta es la fuente MÁS fiable (supera a courtNames que puede estar desactualizado)
+    const _KNOWN: Record<string, number> = {
+        'Margarita Padel': 6, 'Tibisay': 3, 'Sun Sol Costa Azul': 4,
+        'Food Kart': 3, 'Elite': 4, 'Bodeguero': 3,
+        'Sun Sol Pedro Gonzalez': 2, 'Playa el Agua': 3,
+    };
+
+    // ── Orden de prioridad para numCanchas ────────────────────────────────────
+    // 1. KNOWN_COMPLEXES[complexName]: fuente de verdad del complejo (máxima prioridad)
+    //    courtNames puede tener datos de otro complejo si el usuario cambió de complejo.
+    // 2. Canchas únicas en el primer slot de matches (datos reales del fixture generado)
+    // 3. totalCourts (campo Firestore)
+    // 4. courtNames.length (menos fiable — puede estar desactualizado)
+    // 5. 1 (fallback de seguridad)
+    let _numCanchas = 0;
+
+    // 1ª: KNOWN_COMPLEXES por complexName
+    const _cxName: string = (tournament as any)?.complexName ?? '';
+    if (_cxName && _KNOWN[_cxName] !== undefined) {
+        _numCanchas = _KNOWN[_cxName];
+    }
+
+    // 2ª: canchas únicas en el primer slot del fixture
+    if (_numCanchas === 0) {
+        const _sorted = [...matches].sort((a, b) => _toMsT(a.scheduledTime) - _toMsT(b.scheduledTime));
+        if (_sorted.length > 0) {
+            const _firstMin = _toMin(_sorted[0].scheduledTime);
+            if (_firstMin > 0) {
+                const _firstSlot = _sorted.filter(mx => _toMin(mx.scheduledTime) === _firstMin);
+                const _courts = new Set(_firstSlot.map(mx => Number(mx.court ?? mx.courtIndex ?? -1)).filter(n => n >= 0));
+                _numCanchas = _courts.size;
+            }
+        }
+    }
+
+    // 3ª: totalCourts
+    if (_numCanchas === 0) _numCanchas = Number((tournament as any)?.totalCourts ?? 0);
+
+    // 4ª: courtNames.length (puede estar desactualizado, usar como último recurso)
+    if (_numCanchas === 0 && Array.isArray((tournament as any)?.courtNames))
+        _numCanchas = (tournament as any).courtNames.length;
+
+    // Fallback
+    if (_numCanchas <= 0) _numCanchas = 1;
+
+    // Pending del slot más próximo, limitados a _numCanchas
+    const _pending = matches
+        .filter(mx => mx.status === MatchStatus.PENDING)
+        .sort((a, b) => _toMsT(a.scheduledTime) - _toMsT(b.scheduledTime));
+    const _earliestMin = _pending.length > 0 ? _toMin(_pending[0].scheduledTime) : null;
+    const _nextSlot = _earliestMin !== null && _earliestMin > 0
+        ? _pending.filter(p => _toMin(p.scheduledTime) === _earliestMin)
+        : _pending;
+    // Clave compuesta estable aunque el ID sea undefined (matches se regeneran en cada render)
+    const _mkKey = (p: any) => `${_toMin(p.scheduledTime)}_${p.court ?? p.courtIndex ?? ''}`;
+    const _nextUpKeys = new Set(_nextSlot.slice(0, _numCanchas).map(_mkKey));
+
+    if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && !(window as any).__diagLogged2) {
+        (window as any).__diagLogged2 = true;
+        console.log('[PorComenzar] complexName:', _cxName, '→ numCanchas:', _numCanchas);
+        console.log('[PorComenzar] _earliestMin:', _earliestMin, '| _nextSlot:', _nextSlot.length, '| _nextUpKeys:', _nextUpKeys.size, '| keys:', [..._nextUpKeys]);
+    }
+
+
     const filteredMatches = matches.filter(m => {
         if (activeTab === 'Todos') return true;
         if (activeTab === 'En Vivo') return m.status === MatchStatus.LIVE;
-        if (activeTab === 'Por Comenzar') {
-            // Usar totalCourts del torneo (fuente de verdad: campo en Firestore)
-            // Fallback: número de partidos actualmente LIVE (canchas realmente ocupadas)
-            const liveCount = matches.filter(m2 => m2.status === MatchStatus.LIVE).length;
-            const numCourts = (tournament as any)?.totalCourts
-                ? Number((tournament as any).totalCourts)
-                : Math.max(1, liveCount);
-            // Tomar los próximos N partidos PENDING, ordenados por scheduledTime asc
-            const pending = matches
-                .filter(m2 => m2.status === MatchStatus.PENDING)
-                .sort((a, b) => {
-                    const toMs = (v: any) => {
-                        if (!v) return 0;
-                        if (typeof v === 'string') return new Date(v).getTime();
-                        if (v?.toDate) return v.toDate().getTime();
-                        return new Date(v).getTime();
-                    };
-                    return toMs(a.scheduledTime) - toMs(b.scheduledTime);
-                })
-                .slice(0, numCourts);
-            return pending.some(p => p.id === m.id);
-        }
+        if (activeTab === 'Por Comenzar') return _nextUpKeys.has(_mkKey(m));
+
         if (activeTab === 'Finalizados') return m.status === MatchStatus.FINISHED;
         if (activeTab === 'Reglas' || activeTab === 'Grupos' || activeTab === 'Ranking') return false;
         // Fase del cuadro
@@ -736,8 +803,15 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                 <span className="material-symbols-outlined text-sm">arrow_back</span>
                             </Link>
                             <div>
-                                <h1 className="text-lg font-bold leading-tight">{tournament?.name}</h1>
-                                <p className="text-xs text-padel-primary font-medium tracking-tight uppercase italic">{tournament?.complexName || 'Margarita Padel'} • {tournament?.category}</p>
+                                <h1 className="text-lg font-bold leading-tight">
+                                    {tournament?.name
+                                        ? Object.entries(CAT_LABEL).reduce(
+                                            (acc, [key, val]) => acc.replace(new RegExp(key, 'g'), val),
+                                            tournament.name
+                                        )
+                                        : ''}
+                                </h1>
+                                <p className="text-xs text-padel-primary font-medium tracking-tight uppercase italic">{tournament?.complexName || 'Margarita Padel'} • {formatCat(tournament?.category)}</p>
                             </div>
                         </div>
                     </div>
@@ -1404,7 +1478,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                     )}
                                                                     {tournament?.category && (
                                                                         <span className="text-[8px] font-black uppercase tracking-widest text-gray-400 bg-white/[0.10] border border-white/[0.15] px-1.5 py-0.5 rounded">
-                                                                            {tournament.category.replace(/_/g, ' ')}
+                                                                            {formatCat(tournament.category)}
                                                                         </span>
                                                                     )}
                                                                     {tournament?.gender && (
@@ -1589,22 +1663,22 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                             );
                                                         })()}
 
-                                                        {/* Mini-Dock — visible en "Por Comenzar" para acceso rápido */}
-                                                        {canManageMatches && (activeTab === 'Por Comenzar' || activeTab === 'En Vivo') && match.status !== MatchStatus.FINISHED && (
-                                                            <div className="grid grid-cols-4 gap-1.5 px-3 py-2.5 bg-black/40 border-t border-white/[0.08]">
+                                                        {/* Dock de acciones: 4 botones (Control, Pizarra, Cámaras, Publicidad) */}
+                                                        {canManageMatches && match.status !== MatchStatus.FINISHED && (
+                                                            <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t border-white/[0.08]">
                                                                 {/* CONTROL */}
                                                                 <Link
                                                                     href={`/tournaments/${id}/score/${match.id}`}
-                                                                    className={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl transition-all active:scale-95 border
+                                                                    className={`flex flex-col items-center justify-center gap-1.5 py-3.5 transition-all active:scale-95
                                                                         ${match.status === MatchStatus.LIVE
-                                                                            ? 'bg-padel-primary/15 text-padel-primary border-padel-primary/40 shadow-[0_0_12px_rgba(204,255,0,0.15)]'
-                                                                            : 'bg-white/[0.06] text-gray-400 hover:bg-padel-primary/10 hover:text-padel-primary border-white/10 hover:border-padel-primary/30'
+                                                                            ? 'bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20'
+                                                                            : 'bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-[#ccff00]'
                                                                         }`}
                                                                 >
                                                                     <div className="relative">
-                                                                        <Zap className="w-4 h-4" />
+                                                                        <Gamepad2 className="w-4 h-4" />
                                                                         {match.status === MatchStatus.LIVE && (
-                                                                            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shadow-[0_0_5px_#4ade80]" />
+                                                                            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#ccff00] shadow-[0_0_6px_#ccff00] animate-pulse" />
                                                                         )}
                                                                     </div>
                                                                     <span className="text-[7px] font-black uppercase tracking-widest">Control</span>
@@ -1614,46 +1688,31 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                 <Link
                                                                     href={`/tournaments/${id}/display/${match.id}`}
                                                                     target="_blank"
-                                                                    className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl bg-white/[0.06] text-gray-400 hover:bg-blue-500/10 hover:text-blue-400 transition-all active:scale-95 border border-white/10 hover:border-blue-400/30"
+                                                                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-white transition-all active:scale-95"
                                                                 >
                                                                     <Monitor className="w-4 h-4" />
                                                                     <span className="text-[7px] font-black uppercase tracking-widest">Pizarra</span>
                                                                 </Link>
 
-                                                                {/* CÁMARA */}
+                                                                {/* CÁMARAS */}
                                                                 <Link
                                                                     href={`/tournaments/${id}/control/broadcasting`}
-                                                                    className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl bg-white/[0.06] text-gray-400 hover:bg-orange-500/10 hover:text-orange-400 transition-all active:scale-95 border border-white/10 hover:border-orange-400/30"
+                                                                    target="_blank"
+                                                                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-orange-400 transition-all active:scale-95"
                                                                 >
                                                                     <Camera className="w-4 h-4" />
-                                                                    <span className="text-[7px] font-black uppercase tracking-widest">Cámara</span>
+                                                                    <span className="text-[7px] font-black uppercase tracking-widest">Cámaras</span>
                                                                 </Link>
 
-                                                                {/* EN VIVO toggle */}
-                                                                <button
-                                                                    onClick={async () => {
-                                                                        const updated = matches.map(m => m.id === match.id ? { ...m, isStreaming: !match.isStreaming } : m);
-                                                                        setMatches(updated);
-                                                                        try {
-                                                                            await updateDoc(doc(db, 'tournaments', id), { matches: stripMatches(updated), updatedAt: new Date() });
-                                                                        } catch (e) { console.error(e); }
-                                                                    }}
-                                                                    className={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl transition-all active:scale-95 border
-                                                                        ${match.isStreaming
-                                                                            ? 'bg-red-500/15 text-red-400 border-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.15)]'
-                                                                            : 'bg-white/[0.06] text-gray-400 hover:bg-red-500/10 hover:text-red-400 border-white/10 hover:border-red-400/30'
-                                                                        }`}
+                                                                {/* PUBLICIDAD */}
+                                                                <Link
+                                                                    href={`/tournaments/${id}/control/broadcasting`}
+                                                                    target="_blank"
+                                                                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-yellow-400 transition-all active:scale-95"
                                                                 >
-                                                                    <div className="relative">
-                                                                        <Radio className="w-4 h-4" />
-                                                                        {match.isStreaming && (
-                                                                            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_5px_red]" />
-                                                                        )}
-                                                                    </div>
-                                                                    <span className="text-[7px] font-black uppercase tracking-widest">
-                                                                        {match.isStreaming ? 'En Vivo' : 'Stream'}
-                                                                    </span>
-                                                                </button>
+                                                                    <Tv className="w-4 h-4" />
+                                                                    <span className="text-[7px] font-black uppercase tracking-widest">Publicidad</span>
+                                                                </Link>
                                                             </div>
                                                         )}
                                                     </div>

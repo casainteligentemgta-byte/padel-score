@@ -93,6 +93,8 @@ export default function AdsManagement({ params }: { params: Promise<{ id: string
     const [aiSearch, setAiSearch] = useState(false);
     const [showTicker, setShowTicker] = useState(true);
     const [venueName, setVenueName] = useState('');
+    const [clockStyle, setClockStyle] = useState<'classic' | 'broadcast'>('classic');
+    const [clockImageUrl, setClockImageUrl] = useState<string>('');
 
     const SAMPLE_VIDEO = "https://assets.mixkit.co/videos/preview/mixkit-man-playing-padel-tennis-41484-large.mp4";
 
@@ -130,6 +132,8 @@ export default function AdsManagement({ params }: { params: Promise<{ id: string
                 setAiSearch(bs.aiAnimationSearchEnabled || false);
                 setShowTicker(bs.showTicker !== false);
                 setVenueName(bs.venueName || '');
+                setClockStyle(bs.clockStyle || 'classic');
+                setClockImageUrl(bs.clockImageUrl || '');
                 // CAMERAS
                 if (bs.cameras) setCameras(bs.cameras);
             }
@@ -245,6 +249,8 @@ export default function AdsManagement({ params }: { params: Promise<{ id: string
                     aiAnimationSearchEnabled: aiSearch,
                     showTicker,
                     venueName,
+                    clockStyle,
+                    clockImageUrl,
                     // CAMERAS
                     cameras,
                 }
@@ -601,6 +607,71 @@ export default function AdsManagement({ params }: { params: Promise<{ id: string
                                         <textarea placeholder="Ej: ¡Bienvenidos al Torneo de Verano!" value={bannerText}
                                             onChange={(e) => setBannerText(e.target.value)}
                                             className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:border-padel-primary transition-all outline-none resize-none h-20" />
+                                    </div>
+                                </section>
+
+                                {/* Estilo de Reloj */}
+                                <section className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 space-y-6">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <Clock className="w-5 h-5 text-padel-primary" />
+                                            <h2 className="text-sm font-black italic uppercase tracking-widest">Estilo de Reloj</h2>
+                                        </div>
+                                        <div className="flex bg-white/5 rounded-xl p-1 border border-white/10">
+                                            <button onClick={() => setClockStyle('classic')}
+                                                className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${clockStyle === 'classic' ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}>Clásico</button>
+                                            <button onClick={() => setClockStyle('broadcast')}
+                                                className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${clockStyle === 'broadcast' ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}>Broadcast</button>
+                                        </div>
+                                    </div>
+
+                                    {clockStyle === 'broadcast' && (
+                                        <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                                            <div className="p-6 border-2 border-dashed border-white/10 rounded-3xl bg-white/[0.01] text-center space-y-4">
+                                                {clockImageUrl ? (
+                                                    <div className="relative group mx-auto w-48 aspect-video rounded-2xl overflow-hidden border border-white/10">
+                                                        <img src={clockImageUrl} className="w-full h-full object-cover" />
+                                                        <button onClick={() => setClockImageUrl('')}
+                                                            className="absolute top-2 right-2 p-2 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <Trash2 className="w-4 h-4 text-white" />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <div className="w-12 h-12 bg-padel-primary/10 rounded-2xl flex items-center justify-center mx-auto">
+                                                            <Upload className="w-6 h-6 text-padel-primary" />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <p className="text-xs font-bold text-white">Imagen de Fondo (Reloj)</p>
+                                                            <p className="text-[10px] text-gray-500">Recomendado: Branded o PNG Transparente</p>
+                                                        </div>
+                                                        <label className="inline-block px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-wider cursor-pointer transition-all">
+                                                            Subir Imagen
+                                                            <input type="file" className="hidden" accept="image/*"
+                                                                onChange={async (e) => {
+                                                                    const file = e.target.files?.[0];
+                                                                    if (!file) return;
+                                                                    setUploading('clock-bg');
+                                                                    try {
+                                                                        const fileRef = ref(storage, `tournaments/${id}/broadcast/clock_${Date.now()}_${file.name}`);
+                                                                        await uploadBytes(fileRef, file);
+                                                                        setClockImageUrl(await getDownloadURL(fileRef));
+                                                                    } catch (err) { console.error(err); }
+                                                                    finally { setUploading(null); }
+                                                                }} />
+                                                        </label>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl">
+                                        <div className="flex gap-3">
+                                            <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                                            <p className="text-[10px] text-cyan-300/80 leading-relaxed font-medium">
+                                                El estilo <span className="text-cyan-400 font-black">Broadcast</span> integra el reloj de forma más elegante sobre el tablero de mandos, permitiendo usar una imagen de marca o textura de fondo.
+                                            </p>
+                                        </div>
                                     </div>
                                 </section>
 

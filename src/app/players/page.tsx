@@ -114,7 +114,7 @@ function PlayersListContent() {
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
             <Sidebar />
 
-            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 flex-shrink-0 pl-24 md:pl-28">
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-3 flex-shrink-0 pl-24 md:pl-28">
                 <div>
                     <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
                         <span className="text-padel-primary">Jugadores</span>
@@ -129,7 +129,7 @@ function PlayersListContent() {
                 </Link>
             </header>
 
-            <div className="mb-8 relative flex-shrink-0">
+            <div className="mb-3 relative flex-shrink-0">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
                 <input
                     type="text"
@@ -140,7 +140,7 @@ function PlayersListContent() {
                 />
             </div>
 
-            <div className="ipad-scroll-area pb-40">
+            <div className="ipad-scroll-area pb-4">
                 <div className="glass overflow-hidden overflow-x-auto">
                     <table className="w-full text-left font-public-sans">
                         <thead>
@@ -219,9 +219,7 @@ function PlayersListContent() {
                     </table>
                 </div>
 
-                <footer className="mt-16 pt-8 border-t border-white/5 text-center">
-                    <p className="text-[9px] font-black tracking-[0.3em] uppercase text-gray-700 italic">PADEL SMART Pro System • 2024</p>
-                </footer>
+
             </div>
 
             {/* Modal de Edición */}

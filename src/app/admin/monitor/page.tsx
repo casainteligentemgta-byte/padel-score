@@ -124,7 +124,7 @@ export default function AdminMonitorPage() {
             <Sidebar />
 
             <div className="ipad-scroll-area p-8 md:p-12 pl-24 md:pl-32">
-                <header className="mb-12">
+                <header className="mb-3">
                     <div className="flex items-center gap-3 mb-4">
                         <div className="p-3 bg-padel-primary/20 rounded-2xl border border-padel-primary/30">
                             <Monitor className="w-6 h-6 text-padel-primary" />
@@ -258,7 +258,7 @@ export default function AdminMonitorPage() {
                 )}
 
                 {/* IA REPORTER SECTION */}
-                <div className="mt-20 border-t border-white/5 pt-12 pb-20">
+                <div className="mt-8 border-t border-white/5 pt-6 pb-4">
                     <header className="mb-8 flex justify-between items-center">
                         <div>
                             <div className="flex items-center gap-3 mb-2">

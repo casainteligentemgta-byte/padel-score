@@ -58,6 +58,7 @@ export interface Court {
 export interface Tournament {
     id: string;
     name: string;
+    owners?: string[];
     type: TournamentType;
     category: TournamentCategory;
     startDate: Date;
@@ -78,6 +79,10 @@ export interface Tournament {
         adMediaUrls?: string[]; // URLs specifically for the full-screen display
         funAnimationsEnabled?: boolean;
         aiAnimationSearchEnabled?: boolean;
+    };
+    rules?: {
+        content?: string;
+        manuals?: { title: string; url: string }[];
     };
 }
 

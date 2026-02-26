@@ -65,7 +65,7 @@ export default function LiveBracketsPage() {
             {!isTVMode && <Sidebar />}
 
             <div className={`ipad-scroll-area flex flex-col p-8 md:p-12 ${isTVMode ? '' : 'pl-24 md:pl-32'}`}>
-                <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 flex-shrink-0 w-full">
+                <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-3 flex-shrink-0 w-full">
                     <div>
                         <div className="flex items-center gap-3 mb-2">
                             <div className="px-3 py-1 bg-red-600/10 border border-red-600/30 rounded-full flex items-center gap-2">
@@ -232,9 +232,7 @@ export default function LiveBracketsPage() {
                     )}
                 </div>
 
-                <footer className="mt-20 pt-12 border-t border-white/5 text-center pb-24 h-48">
-                    <p className="text-[10px] font-black tracking-[0.4em] uppercase text-gray-600 italic">Optimizado para Smart Padel Pro Reality Engines • 2024</p>
-                </footer>
+
             </div>
 
         </div>

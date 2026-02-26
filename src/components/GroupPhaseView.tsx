@@ -13,7 +13,12 @@ import {
     ArrowRight,
     Flag,
     Lock,
+    Gamepad2,
+    Monitor,
+    Camera,
+    Tv
 } from 'lucide-react';
+import Link from 'next/link';
 import { MatchStatus } from '@/types/tournament';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -591,43 +596,82 @@ export default function GroupPhaseView({
                                             return (
                                                 <div
                                                     key={match.id}
-                                                    className={`flex items-center gap-3 px-5 py-3.5 transition-colors ${isFinished ? 'bg-white/[0.01]' : 'hover:bg-white/[0.02]'}`}
+                                                    className={`group transition-colors ${isFinished ? 'bg-white/[0.01]' : 'hover:bg-white/[0.02]'}`}
                                                 >
-                                                    {/* Status dot */}
-                                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isFinished ? 'bg-green-500' : isLive ? 'bg-red-500 animate-pulse' : 'bg-white/15'}`} />
+                                                    <div className="flex items-center gap-3 px-5 py-3.5">
+                                                        {/* Status dot */}
+                                                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isFinished ? 'bg-green-500/40' : isLive ? 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-white/10'}`} />
 
-                                                    {/* Team 1 */}
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className={`text-[11px] font-black italic uppercase truncate leading-none ${isFinished && g1 > g2 ? 'text-padel-primary' : 'text-white'}`}>
-                                                            {match.team1Name}
-                                                        </p>
-                                                        <p className={`text-[9px] font-bold italic uppercase truncate mt-0.5 ${isFinished && g2 > g1 ? 'text-padel-primary' : 'text-gray-500'}`}>
-                                                            {match.team2Name}
-                                                        </p>
+                                                        {/* Team 1 & 2 */}
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className={`text-[10px] font-black italic uppercase truncate leading-none ${isFinished && g1 > g2 ? 'text-padel-primary' : 'text-white'}`}>
+                                                                {match.team1Name}
+                                                            </p>
+                                                            <p className={`text-[10px] font-black italic uppercase truncate mt-1.5 ${isFinished && g2 > g1 ? 'text-padel-primary' : 'text-gray-500'}`}>
+                                                                {match.team2Name}
+                                                            </p>
+                                                        </div>
+
+                                                        {/* Score / Input */}
+                                                        {isFinished ? (
+                                                            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                                                <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl border border-white/10">
+                                                                    <span className={`text-base font-black leading-none ${g1 > g2 ? 'text-padel-primary' : 'text-gray-400'}`}>{g1}</span>
+                                                                    <span className="text-gray-700 font-black text-xs">·</span>
+                                                                    <span className={`text-base font-black leading-none ${g2 > g1 ? 'text-padel-primary' : 'text-gray-400'}`}>{g2}</span>
+                                                                </div>
+                                                            </div>
+                                                        ) : canManage && !match.id.startsWith('pending-') ? (
+                                                            <ScoreInput
+                                                                matchId={match.id}
+                                                                defaultG1={g1}
+                                                                defaultG2={g2}
+                                                                disabled={!canManage}
+                                                                onSave={(g1, g2) => onSaveResult(match.id, g1, g2)}
+                                                            />
+                                                        ) : (
+                                                            <div className="flex items-center gap-2 text-[8px] font-black text-gray-700 uppercase tracking-widest">
+                                                                <Lock className="w-2.5 h-2.5" />
+                                                                <span>Pendiente</span>
+                                                            </div>
+                                                        )}
                                                     </div>
 
-                                                    {/* Score / Input */}
-                                                    {isFinished ? (
-                                                        <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
-                                                            <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl border border-white/10">
-                                                                <span className={`text-base font-black leading-none ${g1 > g2 ? 'text-padel-primary' : 'text-gray-400'}`}>{g1}</span>
-                                                                <span className="text-gray-700 font-black text-xs">·</span>
-                                                                <span className={`text-base font-black leading-none ${g2 > g1 ? 'text-padel-primary' : 'text-gray-400'}`}>{g2}</span>
-                                                            </div>
-                                                            <span className="text-[7px] text-green-500 font-black uppercase tracking-widest">Finalizado</span>
-                                                        </div>
-                                                    ) : canManage ? (
-                                                        <ScoreInput
-                                                            matchId={match.id}
-                                                            defaultG1={g1}
-                                                            defaultG2={g2}
-                                                            disabled={!canManage || match.id.startsWith('pending-')}
-                                                            onSave={(g1, g2) => onSaveResult(match.id, g1, g2)}
-                                                        />
-                                                    ) : (
-                                                        <div className="flex items-center gap-2 text-[10px] font-black text-gray-700 uppercase tracking-widest">
-                                                            <Lock className="w-3 h-3" />
-                                                            <span>Pendiente</span>
+                                                    {/* Dock de acciones (Grupos) */}
+                                                    {canManage && !isFinished && !match.id.startsWith('pending-') && (
+                                                        <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t border-white/[0.04]">
+                                                            <Link
+                                                                href={`/tournaments/${tournament.id}/score/${match.id}`}
+                                                                className={`flex flex-col items-center justify-center gap-1 py-2 transition-all active:scale-95
+                                                                    ${isLive ? 'bg-padel-primary/10 text-padel-primary hover:bg-padel-primary/20' : 'text-gray-500 hover:text-padel-primary'}`}
+                                                            >
+                                                                <Gamepad2 className="w-3 h-3" />
+                                                                <span className="text-[6px] font-black uppercase tracking-widest">Control</span>
+                                                            </Link>
+                                                            <Link
+                                                                href={`/tournaments/${tournament.id}/display/${match.id}`}
+                                                                target="_blank"
+                                                                className="flex flex-col items-center justify-center gap-1 py-2 text-gray-500 hover:text-white transition-all active:scale-95"
+                                                            >
+                                                                <Monitor className="w-3 h-3" />
+                                                                <span className="text-[6px] font-black uppercase tracking-widest">Pizarra</span>
+                                                            </Link>
+                                                            <Link
+                                                                href={`/tournaments/${tournament.id}/control/broadcasting`}
+                                                                target="_blank"
+                                                                className="flex flex-col items-center justify-center gap-1 py-2 text-gray-500 hover:text-orange-400 transition-all active:scale-95"
+                                                            >
+                                                                <Camera className="w-3 h-3" />
+                                                                <span className="text-[6px] font-black uppercase tracking-widest">Cámaras</span>
+                                                            </Link>
+                                                            <Link
+                                                                href={`/tournaments/${tournament.id}/control/broadcasting`}
+                                                                target="_blank"
+                                                                className="flex flex-col items-center justify-center gap-1 py-2 text-gray-500 hover:text-yellow-400 transition-all active:scale-95"
+                                                            >
+                                                                <Tv className="w-3 h-3" />
+                                                                <span className="text-[6px] font-black uppercase tracking-widest">Publicidad</span>
+                                                            </Link>
                                                         </div>
                                                     )}
                                                 </div>

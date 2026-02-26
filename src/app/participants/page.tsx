@@ -22,6 +22,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { Participant, TournamentCategory, Group } from '@/types/tournament';
 import Link from 'next/link';
+import Sidebar from '@/components/Sidebar';
 
 export default function ParticipantsPage() {
     const { user } = useAuth();
@@ -135,71 +136,63 @@ export default function ParticipantsPage() {
     );
 
     return (
-        <div className="min-h-screen bg-[#0a0a0a] text-white p-6 md:p-12 font-outfit">
-            <div className="max-w-6xl mx-auto space-y-8">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div>
-                        <Link href="/" className="text-padel-primary text-xs font-black uppercase tracking-[0.3em] mb-2 block hover:translate-x-1 transition-transform inline-flex items-center gap-2">
-                            ← Inicio
-                        </Link>
-                        <h1 className="text-5xl font-black italic uppercase tracking-tighter">
-                            Comunidad <span className="text-padel-primary">Padel</span>
-                        </h1>
-                        <p className="text-gray-500 font-medium mt-2">Organiza tus jugadores y crea grupos estratégicos.</p>
-                    </div>
-                    <div className="flex gap-3">
-                        <button
-                            onClick={() => setIsPlayerModalOpen(true)}
-                            className="bg-white/5 border border-white/10 text-white px-6 py-4 rounded-2xl font-black uppercase italic text-xs hover:bg-white/10 transition-all flex items-center gap-2"
-                        >
-                            <UserPlus className="w-4 h-4 text-padel-primary" /> Nuevo Jugador
-                        </button>
-                        <button
-                            onClick={() => setIsGroupModalOpen(true)}
-                            className="bg-padel-primary text-black px-6 py-4 rounded-2xl font-black uppercase italic text-xs hover:scale-105 transition-all shadow-lg shadow-padel-primary/20 flex items-center gap-2"
-                        >
-                            <FolderPlus className="w-4 h-4" /> Crear Grupo
-                        </button>
-                    </div>
-                </div>
+        <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
+            <Sidebar />
 
-                {/* Main Tabs */}
-                <div className="flex gap-4 p-1 bg-white/5 rounded-2xl border border-white/5 w-fit">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3 flex-shrink-0 pl-24 md:pl-28">
+                <div>
+                    <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
+                        Comunidad <span className="text-padel-primary">Padel</span>
+                    </h1>
+                    <p className="text-gray-500 font-medium mt-1 text-sm">Organiza tus jugadores y crea grupos estratégicos.</p>
+                </div>
+                <div className="flex gap-3">
+                    <button
+                        onClick={() => setIsPlayerModalOpen(true)}
+                        className="bg-white/5 border border-white/10 text-white px-4 py-2.5 rounded-xl font-black uppercase italic text-xs hover:bg-white/10 transition-all flex items-center gap-2"
+                    >
+                        <UserPlus className="w-4 h-4 text-padel-primary" /> Nuevo Jugador
+                    </button>
+                    <button
+                        onClick={() => setIsGroupModalOpen(true)}
+                        className="bg-padel-primary text-black px-4 py-2.5 rounded-xl font-black uppercase italic text-xs hover:scale-105 transition-all shadow-lg shadow-padel-primary/20 flex items-center gap-2"
+                    >
+                        <FolderPlus className="w-4 h-4" /> Crear Grupo
+                    </button>
+                </div>
+            </div>
+
+            {/* Tabs + Search Bar (fixed, outside scroll area) */}
+            <div className="flex items-center gap-4 mb-3 pl-24 md:pl-28 flex-shrink-0">
+                <div className="flex gap-2 p-1 bg-white/5 rounded-xl border border-white/5">
                     <button
                         onClick={() => setActiveTab('players')}
-                        className={`px-8 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-2 ${activeTab === 'players' ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}
+                        className={`px-5 py-2 rounded-lg font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-2 ${activeTab === 'players' ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}
                     >
-                        <Users className="w-3.5 h-3.5" /> Jugadores
+                        <Users className="w-3.5 h-3.5" /> Jugadores ({participants.length})
                     </button>
                     <button
                         onClick={() => setActiveTab('groups')}
-                        className={`px-8 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-2 ${activeTab === 'groups' ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}
+                        className={`px-5 py-2 rounded-lg font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-2 ${activeTab === 'groups' ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}
                     >
-                        <LayoutGrid className="w-3.5 h-3.5" /> Grupos / Equipos
+                        <LayoutGrid className="w-3.5 h-3.5" /> Grupos ({groups.length})
                     </button>
                 </div>
-
-                {/* Sub-Header: Search & Stats */}
-                <div className="grid md:grid-cols-4 gap-6">
-                    <div className="glass p-6 rounded-3xl border-white/5 md:col-span-3 flex items-center gap-4">
-                        <Search className="w-5 h-5 text-gray-500" />
-                        <input
-                            type="text"
-                            placeholder={`Buscar ${activeTab === 'players' ? 'jugador' : 'grupo'}...`}
-                            className="bg-transparent border-none outline-none w-full text-lg font-medium placeholder:text-gray-700"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </div>
-                    <div className="glass p-6 rounded-3xl border-white/5 flex flex-col justify-center text-center">
-                        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest leading-none mb-1">Total {activeTab === 'players' ? 'Padrón' : 'Grupos'}</p>
-                        <p className="text-3xl font-black text-padel-primary italic">
-                            {activeTab === 'players' ? participants.length : groups.length}
-                        </p>
-                    </div>
+                <div className="flex-1 glass rounded-xl flex items-center gap-3 px-4 py-2.5">
+                    <Search className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    <input
+                        type="text"
+                        placeholder={`Buscar ${activeTab === 'players' ? 'jugador' : 'grupo'}...`}
+                        className="bg-transparent border-none outline-none w-full text-sm font-medium placeholder:text-gray-700"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
                 </div>
+            </div>
 
+            {/* Scrollable Content */}
+            <div className="ipad-scroll-area pb-4 pl-24 md:pl-28">
                 {/* Content Grid */}
                 <AnimatePresence mode='wait'>
                     {activeTab === 'players' ? (
@@ -289,7 +282,7 @@ export default function ParticipantsPage() {
                         </motion.div>
                     )}
                 </AnimatePresence>
-            </div>
+            </div>{/* end ipad-scroll-area */}
 
             {/* Modal Jugador */}
             <AnimatePresence>

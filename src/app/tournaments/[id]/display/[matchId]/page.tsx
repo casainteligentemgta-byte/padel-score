@@ -18,6 +18,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const [loading, setLoading] = useState(true);
     const [mode, setMode] = useState<'score' | 'ad'>('score');
     const [currentAdIdx, setCurrentAdIdx] = useState(0);
+    const [recentResults, setRecentResults] = useState<any[]>([]);
     const [clock, setClock] = useState<{ date: string; time: string }>({ date: '', time: '' });
     const [temp, setTemp] = useState<number | null>(null);
     const prevScore = useRef<string>('');
@@ -28,6 +29,8 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
 
     // ── Marcador en vivo del RTDB (escrito por el marker en tiempo real) ─────
     const [liveMarcador, setLiveMarcador] = useState<any>(null);
+    const [sponsorIdx, setSponsorIdx] = useState(0);
+    const [matchDuration, setMatchDuration] = useState<string>('');
 
     // Ticker desde RTDB (tiempo real, configurable desde panel publicidad)
     const [tickerTexto, setTickerTexto] = useState('');
@@ -94,7 +97,38 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return () => clearInterval(id);
     }, []);
 
-    // Temperature — Isla de Margarita (Open-Meteo, no API key needed)
+    // Sponsors Cycle
+    useEffect(() => {
+        const sponsors = tournament?.broadcastingSettings?.sponsors?.filter((s: any) => s.active) || [];
+        if (sponsors.length <= 1) return;
+        const id = setInterval(() => {
+            setSponsorIdx(prev => (prev + 1) % sponsors.length);
+        }, 8000);
+        return () => clearInterval(id);
+    }, [tournament?.broadcastingSettings?.sponsors]);
+
+    // Match Duration Counter
+    useEffect(() => {
+        if (match?.status !== MatchStatus.LIVE && match?.status !== 'live') {
+            setMatchDuration('');
+            return;
+        }
+        const update = () => {
+            const start = match?.startTime || liveMarcador?.match_start_time || match?.updatedAt;
+            if (!start) return;
+            const diff = Date.now() - (start.seconds ? start.seconds * 1000 : new Date(start).getTime());
+            const mins = Math.floor(diff / 60000);
+            const hrs = Math.floor(mins / 60);
+            setMatchDuration(hrs > 0 ? `${hrs}h ${mins % 60}m` : `${mins}m`);
+        };
+        update();
+        const id = setInterval(update, 60000);
+        return () => clearInterval(id);
+    }, [match?.status, match?.startTime, liveMarcador?.match_start_time]);
+
+    // Temperature (Open-Meteo) — Isla de Margarita
+
+    // Temperature (Open-Meteo) — Isla de Margarita
     useEffect(() => {
         fetch('https://api.open-meteo.com/v1/forecast?latitude=11.0&longitude=-63.9&current_weather=true')
             .then(r => r.json())
@@ -139,7 +173,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     if (found) {
                         const team1 = found.team1Index > 0 ? tourneyData.teams?.[found.team1Index - 1] : null;
                         const team2 = found.team2Index > 0 ? tourneyData.teams?.[found.team2Index - 1] : null;
-                        setMatch({
+                        const matchData = {
                             ...found,
                             court: found.court || (found.courtIndex !== undefined ? found.courtIndex + 1 : undefined),
                             t1p1: team1?.p1?.name || found.team1?.p1Name || found.team1?.p1?.name || 'Jugador 1',
@@ -152,7 +186,24 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                             t2p2Photo: team2?.p2?.photo || found.team2?.p2?.photo || null,
                             t1Name: team1 ? `${team1.p1.name} / ${team1.p2.name}` : 'TBD',
                             t2Name: team2 ? `${team2.p1.name} / ${team2.p2.name}` : 'TBD',
-                        });
+                        };
+                        setMatch(matchData);
+
+                        // Extract latest finished matches for ticker
+                        const finished = tourneyData.matches
+                            .filter((mx: any) => mx.status === MatchStatus.FINISHED)
+                            .sort((a: any, b: any) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0))
+                            .slice(0, 3)
+                            .map((mx: any) => {
+                                const t1 = mx.team1Index > 0 ? tourneyData.teams?.[mx.team1Index - 1] : null;
+                                const t2 = mx.team2Index > 0 ? tourneyData.teams?.[mx.team2Index - 1] : null;
+                                return {
+                                    ...mx,
+                                    t1Name: t1 ? `${t1.p1.name}/${t1.p2.name}` : (mx.team1Name || 'T1'),
+                                    t2Name: t2 ? `${t2.p1.name}/${t2.p2.name}` : (mx.team2Name || 'T2'),
+                                };
+                            });
+                        setRecentResults(finished);
 
                         const next = tourneyData.matches
                             .filter((m: any) => m.court === found.court && m.status === MatchStatus.PENDING)
@@ -345,47 +396,113 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 padding: 'clamp(6px,1vh,14px) clamp(10px,1.8vw,28px)',
                             }}
                         >
-                            {/* Left: PISTA / FASE / CATEGORÍA — igual que en el marcador */}
-                            <div className="flex flex-col items-start justify-center" style={{ gap: 'clamp(1px,0.25vh,5px)' }}>
-                                {/* Pista — grande */}
-                                <span className="font-black italic uppercase tracking-tighter text-white leading-none"
-                                    style={{ fontSize: 'clamp(16px,2.2vw,38px)' }}>
-                                    Pista {match.court ?? '-'}
-                                </span>
-                                {/* Fase / Ronda — mediana */}
-                                {(match.roundName || match.groupName) && (
-                                    <span className="font-black italic uppercase tracking-tight leading-none"
-                                        style={{ fontSize: 'clamp(10px,1.2vw,20px)', color: 'rgba(255,255,255,0.60)' }}>
-                                        {match.roundName || match.groupName}
-                                    </span>
+                            {/* Left: Tournament & Match Info */}
+                            <div className="flex items-center gap-6">
+                                {tournament?.logo && (
+                                    <div className="w-[clamp(40px,5vw,100px)] aspect-square bg-white/5 rounded-2xl p-2 border border-white/10 flex items-center justify-center">
+                                        <img src={tournament.logo} className="w-full h-full object-contain" />
+                                    </div>
                                 )}
-                                {/* Categoría — bien visible */}
-                                {tournament?.category && (
-                                    <span className="font-black italic uppercase tracking-wide leading-none"
-                                        style={{ fontSize: 'clamp(10px,1.3vw,22px)', color: 'rgba(255,255,255,0.55)' }}>
-                                        {formatCategory(tournament.category)}
+                                <div className="flex flex-col items-start justify-center" style={{ gap: 'clamp(1px,0.25vh,5px)' }}>
+                                    {/* Pista — grande */}
+                                    <span className="font-black italic uppercase tracking-tighter text-white leading-none"
+                                        style={{ fontSize: 'clamp(16px,2.2vw,38px)' }}>
+                                        Pista {match.court ?? '-'}
                                     </span>
-                                )}
-                                {/* Nombre del torneo debajo como sub-label */}
-                                <span className="font-bold uppercase tracking-widest text-gray-600" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>
-                                    {tournament?.name}
-                                </span>
+                                    {/* Fase / Ronda — mediana */}
+                                    {(match.roundName || match.groupName) && (
+                                        <span className="font-black italic uppercase tracking-tight leading-none"
+                                            style={{ fontSize: 'clamp(10px,1.2vw,20px)', color: 'rgba(255,255,255,0.60)' }}>
+                                            {match.roundName || match.groupName}
+                                        </span>
+                                    )}
+                                    {/* Categoría — bien visible */}
+                                    {tournament?.category && (
+                                        <span className="font-black italic uppercase tracking-wide leading-none"
+                                            style={{ fontSize: 'clamp(10px,1.3vw,22px)', color: 'rgba(255,255,255,0.55)' }}>
+                                            {formatCategory(tournament.category)}
+                                        </span>
+                                    )}
+                                    {/* Nombre del torneo debajo como sub-label */}
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold uppercase tracking-widest text-gray-600 leading-none" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>
+                                            {tournament?.name}
+                                        </span>
+                                        {venueName && (
+                                            <>
+                                                <div className="w-1 h-1 bg-gray-800 rounded-full" />
+                                                <span className="font-bold uppercase tracking-widest text-padel-primary/40 leading-none" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>
+                                                    {venueName}
+                                                </span>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
 
+                            {/* Center: Sponsor Logo (Rotating) */}
+                            {tournament?.broadcastingSettings?.sponsors?.filter((s: any) => s.active).length > 0 && (
+                                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-3">
+                                    <span className="text-[8px] font-black italic text-gray-700 uppercase tracking-[0.4em] rotate-180" style={{ writingMode: 'vertical-rl' }}>PATROCINA</span>
+                                    <div className="w-[clamp(50px,7vw,140px)] h-[clamp(24px,3vh,50px)] relative">
+                                        <AnimatePresence mode="wait">
+                                            <motion.img
+                                                key={sponsorIdx}
+                                                src={tournament.broadcastingSettings.sponsors.filter((s: any) => s.active)[sponsorIdx]?.logoUrl}
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                exit={{ opacity: 0, y: -10 }}
+                                                transition={{ duration: 0.5 }}
+                                                className="w-full h-full object-contain"
+                                            />
+                                        </AnimatePresence>
+                                    </div>
+                                    <span className="text-[8px] font-black italic text-gray-700 uppercase tracking-[0.4em]" style={{ writingMode: 'vertical-rl' }}>SPONSOR</span>
+                                </div>
+                            )}
+
                             {/* Right: Date / Time / Temp — horizontal pill */}
-                            <div className="flex items-center border border-white/8 bg-white/[0.04] backdrop-blur-sm overflow-hidden"
+
+                            {/* Right: Date / Time / Temp — horizontal pill */}
+                            <div className={`flex items-center border transition-all relative overflow-hidden ${tournament?.broadcastingSettings?.clockStyle === 'broadcast'
+                                ? 'bg-black/60 border-white/20 shadow-[0_0_30px_rgba(204,255,0,0.1)]'
+                                : 'border-white/8 bg-white/[0.04] backdrop-blur-sm'
+                                }`}
                                 style={{ borderRadius: 'clamp(10px,1.2vw,20px)' }}>
-                                <div className="flex flex-col items-center justify-center"
+
+                                {tournament?.broadcastingSettings?.clockStyle === 'broadcast' && tournament?.broadcastingSettings?.clockImageUrl && (
+                                    <div className="absolute inset-0 opacity-40 mix-blend-overlay">
+                                        <img src={tournament.broadcastingSettings.clockImageUrl} className="w-full h-full object-cover" />
+                                    </div>
+                                )}
+
+                                {showLive && (
+                                    <div className="flex items-center gap-1.5 px-3 py-1 bg-red-600/20 border-r border-white/5 animate-pulse">
+                                        <div className="w-1.5 h-1.5 bg-red-500 rounded-full shadow-[0_0_8px_#ef4444]" />
+                                        <span className="text-[8px] font-black uppercase tracking-widest text-red-500">LIVE</span>
+                                    </div>
+                                )}
+
+                                <div className="flex flex-col items-center justify-center relative z-10"
                                     style={{ padding: 'clamp(5px,0.9vh,12px) clamp(14px,1.8vw,28px)', gap: 'clamp(1px,0.2vh,3px)' }}>
-                                    <span className="font-black italic tracking-tighter text-white leading-none"
+                                    <span className={`font-black italic tracking-tighter leading-none ${tournament?.broadcastingSettings?.clockStyle === 'broadcast' ? 'text-padel-primary' : 'text-white'}`}
                                         style={{ fontSize: 'clamp(16px,2.2vw,36px)' }}>{clock.time}</span>
-                                    <span className="font-bold uppercase text-gray-500 tracking-widest"
-                                        style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>{clock.date}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold uppercase text-gray-500 tracking-widest leading-none"
+                                            style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>{clock.date}</span>
+                                        {matchDuration && (
+                                            <>
+                                                <div className="w-1 h-1 bg-gray-700 rounded-full" />
+                                                <span className="font-black italic uppercase text-padel-primary tracking-widest leading-none"
+                                                    style={{ fontSize: 'clamp(6px,0.65vw,10px)' }}>{matchDuration}</span>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                                 {temp !== null && (
                                     <>
                                         <div className="self-stretch w-px bg-white/[0.08]" />
-                                        <div className="flex items-center gap-[0.4vw]"
+                                        <div className="flex items-center gap-[0.4vw] relative z-10"
                                             style={{ padding: 'clamp(5px,0.9vh,12px) clamp(12px,1.6vw,24px)' }}>
                                             <Thermometer style={{ width: 'clamp(9px,1vw,16px)', height: 'clamp(9px,1vw,16px)', color: primaryColor, flexShrink: 0 }} />
                                             <span className="font-black italic tracking-tighter"
@@ -415,19 +532,19 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     <div className="flex-1" />
                                     {/* Puntos del game */}
                                     <div className="flex items-center justify-center border-l border-white/[0.05]"
-                                        style={{ width: 'clamp(60px,8vw,130px)', padding: 'clamp(3px,0.5vh,7px) 0', backgroundColor: 'rgba(255,255,255,0.06)' }}>
-                                        <span className="font-black uppercase tracking-widest text-white/40" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>PTS</span>
+                                        style={{ width: 'clamp(68px,9vw,145px)', padding: 'clamp(4px,0.6vh,8px) 0', backgroundColor: 'rgba(255,255,255,0.06)', marginRight: 'clamp(4px,0.5vw,10px)' }}>
+                                        <span className="font-black uppercase tracking-widest text-white/50" style={{ fontSize: 'clamp(7px,0.8vw,12px)' }}>PTS</span>
                                     </div>
                                     {/* Games */}
                                     <div className="flex items-center justify-center border-l border-white/[0.05]"
-                                        style={{ width: 'clamp(48px,6.5vw,104px)', padding: 'clamp(3px,0.5vh,7px) 0', backgroundColor: `${primaryColor}10` }}>
-                                        <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(5px,0.55vw,9px)', color: primaryColor }}>G</span>
+                                        style={{ width: 'clamp(45px,6vw,95px)', padding: 'clamp(4px,0.6vh,8px) 0', backgroundColor: `${primaryColor}10`, marginRight: 'clamp(4px,0.5vw,10px)' }}>
+                                        <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(7px,0.8vw,12px)', color: primaryColor }}>G</span>
                                     </div>
                                     {/* Sets S1 S2 S3 */}
                                     {[1, 2, 3].map(s => (
                                         <div key={s} className="flex items-center justify-center border-l border-white/[0.05]"
-                                            style={{ width: 'clamp(30px,4vw,64px)', padding: 'clamp(3px,0.5vh,7px) 0' }}>
-                                            <span className="font-black uppercase tracking-widest text-gray-600" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>S{s}</span>
+                                            style={{ width: 'clamp(45px,6vw,95px)', padding: 'clamp(4px,0.6vh,8px) 0', marginRight: s < 3 ? 'clamp(4px,0.5vw,10px)' : '0' }}>
+                                            <span className="font-black uppercase tracking-widest text-gray-600" style={{ fontSize: 'clamp(7px,0.8vw,12px)' }}>S{s}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -478,21 +595,21 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     </div>
                                     {/* Puntos del game actual — Team 1 */}
                                     <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                        style={{ width: 'clamp(60px,8vw,130px)', backgroundColor: 'rgba(255,255,255,0.04)' }}>
+                                        style={{ width: 'clamp(68px,9vw,145px)', backgroundColor: 'rgba(255,255,255,0.04)', marginRight: 'clamp(4px,0.5vw,10px)' }}>
                                         <AnimatePresence mode="popLayout">
                                             <motion.span key={ptsT1} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
                                                 className="font-black italic text-white"
-                                                style={{ fontSize: 'clamp(22px,3.8vw,68px)' }}>
+                                                style={{ fontSize: 'clamp(36px,6vw,105px)' }}>
                                                 {ptsT1}
                                             </motion.span>
                                         </AnimatePresence>
                                     </div>
                                     {/* Games */}
                                     <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                        style={{ width: 'clamp(48px,6.5vw,104px)', backgroundColor: `${primaryColor}12` }}>
+                                        style={{ width: 'clamp(45px,6vw,95px)', backgroundColor: `${primaryColor}12`, marginRight: 'clamp(4px,0.5vw,10px)' }}>
                                         <AnimatePresence mode="popLayout">
                                             <motion.span key={gamesT1} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}
-                                                className="font-black italic" style={{ fontSize: 'clamp(18px,3.2vw,58px)', color: primaryColor }}>
+                                                className="font-black italic" style={{ fontSize: 'clamp(20px,3.5vw,64px)', color: primaryColor }}>
                                                 {gamesT1}
                                             </motion.span>
                                         </AnimatePresence>
@@ -503,10 +620,10 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                         const val = isPast ? (match.games_sets?.[s - 1]?.t1 ?? 0) : '';
                                         return (
                                             <div key={s} className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                                style={{ width: 'clamp(30px,4vw,64px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
+                                                style={{ width: 'clamp(45px,6vw,95px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent', marginRight: s < 3 ? 'clamp(4px,0.5vw,10px)' : '0' }}>
                                                 <motion.span key={String(val)} initial={isCur ? { scale: 1.4, opacity: 0 } : {}} animate={{ scale: 1, opacity: 1 }}
-                                                    className={`font-black italic ${isPast ? 'text-white/60' : 'text-white/10'}`}
-                                                    style={{ fontSize: 'clamp(16px,2.8vw,50px)' }}>{val}</motion.span>
+                                                    className={`font-black italic ${isPast ? 'text-white/80' : 'text-white/10'}`}
+                                                    style={{ fontSize: 'clamp(20px,3.5vw,64px)' }}>{val}</motion.span>
                                             </div>
                                         );
                                     })}
@@ -558,21 +675,21 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     </div>
                                     {/* Puntos del game actual — Team 2 */}
                                     <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                        style={{ width: 'clamp(60px,8vw,130px)', backgroundColor: 'rgba(255,255,255,0.04)' }}>
+                                        style={{ width: 'clamp(68px,9vw,145px)', backgroundColor: 'rgba(255,255,255,0.04)', marginRight: 'clamp(4px,0.5vw,10px)' }}>
                                         <AnimatePresence mode="popLayout">
                                             <motion.span key={ptsT2} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
                                                 className="font-black italic text-white"
-                                                style={{ fontSize: 'clamp(22px,3.8vw,68px)' }}>
+                                                style={{ fontSize: 'clamp(36px,6vw,105px)' }}>
                                                 {ptsT2}
                                             </motion.span>
                                         </AnimatePresence>
                                     </div>
                                     {/* Games */}
                                     <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                        style={{ width: 'clamp(48px,6.5vw,104px)', backgroundColor: `${primaryColor}12` }}>
+                                        style={{ width: 'clamp(45px,6vw,95px)', backgroundColor: `${primaryColor}12`, marginRight: 'clamp(4px,0.5vw,10px)' }}>
                                         <AnimatePresence mode="popLayout">
                                             <motion.span key={gamesT2} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}
-                                                className="font-black italic" style={{ fontSize: 'clamp(18px,3.2vw,58px)', color: primaryColor }}>
+                                                className="font-black italic" style={{ fontSize: 'clamp(20px,3.5vw,64px)', color: primaryColor }}>
                                                 {gamesT2}
                                             </motion.span>
                                         </AnimatePresence>
@@ -583,10 +700,10 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                         const val = isPast ? (match.games_sets?.[s - 1]?.t2 ?? 0) : '';
                                         return (
                                             <div key={s} className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                                style={{ width: 'clamp(30px,4vw,64px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
+                                                style={{ width: 'clamp(45px,6vw,95px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent', marginRight: s < 3 ? 'clamp(4px,0.5vw,10px)' : '0' }}>
                                                 <motion.span key={String(val)} initial={isCur ? { scale: 1.4, opacity: 0 } : {}} animate={{ scale: 1, opacity: 1 }}
-                                                    className={`font-black italic ${isPast ? 'text-white/60' : 'text-white/10'}`}
-                                                    style={{ fontSize: 'clamp(16px,2.8vw,50px)' }}>{val}</motion.span>
+                                                    className={`font-black italic ${isPast ? 'text-white/80' : 'text-white/10'}`}
+                                                    style={{ fontSize: 'clamp(20px,3.5vw,64px)' }}>{val}</motion.span>
                                             </div>
                                         );
                                     })}
@@ -701,10 +818,15 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                                 paddingRight: 'clamp(40px,8vw,120px)',
                                             }}>
                                             {tickerTexto}
+                                            {recentResults.length > 0 && recentResults.map((res: any, idx: number) => (
+                                                <span key={`res-${idx}`} className="font-bold opacity-60" style={{ marginLeft: 'clamp(20px,3.5vw,100px)' }}>
+                                                    &nbsp;&bull;&nbsp;RESULTADO: {res.t1Name} {res.games_sets?.[0]?.t1 ?? 0}-{res.games_sets?.[0]?.t2 ?? 0} {res.t2Name}
+                                                </span>
+                                            ))}
                                             {nextMatch && (
                                                 <span
                                                     className="font-bold"
-                                                    style={{ color: primaryColor, marginLeft: 'clamp(12px,2vw,32px)' }}>
+                                                    style={{ color: primaryColor, marginLeft: 'clamp(20px,3.5vw,100px)' }}>
                                                     &nbsp;&bull;&nbsp;A CONTINUACIÓN: {nextMatch.t1Name} vs {nextMatch.t2Name}
                                                 </span>
                                             )}

@@ -5,7 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Trophy, Flag, Lock, CheckCircle2, AlertTriangle,
     ChevronRight, Swords, Users, RotateCcw, Zap, ShieldAlert,
+    Gamepad2, Monitor, Camera, Tv
 } from 'lucide-react';
+import Link from 'next/link';
 import { MatchStatus } from '@/types/tournament';
 import GroupPhaseView from './GroupPhaseView';
 
@@ -44,12 +46,13 @@ function TimelineStep({
 // ─── Bracket Match Card ────────────────────────────────────────────────────────
 
 function BracketMatchCard({
-    match, roundLabel, canEdit, onSave,
+    match, roundLabel, canEdit, onSave, tournamentId
 }: {
     match: any;
     roundLabel: string;
     canEdit: boolean;
     onSave?: (g1: number, g2: number) => void;
+    tournamentId: string;
 }) {
     const [g1, setG1] = useState(match?.games?.t1 ?? 0);
     const [g2, setG2] = useState(match?.games?.t2 ?? 0);
@@ -134,6 +137,59 @@ function BracketMatchCard({
                     </div>
                 )}
             </div>
+
+            {/* Dock de acciones: 4 botones (Control, Pizarra, Cámaras, Publicidad) */}
+            {canEdit && !isFinished && !isTBD && match.id && (
+                <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t border-white/[0.08]">
+                    {/* CONTROL */}
+                    <Link
+                        href={`/tournaments/${tournamentId}/score/${match.id}`}
+                        className={`flex flex-col items-center justify-center gap-1 py-1.5 transition-all active:scale-95
+                            ${match.status === MatchStatus.LIVE
+                                ? 'bg-padel-primary/10 text-padel-primary hover:bg-padel-primary/20'
+                                : 'bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-padel-primary'
+                            }`}
+                    >
+                        <div className="relative">
+                            <Gamepad2 className="w-3 h-3" />
+                            {match.status === MatchStatus.LIVE && (
+                                <span className="absolute -top-0.5 -right-0.5 w-1 h-1 rounded-full bg-padel-primary shadow-[0_0_4px_rgba(204,255,0,0.8)] animate-pulse" />
+                            )}
+                        </div>
+                        <span className="text-[6px] font-black uppercase tracking-widest text-center">Control</span>
+                    </Link>
+
+                    {/* PIZARRA */}
+                    <Link
+                        href={`/tournaments/${tournamentId}/display/${match.id}`}
+                        target="_blank"
+                        className="flex flex-col items-center justify-center gap-1 py-1.5 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-white transition-all active:scale-95"
+                    >
+                        <Monitor className="w-3 h-3" />
+                        <span className="text-[6px] font-black uppercase tracking-widest text-center">Pizarra</span>
+                    </Link>
+
+                    {/* CÁMARAS */}
+                    <Link
+                        href={`/tournaments/${tournamentId}/control/broadcasting`}
+                        target="_blank"
+                        className="flex flex-col items-center justify-center gap-1 py-1.5 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-orange-400 transition-all active:scale-95"
+                    >
+                        <Camera className="w-3 h-3" />
+                        <span className="text-[6px] font-black uppercase tracking-widest text-center">Cámaras</span>
+                    </Link>
+
+                    {/* PUBLICIDAD */}
+                    <Link
+                        href={`/tournaments/${tournamentId}/control/broadcasting`}
+                        target="_blank"
+                        className="flex flex-col items-center justify-center gap-1 py-1.5 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-yellow-400 transition-all active:scale-95"
+                    >
+                        <Tv className="w-3 h-3" />
+                        <span className="text-[6px] font-black uppercase tracking-widest text-center">Publicidad</span>
+                    </Link>
+                </div>
+            )}
         </motion.div>
     );
 }
@@ -141,12 +197,13 @@ function BracketMatchCard({
 // ─── Bracket View ─────────────────────────────────────────────────────────────
 
 function BracketView({
-    matches, canManage, locked, onSaveResult,
+    matches, canManage, locked, onSaveResult, tournamentId
 }: {
     matches: any[];
     canManage: boolean;
     locked: boolean;
     onSaveResult: (matchId: string, g1: number, g2: number) => Promise<void>;
+    tournamentId: string;
 }) {
     const knockoutMatches = matches.filter(m =>
         m.stage === 'SEMIFINAL' || m.stage === 'FINAL' ||
@@ -229,6 +286,7 @@ function BracketView({
                                 roundLabel={`Semifinal ${i + 1}`}
                                 canEdit={canManage}
                                 onSave={(g1, g2) => onSaveResult(m.id, g1, g2)}
+                                tournamentId={tournamentId}
                             />
                         ))}
                     </div>
@@ -252,6 +310,7 @@ function BracketView({
                                 roundLabel="Final"
                                 canEdit={canManage}
                                 onSave={(g1, g2) => onSaveResult(m.id, g1, g2)}
+                                tournamentId={tournamentId}
                             />
                         ))}
                     </div>
@@ -467,6 +526,7 @@ export default function TournamentPhaseManager({
                             canManage={canManage}
                             locked={bracketLocked}
                             onSaveResult={onSaveResult}
+                            tournamentId={tournament.id}
                         />
                     </motion.div>
                 )}

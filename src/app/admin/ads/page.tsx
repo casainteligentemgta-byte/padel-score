@@ -268,7 +268,7 @@ export default function AdsManagementPage() {
                     <section className="space-y-4">
                         <div className="flex items-center justify-between mb-2">
                             <h2 className="text-xl font-bold flex items-center gap-2 text-zinc-400">
-                                <CheckCircle2 className="w-5 h-5 text-padel-primary" /> Anuncios en Firebase
+                                <CheckCircle2 className="w-5 h-5 text-padel-primary" /> Banner página de inicio
                             </h2>
                             <button onClick={loadAds} className="text-[10px] font-bold text-zinc-500 uppercase hover:text-padel-primary flex items-center gap-1">
                                 Actualizar Lista

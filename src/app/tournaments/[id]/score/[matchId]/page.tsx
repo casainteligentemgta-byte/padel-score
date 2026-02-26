@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     ChevronLeft,
     RefreshCw,
-    Undo2,
     CheckCircle2,
     Stethoscope,
     Monitor,
@@ -13,7 +12,15 @@ import {
     Thermometer,
     Minus,
     Plus,
-    RotateCcw
+    RotateCcw,
+    Settings,
+    Flag,
+    X,
+    Trash2,
+    Play,
+    Zap,
+    Activity,
+    ZapOff
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
@@ -31,6 +38,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     const [match, setMatch] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [showMatchSelector, setShowMatchSelector] = useState(false);
+    const [showAdjustModal, setShowAdjustModal] = useState(false);
 
     const canControl = isAdmin || isMarker || tournament?.ownerId === user?.uid;
 
@@ -40,6 +48,46 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     const [isGoldenPoint, setIsGoldenPoint] = useState(true);
     const [isMedicalTimeout, setIsMedicalTimeout] = useState(false);
     const [medicalTimeRemaining, setMedicalTimeRemaining] = useState(180); // 3 minutes
+    const [showSideChange, setShowSideChange] = useState(false);
+    const [tiebreakTo, setTiebreakTo] = useState(7);
+    const [finishClicks, setFinishClicks] = useState(0);
+    const [now, setNow] = useState(new Date());
+
+    useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const handleFinishMatch = async () => {
+        if (finishClicks < 2) {
+            setFinishClicks(prev => prev + 1);
+            setTimeout(() => setFinishClicks(0), 3000); // Reset after 3s of inactivity
+            return;
+        }
+
+        if (!tournament || !match) return;
+        const updatedMatches = tournament.matches.map((m: any) =>
+            m.id === match.id ? {
+                ...m,
+                status: MatchStatus.FINISHED,
+                finishedAt: new Date().toISOString()
+            } : m
+        );
+        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+        router.push(`/tournaments/${id}`);
+    };
+
+    const updateManualScore = async (side: 't1' | 't2', field: 'games' | 'sets' | 'points', value: any) => {
+        if (!tournament || !match) return;
+        const updatedMatches = tournament.matches.map((m: any) =>
+            m.id === match.id ? {
+                ...m,
+                [field]: { ...m[field], [side]: field === 'points' ? value : Math.max(0, value) }
+            } : m
+        );
+        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+    };
+
 
     // ── Timer robusto ────────────────────────────────────────────────────────
     // Usamos refs para que el intervalo no se destruya en cada snapshot de Firestore.
@@ -63,11 +111,11 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             return;
         }
 
-        // Partido LIVE: arrancar el reloj solo si no estaba ya corriendo
-        if (status === MatchStatus.LIVE) {
+        // Partido LIVE o PAUSED: arrancar el reloj solo si no estaba ya corriendo
+        if (status === MatchStatus.LIVE || status === MatchStatus.PAUSED) {
             if (!timerRef.current) {
                 // Sincronizar desde startedAt por si venimos de una recarga
-                if (match.startedAt) {
+                if (match?.startedAt) {
                     const elapsed = Math.floor((Date.now() - new Date(match.startedAt).getTime()) / 1000);
                     setDuration(elapsed);
                 }
@@ -137,17 +185,21 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     let foundMatch = tourneyData.matches.find((m: any) => m.id === matchId);
 
                     // Fallback: si no se encontró por id, buscar por court o courtIndex
-                    // (cuando la URL viene como /score/court_1 o /score/1)
+                    // (cuando la URL viene como /score/court_1 o /score/1 o /score/match_0)
                     if (!foundMatch) {
                         const courtNum = matchId.startsWith('court_')
                             ? parseInt(matchId.replace('court_', ''))
-                            : parseInt(matchId);
+                            : matchId.startsWith('match_')
+                                ? parseInt(matchId.replace('match_', '')) + 1 // Asumimos match_0 es el primero
+                                : parseInt(matchId);
+
                         if (!isNaN(courtNum)) {
                             foundMatch = tourneyData.matches.find((m: any) =>
                                 m.court === courtNum ||
-                                m.courtIndex === courtNum - 1 ||
-                                m.courtIndex === courtNum
+                                m.courtIndex === courtNum - 1
                             ) ?? tourneyData.matches[courtNum - 1] ?? null;
+                        } else {
+                            foundMatch = tourneyData.matches.find((m: any) => m.id === matchId) || null;
                         }
                     }
 
@@ -259,12 +311,43 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
         saveHistory();
 
+        const otherSide = side === 't1' ? 't2' : 't1';
+        let newPoints = { ...match.points };
+
+        // ── Lógica de Tiebreak ───────────────────────────────────────────
+        if (match.isTiebreak) {
+            const currentP = parseInt(match.points?.[side] || '0');
+            const otherP = parseInt(match.points?.[otherSide] || '0');
+            const nextP = currentP + 1;
+            newPoints[side] = nextP.toString();
+
+            // Rotación de saque en Tiebreak: 1er punto (sacador actual), luego cada 2 puntos cambia de equipo
+            const totalPoints = nextP + otherP;
+            let nextServer = match.server;
+            if (totalPoints === 1 || (totalPoints > 1 && (totalPoints - 1) % 2 === 0)) {
+                const nextTeam = match.server.team === 1 ? 2 : 1;
+                const nextPlayer = match.server.player === 1 ? 2 : 1; // Alternar jugador
+                nextServer = { team: nextTeam as 1 | 2, player: nextPlayer as 1 | 2 };
+            }
+
+            // Verificar ganador de tiebreak
+            const target = match.tiebreakTo || tiebreakTo;
+            if (nextP >= target && (nextP - otherP) >= 2) {
+                await winGame(side);
+                return;
+            }
+
+            const updatedMatches = tournament.matches.map((m: any) =>
+                m.id === match.id ? { ...m, points: newPoints, server: nextServer } : m
+            );
+            await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+            return;
+        }
+
+        // ── Lógica Tradicional / Punto de Oro ─────────────────────────────
         const points = ['0', '15', '30', '40', 'AD'];
         const currentPoints = match.points?.[side] || '0';
-        const otherSide = side === 't1' ? 't2' : 't1';
         const otherPoints = match.points?.[otherSide] || '0';
-
-        let newPoints = { ...match.points };
 
         if (currentPoints === '40') {
             if (otherPoints === '40') {
@@ -289,50 +372,59 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         }
 
         const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === matchId ? { ...m, points: newPoints } : m
+            m.id === match.id ? { ...m, points: newPoints } : m
         );
         await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
     };
 
     const winGame = async (side: 't1' | 't2') => {
         let newGames = { t1: match.games?.t1 || 0, t2: match.games?.t2 || 0 };
+        const g1Before = newGames.t1;
+        const g2Before = newGames.t2;
+        const totalGamesBefore = g1Before + g2Before;
+
+        if (match.isTiebreak) {
+            newGames[side]++;
+            await winSet(side, newGames);
+            return;
+        }
+
         newGames[side]++;
+        const g1 = newGames.t1;
+        const g2 = newGames.t2;
+        const totalGames = g1 + g2;
 
-        // ── Rotación de sacador (regla pádel) ────────────────────────────
-        // Tras cada game, saca SIEMPRE el equipo contrario.
-        // Dentro del equipo, los jugadores alternan: P1 la 1ª vez, P2 la 2ª, etc.
-        // Se calcula por el total de games jugados hasta ahora (antes de resetear).
-        const totalGamesPlayed = (match.games?.t1 || 0) + (match.games?.t2 || 0); // games disputados en el set actual antes de este punto
-        const currentServer = match.server || { team: 1, player: 1 };
-        const nextTeam = currentServer.team === 1 ? 2 : 1;
-        // Cuántas veces le ha tocado servir al nextTeam: cada dos games cambia de equipo,
-        // así que el jugador alterna en cada turno de ese equipo.
-        // Contamos cuántos turnos de saque ha tenido el nextTeam hasta ahora.
-        // Turno global = totalGamesPlayed (0-indexed). Si es par → equipo inicial saca, impar → otro.
-        // El jugador dentro del equipo alterna cada turno que le toca a ese equipo.
-        const nextTeamServeCount = Math.floor((totalGamesPlayed + 1) / 2); // turnos que le tocan al nextTeam desde inicio
-        const nextPlayer: 1 | 2 = (nextTeamServeCount % 2 === 0) ? 1 : 2;
-        const nextServer = { team: nextTeam as 1 | 2, player: nextPlayer };
-        // ─────────────────────────────────────────────────────────────────
+        // Avisar cambio de cancha en games impares terminados (1, 3, 5...)
+        if (totalGames % 2 === 1) {
+            setShowSideChange(true);
+        }
 
-        if (newGames[side] >= 6) {
+        // Rotación de sacador (regla pádel: alterna cada game de equipo, y cada 2 turnos de equipo alterna jugador)
+        const team = (totalGames % 2 === 0) ? 1 : 2;
+        const teamNumTurns = Math.floor(totalGames / 2);
+        const player = (teamNumTurns % 2 === 0) ? 1 : 2;
+        const nextServer = { team: team as 1 | 2, player: player as 1 | 2 };
 
-            let newSets = { t1: match.sets?.t1 || 0, t2: match.sets?.t2 || 0 };
-            newSets[side]++;
-
+        // ── Lógica de Set ────────────────────────────────────────────────
+        // 6-x con diferencia de 2, o 7-5, o 7-x en tiebreak
+        if ((g1 >= 6 && g1 - g2 >= 2) || (g2 >= 6 && g2 - g1 >= 2) || g1 === 7 || g2 === 7) {
+            await winSet(side, newGames);
+        } else if (g1 === 6 && g2 === 6) {
+            // ENTRAR EN TIEBREAK
             const updatedMatches = tournament.matches.map((m: any) =>
-                m.id === matchId ? {
+                m.id === match.id ? {
                     ...m,
-                    games: { t1: 0, t2: 0 },
+                    games: newGames,
                     points: { t1: '0', t2: '0' },
-                    sets: newSets,
+                    isTiebreak: true,
                     server: nextServer
                 } : m
             );
             await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
         } else {
+            // Juego Normal
             const updatedMatches = tournament.matches.map((m: any) =>
-                m.id === matchId ? {
+                m.id === match.id ? {
                     ...m,
                     games: newGames,
                     points: { t1: '0', t2: '0' },
@@ -343,6 +435,28 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         }
     };
 
+    const winSet = async (side: 't1' | 't2', finalGames: { t1: number, t2: number }) => {
+        let newSets = { t1: match.sets?.t1 || 0, t2: match.sets?.t2 || 0 };
+        newSets[side]++;
+
+        // El partido termina a los 2 sets (2-0 o si hay empate 1-1 se decide según reglamento)
+        // Por ahora, implementamos que el primero a 2 gana. Si llega a 1-1, el siguiente set decidirá.
+        const isMatchFinished = newSets[side] >= 2;
+
+        const updatedMatches = tournament.matches.map((m: any) =>
+            m.id === match.id ? {
+                ...m,
+                games: isMatchFinished ? finalGames : { t1: 0, t2: 0 },
+                points: { t1: '0', t2: '0' },
+                sets: newSets,
+                isTiebreak: false,
+                status: isMatchFinished ? MatchStatus.FINISHED : m.status,
+                finishedAt: isMatchFinished ? new Date().toISOString() : m.finishedAt || null
+            } : m
+        );
+        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+    };
+
     // ── Lógica de selección de sacador ───────────────────────────────────
     // Un estado local para detectar doble-click rápido
     const lastClickRef = { team: 0, player: 0, ts: 0 };
@@ -351,7 +465,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     const setSpecificServer = async (team: number, player: number) => {
         if (!tournament || !match) return;
         const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === matchId ? { ...m, server: { team, player } } : m
+            m.id === match.id ? { ...m, server: { team, player } } : m
         );
         await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
     };
@@ -379,7 +493,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         saveHistory();
         const currentServer = match.server || { team: 1, player: 1 };
         const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === matchId ? { ...m, server: { ...currentServer, player: currentServer.player === 1 ? 2 : 1 } } : m
+            m.id === match.id ? { ...m, server: { ...currentServer, player: currentServer.player === 1 ? 2 : 1 } } : m
         );
         await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
     };
@@ -389,7 +503,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         saveHistory();
         const currentServer = match.server || { team: 1, player: 1 };
         const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === matchId ? { ...m, server: { ...currentServer, team: currentServer.team === 1 ? 2 : 1 } } : m
+            m.id === match.id ? { ...m, server: { ...currentServer, team: currentServer.team === 1 ? 2 : 1 } } : m
         );
         await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
     };
@@ -405,7 +519,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         setIsMedicalTimeout(!isMedicalTimeout);
 
         const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === matchId ? { ...m, status: newStatus } : m
+            m.id === match.id ? { ...m, status: newStatus } : m
         );
         await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
     };
@@ -441,215 +555,265 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     const server = match.server || { team: 1, player: 1 };
 
     return (
-        <div className="fixed inset-0 bg-[#0a0a0a] text-white flex flex-col font-sans select-none overflow-hidden touch-none p-3">
-            {/* Top Bar */}
-            <header className="flex items-center justify-between mb-2 px-1">
-                {/* ── Izquierda: Atrás + Reloj/Iniciar + Temperatura ── */}
+        <div className="fixed inset-0 bg-[#070707] text-white flex flex-col font-sans select-none overflow-hidden touch-none p-4 gap-4 premium-gradient">
+            {/* Background Glows */}
+            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-padel-primary/5 blur-[120px] rounded-full pointer-events-none" />
+            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-padel-primary/5 blur-[120px] rounded-full pointer-events-none" />
+            <motion.div
+                animate={{
+                    opacity: [0.3, 0.5, 0.3],
+                    scale: [1, 1.1, 1]
+                }}
+                transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle_at_center,rgba(204,255,0,0.03)_0%,transparent_70%)] pointer-events-none"
+            />
+
+            {/* Rectangle 1: Header */}
+            <header className="h-28 px-10 flex items-center justify-between relative z-50 glass rounded-[2.5rem] shadow-2xl shrink-0">
+                {/* Side Change Alert */}
+                <AnimatePresence>
+                    {showSideChange && (
+                        <motion.div
+                            initial={{ y: -100, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: -100, opacity: 0 }}
+                            className="absolute inset-x-0 -bottom-16 flex justify-center z-[60]"
+                        >
+                            <div className="bg-padel-primary text-black px-8 py-4 rounded-2xl flex items-center gap-4 shadow-2xl border-b-4 border-black/20">
+                                <RefreshCw className="w-6 h-6 animate-spin-slow" />
+                                <div className="flex flex-col">
+                                    <span className="font-black italic uppercase text-lg leading-none">Change Ends</span>
+                                    <span className="text-[10px] font-bold opacity-70 uppercase tracking-widest">Odd Game Finished</span>
+                                </div>
+                                <button
+                                    onClick={() => setShowSideChange(false)}
+                                    className="ml-4 w-8 h-8 flex items-center justify-center rounded-lg bg-black/10 hover:bg-black/20 transition-colors"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
                 <div className="flex items-center gap-6">
-                    {/* Botón Atrás */}
-                    <button
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={() => router.push(`/tournaments/${id}`)}
-                        className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all active:scale-95"
-                        title="Volver al torneo"
+                        className="w-12 h-12 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all group shrink-0"
                     >
-                        <ChevronLeft className="w-5 h-5 text-gray-400" />
-                    </button>
+                        <ChevronLeft className="w-6 h-6 text-gray-400 group-hover:text-padel-primary transition-colors" />
+                    </motion.button>
 
-                    {/* Reloj + Botón Iniciar */}
-                    <div className="flex flex-col items-center gap-1">
-                        <span className="text-[10px] font-black italic text-gray-500 tracking-widest uppercase">Duración</span>
-                        {match.status === MatchStatus.FINISHED ? (
-                            <span className="text-3xl font-black italic text-white/40 tracking-tighter">{formatDuration(duration)}</span>
-                        ) : match.status === MatchStatus.LIVE ? (
-                            <span className="text-3xl font-black italic text-padel-primary tracking-tighter tabular-nums">{formatDuration(duration)}</span>
-                        ) : (
-                            /* Estado PENDING: botón de inicio */
-                            <button
+                    <div className="flex flex-col items-center select-none">
+                        <h1 className="text-4xl font-black italic uppercase tracking-tighter text-white leading-none mb-2 text-center">
+                            {match.courtName || (match.court ? `Pista ${match.court}` : 'Pista 1')}
+                        </h1>
+                        <div className="flex flex-col items-center gap-1.5">
+                            <span className="text-xl font-black italic uppercase text-white/80 leading-none tracking-tight text-center">
+                                {match.roundName || match.groupName || 'Fase de Grupos'}
+                            </span>
+                            <span className="text-base font-black italic uppercase text-white/50 leading-none tracking-tight text-center">
+                                {tournament?.gender === 'female' ? 'FEMENINO' : tournament?.gender === 'male' ? 'MASCULINO' : 'MIXTO'}
+                            </span>
+                            <span className="text-lg font-black italic uppercase text-padel-primary leading-none tracking-tight flex items-center gap-2 text-center">
+                                <span className="w-1.5 h-1.5 rounded-full bg-padel-primary/40" />
+                                {tournament?.category?.replace('MAS_', '+').replace('_', ' ') || match.category || 'Categoría Principal'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Center: Match Control (Timer) */}
+                <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0 flex items-center">
+                    {match.status === MatchStatus.PENDING ? (
+                        <div className="flex flex-col items-center gap-4">
+                            <motion.button
+                                initial={{ y: -20, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                whileHover={{ scale: 1.05, backgroundColor: '#ccff00', color: '#000' }}
+                                whileTap={{ scale: 0.95 }}
                                 onClick={startMatch}
-                                className="flex items-center gap-2 px-4 py-2 bg-padel-primary text-black text-[10px] font-black italic uppercase tracking-widest rounded-xl hover:scale-105 active:scale-95 transition-all shadow-[0_5px_20px_rgba(204,255,0,0.35)]"
+                                className="flex items-center gap-4 px-12 py-5 bg-padel-primary text-black rounded-b-3xl font-black italic uppercase tracking-[0.2em] shadow-[0_10px_40px_-10px_rgba(204,255,0,0.3)] transition-all border-x border-b border-black/10 backdrop-blur-md"
                             >
-                                <Timer className="w-3.5 h-3.5" />
-                                Iniciar Partido
-                            </button>
-                        )}
-                    </div>
+                                <Play className="w-5 h-5 fill-current" />
+                                Empezar Partido
+                            </motion.button>
 
-                    <div className="flex flex-col">
-                        <span className="text-[10px] font-black italic text-gray-500 tracking-widest uppercase">Temperatura</span>
-                        <span className="text-3xl font-black italic text-white tracking-tighter">28°C</span>
-                    </div>
+                            <div className="flex flex-col items-center leading-none select-none">
+                                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/30 mb-1.5">
+                                    {now.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase()}
+                                </span>
+                                <span className="text-xl font-black italic uppercase tracking-tighter text-white/50 tabular-nums">
+                                    {now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase()}
+                                </span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center bg-white/[0.03] border-x border-b border-white/10 px-10 py-4 rounded-b-3xl backdrop-blur-xl shadow-2xl">
+                            <span className="text-4xl font-black tracking-tighter tabular-nums italic text-white text-glow leading-none">
+                                {formatDuration(duration)}
+                            </span>
+                            <div className="flex items-center gap-2 mt-2">
+                                <motion.div
+                                    animate={{ scale: [1, 1.2, 1], opacity: [0.4, 0.8, 0.4] }}
+                                    transition={{ duration: 2, repeat: Infinity }}
+                                    className="w-1.5 h-1.5 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]"
+                                />
+                                <span className="text-[9px] font-black italic tracking-[0.3em] uppercase text-padel-primary/80">
+                                    Tiempo de Juego
+                                </span>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                <div className="flex gap-4">
-                    <RefereeRemoteControl
-                        onTeamAPoint={() => updateScore('t1', 'plus')}
-                        onTeamBPoint={() => updateScore('t2', 'plus')}
-                        onUndo={() => undoPoint()}
-                    />
-                    <button
-                        onClick={() => setShowMatchSelector(true)}
-                        className="flex items-center justify-center gap-2.5 px-5 py-3 rounded-2xl text-[10px] font-black italic uppercase tracking-widest transition-all active:scale-95 bg-white border border-white/80 text-gray-800 hover:bg-white/90 shadow-md"
-                    >
-                        {/* Flechas circulares SVG */}
-                        <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="w-5 h-5 flex-shrink-0 text-gray-800"
-                        >
-                            <path d="M17 2l4 4-4 4" />
-                            <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-                            <path d="M7 22l-4-4 4-4" />
-                            <path d="M21 13v2a4 4 0 0 1-4 4H3" />
-                        </svg>
-                        Cambiar Cancha
-                    </button>
-                    <button
-                        onClick={handleMedicalTimeout}
-                        className={`flex items-center justify-center gap-2.5 px-5 py-3 rounded-2xl text-[10px] font-black italic uppercase tracking-widest transition-all active:scale-95 ${isMedicalTimeout
-                            ? 'bg-red-600 border border-red-500 text-white shadow-[0_0_20px_rgba(220,38,38,0.5)]'
-                            : 'bg-white border border-white/80 text-red-600 hover:bg-white/90 shadow-md'
-                            }`}
-                    >
-                        {/* Cruz roja / blanca SVG */}
-                        <svg
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className={`w-5 h-5 flex-shrink-0 ${isMedicalTimeout ? 'text-white animate-pulse' : 'text-red-600'}`}
-                        >
-                            <rect x="9" y="2" width="6" height="20" rx="2" />
-                            <rect x="2" y="9" width="20" height="6" rx="2" />
-                        </svg>
-                        {isMedicalTimeout ? 'Reanudar' : 'Asistencia'}
-                    </button>
-                </div>
+                {/* Right: Technical Info & Actions */}
+                <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2">
+                        {[
+                            { icon: RefreshCw, onClick: () => setShowMatchSelector(true), color: 'hover:text-padel-primary', label: 'Cambiar Pista' },
+                            { icon: Settings, onClick: () => setShowAdjustModal(true), color: 'hover:text-white', label: 'Ajustes' },
+                            {
+                                icon: Plus,
+                                onClick: handleMedicalTimeout,
+                                isMedical: true,
+                                label: 'Asistencia Médica'
+                            },
+                        ].map((btn, idx) => (
+                            <motion.button
+                                key={idx}
+                                whileHover={{ scale: 1.05, backgroundColor: btn.isMedical ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.05)' }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={btn.onClick}
+                                className={`w-11 h-11 flex items-center justify-center rounded-xl transition-all border ${btn.isMedical
+                                    ? 'bg-red-500/10 border-red-500/30 text-red-500'
+                                    : 'text-gray-500 border-white/5 ' + btn.color
+                                    }`}
+                                title={btn.label}
+                            >
+                                {btn.isMedical ? (
+                                    <div className="relative w-5 h-5 flex items-center justify-center">
+                                        <div className="absolute w-5 h-1.5 bg-current rounded-full" />
+                                        <div className="absolute w-1.5 h-5 bg-current rounded-full" />
+                                    </div>
+                                ) : (
+                                    <btn.icon className="w-5 h-5" />
+                                )}
+                            </motion.button>
+                        ))}
 
-                <div className="flex flex-col items-center gap-0.5">
-                    {/* Pista — más grande */}
-                    <span className="text-2xl font-black italic text-white uppercase tracking-tighter leading-none">
-                        Pista {match.court ?? '-'}
-                    </span>
-                    {/* Fase / Ronda — mediano */}
-                    {(match.roundName || match.groupName) && (
-                        <span className="text-sm font-black italic text-white/70 uppercase tracking-tight leading-none">
-                            {match.roundName || match.groupName}
-                        </span>
-                    )}
-                    {/* Categoría — más pequeño */}
-                    {tournament?.category && (
-                        <span className="text-[10px] font-black italic text-gray-500 uppercase tracking-widest leading-none">
-                            {tournament.category.replace(/_/g, ' ')}
-                        </span>
-                    )}
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={handleFinishMatch}
+                            className={`px-6 py-3.5 rounded-xl text-[10px] font-black italic uppercase tracking-[0.15em] transition-all ${finishClicks === 0
+                                ? 'bg-white/5 border border-white/10 text-white/40 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30'
+                                : finishClicks === 1
+                                    ? 'bg-orange-500 text-white border-orange-600'
+                                    : 'bg-red-600 text-white'
+                                }`}
+                        >
+                            {finishClicks === 0 ? 'Finalizar' : finishClicks === 1 ? '¿Seguro?' : 'Confirmar'}
+                        </motion.button>
+                    </div>
                 </div>
             </header>
 
-            {/* Main Content: Two Teams */}
-            <main className="flex-1 flex gap-3 px-1">
+            {/* Rectangle 2 & 3: Middle Content */}
+            <main className="flex-1 flex gap-4 min-h-0 overflow-hidden">
                 {/* Team 1 Card */}
-                <div className="flex-1 bg-[#141414] border border-white/5 rounded-[2rem] p-4 flex flex-col items-center relative overflow-hidden group">
+                <div className="flex-1 glass rounded-[3rem] p-8 flex flex-col items-center relative overflow-hidden group shadow-2xl">
+                    <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/[0.04] to-transparent opacity-50" />
 
-                    <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/5 to-transparent opacity-50" />
+                    {/* Players Section */}
+                    <div className="flex justify-center gap-8 mb-8 relative z-10 w-full">
+                        {[1, 2].map((pNum) => {
+                            const isServer = server.team === 1 && server.player === pNum;
+                            const playerName = pNum === 1 ? match.team1.p1 : match.team1.p2;
+                            const playerPhoto = pNum === 1 ? match.team1.p1Photo : match.team1.p2Photo;
 
-                    {/* Players Header */}
-                    <div className="flex justify-center gap-5 mb-3 relative z-10">
-                        {/* Player 1 */}
-                        <div className="flex flex-col items-center gap-4">
-                            <div
-                                onClick={() => handlePlayerIconClick(1, 1)}
-                                className={`relative w-16 h-16 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 1 && server.player === 1 ? 'border-padel-primary scale-110 shadow-[0_0_20px_rgba(204,255,0,0.4)] z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
-                            >
-                                <div className="w-full h-full rounded-full overflow-hidden">
-                                    <img src={match.team1.p1Photo || `https://ui-avatars.com/api/?name=${match.team1.p1}&background=222&color=fff`} className="w-full h-full object-cover" />
+                            return (
+                                <div key={pNum} className="flex flex-col items-center gap-4 flex-1 max-w-[140px]">
+                                    <div
+                                        onClick={() => handlePlayerIconClick(1, pNum)}
+                                        className={`relative w-24 h-24 rounded-[2rem] transition-all duration-500 cursor-pointer group/player ${isServer ? 'scale-110' : 'opacity-40 hover:opacity-100 grayscale hover:grayscale-0'}`}
+                                    >
+                                        <div className={`w-full h-full rounded-[2rem] overflow-hidden border-4 transition-colors ${isServer ? 'border-padel-primary shadow-[0_0_40px_rgba(204,255,0,0.3)]' : 'border-white/10'}`}>
+                                            <img
+                                                src={playerPhoto || `https://ui-avatars.com/api/?name=${playerName}&background=222&color=fff&bold=true&font-size=0.4`}
+                                                className="w-full h-full object-cover"
+                                                alt={playerName}
+                                            />
+                                        </div>
+
+                                        {isServer && (
+                                            <motion.div
+                                                layoutId="server-glow-t1"
+                                                className="absolute -inset-2 bg-padel-primary/20 blur-xl rounded-[2.5rem] -z-10"
+                                                animate={{ opacity: [0.3, 0.6, 0.3] }}
+                                                transition={{ duration: 2, repeat: Infinity }}
+                                            />
+                                        )}
+
+                                        {isServer && (
+                                            <motion.div
+                                                initial={{ scale: 0, rotate: -45 }}
+                                                animate={{ scale: 1, rotate: 0 }}
+                                                className="absolute -bottom-2 -right-2 w-10 h-10 bg-padel-primary text-black rounded-xl border-4 border-black flex items-center justify-center shadow-xl z-20"
+                                            >
+                                                <div className="w-5 h-5 bg-black rounded-full flex items-center justify-center p-1">
+                                                    <div className="w-full h-full border-2 border-padel-primary rounded-full animate-spin-slow" />
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </div>
+                                    <span className={`text-sm font-black italic uppercase tracking-tighter text-center transition-colors ${isServer ? 'text-padel-primary' : 'text-white/60'}`}>
+                                        {playerName}
+                                    </span>
                                 </div>
-                                {server.team === 1 && server.player === 1 && (
-                                    <>
-                                        <div className="absolute inset-0 bg-padel-primary/10 animate-pulse rounded-full" />
-                                        <motion.div
-                                            animate={{ y: [0, -8, 0], scale: [1, 0.9, 1] }}
-                                            transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }}
-                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 bg-padel-primary rounded-full shadow-[0_5px_15px_rgba(204,255,0,0.6)] flex items-center justify-center border-4 border-black z-30 overflow-hidden"
-                                        >
-                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 rotate-45" />
-                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 -rotate-45" />
-                                        </motion.div>
-                                    </>
-                                )}
-                            </div>
-                            <span className="block text-sm font-black italic uppercase tracking-tighter text-center">{match.team1.p1}</span>
-                        </div>
-
-                        {/* Player 2 */}
-                        <div className="flex flex-col items-center gap-4">
-                            <div
-                                onClick={() => handlePlayerIconClick(1, 2)}
-                                className={`relative w-16 h-16 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 1 && server.player === 2 ? 'scale-110 z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
-                                style={server.team === 1 && server.player === 2 ? { borderColor: primaryColor, boxShadow: `0 0 40px ${primaryColor}66` } : {}}
-                            >
-                                <div className="w-full h-full rounded-full overflow-hidden">
-                                    <img src={match.team1.p2Photo || `https://ui-avatars.com/api/?name=${match.team1.p2}&background=222&color=fff`} className="w-full h-full object-cover" />
-                                </div>
-                                {server.team === 1 && server.player === 2 && (
-                                    <>
-                                        <div className="absolute inset-0 animate-pulse rounded-full" style={{ backgroundColor: `${primaryColor}1a` }} />
-                                        <motion.div
-                                            animate={{ y: [0, -8, 0], scale: [1, 0.9, 1] }}
-                                            transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }}
-                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full flex items-center justify-center border-4 border-black z-30 overflow-hidden"
-                                            style={{ backgroundColor: primaryColor, boxShadow: `0 5px 15px ${primaryColor}99` }}
-                                        >
-                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 rotate-45" />
-                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 -rotate-45" />
-                                        </motion.div>
-                                    </>
-                                )}
-                            </div>
-                            <span className="block text-sm font-black italic uppercase tracking-tighter text-center">{match.team1.p2}</span>
-                        </div>
+                            );
+                        })}
                     </div>
 
-
-                    {/* Games & Sets — Team 1 */}
-                    <div className="relative z-10 flex items-stretch gap-px mx-auto mb-3 rounded-2xl overflow-hidden border border-white/10 w-fit">
-                        {/* Games */}
-                        <div className="flex flex-col items-center px-6 py-2 bg-white/5">
-                            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30 mb-1">Games</span>
-                            <span className="text-2xl font-black italic leading-none" style={{ color: primaryColor }}>
+                    {/* Vertical Stats (Games/Sets) on the inner edge */}
+                    <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col items-center gap-6 z-20 bg-black/20 backdrop-blur-md border border-white/5 py-6 px-3 rounded-3xl">
+                        <div className="flex flex-col items-center">
+                            <span className="text-[8px] font-black uppercase text-gray-500 tracking-[0.2em] mb-1">G</span>
+                            <span className="text-4xl font-black italic tabular-nums text-padel-primary leading-none">
                                 {match.games?.t1 ?? 0}
                             </span>
                         </div>
-                        {/* Divider */}
-                        <div className="w-px bg-white/10" />
-                        {/* Sets */}
-                        <div className="flex flex-col items-center px-6 py-2 bg-white/5">
-                            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30 mb-1">Sets</span>
-                            <span className="text-2xl font-black italic leading-none text-white">
+                        <div className="w-6 h-px bg-white/10" />
+                        <div className="flex flex-col items-center">
+                            <span className="text-[8px] font-black uppercase text-gray-500 tracking-[0.2em] mb-1">S</span>
+                            <span className="text-4xl font-black italic tabular-nums text-white leading-none">
                                 {match.sets?.t1 ?? 0}
                             </span>
                         </div>
                     </div>
 
-                    {/* Points Interaction */}
-                    <div className="flex-1 flex items-center justify-center w-full relative z-10 gap-8">
+                    {/* Central Points Control (Integrated Scoreboard) */}
+                    <div className="flex items-center gap-4 p-2 bg-black/40 border border-white/10 rounded-[2rem] mb-8 relative z-10 shadow-inner">
                         <motion.button
+                            whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.08)' }}
                             whileTap={{ scale: 0.9 }}
                             onClick={() => updateScore('t1', 'minus')}
-                            className="w-14 h-28 bg-white/5 border border-white/5 rounded-[1.5rem] flex items-center justify-center hover:bg-white/10 transition-all text-gray-500"
+                            className="w-10 h-10 rounded-full glass flex items-center justify-center text-white/20 hover:text-white/60 transition-colors border border-white/10"
                         >
-                            <Minus className="w-8 h-8" />
+                            <Minus className="w-5 h-5" />
                         </motion.button>
 
-                        <div className="flex flex-col items-center">
-                            <span className="text-[10px] font-black italic text-gray-500 uppercase tracking-[0.3em] mb-4">Puntos</span>
+                        <div className="flex flex-col items-center px-4 min-w-[80px]">
+                            <span className="text-[8px] font-black uppercase text-gray-500 tracking-widest mb-0.5">Points</span>
                             <AnimatePresence mode="wait">
                                 <motion.span
                                     key={match.points?.t1}
-                                    initial={{ scale: 0.5, opacity: 0 }}
-                                    animate={{ scale: 1, opacity: 1 }}
-                                    className="text-[6rem] font-black leading-none tracking-tighter text-white"
+                                    initial={{ y: 5, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    exit={{ y: -5, opacity: 0 }}
+                                    className="text-4xl font-black italic tabular-nums text-white leading-none text-glow"
                                 >
                                     {match.points?.t1 || '0'}
                                 </motion.span>
@@ -657,120 +821,108 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         </div>
 
                         <motion.button
+                            whileHover={{ scale: 1.1, backgroundColor: 'rgba(204,255,0,0.15)' }}
                             whileTap={{ scale: 0.9 }}
                             onClick={() => updateScore('t1', 'plus')}
-                            className="w-14 h-28 bg-padel-primary/10 border border-padel-primary/20 rounded-[1.5rem] flex items-center justify-center hover:bg-padel-primary/20 transition-all text-padel-primary"
+                            className="w-10 h-10 rounded-full bg-padel-primary/10 border border-padel-primary/20 flex items-center justify-center text-padel-primary hover:border-padel-primary/40 transition-all shadow-[0_5px_15px_-5px_rgba(204,255,0,0.3)]"
                         >
-                            <Plus className="w-8 h-8" />
+                            <Plus className="w-6 h-6" />
                         </motion.button>
                     </div>
                 </div>
 
 
                 {/* Team 2 Card */}
-                <div className="flex-1 bg-[#141414] border border-white/5 rounded-[2.5rem] p-6 flex flex-col items-center relative overflow-hidden group">
-                    <div className="absolute inset-0 bg-gradient-to-bl from-white/5 to-transparent opacity-50" />
+                <div className="flex-1 glass rounded-[3rem] p-8 flex flex-col items-center relative overflow-hidden group shadow-2xl">
+                    <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/[0.04] to-transparent opacity-50" />
 
+                    {/* Players Section */}
+                    <div className="flex justify-center gap-8 mb-8 relative z-10 w-full">
+                        {[1, 2].map((pNum) => {
+                            const isServer = server.team === 2 && server.player === pNum;
+                            const playerName = pNum === 1 ? match.team2.p1 : match.team2.p2;
+                            const playerPhoto = pNum === 1 ? match.team2.p1Photo : match.team2.p2Photo;
 
+                            return (
+                                <div key={pNum} className="flex flex-col items-center gap-4 flex-1 max-w-[140px]">
+                                    <div
+                                        onClick={() => handlePlayerIconClick(2, pNum)}
+                                        className={`relative w-24 h-24 rounded-[2rem] transition-all duration-500 cursor-pointer group/player ${isServer ? 'scale-110' : 'opacity-40 hover:opacity-100 grayscale hover:grayscale-0'}`}
+                                    >
+                                        <div className={`w-full h-full rounded-[2rem] overflow-hidden border-4 transition-colors ${isServer ? 'border-padel-primary shadow-[0_0_40px_rgba(204,255,0,0.3)]' : 'border-white/10'}`}>
+                                            <img
+                                                src={playerPhoto || `https://ui-avatars.com/api/?name=${playerName}&background=222&color=fff&bold=true&font-size=0.4`}
+                                                className="w-full h-full object-cover"
+                                                alt={playerName}
+                                            />
+                                        </div>
 
-                    {/* Players Header */}
-                    <div className="flex justify-center gap-5 mb-3 relative z-10">
-                        {/* Player 1 */}
-                        <div className="flex flex-col items-center gap-4">
-                            <div
-                                onClick={() => handlePlayerIconClick(2, 1)}
-                                className={`relative w-16 h-16 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 2 && server.player === 1 ? 'scale-110 z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
-                                style={server.team === 2 && server.player === 1 ? { borderColor: primaryColor, boxShadow: `0 0 40px ${primaryColor}66` } : {}}
-                            >
-                                <div className="w-full h-full rounded-full overflow-hidden">
-                                    <img src={match.team2.p1Photo || `https://ui-avatars.com/api/?name=${match.team2.p1}&background=222&color=fff`} className="w-full h-full object-cover" />
+                                        {isServer && (
+                                            <motion.div
+                                                layoutId="server-glow-t2"
+                                                className="absolute -inset-2 bg-padel-primary/20 blur-xl rounded-[2.5rem] -z-10"
+                                                animate={{ opacity: [0.3, 0.6, 0.3] }}
+                                                transition={{ duration: 2, repeat: Infinity }}
+                                            />
+                                        )}
+
+                                        {isServer && (
+                                            <motion.div
+                                                initial={{ scale: 0, rotate: -45 }}
+                                                animate={{ scale: 1, rotate: 0 }}
+                                                className="absolute -bottom-2 -right-2 w-10 h-10 bg-padel-primary text-black rounded-xl border-4 border-black flex items-center justify-center shadow-xl z-20"
+                                            >
+                                                <div className="w-5 h-5 bg-black rounded-full flex items-center justify-center p-1">
+                                                    <div className="w-full h-full border-2 border-padel-primary rounded-full animate-spin-slow" />
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </div>
+                                    <span className={`text-sm font-black italic uppercase tracking-tighter text-center transition-colors ${isServer ? 'text-padel-primary' : 'text-white/60'}`}>
+                                        {playerName}
+                                    </span>
                                 </div>
-                                {server.team === 2 && server.player === 1 && (
-                                    <>
-                                        <div className="absolute inset-0 animate-pulse rounded-full" style={{ backgroundColor: `${primaryColor}1a` }} />
-                                        <motion.div
-                                            animate={{ y: [0, -8, 0], scale: [1, 0.9, 1] }}
-                                            transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }}
-                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full flex items-center justify-center border-4 border-black z-30 overflow-hidden"
-                                            style={{ backgroundColor: primaryColor, boxShadow: `0 5px 15px ${primaryColor}99` }}
-                                        >
-                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 rotate-45" />
-                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 -rotate-45" />
-                                        </motion.div>
-                                    </>
-                                )}
-                            </div>
-                            <span className="block text-sm font-black italic uppercase tracking-tighter text-center">{match.team2.p1}</span>
-                        </div>
-
-                        {/* Player 2 */}
-                        <div className="flex flex-col items-center gap-4">
-                            <div
-                                onClick={() => handlePlayerIconClick(2, 2)}
-                                className={`relative w-16 h-16 rounded-full border-4 transition-all duration-500 cursor-pointer ${server.team === 2 && server.player === 2 ? 'scale-110 z-20' : 'border-white/5 opacity-40 hover:opacity-100'}`}
-                                style={server.team === 2 && server.player === 2 ? { borderColor: primaryColor, boxShadow: `0 0 40px ${primaryColor}66` } : {}}
-                            >
-                                <div className="w-full h-full rounded-full overflow-hidden">
-                                    <img src={match.team2.p2Photo || `https://ui-avatars.com/api/?name=${match.team2.p2}&background=222&color=fff`} className="w-full h-full object-cover" />
-                                </div>
-                                {server.team === 2 && server.player === 2 && (
-                                    <>
-                                        <div className="absolute inset-0 animate-pulse rounded-full" style={{ backgroundColor: `${primaryColor}1a` }} />
-                                        <motion.div
-                                            animate={{ y: [0, -8, 0], scale: [1, 0.9, 1] }}
-                                            transition={{ duration: 0.6, repeat: Infinity, ease: "easeInOut" }}
-                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full flex items-center justify-center border-4 border-black z-30 overflow-hidden"
-                                            style={{ backgroundColor: primaryColor, boxShadow: `0 5px 15px ${primaryColor}99` }}
-                                        >
-                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 rotate-45" />
-                                            <div className="absolute inset-0 border-[1.5px] border-black/10 rounded-full scale-75 -rotate-45" />
-                                        </motion.div>
-                                    </>
-                                )}
-                            </div>
-                            <span className="block text-sm font-black italic uppercase tracking-tighter text-center">{match.team2.p2}</span>
-                        </div>
+                            );
+                        })}
                     </div>
 
-
-                    {/* Games & Sets — Team 2 */}
-                    <div className="relative z-10 flex items-stretch gap-px mx-auto mb-3 rounded-2xl overflow-hidden border border-white/10 w-fit">
-                        {/* Games */}
-                        <div className="flex flex-col items-center px-6 py-2 bg-white/5">
-                            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30 mb-1">Games</span>
-                            <span className="text-2xl font-black italic leading-none" style={{ color: primaryColor }}>
+                    {/* Vertical Stats (Games/Sets) on the inner edge */}
+                    <div className="absolute left-6 top-1/2 -translate-y-1/2 flex flex-col items-center gap-6 z-20 bg-black/20 backdrop-blur-md border border-white/5 py-6 px-3 rounded-3xl">
+                        <div className="flex flex-col items-center">
+                            <span className="text-[8px] font-black uppercase text-gray-500 tracking-[0.2em] mb-1">G</span>
+                            <span className="text-4xl font-black italic tabular-nums text-padel-primary leading-none">
                                 {match.games?.t2 ?? 0}
                             </span>
                         </div>
-                        {/* Divider */}
-                        <div className="w-px bg-white/10" />
-                        {/* Sets */}
-                        <div className="flex flex-col items-center px-6 py-2 bg-white/5">
-                            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30 mb-1">Sets</span>
-                            <span className="text-2xl font-black italic leading-none text-white">
+                        <div className="w-6 h-px bg-white/10" />
+                        <div className="flex flex-col items-center">
+                            <span className="text-[8px] font-black uppercase text-gray-500 tracking-[0.2em] mb-1">S</span>
+                            <span className="text-4xl font-black italic tabular-nums text-white leading-none">
                                 {match.sets?.t2 ?? 0}
                             </span>
                         </div>
                     </div>
 
-                    {/* Points Interaction */}
-                    <div className="flex-1 flex items-center justify-center w-full relative z-10 gap-8">
+                    {/* Central Points Control (Integrated Scoreboard) */}
+                    <div className="flex items-center gap-4 p-2 bg-black/40 border border-white/10 rounded-[2rem] mb-8 relative z-10 shadow-inner">
                         <motion.button
+                            whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.08)' }}
                             whileTap={{ scale: 0.9 }}
                             onClick={() => updateScore('t2', 'minus')}
-                            className="w-14 h-28 bg-white/5 border border-white/5 rounded-[1.5rem] flex items-center justify-center hover:bg-white/10 transition-all text-gray-500"
+                            className="w-10 h-10 rounded-full glass flex items-center justify-center text-white/20 hover:text-white/60 transition-colors border border-white/10"
                         >
-                            <Minus className="w-8 h-8" />
+                            <Minus className="w-5 h-5" />
                         </motion.button>
 
-                        <div className="flex flex-col items-center">
-                            <span className="text-[10px] font-black italic text-gray-500 uppercase tracking-[0.3em] mb-4">Puntos</span>
+                        <div className="flex flex-col items-center px-4 min-w-[80px]">
+                            <span className="text-[8px] font-black uppercase text-gray-500 tracking-widest mb-0.5">Points</span>
                             <AnimatePresence mode="wait">
                                 <motion.span
                                     key={match.points?.t2}
-                                    initial={{ scale: 0.5, opacity: 0 }}
-                                    animate={{ scale: 1, opacity: 1 }}
-                                    className="text-[6rem] font-black leading-none tracking-tighter text-white"
+                                    initial={{ y: 5, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    exit={{ y: -5, opacity: 0 }}
+                                    className="text-4xl font-black italic tabular-nums text-white leading-none text-glow"
                                 >
                                     {match.points?.t2 || '0'}
                                 </motion.span>
@@ -778,21 +930,64 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         </div>
 
                         <motion.button
+                            whileHover={{ scale: 1.1, backgroundColor: 'rgba(204,255,0,0.15)' }}
                             whileTap={{ scale: 0.9 }}
                             onClick={() => updateScore('t2', 'plus')}
-                            className="w-14 h-28 bg-padel-primary/10 border border-padel-primary/20 rounded-[1.5rem] flex items-center justify-center hover:bg-padel-primary/20 transition-all text-padel-primary"
+                            className="w-10 h-10 rounded-full bg-padel-primary/10 border border-padel-primary/20 flex items-center justify-center text-padel-primary hover:border-padel-primary/40 transition-all shadow-[0_5px_15px_-5px_rgba(204,255,0,0.3)]"
                         >
-                            <Plus className="w-8 h-8" />
+                            <Plus className="w-6 h-6" />
                         </motion.button>
                     </div>
                 </div>
             </main>
 
-            {/* Bottom Actions */}
-            <footer className="flex items-center justify-center px-4 pb-3 pt-2">
-                <div className="flex items-center gap-3 bg-white/5 border border-white/10 px-8 py-3 rounded-[2rem] cursor-pointer hover:bg-white/10 transition-all" onClick={() => setIsGoldenPoint(!isGoldenPoint)}>
-                    <div className={`w-3 h-3 rounded-full ${isGoldenPoint ? 'bg-padel-primary shadow-[0_0_10px_#ccff00]' : 'bg-gray-600'}`} />
-                    <span className="text-[10px] font-black italic uppercase tracking-widest text-gray-300">Punto de Oro: <span className={isGoldenPoint ? 'text-padel-primary' : 'text-gray-500'}>{isGoldenPoint ? 'ON' : 'OFF'}</span></span>
+            {/* Rectangle 4: Footer */}
+            <footer className="h-16 px-8 flex items-center justify-between relative z-10 glass rounded-[2rem] shadow-2xl gap-8 shrink-0">
+                {/* Switch de Punto de Oro */}
+                <motion.div
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setIsGoldenPoint(!isGoldenPoint)}
+                    className={`flex-[0.6] flex items-center justify-between px-5 py-2.5 rounded-[1.5rem] border transition-all duration-500 cursor-pointer ${isGoldenPoint
+                        ? 'bg-padel-primary/10 border-padel-primary/30 shadow-[0_0_20px_rgba(204,255,0,0.1)]'
+                        : 'bg-white/[0.03] border-white/10'
+                        }`}
+                >
+                    <div className="flex flex-col">
+                        <span className={`text-[9px] font-black italic uppercase tracking-[0.25em] ${isGoldenPoint ? 'text-padel-primary' : 'text-gray-500'}`}>Golden Point</span>
+                    </div>
+                    <div className="relative w-10 h-5 bg-black/60 rounded-full border border-white/10 p-0.5">
+                        <motion.div
+                            animate={{
+                                x: isGoldenPoint ? 20 : 0,
+                                backgroundColor: isGoldenPoint ? '#ccff00' : '#444',
+                            }}
+                            className="w-4 h-4 rounded-full"
+                        />
+                    </div>
+                </motion.div>
+
+                {/* Referee Action Dock */}
+                <div className="flex-[1.4] flex items-center gap-4 h-full">
+                    <div className="h-8 w-px bg-white/5 mx-2" />
+
+                    <RefereeRemoteControl
+                        onTeamAPoint={() => updateScore('t1', 'plus')}
+                        onTeamBPoint={() => updateScore('t2', 'plus')}
+                        onUndo={undoPoint}
+                    />
+
+                </div>
+
+                {/* Status Indicator */}
+                <div className="flex-1 flex items-center justify-end gap-6 h-full">
+                    <div className="flex flex-col items-end">
+                        <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest mb-1">Status</span>
+                        <div className="flex items-center gap-3">
+                            <div className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
+                            <span className="text-xs font-bold text-white/60">Cloud Sync Active</span>
+                        </div>
+                    </div>
                 </div>
             </footer>
 
@@ -983,7 +1178,163 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         </motion.div>
                     </motion.div>
                 )}
+                {/* Scoring Adjustment Modal */}
+                {showAdjustModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[400] bg-black/90 backdrop-blur-xl flex items-center justify-center p-6"
+                        onClick={() => setShowAdjustModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 30 }}
+                            animate={{ scale: 1, y: 0 }}
+                            className="bg-[#111] border border-white/10 rounded-[3rem] w-full max-w-xl overflow-hidden flex flex-col"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="p-8 border-b border-white/5 flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white">Score Adjustment</h3>
+                                    <p className="text-[10px] font-black italic text-gray-500 uppercase tracking-widest mt-1">Manual correction of games and sets</p>
+                                </div>
+                                <button onClick={() => setShowAdjustModal(false)} className="p-4 bg-white/5 rounded-full hover:bg-white/10 transition-all text-gray-400">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
+
+                            <div className="p-8 space-y-10">
+                                {/* Team 1 Adjust */}
+                                <div className="space-y-6">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-2 h-8 bg-padel-primary rounded-full" />
+                                        <span className="text-lg font-black italic uppercase tracking-tighter text-white truncate">{match.team1.full}</span>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3">
+                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Puntos</span>
+                                            <div className="flex items-center gap-4">
+                                                <select
+                                                    value={match.points?.t1 || '0'}
+                                                    onChange={(e) => updateManualScore('t1', 'points', e.target.value)}
+                                                    className="bg-black border border-white/10 rounded-lg px-2 py-1 text-xl font-black italic text-padel-primary outline-none"
+                                                >
+                                                    {['0', '15', '30', '40', 'AD'].map(p => <option key={p} value={p}>{p}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3">
+                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Juegos</span>
+                                            <div className="flex items-center gap-4">
+                                                <button onClick={() => updateManualScore('t1', 'games', (match.games?.t1 || 0) - 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">-</button>
+                                                <span className="text-2xl font-black italic text-padel-primary">{match.games?.t1 || 0}</span>
+                                                <button onClick={() => updateManualScore('t1', 'games', (match.games?.t1 || 0) + 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">+</button>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3">
+                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Sets</span>
+                                            <div className="flex items-center gap-4">
+                                                <button onClick={() => updateManualScore('t1', 'sets', (match.sets?.t1 || 0) - 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">-</button>
+                                                <span className="text-2xl font-black italic text-white">{match.sets?.t1 || 0}</span>
+                                                <button onClick={() => updateManualScore('t1', 'sets', (match.sets?.t1 || 0) + 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">+</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Team 2 Adjust */}
+                                <div className="space-y-6">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-2 h-8 bg-gray-600 rounded-full" />
+                                        <span className="text-lg font-black italic uppercase tracking-tighter text-white truncate">{match.team2.full}</span>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3">
+                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Puntos</span>
+                                            <div className="flex items-center gap-4">
+                                                <select
+                                                    value={match.points?.t2 || '0'}
+                                                    onChange={(e) => updateManualScore('t2', 'points', e.target.value)}
+                                                    className="bg-black border border-white/10 rounded-lg px-2 py-1 text-xl font-black italic text-padel-primary outline-none"
+                                                >
+                                                    {['0', '15', '30', '40', 'AD'].map(p => <option key={p} value={p}>{p}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3">
+                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Juegos</span>
+                                            <div className="flex items-center gap-4">
+                                                <button onClick={() => updateManualScore('t2', 'games', (match.games?.t2 || 0) - 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">-</button>
+                                                <span className="text-2xl font-black italic text-padel-primary">{match.games?.t2 || 0}</span>
+                                                <button onClick={() => updateManualScore('t2', 'games', (match.games?.t2 || 0) + 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">+</button>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3">
+                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Sets</span>
+                                            <div className="flex items-center gap-4">
+                                                <button onClick={() => updateManualScore('t2', 'sets', (match.sets?.t2 || 0) - 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">-</button>
+                                                <span className="text-2xl font-black italic text-white">{match.sets?.t2 || 0}</span>
+                                                <button onClick={() => updateManualScore('t2', 'sets', (match.sets?.t2 || 0) + 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">+</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Special Rules */}
+                                <div className="space-y-4 pt-4 border-t border-white/5">
+                                    <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Tiebreak Target</span>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {[7, 10].map(val => (
+                                            <button
+                                                key={val}
+                                                onClick={() => setTiebreakTo(val)}
+                                                className={`py-4 rounded-2xl border font-black italic uppercase text-xs transition-all ${tiebreakTo === val
+                                                    ? 'bg-padel-primary text-black border-padel-primary shadow-[0_0_20px_rgba(204,255,0,0.2)]'
+                                                    : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                                                    }`}
+                                            >
+                                                To {val} Points
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="p-8 bg-white/[0.02] border-t border-white/5 flex gap-4">
+                                <button
+                                    onClick={() => {
+                                        if (confirm('¿Resetear marcador de este partido?')) {
+                                            const updatedMatches = tournament.matches.map((m: any) =>
+                                                m.id === match.id ? {
+                                                    ...m,
+                                                    points: { t1: '0', t2: '0' },
+                                                    games: { t1: 0, t2: 0 },
+                                                    sets: { t1: 0, t2: 0 },
+                                                    status: MatchStatus.PENDING,
+                                                    startedAt: null,
+                                                    finishedAt: null
+                                                } : m
+                                            );
+                                            updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+                                            setShowAdjustModal(false);
+                                        }
+                                    }}
+                                    className="flex-1 py-4 bg-red-500/10 text-red-500 rounded-2xl font-black italic uppercase tracking-widest text-[10px] hover:bg-red-500/20 transition-all border border-red-500/10"
+                                >
+                                    Reset Match
+                                </button>
+                                <button
+                                    onClick={() => setShowAdjustModal(false)}
+                                    className="flex-1 py-4 bg-white text-black rounded-2xl font-black italic uppercase tracking-widest text-[10px] hover:scale-[1.02] transition-all"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
             </AnimatePresence>
+
 
             <style jsx global>{`
                 body {
