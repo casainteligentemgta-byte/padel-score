@@ -36,6 +36,8 @@ interface EnrichedMatch {
     server?: { team: 1 | 2; player: 1 | 2 };
     bracketPosition?: { round: number; position: number };
     isStreaming?: boolean;
+    forcedAds?: boolean;
+    current_ad_url?: string;
     [key: string]: any;
 }
 
@@ -63,75 +65,99 @@ function getPhaseLabel(match: EnrichedMatch): string {
 
 // ── Mini-Dock Component ────────────────────────────────────────────────────
 function MiniDock({
-    match, tournamentId, onStartMatch, onToggleStream, isUpdating
+    match, tournamentId, onStartMatch, onToggleStream, onToggleAds, isUpdating
 }: {
     match: EnrichedMatch;
     tournamentId: string;
     onStartMatch: (id: string) => void;
     onToggleStream: (id: string, val: boolean) => void;
+    onToggleAds: (id: string, val: boolean) => void;
     isUpdating: boolean;
 }) {
     const isLive = match.status === MatchStatus.LIVE;
     const isFinished = match.status === MatchStatus.FINISHED;
     const isStreaming = !!match.isStreaming;
+    const isAds = !!match.forcedAds;
+
 
     return (
-        <div className="grid grid-cols-4 gap-px bg-white/[0.04] rounded-b-2xl overflow-hidden border-t border-white/[0.06]">
+        <div className="grid grid-cols-5 border-t border-white/[0.06] rounded-b-2xl overflow-hidden">
             {/* CONTROL */}
             <Link
                 href={`/tournaments/${tournamentId}/score/${match.id}`}
                 onClick={() => !isLive && onStartMatch(match.id)}
-                className={`flex flex-col items-center justify-center gap-1 py-3 transition-all active:scale-95
+                className={`flex flex-col items-center justify-center gap-1.5 py-3.5 transition-all active:scale-95 border-r border-white/[0.05]
                     ${isLive
                         ? 'bg-padel-primary/10 text-padel-primary hover:bg-padel-primary/20'
                         : 'bg-white/[0.02] text-gray-400 hover:bg-white/[0.06] hover:text-white'
                     }`}
             >
                 <div className="relative">
-                    <Zap className="w-4 h-4" />
+                    <Zap className="w-[18px] h-[18px]" />
                     {isLive && (
                         <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_red] animate-pulse" />
                     )}
                 </div>
-                <span className="text-[8px] font-black uppercase tracking-widest">Control</span>
+                <span className="text-[8px] font-black uppercase tracking-widest leading-none">Control</span>
             </Link>
 
             {/* PIZARRA */}
             <Link
                 href={`/tournaments/${tournamentId}/display/${match.id}`}
                 target="_blank"
-                className="flex flex-col items-center justify-center gap-1 py-3 bg-white/[0.02] text-gray-400 hover:bg-white/[0.06] hover:text-white transition-all active:scale-95"
+                className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-white/[0.02] text-gray-400 hover:bg-white/[0.06] hover:text-white transition-all active:scale-95 border-r border-white/[0.05]"
             >
-                <Monitor className="w-4 h-4" />
-                <span className="text-[8px] font-black uppercase tracking-widest">Pizarra</span>
+                <Monitor className="w-[18px] h-[18px]" />
+                <span className="text-[8px] font-black uppercase tracking-widest leading-none">Pizarra</span>
             </Link>
 
             {/* CÁMARA */}
             <Link
                 href={`/tournaments/${tournamentId}/control/broadcasting`}
-                className="flex flex-col items-center justify-center gap-1 py-3 bg-white/[0.02] text-gray-400 hover:bg-white/[0.06] hover:text-orange-400 transition-all active:scale-95"
+                className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-white/[0.02] text-gray-400 hover:bg-white/[0.06] hover:text-orange-400 transition-all active:scale-95 border-r border-white/[0.05]"
             >
-                <Camera className="w-4 h-4" />
-                <span className="text-[8px] font-black uppercase tracking-widest">Cámara</span>
+                <Camera className="w-[18px] h-[18px]" />
+                <span className="text-[8px] font-black uppercase tracking-widest leading-none">Cámara</span>
             </Link>
+
+            {/* ADS — Toggle publicidad en pizarra */}
+            <button
+                onClick={() => onToggleAds(match.id, !isAds)}
+                disabled={isUpdating}
+                className={`flex flex-col items-center justify-center gap-1.5 py-3.5 transition-all active:scale-95 border-r border-white/[0.05] w-full
+                    ${isAds
+                        ? 'bg-yellow-500/15 text-yellow-400 hover:bg-yellow-500/25'
+                        : 'bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-yellow-400'
+                    }`}
+            >
+                <div className="relative">
+                    <Tv className="w-[18px] h-[18px]" />
+                    {isAds && (
+                        <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-yellow-400 animate-pulse shadow-[0_0_6px_#facc15]" />
+                    )}
+                </div>
+                <span className="text-[8px] font-black uppercase tracking-widest leading-none">
+                    {isAds ? 'ADS ON' : 'ADS'}
+                </span>
+            </button>
 
             {/* EN VIVO — Toggle streaming */}
             <button
                 onClick={() => onToggleStream(match.id, !isStreaming)}
                 disabled={isUpdating}
-                className={`flex flex-col items-center justify-center gap-1 py-3 transition-all active:scale-95
+                className={`flex flex-col items-center justify-center gap-1.5 py-3.5 transition-all active:scale-95 w-full
                     ${isStreaming
                         ? 'bg-red-500/15 text-red-400 hover:bg-red-500/25'
                         : 'bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-red-400'
                     }`}
             >
                 <div className="relative">
-                    <Radio className="w-4 h-4" />
+                    <Radio className="w-[18px] h-[18px]" />
                     {isStreaming && (
                         <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_6px_red]" />
                     )}
                 </div>
-                <span className="text-[8px] font-black uppercase tracking-widest">
+                <span className="text-[8px] font-black uppercase tracking-widest leading-none">
                     {isStreaming ? 'En Vivo' : 'Stream'}
                 </span>
             </button>
@@ -141,7 +167,7 @@ function MiniDock({
 
 // ── Match Card for Control Panel ───────────────────────────────────────────
 function ControlMatchCard({
-    match, tournamentId, canOperate, onStartMatch, onFinishMatch, onToggleStream, onRevertMatch, isUpdating
+    match, tournamentId, canOperate, onStartMatch, onFinishMatch, onToggleStream, onToggleAds, onRevertMatch, isUpdating
 }: {
     match: EnrichedMatch;
     tournamentId: string;
@@ -149,6 +175,7 @@ function ControlMatchCard({
     onStartMatch: (id: string) => void;
     onFinishMatch: (id: string) => void;
     onToggleStream: (id: string, val: boolean) => void;
+    onToggleAds: (id: string, val: boolean) => void;
     onRevertMatch: (id: string) => void;
     isUpdating: boolean;
 }) {
@@ -312,6 +339,7 @@ function ControlMatchCard({
                     tournamentId={tournamentId}
                     onStartMatch={onStartMatch}
                     onToggleStream={onToggleStream}
+                    onToggleAds={onToggleAds}
                     isUpdating={isUpdating}
                 />
             )}
@@ -322,11 +350,12 @@ function ControlMatchCard({
 // ── Phase Section ──────────────────────────────────────────────────────────
 function PhaseSection({
     title, matches, tournamentId, canOperate,
-    onStartMatch, onFinishMatch, onToggleStream, onRevertMatch, updatingId, isCollapsible, defaultOpen
+    onStartMatch, onFinishMatch, onToggleStream, onToggleAds, onRevertMatch, updatingId, isCollapsible, defaultOpen
 }: {
     title: string; matches: EnrichedMatch[]; tournamentId: string;
     canOperate: boolean; onStartMatch: (id: string) => void;
     onFinishMatch: (id: string) => void; onToggleStream: (id: string, val: boolean) => void;
+    onToggleAds: (id: string, val: boolean) => void;
     onRevertMatch: (id: string) => void;
     updatingId: string | null; isCollapsible?: boolean; defaultOpen?: boolean;
 }) {
@@ -356,15 +385,16 @@ function PhaseSection({
                     >
                         <div className="p-3 grid grid-cols-1 xl:grid-cols-2 gap-3">
                             <AnimatePresence mode="popLayout">
-                                {matches.map(m => (
+                                {matches.map((m, mIdx) => (
                                     <ControlMatchCard
-                                        key={m.id}
+                                        key={m.id || `card-${mIdx}`}
                                         match={m}
                                         tournamentId={tournamentId}
                                         canOperate={canOperate}
                                         onStartMatch={onStartMatch}
                                         onFinishMatch={onFinishMatch}
                                         onToggleStream={onToggleStream}
+                                        onToggleAds={onToggleAds}
                                         onRevertMatch={onRevertMatch}
                                         isUpdating={updatingId === m.id}
                                     />
@@ -407,26 +437,47 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                 const data = { id: snap.id, ...snap.data() } as any;
                 setTournament(data);
 
-                const enriched: EnrichedMatch[] = (data.matches || []).map((m: any) => {
-                    const t1 = m.team1Index > 0 ? data.teams?.[m.team1Index - 1] : null;
-                    const t2 = m.team2Index > 0 ? data.teams?.[m.team2Index - 1] : null;
-                    const pname = (p: any, idx: number, slot: 1 | 2) => {
-                        if (idx <= 0) return 'Por definir';
-                        // Sequential unique numbering: team 1 → J1/J2, team 2 → J3/J4, etc.
-                        const num = (idx * 2) - (slot === 1 ? 1 : 0);
-                        return p?.name?.trim() || `Jugador ${num}`;
+                const enriched: EnrichedMatch[] = (data.matches || []).map((m: any, mIdx: number) => {
+                    // Garantizar id único — crítico para React keys
+                    const matchId = m.id || `match_${mIdx}`;
+
+                    // Resolver equipo: soporta formato nuevo (team1 embebido con p1/p2)
+                    // y formato legacy (team1Index → data.teams[])
+                    const resolveTeam = (mTeam: any, teamIdx: number, side: 'team1' | 'team2') => {
+                        // Formato nuevo: objeto embebido con p1/p2
+                        if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
+                            if (mTeam.isTBD || mTeam.teamLabel) {
+                                return { name: mTeam.teamLabel || mTeam.p1?.name || '?', photo1: null, photo2: null };
+                            }
+                            const p1n = (mTeam.p1Name || mTeam.p1?.name || '').trim();
+                            const p2n = (mTeam.p2Name || mTeam.p2?.name || '').trim();
+                            return {
+                                name: [p1n, p2n].filter(Boolean).join(' · ') || '?',
+                                photo1: mTeam.p1?.photo || null,
+                                photo2: mTeam.p2?.photo || null,
+                            };
+                        }
+                        // Formato legacy: índice → data.teams[]
+                        const t = teamIdx > 0 ? data.teams?.[teamIdx - 1] : null;
+                        const pname = (p: any, idx: number, slot: 1 | 2) => {
+                            if (idx <= 0) return 'Por definir';
+                            const num = (idx * 2) - (slot === 1 ? 1 : 0);
+                            return p?.name?.trim() || `Jugador ${num}`;
+                        };
+                        if (!t) return { name: teamIdx > 0 ? `Pareja ${teamIdx}` : '?', photo1: null, photo2: null };
+                        return {
+                            name: `${pname(t.p1, teamIdx, 1)} · ${pname(t.p2, teamIdx, 2)}`,
+                            photo1: t.p1?.photo || null,
+                            photo2: t.p2?.photo || null,
+                        };
                     };
+
                     return {
                         ...m,
+                        id: matchId,
                         court: m.court || (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined),
-                        team1: {
-                            name: t1 ? `${pname(t1.p1, m.team1Index, 1)} · ${pname(t1.p2, m.team1Index, 2)}` : `Equipo ${m.team1Index}`,
-                            photo1: t1?.p1?.photo || null, photo2: t1?.p2?.photo || null
-                        },
-                        team2: {
-                            name: t2 ? `${pname(t2.p1, m.team2Index, 1)} · ${pname(t2.p2, m.team2Index, 2)}` : `Equipo ${m.team2Index}`,
-                            photo1: t2?.p1?.photo || null, photo2: t2?.p2?.photo || null
-                        },
+                        team1: resolveTeam(m.team1, m.team1Index, 'team1'),
+                        team2: resolveTeam(m.team2, m.team2Index, 'team2'),
                     };
                 });
                 setMatches(enriched);
@@ -465,6 +516,15 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
         setUpdatingId(matchId);
         try {
             const updated = matches.map(m => m.id === matchId ? { ...m, isStreaming: val } : m);
+            await updateDoc(doc(db, 'tournaments', id), { matches: stripMatches(updated), updatedAt: new Date() });
+        } catch (e) { console.error(e); }
+        finally { setUpdatingId(null); }
+    };
+
+    const toggleAds = async (matchId: string, val: boolean) => {
+        setUpdatingId(matchId);
+        try {
+            const updated = matches.map(m => m.id === matchId ? { ...m, forcedAds: val } : m);
             await updateDoc(doc(db, 'tournaments', id), { matches: stripMatches(updated), updatedAt: new Date() });
         } catch (e) { console.error(e); }
         finally { setUpdatingId(null); }
@@ -518,16 +578,23 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
         return 'FINISHED';
     })();
 
-    // Active phase matches (live + pending of that stage)
-    const activePhaseMatches = matches.filter(m =>
-        (m.stage || 'OPEN') === activePhaseKey &&
-        (m.status === MatchStatus.LIVE || m.status === MatchStatus.PENDING)
-    );
+    // Active phase matches: live OR pending con cancha asignada (pueden iniciarse ahora)
+    // Incluimos partidos PENDING de cualquier stage si tienen cancha, para permitir
+    // iniciar simultáneamente partidos en pistas 1, 2, 3, etc.
+    const activePhaseMatches = matches.filter(m => {
+        if (m.status === MatchStatus.LIVE) return true;
+        if (m.status === MatchStatus.PENDING) {
+            // Si tiene cancha asignada → puede iniciarse (está en lista activa)
+            const hasCourt = m.court !== undefined && m.court !== null && m.court !== '';
+            return hasCourt;
+        }
+        return false;
+    });
 
-    // "Próximos" = pending matches from all OTHER future stages
+    // "Próximos" = pending sin cancha asignada (aún no tienen pista definida)
     const proximosMatches = matches.filter(m =>
         m.status === MatchStatus.PENDING &&
-        (m.stage || 'OPEN') !== activePhaseKey
+        (m.court === undefined || m.court === null || m.court === '')
     );
 
     // Stats
@@ -676,6 +743,7 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                                         onStartMatch={startMatch}
                                         onFinishMatch={finishMatch}
                                         onToggleStream={toggleStream}
+                                        onToggleAds={toggleAds}
                                         onRevertMatch={revertToPending}
                                         updatingId={updatingId}
                                         defaultOpen={true}
@@ -691,6 +759,7 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                                     onStartMatch={startMatch}
                                     onFinishMatch={finishMatch}
                                     onToggleStream={toggleStream}
+                                    onToggleAds={toggleAds}
                                     onRevertMatch={revertToPending}
                                     updatingId={updatingId}
                                     defaultOpen={true}
@@ -722,6 +791,7 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                                         onStartMatch={startMatch}
                                         onFinishMatch={finishMatch}
                                         onToggleStream={toggleStream}
+                                        onToggleAds={toggleAds}
                                         onRevertMatch={revertToPending}
                                         updatingId={updatingId}
                                         isCollapsible={true}
@@ -744,10 +814,11 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                                         title="✓ Finalizados"
                                         matches={finishedMatches}
                                         tournamentId={id}
-                                        canOperate={false} // read-only for finished
+                                        canOperate={false}
                                         onStartMatch={startMatch}
                                         onFinishMatch={finishMatch}
                                         onToggleStream={toggleStream}
+                                        onToggleAds={toggleAds}
                                         onRevertMatch={revertToPending}
                                         updatingId={updatingId}
                                         isCollapsible={true}

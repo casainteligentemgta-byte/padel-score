@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import BottomNav from '@/components/BottomNav';
 import { Suspense } from 'react';
 import { formatDNI } from '@/lib/formatters';
 
@@ -224,8 +223,6 @@ function PlayersListContent() {
                     <p className="text-[9px] font-black tracking-[0.3em] uppercase text-gray-700 italic">PADEL SMART Pro System • 2024</p>
                 </footer>
             </div>
-
-            <BottomNav />
 
             {/* Modal de Edición */}
             <AnimatePresence>

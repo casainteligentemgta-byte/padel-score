@@ -5,12 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Bluetooth,
     BluetoothConnected,
-    BluetoothOff,
-    Keyboard,
     Zap,
-    Cpu,
-    AlertCircle,
-    CheckCircle2
 } from 'lucide-react';
 
 interface RefereeRemoteControlProps {
@@ -90,10 +85,6 @@ export default function RefereeRemoteControl({
                     {btConnected ? <BluetoothConnected className="w-4 h-4" /> : <Bluetooth className="w-4 h-4" />}
                     {btConnected ? 'Remoto Conectado' : 'Link Bluetooth'}
                 </button>
-
-                <div className={`p-3 rounded-xl border transition-all ${isListening ? 'bg-padel-primary/10 border-padel-primary text-padel-primary' : 'bg-white/5 border-white/5 text-gray-600'}`}>
-                    <Keyboard className="w-4 h-4" />
-                </div>
             </div>
 
             <AnimatePresence>
@@ -110,11 +101,6 @@ export default function RefereeRemoteControl({
                 )}
             </AnimatePresence>
 
-            {/* Status Info Tooltip / Panel */}
-            <div className="flex items-center gap-2 text-[8px] font-bold text-gray-600 uppercase tracking-widest italic">
-                <Cpu className="w-3 h-3 rotate-12" />
-                Mapeo: A/1 (T1) • B/2 (T2) • C/3 (Undo)
-            </div>
         </div>
     );
 }

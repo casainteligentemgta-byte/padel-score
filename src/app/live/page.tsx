@@ -7,7 +7,6 @@ import { Trophy, Zap, Clock, Users, ChevronRight, Play, LayoutDashboard, Radio }
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
-import BottomNav from '@/components/BottomNav';
 import { MatchStatus } from '@/types/tournament';
 import { useSearchParams } from 'next/navigation';
 
@@ -238,7 +237,6 @@ export default function LiveBracketsPage() {
                 </footer>
             </div>
 
-            {!isTVMode && <BottomNav />}
         </div>
     );
 }

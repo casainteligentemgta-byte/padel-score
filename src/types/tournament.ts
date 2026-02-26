@@ -3,7 +3,9 @@ export enum TournamentType {
     AMERICANO_DUPLA = 'AMERICANO_DUPLA',           // Dupla fija
     KNOCKOUT = 'KNOCKOUT',                         // Eliminación directa
     ROUND_ROBIN = 'ROUND_ROBIN',                   // Liga / Grupos / Round Robin
+    CRUZADO = 'CRUZADO',                           // Grupo A vs Grupo B → Cuartos de final
 }
+
 
 export enum TournamentCategory {
     // Géneros básicos
@@ -22,6 +24,7 @@ export enum TournamentCategory {
 
     // Veteranos
     MAS_45 = 'MAS_45',
+    MAS_50 = 'MAS_50',
 
     // Sumas
     SUMA_7 = 'SUMA_7',

@@ -27,7 +27,8 @@ import {
     Monitor,
     Tv,
     Radio,
-    Camera
+    Camera,
+    Trash2
 } from 'lucide-react';
 import Link from 'next/link';
 import { MatchStatus, TournamentType, ScheduleConfig } from '@/types/tournament';
@@ -37,6 +38,8 @@ import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import GroupPhaseView from '@/components/GroupPhaseView';
+import TournamentPhaseManager from '@/components/TournamentPhaseManager';
 
 
 
@@ -57,6 +60,8 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const [subFilter, setSubFilter] = useState('Todos');
 
     const [error, setError] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [confirmDelete, setConfirmDelete] = useState(false);
 
     const isOwner = tournament?.ownerId === user?.uid;
     const canManageMatches = isOwner || isAdmin || isMarker;
@@ -407,6 +412,23 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         }
     };
 
+    const handleDeleteTournament = async () => {
+        if (!confirmDelete) {
+            setConfirmDelete(true);
+            return;
+        }
+        setIsDeleting(true);
+        try {
+            await dataService.deleteTournament(id);
+            router.push('/tournaments');
+        } catch (err) {
+            console.error('[Dashboard] Error deleting tournament:', err);
+            alert('Error al eliminar el torneo. Inténtalo de nuevo.');
+            setIsDeleting(false);
+            setConfirmDelete(false);
+        }
+    };
+
     const notifyMatch = (match: any, type: 'start' | 'result') => {
         const tournamentName = tournament?.name || 'Torneo de Padel';
         const court = match.court || 'Pista asignada';
@@ -466,6 +488,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     );
 
     const isRoundRobin = tournament?.type === TournamentType.ROUND_ROBIN;
+    const isCruzado = tournament?.type === TournamentType.CRUZADO;
     const hasBracket = matches.some(m => m.stage === 'MAIN_DRAW');
 
     // ── Calcular fases de cuadro dinámicamente según # parejas ────────────
@@ -510,7 +533,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     tabs.push('En Vivo');
     tabs.push('Por Comenzar');
     tabs.push('Finalizados');
-    if (!isRoundRobin) tabs.push('Ranking');
+    if (!isRoundRobin && !isCruzado) tabs.push('Ranking');
     tabs.push('Reglas');
     // Deduplicar por si acaso algún valor se repitió
     const uniqueTabs = [...new Set(tabs)];
@@ -552,7 +575,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const getLiveConfig = (count: number) => {
         // Uniform config for rows of three as requested
         return {
-            grid: 'grid-cols-1 md:grid-cols-3',
+            grid: 'grid-cols-3',
             name: 'text-[14px]',
             score: 'w-16 h-16 text-3xl',
             sets: 'w-10 h-10 text-lg',
@@ -565,6 +588,46 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     };
 
     const liveConfig = isLiveDashboard ? getLiveConfig(filteredMatches.length) : null;
+
+    /**
+     * Para un partido PENDING, detecta si hay un partido LIVE en la misma cancha
+     * que lleva más de lo esperado (85 min desde su inicio), y estima el retraso.
+     * Retorna null si el partido está en tiempo, o { delayMins, estimatedStartMs } si está demorado.
+     */
+    const getDelayInfo = (match: any): { delayMins: number; estimatedStartMs: number } | null => {
+        if (match.status !== MatchStatus.PENDING) return null;
+
+        const courtKey = match.courtId ?? match.courtIndex ?? null;
+        if (courtKey === null) return null;
+
+        // Buscar partido LIVE en la misma cancha
+        const liveOnCourt = matches.find((m: any) =>
+            m.status === MatchStatus.LIVE &&
+            (m.courtId ?? m.courtIndex ?? null) === courtKey &&
+            m.actualStartTime
+        );
+
+        if (!liveOnCourt) return null;
+
+        const now = Date.now();
+        const startMs = liveOnCourt.actualStartTime?.toDate
+            ? liveOnCourt.actualStartTime.toDate().getTime()
+            : new Date(liveOnCourt.actualStartTime).getTime();
+
+        const elapsedMins = (now - startMs) / 60000;
+        const SLOT = 85; // minutos esperados por slot
+
+        if (elapsedMins <= SLOT) return null; // aún en tiempo
+
+        // Retraso estimado en esta cancha
+        const delayMins = Math.ceil(elapsedMins - SLOT);
+        const scheduledMs = match.scheduledTime?.toDate
+            ? match.scheduledTime.toDate().getTime()
+            : new Date(match.scheduledTime).getTime();
+        const estimatedStartMs = scheduledMs + delayMins * 60000 + 5 * 60000; // +5 min buffer
+
+        return { delayMins, estimatedStartMs };
+    };
 
     const calculateStandings = (matchesArray?: any[]) => {
         const standings: { [key: string]: any } = {};
@@ -739,8 +802,8 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
             </header>
 
             {/* Content Area */}
-            <div className={`ipad-scroll-area ${isLiveDashboard ? 'overflow-hidden !pr-0' : ''}`}>
-                <main className={`${isLiveDashboard ? 'max-w-none w-full h-full p-2' : 'max-w-4xl mx-auto w-full px-4 py-10'} transition-all duration-500`}>
+            <div className={`ipad-scroll-area ${isLiveDashboard ? 'overflow-hidden !pr-0' : (activeTab === 'Por Comenzar' ? 'overflow-hidden' : '')}`}>
+                <main className={`${isLiveDashboard ? 'max-w-none w-full h-full p-2' : activeTab === 'Por Comenzar' ? 'max-w-4xl mx-auto w-full px-4 py-6 h-full flex flex-col' : 'max-w-4xl mx-auto w-full px-4 py-10'} transition-all duration-500`}>
                     <AnimatePresence mode="wait">
                         {activeTab === 'Reglas' ? (
                             <motion.div
@@ -832,177 +895,170 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 className="space-y-4"
                             >
-                                {isRoundRobin ? (() => {
-                                    // ── ROUND ROBIN: tablas por grupo ─────────────────────
-                                    const standings = getGroupStandings();
-                                    const groupEntries = Object.entries(standings).sort((a, b) => a[0].localeCompare(b[0]));
-                                    const availableGroups = groupEntries.map(([name]) => name);
+                                {isCruzado ? (() => {
+                                    // ── CRUZADO: Grupo A / Grupo B + Cuartos de final ────
+                                    const ga = (tournament?.groupAssignments ?? {}) as Record<string, string[]>;
+                                    const groupAIds: string[] = ga['A'] ?? [];
+                                    const groupBIds: string[] = ga['B'] ?? [];
 
-                                    if (groupEntries.length === 0) {
-                                        return (
-                                            <div className="py-20 text-center space-y-4 bg-white/5 rounded-[2.5rem] border border-dashed border-white/10">
-                                                <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto opacity-20">
-                                                    <Trophy className="w-8 h-8 text-white" />
-                                                </div>
-                                                <p className="text-xs font-black italic uppercase text-gray-600 tracking-widest">No se han generado grupos</p>
-                                            </div>
+                                    // Calcular standings por grupo usando solo partidos cruzados finalizados
+                                    const crossFinished = matches.filter((m: any) => m.status === MatchStatus.FINISHED && m.stage === 'GROUP_STAGE');
+
+                                    const buildGroupStanding = (teamIds: string[]) => {
+                                        return teamIds.map((tid) => {
+                                            const teamIdx = tournament?.teams?.findIndex((t: any) => String(t.id) === tid);
+                                            const team = teamIdx !== undefined && teamIdx >= 0 ? tournament?.teams?.[teamIdx] : null;
+                                            const tNum = (teamIdx ?? -1) + 1; // 1-based index used in matches
+
+                                            let mWon = 0, mPlayed = 0, sWon = 0, sLost = 0, gWon = 0, gLost = 0;
+                                            crossFinished.forEach((m: any) => {
+                                                const side = m.team1Index === tNum ? 't1' : m.team2Index === tNum ? 't2' : null;
+                                                if (!side) return;
+                                                const opp = side === 't1' ? 't2' : 't1';
+                                                mPlayed++;
+                                                gWon += m.games?.[side] ?? 0;
+                                                gLost += m.games?.[opp] ?? 0;
+                                                sWon += m.sets?.[side] ?? 0;
+                                                sLost += m.sets?.[opp] ?? 0;
+                                                if ((m.sets?.[side] ?? 0) > (m.sets?.[opp] ?? 0)) mWon++;
+                                                else if (m.sets?.[side] === m.sets?.[opp] && (m.games?.[side] ?? 0) > (m.games?.[opp] ?? 0)) mWon++;
+                                            });
+
+                                            return {
+                                                id: tid,
+                                                tNum,
+                                                name: team ? `${team.p1?.name ?? 'J1'} / ${team.p2?.name ?? 'J2'}` : `Pareja ${tNum}`,
+                                                mWon, mPlayed, sWon, sLost, gWon, gLost,
+                                            };
+                                        }).sort((a, b) =>
+                                            b.mWon - a.mWon ||
+                                            (b.sWon - b.sLost) - (a.sWon - a.sLost) ||
+                                            (b.gWon - b.gLost) - (a.gWon - a.gLost)
                                         );
-                                    }
+                                    };
 
-                                    // ── Filtros de categoría/género ─────────────────────
-                                    const categoryLabel = tournament?.category || null;
-                                    const genderLabel = tournament?.gender || null;
+                                    const standA = buildGroupStanding(groupAIds);
+                                    const standB = buildGroupStanding(groupBIds);
 
-                                    // Construir chips: categoría + género del torneo
-                                    const filterChips: { key: string; label: string; color: string }[] = [];
-                                    if (categoryLabel) {
-                                        filterChips.push({ key: 'cat', label: categoryLabel, color: 'from-padel-primary/20 to-padel-primary/5 border-padel-primary/40 text-padel-primary' });
-                                    }
-                                    if (genderLabel) {
-                                        const gcolor = genderLabel.toLowerCase().includes('fem')
-                                            ? 'from-pink-500/20 to-pink-500/5 border-pink-500/40 text-pink-400'
-                                            : genderLabel.toLowerCase().includes('mas')
-                                                ? 'from-blue-500/20 to-blue-500/5 border-blue-500/40 text-blue-400'
-                                                : 'from-purple-500/20 to-purple-500/5 border-purple-500/40 text-purple-400';
-                                        filterChips.push({ key: 'gen', label: genderLabel, color: gcolor });
-                                    }
-                                    // Chips de grupos para scroll ref
-                                    const activeIdx = availableGroups.indexOf(activeGroup || availableGroups[0]);
+                                    // QF pairing: 1°A vs 2°B | 1°B vs 2°A | 3°A vs 4°B | 3°B vs 4°A
+                                    const qfPairings = [
+                                        { label: 'QF 1', t1: standA[0]?.name ?? 'TBD', t2: standB[1]?.name ?? 'TBD', desc: '1° A vs 2° B' },
+                                        { label: 'QF 2', t1: standB[0]?.name ?? 'TBD', t2: standA[1]?.name ?? 'TBD', desc: '1° B vs 2° A' },
+                                        { label: 'QF 3', t1: standA[2]?.name ?? 'TBD', t2: standB[3]?.name ?? 'TBD', desc: '3° A vs 4° B' },
+                                        { label: 'QF 4', t1: standB[2]?.name ?? 'TBD', t2: standA[3]?.name ?? 'TBD', desc: '3° B vs 4° A' },
+                                    ];
+
+                                    const GroupPanel = ({ title, color, rows }: { title: string; color: string; rows: typeof standA }) => (
+                                        <div className={`flex-1 bg-white/5 rounded-2xl border ${color} overflow-hidden`}>
+                                            <div className={`px-4 py-3 border-b ${color} flex items-center gap-2`}>
+                                                <span className={`text-xs font-black uppercase tracking-widest ${title === 'Grupo A' ? 'text-[#ccff00]' : 'text-blue-400'}`}>{title}</span>
+                                            </div>
+                                            <div className="divide-y divide-white/5">
+                                                {rows.map((row, idx) => (
+                                                    <div key={row.id} className="flex items-center gap-3 px-4 py-3">
+                                                        <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black ${idx === 0 ? 'bg-[#ccff00] text-black' :
+                                                            idx === 1 ? 'bg-white/20 text-white' :
+                                                                'bg-white/5 text-gray-500'
+                                                            }`}>{idx + 1}</span>
+                                                        <span className="flex-1 text-xs font-bold text-white truncate">{row.name}</span>
+                                                        <div className="flex gap-3 text-[10px] font-mono text-gray-400">
+                                                            <span title="Pts">{row.mWon}P</span>
+                                                            <span title="Sets">{row.sWon}-{row.sLost}</span>
+                                                            <span title="Games">{row.gWon}-{row.gLost}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {rows.length === 0 && (
+                                                    <p className="text-[10px] text-gray-600 text-center py-6 italic">Sin resultados aún</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
 
                                     return (
-                                        <div className="space-y-3">
-                                            {/* ── Chips categoría/género ── */}
-                                            {filterChips.length > 0 && (
-                                                <div className="flex flex-wrap gap-2 px-1">
-                                                    {filterChips.map(chip => (
-                                                        <div
-                                                            key={chip.key}
-                                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-gradient-to-r text-[9px] font-black uppercase tracking-widest italic ${chip.color}`}
-                                                        >
-                                                            {chip.key === 'cat' && <Trophy className="w-2.5 h-2.5" />}
-                                                            {chip.key === 'gen' && <User className="w-2.5 h-2.5" />}
-                                                            {chip.label}
-                                                        </div>
-                                                    ))}
+                                        <div className="space-y-5">
+                                            {/* Header */}
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 bg-[#ccff00]/10 rounded-full flex items-center justify-center">
+                                                    <span className="text-[#ccff00] text-base">⚡</span>
                                                 </div>
-                                            )}
-
-                                            {/* ── Botones de grupos (scroll horizontal) ── */}
-                                            <div className="overflow-x-auto no-scrollbar">
-                                                <div className="flex gap-2 pb-1 w-max">
-                                                    {availableGroups.map((name, idx) => (
-                                                        <button
-                                                            key={name}
-                                                            onClick={() => {
-                                                                setActiveGroup(name);
-                                                                // scroll the carousel
-                                                                const container = document.getElementById('groups-carousel');
-                                                                if (container) {
-                                                                    container.scrollTo({ left: idx * container.offsetWidth, behavior: 'smooth' });
-                                                                }
-                                                            }}
-                                                            className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all whitespace-nowrap flex items-center gap-1.5 ${(activeGroup || availableGroups[0]) === name
-                                                                ? 'bg-padel-primary text-black shadow-[0_8px_20px_rgba(204,255,0,0.25)] scale-105'
-                                                                : 'bg-white/5 text-gray-500 hover:bg-white/10 border border-white/10'
-                                                                }`}
-                                                        >
-                                                            <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[8px] font-black ${(activeGroup || availableGroups[0]) === name ? 'bg-black/20' : 'bg-white/10'}`}>{name}</span>
-                                                            Grupo {name}
-                                                        </button>
-                                                    ))}
+                                                <div>
+                                                    <h3 className="text-sm font-black uppercase tracking-tighter text-white">Formato Cruzado</h3>
+                                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Grupo A vs Grupo B · 2 juegos por pareja · Top 4 avanzan</p>
                                                 </div>
                                             </div>
 
-                                            {/* ── Carrusel de grupos (scroll horizontal con snap) ── */}
-                                            <div
-                                                id="groups-carousel"
-                                                className="overflow-x-auto no-scrollbar"
-                                                style={{ scrollSnapType: 'x mandatory', scrollBehavior: 'smooth' }}
-                                                onScroll={(e) => {
-                                                    const el = e.currentTarget;
-                                                    const idx = Math.round(el.scrollLeft / el.offsetWidth);
-                                                    if (availableGroups[idx] && availableGroups[idx] !== activeGroup) {
-                                                        setActiveGroup(availableGroups[idx]);
-                                                    }
-                                                }}
-                                            >
-                                                <div className="flex" style={{ width: `${groupEntries.length * 100}%` }}>
-                                                    {groupEntries.map(([gName, gTeams]) => (
-                                                        <div
-                                                            key={gName}
-                                                            style={{ width: `${100 / groupEntries.length}%`, scrollSnapAlign: 'start', flexShrink: 0 }}
-                                                            className="pr-0"
-                                                        >
-                                                            <div className="bg-[#1a1a1a] border border-white/10 rounded-[2rem] overflow-hidden shadow-2xl">
-                                                                {/* Header del grupo */}
-                                                                <div className="bg-padel-primary px-6 py-3 flex justify-between items-center text-black">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <div className="w-6 h-6 bg-black/20 rounded-lg flex items-center justify-center text-[10px] font-black">{gName}</div>
-                                                                        <h3 className="font-black italic uppercase tracking-tighter text-sm">Grupo {gName}</h3>
-                                                                    </div>
-                                                                    <span className="text-[9px] opacity-60 font-black uppercase tracking-widest italic">{(gTeams as any[]).length} parejas</span>
-                                                                </div>
-                                                                <div className="p-3">
-                                                                    <div className="overflow-x-auto">
-                                                                        <table className="w-full">
-                                                                            <thead>
-                                                                                <tr className="text-[9px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
-                                                                                    <th className="text-left py-2 px-2">#</th>
-                                                                                    <th className="text-left py-2 px-2">Pareja</th>
-                                                                                    <th className="text-center py-2 px-1">PJ</th>
-                                                                                    <th className="text-center py-2 px-1">PG</th>
-                                                                                    <th className="text-center py-2 px-1">Sets</th>
-                                                                                    <th className="text-center py-2 px-1">Pts</th>
-                                                                                </tr>
-                                                                            </thead>
-                                                                            <tbody className="divide-y divide-white/5">
-                                                                                {(gTeams as any[]).sort((a, b) => b.points - a.points || b.setsWon - a.setsWon).map((team: any, idx: number) => (
-                                                                                    <tr key={team.id} className="text-white group hover:bg-white/[0.02] transition-colors">
-                                                                                        <td className="py-2.5 px-2">
-                                                                                            <span className={`w-4 h-4 flex items-center justify-center rounded-md text-[8px] font-black italic ${idx < 2 ? 'bg-padel-primary text-black' : 'bg-white/10 text-white/40'}`}>{idx + 1}</span>
-                                                                                        </td>
-                                                                                        <td className="py-2.5 px-2">
-                                                                                            <span className="text-[10px] font-black italic uppercase tracking-tighter group-hover:text-padel-primary transition-colors leading-tight block">
-                                                                                                {team.name.replace(/\s+y\s+/i, ' / ')}
-                                                                                            </span>
-                                                                                        </td>
-                                                                                        <td className="py-2.5 px-1 text-center text-[10px] font-bold text-gray-400">{team.played ?? team.matchesPlayed ?? 0}</td>
-                                                                                        <td className="py-2.5 px-1 text-center text-[10px] font-bold text-gray-400">{team.won ?? team.matchesWon ?? 0}</td>
-                                                                                        <td className="py-2.5 px-1 text-center text-[9px] font-bold text-gray-400">{team.setsWon}-{team.setsLost}</td>
-                                                                                        <td className="py-2.5 px-1 text-center text-[10px] font-black italic text-padel-primary">{team.points ?? (team.matchesWon * 3 + team.setsWon)}</td>
-                                                                                    </tr>
-                                                                                ))}
-                                                                            </tbody>
-                                                                        </table>
-                                                                    </div>
-                                                                </div>
+                                            {/* Grupos lado a lado */}
+                                            <div className="flex gap-3">
+                                                <GroupPanel title="Grupo A" color="border-[#ccff00]/20" rows={standA} />
+                                                <GroupPanel title="Grupo B" color="border-blue-500/20" rows={standB} />
+                                            </div>
+
+                                            {/* Cuartos de final */}
+                                            <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+                                                <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+                                                    <Trophy className="w-3 h-3 text-[#ccff00]" />
+                                                    <span className="text-xs font-black uppercase tracking-widest text-[#ccff00]">Cuartos de Final</span>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-0 divide-x divide-y divide-white/5">
+                                                    {qfPairings.map((qf) => (
+                                                        <div key={qf.label} className="p-4 space-y-2">
+                                                            <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest">{qf.desc}</p>
+                                                            <div className="space-y-1">
+                                                                <div className="text-[11px] font-bold text-white truncate">{qf.t1}</div>
+                                                                <div className="text-[9px] text-gray-600 font-black uppercase">vs</div>
+                                                                <div className="text-[11px] font-bold text-white truncate">{qf.t2}</div>
                                                             </div>
                                                         </div>
                                                     ))}
                                                 </div>
                                             </div>
-
-                                            {/* ── Indicadores de puntos ── */}
-                                            {availableGroups.length > 1 && (
-                                                <div className="flex justify-center gap-1.5 pt-1">
-                                                    {availableGroups.map((name) => (
-                                                        <button
-                                                            key={name}
-                                                            onClick={() => {
-                                                                setActiveGroup(name);
-                                                                const container = document.getElementById('groups-carousel');
-                                                                const idx = availableGroups.indexOf(name);
-                                                                if (container) container.scrollTo({ left: idx * container.offsetWidth, behavior: 'smooth' });
-                                                            }}
-                                                            className={`transition-all rounded-full ${(activeGroup || availableGroups[0]) === name
-                                                                ? 'w-6 h-1.5 bg-padel-primary'
-                                                                : 'w-1.5 h-1.5 bg-white/20'
-                                                                }`}
-                                                        />
-                                                    ))}
-                                                </div>
-                                            )}
                                         </div>
+                                    );
+                                })() : isRoundRobin ? (() => {
+                                    // ── ROUND ROBIN: orquestador de fases con timeline y bracket ─
+                                    const handleSaveGroupResult = async (matchId: string, gamesT1: number, gamesT2: number) => {
+                                        const match = matches.find(m => m.id === matchId);
+                                        if (!match) return;
+                                        const teamAWon = gamesT1 > gamesT2;
+                                        const updatedMatches = matches.map(m =>
+                                            m.id === matchId
+                                                ? {
+                                                    ...m,
+                                                    status: MatchStatus.FINISHED,
+                                                    games: { t1: gamesT1, t2: gamesT2 },
+                                                    sets: { t1: teamAWon ? 1 : 0, t2: teamAWon ? 0 : 1 },
+                                                    score: `${gamesT1}-${gamesT2}`,
+                                                    actualEndTime: new Date(),
+                                                }
+                                                : m
+                                        );
+                                        await updateDoc(doc(db, 'tournaments', id), {
+                                            matches: stripMatches(updatedMatches),
+                                            updatedAt: new Date(),
+                                        });
+                                        setMatches(updatedMatches);
+                                    };
+                                    return (
+                                        <TournamentPhaseManager
+                                            tournament={tournament}
+                                            matches={matches}
+                                            canManage={canManageTournament}
+                                            onSaveResult={handleSaveGroupResult}
+                                            onFinishGroupPhase={() => generateMainDraw()}
+                                            onResetElimination={async () => {
+                                                // Eliminar partidos de llave y restaurar edición de grupos
+                                                const groupOnly = matches.filter(m =>
+                                                    m.stage === 'GROUP_STAGE' || m.groupName != null
+                                                );
+                                                await updateDoc(doc(db, 'tournaments', id), {
+                                                    matches: stripMatches(groupOnly),
+                                                    mainDrawGenerated: false,
+                                                    updatedAt: new Date(),
+                                                });
+                                                setMatches(groupOnly);
+                                            }}
+                                        />
                                     );
                                 })() : (() => {
                                     // ── AMERICANO / KNOCKOUT: clasificación general ────────
@@ -1229,7 +1285,11 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
-                                className={isLiveDashboard ? 'h-full flex flex-col p-6 bg-[radial-gradient(circle_at_top,_#1a1a1a_0%,_#000_100%)]' : 'space-y-8'}
+                                className={isLiveDashboard
+                                    ? 'h-full flex flex-col p-6 bg-[radial-gradient(circle_at_top,_#1a1a1a_0%,_#000_100%)]'
+                                    : activeTab === 'Por Comenzar'
+                                        ? 'flex-1 flex flex-col min-h-0'
+                                        : 'space-y-8'}
                             >
                                 {filteredMatches.length === 0 ? (
                                     <div className="py-32 text-center space-y-6">
@@ -1251,27 +1311,48 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                         )}
                                     </div>
                                 ) : (
-                                    <div className={isLiveDashboard
-                                        ? `grid grid-cols-1 md:grid-cols-3 gap-6 h-full`
-                                        : `grid grid-cols-1 md:grid-cols-3 gap-6`
-                                    }>
-                                        {filteredMatches.map((match: any) => {
-                                            if (!match || !match.team1 || !match.team2) return null;
+                                    <div className={(() => {
+                                        const count = filteredMatches.filter((m: any) => m && m.team1 && m.team2).length;
+                                        if (isLiveDashboard) return 'grid grid-cols-3 gap-4 h-full';
+                                        if (activeTab === 'Por Comenzar') {
+                                            // ≤3 → 3 columnas, 1 fila que llena pantalla
+                                            // ≤6 → 3 columnas, 2 filas que llenan pantalla
+                                            const rows = count <= 3 ? 1 : 2;
+                                            return `grid grid-cols-3 gap-3 flex-1 min-h-0`;
+                                        }
+                                        return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4';
+                                    })()}>
+                                        {filteredMatches.filter((match: any) => match && match.team1 && match.team2).map((match: any, idx: number) => {
 
-                                            const t1p1 = match.team1?.p1Name || (match.team1?.name || '').split('/')[0]?.trim();
-                                            const t1p2 = match.team1?.p2Name || (match.team1?.name || '').split('/')[1]?.trim();
-                                            const t2p1 = match.team2?.p1Name || (match.team2?.name || '').split('/')[0]?.trim();
-                                            const t2p2 = match.team2?.p2Name || (match.team2?.name || '').split('/')[1]?.trim();
+                                            // ── Resolver nombres de jugadores ──────────────────────────────────
+                                            // Prioridad: teamLabel (TBD/knockout) > p1Name > p1.name > team1Name > '?'
+                                            const resolveNames = (team: any, teamName?: string): [string, string] => {
+                                                // Equipo TBD (semis/final): mostrar el label completo en p1
+                                                if (team?.isTBD || team?.teamLabel) {
+                                                    return [team?.teamLabel || team?.p1?.name || teamName || '?', ''];
+                                                }
+                                                const p1 = (team?.p1Name || team?.p1?.name || '').trim();
+                                                const p2 = (team?.p2Name || team?.p2?.name || '').trim();
+                                                // Si no hay nada, intentar split del teamName
+                                                if (!p1 && teamName) {
+                                                    const parts = teamName.split('/');
+                                                    return [(parts[0] || '?').trim(), (parts[1] || '').trim()];
+                                                }
+                                                return [p1 || '?', p2];
+                                            };
+                                            const [t1p1, t1p2] = resolveNames(match.team1, match.team1Name);
+                                            const [t2p1, t2p2] = resolveNames(match.team2, match.team2Name);
+                                            const delayInfo = getDelayInfo(match);
 
                                             return (
                                                 <motion.section
-                                                    key={match.id}
+                                                    key={match.id ?? `match-${idx}`}
                                                     initial={{ opacity: 0, y: 10 }}
                                                     animate={{ opacity: 1, y: 0 }}
                                                     exit={{ opacity: 0, scale: 0.95 }}
-                                                    className={`w-full ${isLiveDashboard ? 'h-full flex flex-col' : ''}`}
+                                                    className={`w-full ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full flex flex-col' : ''}`}
                                                 >
-                                                    <div className={`bg-[#111111] rounded-[2rem] overflow-hidden border border-white/[0.12] flex flex-col shadow-2xl hover:border-white/25 transition-all ${isLiveDashboard ? 'h-full' : ''}`}>
+                                                    <div className={`bg-[#111111] rounded-[2rem] overflow-hidden border border-white/[0.12] flex flex-col shadow-2xl hover:border-white/25 transition-all ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full' : ''}`}>
 
                                                         {/* ── Header: 2 líneas ─────────────────────────────── */}
                                                         <div className="px-4 pt-2.5 pb-2 border-b border-white/[0.10] flex flex-col gap-1 bg-white/[0.07]">
@@ -1285,6 +1366,14 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                     {(() => {
                                                                         const raw = match.time || match.scheduledTime;
                                                                         if (!raw) return null;
+                                                                        // Si hay demora, mostramos hora estimada en naranja; si no, hora programada normal
+                                                                        if (delayInfo) {
+                                                                            const estTime = new Date(delayInfo.estimatedStartMs);
+                                                                            const hhmm = estTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+                                                                            return (
+                                                                                <span className="text-[10px] font-bold text-orange-400 tracking-wider">· ~{hhmm}</span>
+                                                                            );
+                                                                        }
                                                                         const d = raw?.toDate ? raw.toDate() : new Date(raw);
                                                                         const hhmm = isNaN(d.getTime()) ? String(raw) : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
                                                                         return (
@@ -1292,11 +1381,15 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                         );
                                                                     })()}
                                                                 </div>
-                                                                {/* Badge derecho: EN VIVO tiene prioridad, luego Finalizado, luego grupo pendiente */}
+                                                                {/* Badge derecho: prioridad EN VIVO > Finalizado > DEMORADO > grupo */}
                                                                 {match.status === MatchStatus.LIVE ? (
                                                                     <span className="text-[9px] font-black text-red-400 uppercase italic tracking-widest animate-pulse">● En Vivo</span>
                                                                 ) : match.status === MatchStatus.FINISHED ? (
                                                                     <span className="text-[9px] font-black text-white/30 uppercase italic tracking-widest">Finalizado</span>
+                                                                ) : delayInfo ? (
+                                                                    <span className="text-[9px] font-black text-orange-400 bg-orange-500/10 border border-orange-500/30 px-2 py-0.5 rounded-md italic uppercase tracking-widest animate-pulse">
+                                                                        ⚠ Demorado ~{delayInfo.delayMins}m
+                                                                    </span>
                                                                 ) : match.groupName ? (
                                                                     <span className="text-[9px] font-black bg-white/10 text-gray-400 px-2 py-0.5 rounded-md italic uppercase border border-white/10">G{match.groupName}</span>
                                                                 ) : null}
@@ -1767,7 +1860,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                             >
                                 <div className="p-6 border-b border-white/5 flex items-center justify-between">
                                     <h3 className="text-xl font-black italic uppercase tracking-tighter">Compartir Torneo</h3>
-                                    <button onClick={() => setIsShareModalOpen(false)} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
+                                    <button onClick={() => { setIsShareModalOpen(false); setConfirmDelete(false); }} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
                                         <X className="w-5 h-5" />
                                     </button>
                                 </div>
@@ -1848,6 +1941,37 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                     <p className="text-[9px] text-center text-gray-600 uppercase font-bold tracking-widest italic py-2">
                                         Para compartir en Instagram, copia el link y pégalo en tu biografía o historias.
                                     </p>
+
+                                    {/* Zona peligrosa — solo admin/propietario */}
+                                    {canManageTournament && (
+                                        <div className="pt-2 border-t border-white/5">
+                                            <button
+                                                id="btn-delete-tournament"
+                                                onClick={handleDeleteTournament}
+                                                disabled={isDeleting}
+                                                className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${confirmDelete
+                                                    ? 'bg-red-600 hover:bg-red-500 text-white border border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]'
+                                                    : 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20'
+                                                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                                {isDeleting ? 'Eliminando...' : confirmDelete ? '⚠️ Confirmar — Borrar todo' : 'Eliminar Torneo'}
+                                            </button>
+                                            {confirmDelete && !isDeleting && (
+                                                <p className="text-[9px] text-center text-red-400/70 mt-2 italic">
+                                                    Esta acción es irreversible. Se eliminarán todos los datos del torneo.
+                                                </p>
+                                            )}
+                                            {confirmDelete && (
+                                                <button
+                                                    onClick={() => setConfirmDelete(false)}
+                                                    className="w-full mt-1 text-[9px] text-gray-500 hover:text-gray-300 transition-colors py-1 uppercase tracking-widest font-bold"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </motion.div>
                         </motion.div>

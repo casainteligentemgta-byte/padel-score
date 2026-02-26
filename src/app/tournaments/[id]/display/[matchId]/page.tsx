@@ -142,10 +142,14 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                         setMatch({
                             ...found,
                             court: found.court || (found.courtIndex !== undefined ? found.courtIndex + 1 : undefined),
-                            t1p1: team1?.p1?.name || 'Jugador 1',
-                            t1p2: team1?.p2?.name || 'Jugador 2',
-                            t2p1: team2?.p1?.name || 'Jugador 1',
-                            t2p2: team2?.p2?.name || 'Jugador 2',
+                            t1p1: team1?.p1?.name || found.team1?.p1Name || found.team1?.p1?.name || 'Jugador 1',
+                            t1p2: team1?.p2?.name || found.team1?.p2Name || found.team1?.p2?.name || 'Jugador 2',
+                            t2p1: team2?.p1?.name || found.team2?.p1Name || found.team2?.p1?.name || 'Jugador 1',
+                            t2p2: team2?.p2?.name || found.team2?.p2Name || found.team2?.p2?.name || 'Jugador 2',
+                            t1p1Photo: team1?.p1?.photo || found.team1?.p1?.photo || null,
+                            t1p2Photo: team1?.p2?.photo || found.team1?.p2?.photo || null,
+                            t2p1Photo: team2?.p1?.photo || found.team2?.p1?.photo || null,
+                            t2p2Photo: team2?.p2?.photo || found.team2?.p2?.photo || null,
                             t1Name: team1 ? `${team1.p1.name} / ${team1.p2.name}` : 'TBD',
                             t2Name: team2 ? `${team2.p1.name} / ${team2.p2.name}` : 'TBD',
                         });
@@ -195,9 +199,21 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const modoPuntos: 'normal' | 'tiebreak' | 'super_tiebreak' = lm?.modo_puntos || 'normal';
     const isTiebreak = modoPuntos !== 'normal';
 
+    // Convierte valor numérico a notación tenis: 0→0, 1→15, 2→30, 3→40, 4→AD
+    // También acepta strings como '0','15','30','40','AD' directamente
+    const toTennis = (v: any): string => {
+        if (v === null || v === undefined) return '0';
+        const s = String(v).trim().toUpperCase();
+        if (['15', '30', '40', 'AD'].includes(s)) return s;
+        const n = parseInt(s);
+        return ['0', '15', '30', '40', 'AD'][Math.min(n, 4)] ?? s;
+    };
+
     // Puntos actuales
-    const ptsT1 = lm ? (lm.puntos?.local ?? '0') : (match.points?.t1 || '0');
-    const ptsT2 = lm ? (lm.puntos?.visitante ?? '0') : (match.points?.t2 || '0');
+    const ptsT1Raw = lm ? (lm.puntos?.local ?? '0') : (match.points?.t1 ?? '0');
+    const ptsT2Raw = lm ? (lm.puntos?.visitante ?? '0') : (match.points?.t2 ?? '0');
+    const ptsT1 = toTennis(ptsT1Raw);
+    const ptsT2 = toTennis(ptsT2Raw);
 
     // Sets ganados
     const setsT1 = lm ? (lm.sets?.local ?? 0) : (match.sets?.t1 ?? 0);
@@ -253,6 +269,42 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         </div>
     );
 
+    // ── Formateador de categorías (slug del enum + género del torneo)
+    const CATEGORY_BASE_LABELS: Record<string, string> = {
+        // Categorias por nivel
+        primera: '1ª',
+        segunda: '2ª',
+        tercera: '3ª',
+        cuarta: '4ª',
+        quinta: '5ª',
+        sexta: '6ª',
+        septima: '7ª',
+        // Sumas
+        suma_7: 'Suma 7',
+        suma_8: 'Suma 8',
+        suma_9: 'Suma 9',
+        suma_10: 'Suma 10',
+        suma_11: 'Suma 11',
+        // Veteranos
+        mas_45: '+45',
+        mas_50: '+50',
+        // Genéricos
+        mixto: 'Mixto',
+        menores: 'Menores',
+        open: 'Open',
+    };
+    const GENDER_SUFFIX: Record<string, string> = {
+        MALE: 'Masc.',
+        FEMALE: 'Fem.',
+        MIXED: 'Mix.',
+    };
+    const formatCategory = (slug: string) => {
+        const key = slug.toLowerCase();
+        const base = CATEGORY_BASE_LABELS[key] ?? slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const suffix = tournament?.gender ? GENDER_SUFFIX[tournament.gender] : '';
+        return suffix ? `${base} ${suffix}` : base;
+    };
+
     return (
         <div
             className={`h-screen w-screen text-white overflow-hidden font-outfit relative flex flex-col transition-colors duration-1000 ${isFinal ? 'bg-[#000] border-8 border-[#FFD700]/20' : 'bg-[#050505]'}`}
@@ -293,41 +345,31 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 padding: 'clamp(6px,1vh,14px) clamp(10px,1.8vw,28px)',
                             }}
                         >
-                            {/* Left: Title + Quinta + Court */}
-                            <div className="flex flex-col justify-center">
-                                <div className="flex items-center gap-2">
-                                    {isFinal && <span className="text-[#FFD700]" style={{ fontSize: 'clamp(10px,1.2vw,18px)' }}>★</span>}
-                                    <h1
-                                        className="font-black italic uppercase tracking-tighter text-white leading-none"
-                                        style={{ fontSize: 'clamp(12px,1.6vw,26px)' }}
-                                    >
-                                        {tournament?.name}
-                                    </h1>
-                                </div>
-                                {/* Quinta — above PISTA, bigger than PISTA smaller than title */}
-                                {tournament?.category && (
-                                    <div className="mt-[4px]">
-                                        <span
-                                            className="font-black italic uppercase tracking-wide"
-                                            style={{ fontSize: 'clamp(10px,1.25vw,21px)', color: primaryColor }}
-                                        >
-                                            {tournament.category}
-                                        </span>
-                                    </div>
-                                )}
-                                <div className="flex items-center gap-2 mt-[3px]">
-                                    <span className="font-black uppercase text-gray-400" style={{ fontSize: 'clamp(8px,0.9vw,15px)', letterSpacing: '0.2em' }}>
-                                        PISTA {match.court}
+                            {/* Left: PISTA / FASE / CATEGORÍA — igual que en el marcador */}
+                            <div className="flex flex-col items-start justify-center" style={{ gap: 'clamp(1px,0.25vh,5px)' }}>
+                                {/* Pista — grande */}
+                                <span className="font-black italic uppercase tracking-tighter text-white leading-none"
+                                    style={{ fontSize: 'clamp(16px,2.2vw,38px)' }}>
+                                    Pista {match.court ?? '-'}
+                                </span>
+                                {/* Fase / Ronda — mediana */}
+                                {(match.roundName || match.groupName) && (
+                                    <span className="font-black italic uppercase tracking-tight leading-none"
+                                        style={{ fontSize: 'clamp(10px,1.2vw,20px)', color: 'rgba(255,255,255,0.60)' }}>
+                                        {match.roundName || match.groupName}
                                     </span>
-                                    {match.roundName && (
-                                        <>
-                                            <span className="text-white/20" style={{ fontSize: 'clamp(8px,0.9vw,15px)' }}>•</span>
-                                            <span className="font-bold uppercase text-gray-500" style={{ fontSize: 'clamp(9px,1vw,17px)', letterSpacing: '0.15em' }}>
-                                                {match.roundName}
-                                            </span>
-                                        </>
-                                    )}
-                                </div>
+                                )}
+                                {/* Categoría — bien visible */}
+                                {tournament?.category && (
+                                    <span className="font-black italic uppercase tracking-wide leading-none"
+                                        style={{ fontSize: 'clamp(10px,1.3vw,22px)', color: 'rgba(255,255,255,0.55)' }}>
+                                        {formatCategory(tournament.category)}
+                                    </span>
+                                )}
+                                {/* Nombre del torneo debajo como sub-label */}
+                                <span className="font-bold uppercase tracking-widest text-gray-600" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>
+                                    {tournament?.name}
+                                </span>
                             </div>
 
                             {/* Right: Date / Time / Temp — horizontal pill */}
@@ -368,123 +410,172 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 className="border border-white/8 bg-white/[0.025] overflow-hidden flex flex-col"
                                 style={{ gridColumn: '1 / -1', borderRadius: 'clamp(12px,1.6vw,26px)' }}
                             >
-                                {/* Column headers */}
+                                {/* Column headers — orden: PTS | G | S1 | S2 | S3 */}
                                 <div className="flex items-center border-b border-white/[0.05]">
-                                    <div className="flex-1" style={{ padding: 'clamp(3px,0.5vh,7px) clamp(14px,2vw,32px)' }}>
-                                        <span className="font-black uppercase tracking-[0.3em] text-gray-600" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>JUGADOR</span>
+                                    <div className="flex-1" />
+                                    {/* Puntos del game */}
+                                    <div className="flex items-center justify-center border-l border-white/[0.05]"
+                                        style={{ width: 'clamp(60px,8vw,130px)', padding: 'clamp(3px,0.5vh,7px) 0', backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                                        <span className="font-black uppercase tracking-widest text-white/40" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>PTS</span>
+                                    </div>
+                                    {/* Games */}
+                                    <div className="flex items-center justify-center border-l border-white/[0.05]"
+                                        style={{ width: 'clamp(48px,6.5vw,104px)', padding: 'clamp(3px,0.5vh,7px) 0', backgroundColor: `${primaryColor}10` }}>
+                                        <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(5px,0.55vw,9px)', color: primaryColor }}>G</span>
                                     </div>
                                     {/* Sets S1 S2 S3 */}
                                     {[1, 2, 3].map(s => (
                                         <div key={s} className="flex items-center justify-center border-l border-white/[0.05]"
-                                            style={{ width: 'clamp(38px,5.5vw,90px)', padding: 'clamp(3px,0.5vh,7px) 0' }}>
+                                            style={{ width: 'clamp(30px,4vw,64px)', padding: 'clamp(3px,0.5vh,7px) 0' }}>
                                             <span className="font-black uppercase tracking-widest text-gray-600" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>S{s}</span>
                                         </div>
                                     ))}
-                                    {/* Games */}
-                                    <div className="flex items-center justify-center border-l border-white/[0.05]"
-                                        style={{ width: 'clamp(44px,6vw,100px)', padding: 'clamp(3px,0.5vh,7px) 0', background: 'rgba(255,255,255,0.03)' }}>
-                                        <span className="font-black uppercase tracking-widest text-gray-500" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>G</span>
-                                    </div>
-                                    {/* Points */}
-                                    <div className="flex flex-col items-center justify-center border-l border-white/[0.05]"
-                                        style={{ width: 'clamp(56px,8vw,128px)', padding: 'clamp(3px,0.5vh,7px) 0', backgroundColor: `${primaryColor}10` }}>
-                                        <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(5px,0.55vw,9px)', color: primaryColor }}>PTS</span>
-                                        {isTiebreak && (
-                                            <span className="font-black uppercase tracking-wider rounded-sm px-[4px] leading-tight"
-                                                style={{
-                                                    fontSize: 'clamp(4px,0.4vw,7px)',
-                                                    backgroundColor: modoPuntos === 'super_tiebreak' ? 'rgba(168,85,247,0.25)' : 'rgba(249,115,22,0.25)',
-                                                    color: modoPuntos === 'super_tiebreak' ? '#c084fc' : '#fb923c',
-                                                    marginTop: '2px',
-                                                }}>
-                                                {modoPuntos === 'super_tiebreak' ? 'SUPER TB' : 'TB'}
-                                            </span>
-                                        )}
-                                    </div>
                                 </div>
 
                                 {/* ── Team 1 row ── */}
                                 <div className="flex-1 flex items-center relative border-b border-white/[0.05] overflow-hidden min-h-0">
-                                    <AnimatePresence>
-                                        {(lm?.saque?.equipo === 1 || match.server?.team === 1) && (
-                                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                                className="absolute inset-0 pointer-events-none"
-                                                style={{ background: `radial-gradient(ellipse at 0% 50%, ${primaryColor}14 0%, transparent 60%)` }} />
-                                        )}
-                                    </AnimatePresence>
                                     <div className="flex-1 flex items-center min-w-0"
                                         style={{ padding: 'clamp(8px,1.2vh,20px) clamp(14px,2vw,32px)', gap: 'clamp(6px,1vw,18px)' }}>
-                                        {(lm?.saque?.equipo === 1 || match.server?.team === 1) && (
-                                            <motion.div animate={{ scale: [1, 1.4, 1], rotate: [0, 90, 0] }} transition={{ repeat: Infinity, duration: 1.2 }}
-                                                className="flex-shrink-0 rounded-sm"
-                                                style={{ width: 'clamp(7px,0.9vw,14px)', height: 'clamp(7px,0.9vw,14px)', backgroundColor: primaryColor, boxShadow: `0 0 10px ${primaryColor}` }} />
-                                        )}
-                                        <div className="flex flex-col min-w-0 flex-1" style={{ gap: 'clamp(1px,0.2vh,4px)' }}>
-                                            <p className="font-black italic uppercase tracking-tighter text-white leading-none truncate"
-                                                style={{ fontSize: 'clamp(16px,3.2vw,58px)' }}>{lm?.equipo_1?.nombre || match.t1p1}</p>
-                                            <p className="font-black italic uppercase tracking-tighter leading-none truncate"
-                                                style={{ fontSize: 'clamp(10px,1.6vw,28px)', color: primaryColor, opacity: 0.7 }}>{match.t1p2}</p>
+                                        {/* Jugadores: avatares + nombres */}
+                                        <div className="flex flex-col min-w-0 flex-1" style={{ gap: 'clamp(4px,0.6vh,10px)' }}>
+                                            {/* Jugador 1 del equipo 1 */}
+                                            <div className="flex items-center min-w-0" style={{ gap: 'clamp(6px,0.8vw,14px)' }}>
+                                                {/* 🎾 Pelota saque — inline al lado del nombre */}
+                                                <AnimatePresence>
+                                                    {(lm?.saque?.equipo === 1 || match.server?.team === 1) && (
+                                                        <motion.span
+                                                            initial={{ opacity: 0, x: -6, scale: 0.5 }}
+                                                            animate={{ opacity: 1, x: 0, scale: 1 }}
+                                                            exit={{ opacity: 0, x: -6, scale: 0.5 }}
+                                                            transition={{ duration: 0.25 }}
+                                                            style={{ fontSize: 'clamp(12px,1.6vw,28px)', lineHeight: 1, flexShrink: 0 }}
+                                                        >🎾</motion.span>
+                                                    )}
+                                                </AnimatePresence>
+                                                <img
+                                                    src={match.t1p1Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t1p1)}&background=222&color=fff&bold=true`}
+                                                    className="rounded-full flex-shrink-0 object-cover"
+                                                    style={{ width: 'clamp(22px,2.8vw,48px)', height: 'clamp(22px,2.8vw,48px)', border: `2px solid ${primaryColor}55` }}
+                                                />
+                                                <p className="font-black italic uppercase tracking-tighter text-white leading-none"
+                                                    style={{ fontSize: 'clamp(13px,2vw,36px)' }}>
+                                                    {lm?.equipo_1?.nombre || match.t1p1}
+                                                </p>
+                                            </div>
+                                            {/* Jugador 2 del equipo 1 */}
+                                            <div className="flex items-center min-w-0" style={{ gap: 'clamp(6px,0.8vw,14px)' }}>
+                                                <img
+                                                    src={match.t1p2Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t1p2)}&background=333&color=fff&bold=true`}
+                                                    className="rounded-full flex-shrink-0 object-cover"
+                                                    style={{ width: 'clamp(22px,2.8vw,48px)', height: 'clamp(22px,2.8vw,48px)', border: '2px solid rgba(255,255,255,0.15)' }}
+                                                />
+                                                <p className="font-black italic uppercase tracking-tighter text-white/70 leading-none"
+                                                    style={{ fontSize: 'clamp(13px,2vw,36px)' }}>
+                                                    {match.t1p2}
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
-                                    {/* Sets pasados */}
-                                    {[1, 2, 3].map(s => {
-                                        const isPast = s < currentSet; const isCur = s === currentSet;
-                                        // Sets completados: vienen de Firestore; el set actual no es una columna s
-                                        const val = isPast ? (match.games_sets?.[s - 1]?.t1 ?? 0) : isCur ? '' : '';
-                                        return (
-                                            <div key={s} className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                                style={{ width: 'clamp(38px,5.5vw,90px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
-                                                <motion.span key={String(val)} initial={isCur ? { scale: 1.4, opacity: 0 } : {}} animate={{ scale: 1, opacity: 1 }}
-                                                    className={`font-black italic ${isPast ? 'text-white/60' : 'text-white/10'}`}
-                                                    style={{ fontSize: 'clamp(18px,3.5vw,64px)' }}>{val}</motion.span>
-                                            </div>
-                                        );
-                                    })}
-                                    {/* Games actuales */}
+                                    {/* Puntos del game actual — Team 1 */}
                                     <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                        style={{ width: 'clamp(44px,6vw,100px)', background: 'rgba(255,255,255,0.03)' }}>
+                                        style={{ width: 'clamp(60px,8vw,130px)', backgroundColor: 'rgba(255,255,255,0.04)' }}>
                                         <AnimatePresence mode="popLayout">
-                                            <motion.span key={gamesT1} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}
+                                            <motion.span key={ptsT1} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
                                                 className="font-black italic text-white"
-                                                style={{ fontSize: 'clamp(18px,3.5vw,64px)' }}>
-                                                {gamesT1}
-                                            </motion.span>
-                                        </AnimatePresence>
-                                    </div>
-                                    {/* Puntos */}
-                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                        style={{ width: 'clamp(56px,8vw,128px)', backgroundColor: `${primaryColor}12` }}>
-                                        <AnimatePresence mode="popLayout">
-                                            <motion.span key={ptsT1} initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -16, opacity: 0 }}
-                                                className="font-black italic" style={{ fontSize: 'clamp(16px,2.8vw,50px)', color: primaryColor }}>
+                                                style={{ fontSize: 'clamp(22px,3.8vw,68px)' }}>
                                                 {ptsT1}
                                             </motion.span>
                                         </AnimatePresence>
                                     </div>
+                                    {/* Games */}
+                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
+                                        style={{ width: 'clamp(48px,6.5vw,104px)', backgroundColor: `${primaryColor}12` }}>
+                                        <AnimatePresence mode="popLayout">
+                                            <motion.span key={gamesT1} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}
+                                                className="font-black italic" style={{ fontSize: 'clamp(18px,3.2vw,58px)', color: primaryColor }}>
+                                                {gamesT1}
+                                            </motion.span>
+                                        </AnimatePresence>
+                                    </div>
+                                    {/* Sets pasados */}
+                                    {[1, 2, 3].map(s => {
+                                        const isPast = s < currentSet; const isCur = s === currentSet;
+                                        const val = isPast ? (match.games_sets?.[s - 1]?.t1 ?? 0) : '';
+                                        return (
+                                            <div key={s} className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
+                                                style={{ width: 'clamp(30px,4vw,64px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
+                                                <motion.span key={String(val)} initial={isCur ? { scale: 1.4, opacity: 0 } : {}} animate={{ scale: 1, opacity: 1 }}
+                                                    className={`font-black italic ${isPast ? 'text-white/60' : 'text-white/10'}`}
+                                                    style={{ fontSize: 'clamp(16px,2.8vw,50px)' }}>{val}</motion.span>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
 
                                 {/* ── Team 2 row ── */}
                                 <div className="flex-1 flex items-center relative overflow-hidden min-h-0">
-                                    <AnimatePresence>
-                                        {(lm?.saque?.equipo === 2 || match.server?.team === 2) && (
-                                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                                className="absolute inset-0 pointer-events-none"
-                                                style={{ background: `radial-gradient(ellipse at 0% 50%, ${primaryColor}14 0%, transparent 60%)` }} />
-                                        )}
-                                    </AnimatePresence>
                                     <div className="flex-1 flex items-center min-w-0"
                                         style={{ padding: 'clamp(8px,1.2vh,20px) clamp(14px,2vw,32px)', gap: 'clamp(6px,1vw,18px)' }}>
-                                        {(lm?.saque?.equipo === 2 || match.server?.team === 2) && (
-                                            <motion.div animate={{ scale: [1, 1.4, 1], rotate: [0, 90, 0] }} transition={{ repeat: Infinity, duration: 1.2 }}
-                                                className="flex-shrink-0 rounded-sm"
-                                                style={{ width: 'clamp(7px,0.9vw,14px)', height: 'clamp(7px,0.9vw,14px)', backgroundColor: primaryColor, boxShadow: `0 0 10px ${primaryColor}` }} />
-                                        )}
-                                        <div className="flex flex-col min-w-0 flex-1" style={{ gap: 'clamp(1px,0.2vh,4px)' }}>
-                                            <p className="font-black italic uppercase tracking-tighter text-white leading-none truncate"
-                                                style={{ fontSize: 'clamp(16px,3.2vw,58px)' }}>{lm?.equipo_2?.nombre || match.t2p1}</p>
-                                            <p className="font-black italic uppercase tracking-tighter leading-none truncate"
-                                                style={{ fontSize: 'clamp(10px,1.6vw,28px)', color: primaryColor, opacity: 0.7 }}>{match.t2p2}</p>
+                                        {/* Jugadores: avatares + nombres */}
+                                        <div className="flex flex-col min-w-0 flex-1" style={{ gap: 'clamp(4px,0.6vh,10px)' }}>
+                                            {/* Jugador 1 del equipo 2 */}
+                                            <div className="flex items-center min-w-0" style={{ gap: 'clamp(6px,0.8vw,14px)' }}>
+                                                {/* 🎾 Pelota saque — inline al lado del nombre */}
+                                                <AnimatePresence>
+                                                    {(lm?.saque?.equipo === 2 || match.server?.team === 2) && (
+                                                        <motion.span
+                                                            initial={{ opacity: 0, x: -6, scale: 0.5 }}
+                                                            animate={{ opacity: 1, x: 0, scale: 1 }}
+                                                            exit={{ opacity: 0, x: -6, scale: 0.5 }}
+                                                            transition={{ duration: 0.25 }}
+                                                            style={{ fontSize: 'clamp(12px,1.6vw,28px)', lineHeight: 1, flexShrink: 0 }}
+                                                        >🎾</motion.span>
+                                                    )}
+                                                </AnimatePresence>
+                                                <img
+                                                    src={match.t2p1Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t2p1)}&background=222&color=fff&bold=true`}
+                                                    className="rounded-full flex-shrink-0 object-cover"
+                                                    style={{ width: 'clamp(22px,2.8vw,48px)', height: 'clamp(22px,2.8vw,48px)', border: `2px solid ${primaryColor}55` }}
+                                                />
+                                                <p className="font-black italic uppercase tracking-tighter text-white leading-none"
+                                                    style={{ fontSize: 'clamp(13px,2vw,36px)' }}>
+                                                    {lm?.equipo_2?.nombre || match.t2p1}
+                                                </p>
+                                            </div>
+                                            {/* Jugador 2 del equipo 2 */}
+                                            <div className="flex items-center min-w-0" style={{ gap: 'clamp(6px,0.8vw,14px)' }}>
+                                                <img
+                                                    src={match.t2p2Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t2p2)}&background=333&color=fff&bold=true`}
+                                                    className="rounded-full flex-shrink-0 object-cover"
+                                                    style={{ width: 'clamp(22px,2.8vw,48px)', height: 'clamp(22px,2.8vw,48px)', border: '2px solid rgba(255,255,255,0.15)' }}
+                                                />
+                                                <p className="font-black italic uppercase tracking-tighter text-white/70 leading-none"
+                                                    style={{ fontSize: 'clamp(13px,2vw,36px)' }}>
+                                                    {match.t2p2}
+                                                </p>
+                                            </div>
                                         </div>
+                                    </div>
+                                    {/* Puntos del game actual — Team 2 */}
+                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
+                                        style={{ width: 'clamp(60px,8vw,130px)', backgroundColor: 'rgba(255,255,255,0.04)' }}>
+                                        <AnimatePresence mode="popLayout">
+                                            <motion.span key={ptsT2} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
+                                                className="font-black italic text-white"
+                                                style={{ fontSize: 'clamp(22px,3.8vw,68px)' }}>
+                                                {ptsT2}
+                                            </motion.span>
+                                        </AnimatePresence>
+                                    </div>
+                                    {/* Games */}
+                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
+                                        style={{ width: 'clamp(48px,6.5vw,104px)', backgroundColor: `${primaryColor}12` }}>
+                                        <AnimatePresence mode="popLayout">
+                                            <motion.span key={gamesT2} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}
+                                                className="font-black italic" style={{ fontSize: 'clamp(18px,3.2vw,58px)', color: primaryColor }}>
+                                                {gamesT2}
+                                            </motion.span>
+                                        </AnimatePresence>
                                     </div>
                                     {/* Sets pasados */}
                                     {[1, 2, 3].map(s => {
@@ -492,34 +583,13 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                         const val = isPast ? (match.games_sets?.[s - 1]?.t2 ?? 0) : '';
                                         return (
                                             <div key={s} className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                                style={{ width: 'clamp(38px,5.5vw,90px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
+                                                style={{ width: 'clamp(30px,4vw,64px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
                                                 <motion.span key={String(val)} initial={isCur ? { scale: 1.4, opacity: 0 } : {}} animate={{ scale: 1, opacity: 1 }}
                                                     className={`font-black italic ${isPast ? 'text-white/60' : 'text-white/10'}`}
-                                                    style={{ fontSize: 'clamp(18px,3.5vw,64px)' }}>{val}</motion.span>
+                                                    style={{ fontSize: 'clamp(16px,2.8vw,50px)' }}>{val}</motion.span>
                                             </div>
                                         );
                                     })}
-                                    {/* Games actuales */}
-                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                        style={{ width: 'clamp(44px,6vw,100px)', background: 'rgba(255,255,255,0.03)' }}>
-                                        <AnimatePresence mode="popLayout">
-                                            <motion.span key={gamesT2} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}
-                                                className="font-black italic text-white"
-                                                style={{ fontSize: 'clamp(18px,3.5vw,64px)' }}>
-                                                {gamesT2}
-                                            </motion.span>
-                                        </AnimatePresence>
-                                    </div>
-                                    {/* Puntos */}
-                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                        style={{ width: 'clamp(56px,8vw,128px)', backgroundColor: `${primaryColor}12` }}>
-                                        <AnimatePresence mode="popLayout">
-                                            <motion.span key={ptsT2} initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -16, opacity: 0 }}
-                                                className="font-black italic" style={{ fontSize: 'clamp(16px,2.8vw,50px)', color: primaryColor }}>
-                                                {ptsT2}
-                                            </motion.span>
-                                        </AnimatePresence>
-                                    </div>
                                 </div>
                             </div>
 

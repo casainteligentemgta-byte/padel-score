@@ -3,558 +3,567 @@
 import { useState, useEffect, use } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Tv,
-    Palette,
-    Megaphone,
-    Save,
-    Plus,
-    Trash2,
-    ChevronLeft,
-    CheckCircle2,
-    Layout,
-    Eye,
-    Video,
-    Zap,
-    Sparkles,
-    Clock,
-    Upload,
-    Loader2
+    Camera, Plus, X, Wifi, WifiOff, Tv, Radio, Monitor,
+    Play, Square, RefreshCw, ArrowLeft, Megaphone, Video,
+    Eye, EyeOff, LayoutGrid, Maximize2, Settings, Save,
+    Trash2, ExternalLink, Volume2, VolumeX
 } from 'lucide-react';
-import { useAuth } from '@/lib/AuthContext';
-import { useRouter } from 'next/navigation';
-import { db, storage } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { useAuth } from '@/lib/AuthContext';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
+import { MatchStatus } from '@/types/tournament';
 
-export default function BroadcastingSettings({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
-    const router = useRouter();
-    const { user, isAdmin, loading: authLoading } = useAuth();
-    const [tournament, setTournament] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [showSavedToast, setShowSavedToast] = useState(false);
+// ── Types ───────────────────────────────────────────────────────────────────
+interface CameraFeed {
+    id: string;
+    label: string;
+    url: string;
+    type: 'youtube' | 'rtmp' | 'image' | 'hls' | 'iframe';
+    courtId?: number;
+    active: boolean;
+}
 
-    // Form state
-    const [primaryColor, setPrimaryColor] = useState('#ccff00');
-    const [bannerText, setBannerText] = useState('');
-    const [showLiveIndicator, setShowLiveIndicator] = useState(true);
-    const [sponsors, setSponsors] = useState<{ name: string; logoUrl?: string }[]>([]);
-    const [adFrequency, setAdFrequency] = useState(60);
-    const [adDuration, setAdDuration] = useState(10);
-    const [adMediaUrls, setAdMediaUrls] = useState<string[]>([]);
-    const [funAnimations, setFunAnimations] = useState(true);
-    const [aiSearch, setAiSearch] = useState(false);
-    const [uploading, setUploading] = useState<string | null>(null);
-    const [showTicker, setShowTicker] = useState(true);
-    const [venueName, setVenueName] = useState('');
+const DEFAULT_CAMERAS: CameraFeed[] = [
+    { id: 'cam_1', label: 'Pista 1', url: '', type: 'iframe', courtId: 1, active: true },
+    { id: 'cam_2', label: 'Pista 2', url: '', type: 'iframe', courtId: 2, active: true },
+    { id: 'cam_3', label: 'Pista 3', url: '', type: 'iframe', courtId: 3, active: true },
+    { id: 'cam_4', label: 'Pista 4', url: '', type: 'iframe', courtId: 4, active: true },
+];
 
-    const SAMPLE_VIDEO = "https://assets.mixkit.co/videos/preview/mixkit-man-playing-padel-tennis-41484-large.mp4";
+function extractYouTubeId(url: string): string | null {
+    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&?/]+)/);
+    return match ? match[1] : null;
+}
 
-    const handleFileUpload = async (file: File, type: 'sponsor' | 'ad', index: number) => {
-        const uploadKey = `${type}-${index}`;
-        setUploading(uploadKey);
-        try {
-            const fileRef = ref(storage, `tournaments/${id}/${type}/${Date.now()}_${file.name}`);
-            await uploadBytes(fileRef, file);
-            const url = await getDownloadURL(fileRef);
-
-            if (type === 'sponsor') {
-                updateSponsor(index, 'logoUrl', url);
-            } else {
-                const newUrls = [...adMediaUrls];
-                newUrls[index] = url;
-                setAdMediaUrls(newUrls);
-            }
-        } catch (error) {
-            console.error('Error uploading file:', error);
-            alert('Error al subir el archivo');
-        } finally {
-            setUploading(null);
-        }
-    };
-
-    useEffect(() => {
-        if (!id || authLoading) return;
-
-        const docRef = doc(db, 'tournaments', id);
-        const unsubscribe = onSnapshot(docRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setTournament({ id: docSnap.id, ...data });
-
-                if (data.broadcastingSettings) {
-                    setPrimaryColor(data.broadcastingSettings.primaryColor || '#ccff00');
-                    setBannerText(data.broadcastingSettings.bannerText || '');
-                    setShowLiveIndicator(data.broadcastingSettings.showLiveIndicator !== false);
-                    setSponsors(data.broadcastingSettings.sponsors || []);
-                    setAdFrequency(data.broadcastingSettings.adFrequencySeconds || 60);
-                    setAdDuration(data.broadcastingSettings.adDurationSeconds || 10);
-                    setAdMediaUrls(data.broadcastingSettings.adMediaUrls || [SAMPLE_VIDEO]);
-                    setFunAnimations(data.broadcastingSettings.funAnimationsEnabled !== false);
-                    setAiSearch(data.broadcastingSettings.aiAnimationSearchEnabled || false);
-                    setShowTicker(data.broadcastingSettings.showTicker !== false);
-                    setVenueName(data.broadcastingSettings.venueName || '');
-                }
-            }
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, [id, authLoading]);
-
-    const addSponsor = () => {
-        setSponsors([...sponsors, { name: '', logoUrl: '' }]);
-    };
-
-    const removeSponsor = (index: number) => {
-        setSponsors(sponsors.filter((_, i) => i !== index));
-    };
-
-    const updateSponsor = (index: number, field: string, value: string) => {
-        const newSponsors = [...sponsors];
-        newSponsors[index] = { ...newSponsors[index], [field]: value };
-        setSponsors(newSponsors);
-    };
-
-    const handleSave = async () => {
-        setSaving(true);
-        try {
-            await updateDoc(doc(db, 'tournaments', id), {
-                broadcastingSettings: {
-                    primaryColor,
-                    bannerText,
-                    showLiveIndicator,
-                    sponsors,
-                    adFrequencySeconds: adFrequency,
-                    adDurationSeconds: adDuration,
-                    adMediaUrls: adMediaUrls.length > 0 ? adMediaUrls : [SAMPLE_VIDEO],
-                    funAnimationsEnabled: funAnimations,
-                    aiAnimationSearchEnabled: aiSearch,
-                    showTicker,
-                    venueName
-                }
-            });
-            setShowSavedToast(true);
-            setTimeout(() => setShowSavedToast(false), 3000);
-        } catch (error) {
-            console.error('Error saving settings:', error);
-        }
-        setSaving(false);
-    };
-
-    if (loading) return null;
+// ── Camera Cell ─────────────────────────────────────────────────────────────
+function CameraCell({
+    cam, isFullscreen, onFullscreen, onEdit, liveMatchName
+}: {
+    cam: CameraFeed;
+    isFullscreen: boolean;
+    onFullscreen: () => void;
+    onEdit: () => void;
+    liveMatchName?: string;
+}) {
+    const [muted, setMuted] = useState(true);
+    const hasStream = cam.url.trim() !== '';
+    const ytId = cam.type === 'youtube' ? extractYouTubeId(cam.url) : null;
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white flex font-outfit">
-            <Sidebar />
-
-            <div className="flex-1 p-6 lg:p-10 pl-24 md:pl-32 max-w-7xl">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-12">
-                    <div className="flex items-center gap-6">
+        <motion.div
+            layout
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="relative bg-[#0c0c10] rounded-2xl overflow-hidden border border-white/[0.06] group"
+        >
+            {/* Stream area */}
+            <div className="aspect-video w-full bg-black relative">
+                {hasStream ? (
+                    <>
+                        {ytId ? (
+                            <iframe
+                                src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&modestbranding=1`}
+                                className="absolute inset-0 w-full h-full"
+                                allow="autoplay; encrypted-media"
+                                allowFullScreen
+                            />
+                        ) : cam.type === 'iframe' ? (
+                            <iframe
+                                src={cam.url}
+                                className="absolute inset-0 w-full h-full"
+                                allowFullScreen
+                            />
+                        ) : cam.type === 'image' ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={cam.url} alt={cam.label} className="absolute inset-0 w-full h-full object-cover" />
+                        ) : (
+                            <video
+                                src={cam.url}
+                                autoPlay
+                                muted={muted}
+                                loop
+                                className="absolute inset-0 w-full h-full object-cover"
+                            />
+                        )}
+                    </>
+                ) : (
+                    // Placeholder sin stream
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                        <Camera className="w-10 h-10 text-white/10" />
+                        <p className="text-[9px] font-black uppercase tracking-widest text-white/20">Sin señal</p>
                         <button
-                            onClick={() => router.back()}
-                            className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-all text-gray-500 hover:text-white"
+                            onClick={onEdit}
+                            className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-[8px] font-black uppercase tracking-widest text-white/40 hover:bg-white/10 hover:text-white transition-all"
                         >
-                            <ChevronLeft className="w-5 h-5" />
+                            + Configurar
                         </button>
-                        <div>
-                            <h1 className="text-3xl font-black italic uppercase tracking-tighter flex items-center gap-3">
-                                <Tv className="w-8 h-8 text-padel-primary" />
-                                Configuración de <span className="text-padel-primary">Transmisión</span>
-                            </h1>
-                            <p className="text-xs text-gray-500 font-bold uppercase tracking-[0.3em] mt-1">Módulo de Estilo y Patrocinadores</p>
-                        </div>
                     </div>
+                )}
 
-                    <button
-                        onClick={handleSave}
-                        disabled={saving}
-                        className="flex items-center gap-3 bg-padel-primary text-black px-8 py-4 rounded-2xl font-black italic uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-padel-primary/20 disabled:opacity-50"
-                    >
-                        {saving ? <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" /> : <Save className="w-5 h-5" />}
-                        {saving ? 'Guardando...' : 'Guardar Cambios'}
-                    </button>
-                </div>
-
-                <div className="grid grid-cols-12 gap-8">
-                    {/* Settings Form */}
-                    <div className="col-span-12 lg:col-span-7 space-y-8">
-                        {/* Visual Styles */}
-                        <section className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 space-y-6">
-                            <div className="flex items-center gap-3 mb-2">
-                                <Palette className="w-5 h-5 text-padel-primary" />
-                                <h2 className="text-sm font-black italic uppercase tracking-widest">Identidad Visual</h2>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-6">
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Color Principal (Neon)</label>
-                                    <div className="flex items-center gap-4">
-                                        <input
-                                            type="color"
-                                            value={primaryColor}
-                                            onChange={(e) => setPrimaryColor(e.target.value)}
-                                            className="w-12 h-12 bg-transparent border-0 rounded-xl cursor-pointer"
-                                        />
-                                        <input
-                                            type="text"
-                                            value={primaryColor}
-                                            onChange={(e) => setPrimaryColor(e.target.value)}
-                                            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono uppercase"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Indicador "LIVE"</label>
-                                    <button
-                                        onClick={() => setShowLiveIndicator(!showLiveIndicator)}
-                                        className={`w-full py-3 px-4 rounded-xl border transition-all flex items-center justify-between ${showLiveIndicator ? 'bg-red-500/10 border-red-500/30 text-red-500' : 'bg-white/5 border-white/10 text-gray-500'}`}
-                                    >
-                                        <span className="text-[10px] font-black uppercase">Mostrar Rec de OBS</span>
-                                        <div className={`w-3 h-3 rounded-full ${showLiveIndicator ? 'bg-red-500 animate-pulse' : 'bg-gray-700'}`} />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="space-y-3 pt-4">
-                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Texto de la Marquesina (Banners)</label>
-                                <textarea
-                                    placeholder="Ej: ¡Bienvenidos al Torneo de Verano Margarita 2024! Patrocinado por..."
-                                    value={bannerText}
-                                    onChange={(e) => setBannerText(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:border-padel-primary transition-all outline-none resize-none h-24"
-                                />
-                            </div>
-                        </section>
-
-                        {/* Ticker / Marquesina */}
-                        <section className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 space-y-6">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-3">
-                                    <Megaphone className="w-5 h-5 text-padel-primary" />
-                                    <h2 className="text-sm font-black italic uppercase tracking-widest">Marquesina / Correa Informativa</h2>
-                                </div>
-                                <button
-                                    onClick={() => setShowTicker(!showTicker)}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-[10px] font-black uppercase transition-all ${showTicker
-                                            ? 'bg-padel-primary/10 border-padel-primary/30 text-padel-primary'
-                                            : 'bg-white/5 border-white/10 text-gray-500'
-                                        }`}
-                                >
-                                    <div className={`w-2.5 h-2.5 rounded-full transition-colors ${showTicker ? 'bg-padel-primary animate-pulse' : 'bg-gray-700'}`} />
-                                    {showTicker ? 'Visible' : 'Oculta'}
-                                </button>
-                            </div>
-
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Nombre del Venue / Club</label>
-                                <input
-                                    type="text"
-                                    placeholder="Ej: Margarita Padel Center"
-                                    value={venueName}
-                                    onChange={(e) => setVenueName(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-6 py-3 text-sm focus:border-padel-primary transition-all outline-none"
-                                />
-                                <p className="text-[8px] text-gray-600 font-bold uppercase tracking-widest">Aparece junto al indicador DIRECTO en la pizarra</p>
-                            </div>
-
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Texto de la Correa</label>
-                                <textarea
-                                    placeholder="Ej: ¡Bienvenidos al Torneo de Verano Margarita 2024! Patrocinado por..."
-                                    value={bannerText}
-                                    onChange={(e) => setBannerText(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:border-padel-primary transition-all outline-none resize-none h-20"
-                                />
-                            </div>
-
-                            {/* Preview ticker */}
-                            <div className={`overflow-hidden rounded-2xl border transition-all ${showTicker ? 'border-padel-primary/20 bg-black' : 'border-white/5 bg-white/[0.02] opacity-40'}`}>
-                                <div className="flex items-center gap-8 whitespace-nowrap px-6 py-3 animate-marquee" style={{ fontSize: '11px' }}>
-                                    <span className="font-black italic uppercase tracking-tighter text-white opacity-30">SMART PADEL PRO SYSTEM</span>
-                                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: primaryColor }} />
-                                    <span className="font-black italic uppercase tracking-tighter" style={{ color: primaryColor }}>
-                                        {bannerText || 'BIENVENIDOS AL MEJOR PADEL DEL MUNDO'}
-                                    </span>
-                                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: primaryColor }} />
-                                    <span className="font-black italic uppercase tracking-tighter text-white opacity-30">SMART PADEL PRO SYSTEM</span>
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* Sponsors Management */}
-                        <section className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 space-y-6">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-3">
-                                    <Megaphone className="w-5 h-5 text-padel-primary" />
-                                    <h2 className="text-sm font-black italic uppercase tracking-widest">Patrocinadores Principales</h2>
-                                </div>
-                                <button
-                                    onClick={addSponsor}
-                                    className="p-2 bg-padel-primary/10 text-padel-primary rounded-xl hover:bg-padel-primary/20 transition-all"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                </button>
-                            </div>
-
-                            <div className="space-y-4">
-                                {sponsors.length === 0 ? (
-                                    <div className="py-12 border-2 border-dashed border-white/5 rounded-3xl flex flex-col items-center justify-center text-gray-600">
-                                        <Megaphone className="w-8 h-8 mb-4 opacity-20" />
-                                        <p className="text-[10px] font-black uppercase tracking-widest">No hay patrocinadores registrados</p>
-                                    </div>
-                                ) : sponsors.map((sponsor, idx) => (
-                                    <motion.div
-                                        initial={{ opacity: 0, scale: 0.95 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        key={idx}
-                                        className="bg-white/5 rounded-[2rem] p-6 flex items-center gap-6 border border-white/5 group hover:border-white/10 transition-all"
-                                    >
-                                        <div className="w-16 h-16 bg-black rounded-2xl border border-white/10 flex items-center justify-center text-gray-500 relative overflow-hidden">
-                                            {sponsor.logoUrl ? (
-                                                <img src={sponsor.logoUrl} className="w-full h-full object-contain" />
-                                            ) : (
-                                                <Layout className="w-6 h-6 opacity-20" />
-                                            )}
-                                        </div>
-                                        <div className="flex-1 grid grid-cols-2 gap-4">
-                                            <div className="space-y-1">
-                                                <label className="text-[8px] font-black uppercase text-gray-600 tracking-widest ml-1">Nombre</label>
-                                                <input
-                                                    type="text"
-                                                    value={sponsor.name}
-                                                    onChange={(e) => updateSponsor(idx, 'name', e.target.value)}
-                                                    placeholder="Ej: Gatorade"
-                                                    className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-2 text-xs outline-none focus:border-padel-primary"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[8px] font-black uppercase text-gray-600 tracking-widest ml-1">Logo (Archivo o URL)</label>
-                                                <div className="flex gap-2">
-                                                    <input
-                                                        type="text"
-                                                        value={sponsor.logoUrl || ''}
-                                                        onChange={(e) => updateSponsor(idx, 'logoUrl', e.target.value)}
-                                                        placeholder="https://..."
-                                                        className="flex-1 bg-white/5 border border-white/5 rounded-xl px-4 py-2 text-[10px] outline-none focus:border-padel-primary"
-                                                    />
-                                                    <label className="cursor-pointer group flex items-center justify-center w-10 bg-white/5 border border-white/5 rounded-xl hover:bg-padel-primary/10 hover:border-padel-primary/30 transition-all">
-                                                        <input
-                                                            type="file"
-                                                            className="hidden"
-                                                            accept="image/*"
-                                                            onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'sponsor', idx)}
-                                                        />
-                                                        {uploading === `sponsor-${idx}` ? (
-                                                            <Loader2 className="w-4 h-4 text-padel-primary animate-spin" />
-                                                        ) : (
-                                                            <Upload className="w-4 h-4 text-gray-500 group-hover:text-padel-primary" />
-                                                        )}
-                                                    </label>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => removeSponsor(idx)}
-                                            className="p-3 text-red-500/30 hover:text-red-500 transition-colors"
-                                        >
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
-                                    </motion.div>
-                                ))}
-                            </div>
-                        </section>
-
-                        {/* Display Mode Settings */}
-                        <section className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 space-y-6">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-3">
-                                    <Video className="w-5 h-5 text-padel-primary" />
-                                    <h2 className="text-sm font-black italic uppercase tracking-widest text-[#fb923c]">Configuración TV de Pista</h2>
-                                </div>
-                                <Zap className={`w-4 h-4 ${funAnimations ? 'text-amber-400' : 'text-gray-700'}`} />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-8">
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1 flex items-center gap-2">
-                                        <Clock className="w-3 h-3" /> Frecuencia (seg)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={adFrequency}
-                                        onChange={(e) => setAdFrequency(parseInt(e.target.value))}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-padel-primary outline-none"
-                                        placeholder="60"
-                                    />
-                                    <p className="text-[8px] text-gray-600 font-bold uppercase tracking-widest">Tiempo entre anuncios</p>
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1 flex items-center gap-2">
-                                        <Eye className="w-3 h-3" /> Duración Anuncio (seg)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={adDuration}
-                                        onChange={(e) => setAdDuration(parseInt(e.target.value))}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-padel-primary outline-none"
-                                        placeholder="10"
-                                    />
-                                    <p className="text-[8px] text-gray-600 font-bold uppercase tracking-widest">Tiempo que dura el anuncio</p>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-8">
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Efectos de Pizarra</label>
-                                    <button
-                                        onClick={() => setFunAnimations(!funAnimations)}
-                                        className={`w-full py-3 px-4 rounded-xl border transition-all flex items-center justify-between ${funAnimations ? 'bg-amber-400/10 border-amber-400/30 text-amber-400' : 'bg-white/5 border-white/10 text-gray-500'}`}
-                                    >
-                                        <span className="text-[10px] font-black uppercase">{funAnimations ? 'Animaciones ON' : 'Animaciones OFF'}</span>
-                                        <div className={`w-3 h-3 rounded-full ${funAnimations ? 'bg-amber-400 animate-bounce' : 'bg-gray-700'}`} />
-                                    </button>
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1 flex items-center gap-2">
-                                        <Sparkles className="w-3 h-3 text-cyan-400" /> Búsqueda por IA
-                                    </label>
-                                    <button
-                                        onClick={() => setAiSearch(!aiSearch)}
-                                        className={`w-full py-3 px-4 rounded-xl border transition-all flex items-center justify-between ${aiSearch ? 'bg-cyan-400/10 border-cyan-400/30 text-cyan-400' : 'bg-white/5 border-white/10 text-gray-500'}`}
-                                    >
-                                        <span className="text-[10px] font-black uppercase">{aiSearch ? 'IA Activa' : 'Desactivada'}</span>
-                                        <div className={`w-3 h-3 rounded-full ${aiSearch ? 'bg-cyan-400 shadow-[0_0_10px_cyan]' : 'bg-gray-700'}`} />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="space-y-4">
-                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">URLs de Videos/Ads (Pantalla Completa)</label>
-                                {adMediaUrls.map((url, idx) => (
-                                    <div key={idx} className="flex gap-4">
-                                        <div className="flex-1 flex gap-2">
-                                            <input
-                                                type="text"
-                                                value={url}
-                                                onChange={(e) => {
-                                                    const newUrls = [...adMediaUrls];
-                                                    newUrls[idx] = e.target.value;
-                                                    setAdMediaUrls(newUrls);
-                                                }}
-                                                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs outline-none focus:border-padel-primary"
-                                                placeholder="https://...mp4 o imagen"
-                                            />
-                                            <label className="cursor-pointer group flex items-center justify-center w-10 bg-white/5 border border-white/10 rounded-xl hover:bg-padel-primary/10 hover:border-padel-primary/30 transition-all">
-                                                <input
-                                                    type="file"
-                                                    className="hidden"
-                                                    accept="video/*,image/*"
-                                                    onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'ad', idx)}
-                                                />
-                                                {uploading === `ad-${idx}` ? (
-                                                    <Loader2 className="w-4 h-4 text-padel-primary animate-spin" />
-                                                ) : (
-                                                    <Upload className="w-4 h-4 text-gray-500 group-hover:text-padel-primary" />
-                                                )}
-                                            </label>
-                                        </div>
-                                        <button
-                                            onClick={() => setAdMediaUrls(adMediaUrls.filter((_, i) => i !== idx))}
-                                            className="p-2 text-red-500/40 hover:text-red-500 transition-colors"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                ))}
-                                <button
-                                    onClick={() => setAdMediaUrls([...adMediaUrls, ''])}
-                                    className="w-full py-3 border border-dashed border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-padel-primary hover:border-padel-primary/30 transition-all"
-                                >
-                                    + Añadir Media Publicitario
-                                </button>
-                            </div>
-                        </section>
+                {/* LIVE badge si hay partido */}
+                {liveMatchName && (
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-1 bg-red-500/90 backdrop-blur-sm rounded-md">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                        <span className="text-[7px] font-black uppercase text-white tracking-widest">EN VIVO</span>
                     </div>
+                )}
 
-                    {/* Preview Section */}
-                    <div className="col-span-12 lg:col-span-5">
-                        <div className="sticky top-10 space-y-6">
-                            <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 overflow-hidden flex flex-col items-center">
-                                <div className="flex items-center gap-3 self-start mb-8">
-                                    <Eye className="w-5 h-5 text-padel-primary" />
-                                    <h2 className="text-sm font-black italic uppercase tracking-widest">Vista Previa Broadcast</h2>
-                                </div>
-
-                                {/* Miniature Overlay Mockup */}
-                                <div className="w-full aspect-video bg-[#0a2f0a] rounded-[2rem] border-4 border-black shadow-2xl relative overflow-hidden flex items-center justify-center group">
-                                    <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=800')] bg-cover opacity-20 grayscale" />
-
-                                    {/* LIVE Button */}
-                                    {showLiveIndicator && (
-                                        <div className="absolute top-4 right-4 flex items-center gap-2 px-3 py-1 bg-red-600/20 border border-red-600/40 rounded-full">
-                                            <span className="text-[6px] font-black uppercase tracking-tighter text-white">REC LIVE</span>
-                                            <div className="w-1.5 h-1.5 bg-red-600 rounded-full animate-pulse" />
-                                        </div>
-                                    )}
-
-                                    {/* Score Card Mockup */}
-                                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[90%] h-12 bg-black/80 backdrop-blur-md rounded-2xl border border-white/10 flex items-stretch">
-                                        <div className="flex-[2] flex items-center px-4 border-r border-white/5">
-                                            <div className="w-1.5 h-1.5 rounded-full mr-2" style={{ backgroundColor: primaryColor, boxShadow: `0 0 10px ${primaryColor}` }} />
-                                            <span className="text-[10px] font-black italic uppercase truncate">Team A vs Team B</span>
-                                        </div>
-                                        <div className="w-12 flex items-center justify-center font-black italic text-lg" style={{ color: primaryColor }}>30:15</div>
-                                        <div className="flex-1 flex items-center justify-center bg-white/5 font-black text-[10px] italic">SET 1</div>
-                                    </div>
-
-                                    {/* Sponsor Rotation Preview */}
-                                    {sponsors.length > 0 && (
-                                        <div className="absolute top-4 left-4 bg-white/5 backdrop-blur-sm px-3 py-1.5 rounded-xl flex items-center gap-2 border border-white/10">
-                                            <span className="text-[6px] font-black uppercase text-gray-500 italic">Sponsored by</span>
-                                            <div className="h-3 flex items-center gap-2">
-                                                <div className="h-full px-2 py-0.5 bg-padel-primary/20 rounded-sm text-[8px] font-black text-padel-primary uppercase italic tracking-tighter truncate max-w-[80px]">
-                                                    {sponsors[0].name}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="mt-8 text-center space-y-4 w-full">
-                                    <p className="text-[10px] text-gray-500 font-medium leading-relaxed">Este es un adelanto visual. Los cambios se verán reflejados automáticamente en los enlaces de OBS para todos los partidos activos.</p>
-
-                                    <Link
-                                        href={`/tournaments/${id}/control`}
-                                        className="block py-4 border border-white/5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/5 transition-all text-gray-400"
-                                    >
-                                        Volver al Panel de Control
-                                    </Link>
-                                </div>
-                            </div>
-                        </div>
+                {/* Controls overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute bottom-2 right-2 flex gap-1.5">
+                        {hasStream && (
+                            <button
+                                onClick={() => setMuted(m => !m)}
+                                className="p-1.5 bg-black/60 backdrop-blur-sm rounded-lg border border-white/10 text-white/60 hover:text-white transition-all"
+                            >
+                                {muted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                            </button>
+                        )}
+                        <button
+                            onClick={onEdit}
+                            className="p-1.5 bg-black/60 backdrop-blur-sm rounded-lg border border-white/10 text-white/60 hover:text-white transition-all"
+                        >
+                            <Settings className="w-3 h-3" />
+                        </button>
+                        <button
+                            onClick={onFullscreen}
+                            className="p-1.5 bg-black/60 backdrop-blur-sm rounded-lg border border-white/10 text-white/60 hover:text-white transition-all"
+                        >
+                            <Maximize2 className="w-3 h-3" />
+                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* Saved Toast */}
-            <AnimatePresence>
-                {showSavedToast && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 50 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 50 }}
-                        className="fixed bottom-10 right-10 bg-padel-primary text-black px-8 py-4 rounded-2xl font-black italic flex items-center gap-3 shadow-2xl z-50 uppercase tracking-widest text-sm"
+            {/* Label bar */}
+            <div className="flex items-center justify-between px-3 py-2 border-t border-white/[0.04]">
+                <div className="flex items-center gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full ${hasStream ? 'bg-green-500 shadow-[0_0_4px_#22c55e]' : 'bg-gray-700'}`} />
+                    <span className="text-[9px] font-black uppercase tracking-widest text-white/50">{cam.label}</span>
+                    {cam.courtId && (
+                        <span className="text-[7px] text-white/20 font-mono">P{cam.courtId}</span>
+                    )}
+                </div>
+                {liveMatchName && (
+                    <span className="text-[7px] font-bold text-red-400 truncate max-w-[120px]">{liveMatchName}</span>
+                )}
+            </div>
+        </motion.div>
+    );
+}
+
+// ── Edit Camera Modal ────────────────────────────────────────────────────────
+function EditCameraModal({
+    cam, onSave, onDelete, onClose
+}: {
+    cam: CameraFeed;
+    onSave: (updated: CameraFeed) => void;
+    onDelete: () => void;
+    onClose: () => void;
+}) {
+    const [form, setForm] = useState<CameraFeed>({ ...cam });
+
+    return (
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6"
+            onClick={e => e.target === e.currentTarget && onClose()}
+        >
+            <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                className="w-full max-w-md bg-[#111115] border border-white/[0.08] rounded-3xl p-6 space-y-5"
+            >
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-black italic uppercase tracking-tight">
+                        Configurar Cámara
+                    </h3>
+                    <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/5 text-gray-500 hover:text-white transition-all">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+
+                <div className="space-y-3">
+                    <div>
+                        <label className="text-[8px] font-black uppercase tracking-widest text-gray-600 block mb-1.5">Nombre</label>
+                        <input
+                            type="text"
+                            value={form.label}
+                            onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+                            className="w-full bg-black border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-padel-primary/40 transition-colors"
+                            placeholder="Ej: Pista Central"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="text-[8px] font-black uppercase tracking-widest text-gray-600 block mb-1.5">Tipo de fuente</label>
+                        <div className="grid grid-cols-4 gap-1.5">
+                            {(['youtube', 'iframe', 'image', 'hls'] as CameraFeed['type'][]).map(t => (
+                                <button
+                                    key={t}
+                                    onClick={() => setForm(f => ({ ...f, type: t }))}
+                                    className={`py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all border ${form.type === t ? 'bg-padel-primary/10 border-padel-primary/30 text-padel-primary' : 'bg-white/[0.03] border-white/5 text-gray-600 hover:bg-white/[0.06]'}`}
+                                >
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-[8px] font-black uppercase tracking-widest text-gray-600 block mb-1.5">
+                            URL {form.type === 'youtube' ? '(YouTube link)' : form.type === 'image' ? '(imagen)' : form.type === 'hls' ? '(.m3u8)' : '(iframe/embed)'}
+                        </label>
+                        <input
+                            type="url"
+                            value={form.url}
+                            onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+                            className="w-full bg-black border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-padel-primary/40 transition-colors font-mono text-[11px]"
+                            placeholder="https://..."
+                        />
+                        {form.type === 'youtube' && form.url && extractYouTubeId(form.url) && (
+                            <p className="text-[7px] text-green-500 mt-1 font-bold">✓ YouTube ID: {extractYouTubeId(form.url)}</p>
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="text-[8px] font-black uppercase tracking-widest text-gray-600 block mb-1.5">Pista (opcional)</label>
+                        <input
+                            type="number"
+                            value={form.courtId || ''}
+                            onChange={e => setForm(f => ({ ...f, courtId: parseInt(e.target.value) || undefined }))}
+                            className="w-full bg-black border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-padel-primary/40 transition-colors"
+                            placeholder="1"
+                            min={1}
+                            max={10}
+                        />
+                    </div>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                    <button
+                        onClick={onDelete}
+                        className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all"
                     >
-                        <CheckCircle2 className="w-6 h-6" />
-                        ¡Configuración Actualizada!
-                    </motion.div>
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 transition-all text-[10px] font-black uppercase tracking-widest"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={() => { onSave(form); onClose(); }}
+                        className="flex-1 py-2.5 rounded-xl bg-padel-primary text-black font-black uppercase tracking-widest text-[10px] hover:bg-padel-primary/90 transition-all flex items-center justify-center gap-2"
+                    >
+                        <Save className="w-3.5 h-3.5" />
+                        Guardar
+                    </button>
+                </div>
+            </motion.div>
+        </motion.div>
+    );
+}
+
+// ── Main Page ────────────────────────────────────────────────────────────────
+export default function BroadcastingPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = use(params);
+    const { isAdmin, isMarker } = useAuth();
+
+    const [tournament, setTournament] = useState<any>(null);
+    const [liveMatches, setLiveMatches] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [cameras, setCameras] = useState<CameraFeed[]>(DEFAULT_CAMERAS);
+    const [editingCam, setEditingCam] = useState<CameraFeed | null>(null);
+    const [fullscreenCam, setFullscreenCam] = useState<string | null>(null);
+    const [globalAds, setGlobalAds] = useState(false);
+    const [adUrl, setAdUrl] = useState('');
+    const [savingAds, setSavingAds] = useState(false);
+    const [columns, setColumns] = useState<2 | 3 | 4>(2);
+
+    const canOperate = isAdmin || isMarker;
+
+    // Firebase realtime
+    useEffect(() => {
+        const unsub = onSnapshot(doc(db, 'tournaments', id), snap => {
+            if (snap.exists()) {
+                const data = { id: snap.id, ...snap.data() } as any;
+                setTournament(data);
+
+                // Cargar cámaras guardadas
+                if (data.broadcastingSettings?.cameras) {
+                    setCameras(data.broadcastingSettings.cameras);
+                }
+                // Cargar config de ads
+                if (data.broadcastingSettings?.globalAds !== undefined) {
+                    setGlobalAds(data.broadcastingSettings.globalAds);
+                }
+                if (data.broadcastingSettings?.adUrl) {
+                    setAdUrl(data.broadcastingSettings.adUrl);
+                }
+
+                // Partidos en vivo
+                const live = (data.matches || []).filter((m: any) => m.status === MatchStatus.LIVE);
+                setLiveMatches(live);
+            }
+            setLoading(false);
+        });
+        return () => unsub();
+    }, [id]);
+
+    const saveCameras = async (updated: CameraFeed[]) => {
+        setCameras(updated);
+        await updateDoc(doc(db, 'tournaments', id), {
+            'broadcastingSettings.cameras': updated,
+            updatedAt: new Date(),
+        });
+    };
+
+    const handleSaveCamera = (updated: CameraFeed) => {
+        saveCameras(cameras.map(c => c.id === updated.id ? updated : c));
+    };
+
+    const handleDeleteCamera = (camId: string) => {
+        saveCameras(cameras.filter(c => c.id !== camId));
+    };
+
+    const addCamera = () => {
+        const newCam: CameraFeed = {
+            id: `cam_${Date.now()}`,
+            label: `Cámara ${cameras.length + 1}`,
+            url: '',
+            type: 'iframe',
+            active: true,
+        };
+        setEditingCam(newCam);
+        setCameras(prev => [...prev, newCam]);
+    };
+
+    const saveGlobalAds = async () => {
+        setSavingAds(true);
+        try {
+            // Actualizar todos los partidos con forcedAds
+            const updatedMatches = (tournament?.matches || []).map((m: any) => ({
+                ...m,
+                forcedAds: globalAds,
+                current_ad_url: adUrl || undefined,
+            }));
+            await updateDoc(doc(db, 'tournaments', id), {
+                'broadcastingSettings.globalAds': globalAds,
+                'broadcastingSettings.adUrl': adUrl,
+                matches: updatedMatches,
+                updatedAt: new Date(),
+            });
+        } finally {
+            setSavingAds(false);
+        }
+    };
+
+    // Obtener nombre del partido en vivo para una pista
+    const getLiveMatchForCourt = (courtId?: number) => {
+        if (!courtId) return undefined;
+        const m = liveMatches.find((m: any) =>
+            m.court === courtId || m.courtIndex === courtId - 1
+        );
+        if (!m) return undefined;
+        const t = tournament?.teams;
+        const t1 = m.team1Index > 0 ? t?.[m.team1Index - 1] : null;
+        const t2 = m.team2Index > 0 ? t?.[m.team2Index - 1] : null;
+        const n1 = t1?.p1?.name?.split(' ')[0] || 'Eq1';
+        const n2 = t2?.p1?.name?.split(' ')[0] || 'Eq2';
+        return `${n1} vs ${n2}`;
+    };
+
+    if (loading) return (
+        <div className="h-screen bg-black flex items-center justify-center">
+            <RefreshCw className="w-8 h-8 text-padel-primary animate-spin" />
+        </div>
+    );
+
+    const gridCols = { 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4' }[columns];
+
+    return (
+        <div className="h-screen bg-[#050505] text-white flex overflow-hidden font-outfit">
+            <Sidebar />
+
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden pl-20 md:pl-24">
+
+                {/* ── HEADER ─────────────────────────────────────────────── */}
+                <header className="flex-shrink-0 flex items-center justify-between px-4 lg:px-6 py-3 border-b border-white/[0.04]">
+                    <div className="flex items-center gap-3">
+                        <Link href={`/tournaments/${id}/control`}
+                            className="p-2 rounded-xl hover:bg-white/5 text-gray-600 hover:text-white transition-all">
+                            <ArrowLeft className="w-4 h-4" />
+                        </Link>
+                        <div className="p-2.5 bg-orange-500/10 rounded-xl border border-orange-500/20">
+                            <Camera className="w-5 h-5 text-orange-400" />
+                        </div>
+                        <div>
+                            <h1 className="text-base font-black italic uppercase tracking-tighter">Broadcasting</h1>
+                            <p className="text-[8px] text-gray-600 font-bold uppercase tracking-[0.15em]">
+                                {tournament?.name} · {cameras.length} cámaras · {liveMatches.length} en vivo
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        {/* Columns selector */}
+                        <div className="flex items-center gap-1 p-1 bg-white/[0.03] rounded-xl border border-white/[0.05]">
+                            {([2, 3, 4] as const).map(n => (
+                                <button
+                                    key={n}
+                                    onClick={() => setColumns(n)}
+                                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-[9px] font-black transition-all ${columns === n ? 'bg-white/10 text-white' : 'text-gray-600 hover:text-gray-400'}`}
+                                >
+                                    {n}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Add camera */}
+                        <button
+                            onClick={addCamera}
+                            className="flex items-center gap-2 px-3 py-2 bg-padel-primary/10 border border-padel-primary/20 rounded-xl text-padel-primary text-[9px] font-black uppercase tracking-widest hover:bg-padel-primary/20 transition-all"
+                        >
+                            <Plus className="w-3.5 h-3.5" />
+                            Cámara
+                        </button>
+
+                        {/* Display link */}
+                        <Link
+                            href={`/display/tv/1`}
+                            target="_blank"
+                            className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-gray-400 text-[9px] font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all"
+                        >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Pizarra TV
+                        </Link>
+                    </div>
+                </header>
+
+                {/* ── ADS CONTROL BAR ────────────────────────────────────── */}
+                <div className="flex-shrink-0 px-4 lg:px-6 py-3 border-b border-white/[0.04] bg-yellow-500/[0.02]">
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                            <Tv className="w-4 h-4 text-yellow-400/60" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-yellow-400/60">Modo Publicidad Global</span>
+                        </div>
+
+                        <input
+                            type="url"
+                            value={adUrl}
+                            onChange={e => setAdUrl(e.target.value)}
+                            placeholder="URL de imagen o video publicitario..."
+                            className="flex-1 bg-black/40 border border-white/[0.06] rounded-lg px-3 py-1.5 text-[10px] text-white font-mono outline-none focus:border-yellow-400/30 transition-colors"
+                        />
+
+                        <button
+                            onClick={() => setGlobalAds(v => !v)}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${globalAds
+                                ? 'bg-yellow-400/15 border-yellow-400/40 text-yellow-400'
+                                : 'bg-white/[0.03] border-white/[0.06] text-gray-500 hover:border-yellow-400/20 hover:text-yellow-400'
+                                }`}
+                        >
+                            <div className={`w-2 h-2 rounded-full ${globalAds ? 'bg-yellow-400 animate-pulse' : 'bg-gray-700'}`} />
+                            {globalAds ? 'ADS ACTIVO' : 'Activar ADS'}
+                        </button>
+
+                        <button
+                            onClick={saveGlobalAds}
+                            disabled={savingAds || !canOperate}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-gray-400 hover:bg-white/10 hover:text-white transition-all disabled:opacity-40"
+                        >
+                            {savingAds ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                            Aplicar
+                        </button>
+                    </div>
+                </div>
+
+                {/* ── CAMERA GRID ────────────────────────────────────────── */}
+                <main className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-4 lg:p-6">
+                    {cameras.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center gap-4 opacity-30">
+                            <Camera className="w-16 h-16" />
+                            <p className="font-black italic uppercase tracking-widest text-sm">Sin cámaras configuradas</p>
+                            <button onClick={addCamera} className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-all">
+                                + Añadir primera cámara
+                            </button>
+                        </div>
+                    ) : (
+                        <div className={`grid ${gridCols} gap-3`}>
+                            {cameras.filter(c => c.active).map(cam => (
+                                <CameraCell
+                                    key={cam.id}
+                                    cam={cam}
+                                    isFullscreen={fullscreenCam === cam.id}
+                                    onFullscreen={() => setFullscreenCam(f => f === cam.id ? null : cam.id)}
+                                    onEdit={() => setEditingCam(cam)}
+                                    liveMatchName={getLiveMatchForCourt(cam.courtId)}
+                                />
+                            ))}
+
+                            {/* Add camera card */}
+                            <motion.button
+                                whileHover={{ scale: 1.01 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={addCamera}
+                                className="aspect-video rounded-2xl border border-dashed border-white/[0.08] flex flex-col items-center justify-center gap-2 hover:border-padel-primary/30 hover:bg-padel-primary/[0.02] transition-all group"
+                            >
+                                <Plus className="w-6 h-6 text-white/20 group-hover:text-padel-primary/60 transition-colors" />
+                                <span className="text-[8px] font-black uppercase tracking-widest text-white/20 group-hover:text-padel-primary/60 transition-colors">
+                                    Añadir cámara
+                                </span>
+                            </motion.button>
+                        </div>
+                    )}
+                </main>
+
+                {/* ── LIVE MATCHES STATUS BAR ─────────────────────────────── */}
+                <footer className="flex-shrink-0 h-9 flex items-center gap-4 px-4 lg:px-6 border-t border-white/[0.04] bg-black/20">
+                    <div className="flex items-center gap-1.5">
+                        <Wifi className="w-3 h-3 text-green-500" />
+                        <span className="text-[7px] font-black uppercase text-gray-700 tracking-widest">Firebase Sync</span>
+                    </div>
+                    {liveMatches.length > 0 ? (
+                        <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_4px_red]" />
+                            <span className="text-[7px] font-black uppercase text-red-400/80 tracking-widest">
+                                {liveMatches.length} partido{liveMatches.length > 1 ? 's' : ''} en vivo
+                            </span>
+                        </div>
+                    ) : (
+                        <span className="text-[7px] font-black uppercase text-gray-700 tracking-widest">Sin partidos en vivo</span>
+                    )}
+                    <span className="ml-auto text-[7px] font-black tracking-[0.25em] uppercase text-gray-800 italic">
+                        PADEL SMART Pro · Broadcasting
+                    </span>
+                </footer>
+            </div>
+
+            {/* ── EDIT MODAL ─────────────────────────────────────────────── */}
+            <AnimatePresence>
+                {editingCam && (
+                    <EditCameraModal
+                        cam={editingCam}
+                        onSave={handleSaveCamera}
+                        onDelete={() => { handleDeleteCamera(editingCam.id); setEditingCam(null); }}
+                        onClose={() => setEditingCam(null)}
+                    />
                 )}
             </AnimatePresence>
+
+            <style jsx global>{`
+                .no-scrollbar::-webkit-scrollbar { display: none; }
+                .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+                @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
+                .font-outfit { font-family: 'Outfit', sans-serif; }
+            `}</style>
         </div>
     );
 }

@@ -7,10 +7,10 @@ import { Trophy, Calendar, MapPin, ChevronRight, Plus, RefreshCw, LogOut, Trash2
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import LoginButton from '@/components/LoginButton';
-import BottomNav from '@/components/BottomNav';
 
 import Sidebar from '@/components/Sidebar';
 import { BouncingBall } from '@/components/BouncingBall';
+import { formatDate } from '@/lib/formatters';
 
 export default function MyTournamentsPage() {
     const { user, loading: authLoading } = useAuth();
@@ -144,7 +144,7 @@ export default function MyTournamentsPage() {
                                                 <div className="space-y-3 mb-6">
                                                     <div className="flex items-center gap-3 text-gray-500 text-xs">
                                                         <Calendar className="w-4 h-4 text-padel-primary" />
-                                                        <span>{first.startDate ? new Date(first.startDate).toLocaleDateString() : 'Sin fecha'}</span>
+                                                        <span>{formatDate(first.startDate)}</span>
                                                     </div>
                                                     <div className="flex items-center gap-3 text-gray-500 text-xs">
                                                         <MapPin className="w-4 h-4 text-padel-primary" />
@@ -153,6 +153,41 @@ export default function MyTournamentsPage() {
                                                 </div>
 
                                                 <div className="mt-auto space-y-2">
+                                                    {/* ── Botón evento completo (solo si es un evento unificado) ── */}
+                                                    {isGrouped && (
+                                                        <Link href={`/tournaments/event?ids=${groupTournaments.map(t => t.id).join(',')}`}>
+                                                            <div className="flex items-center justify-between p-3 mb-1 bg-padel-primary/10 hover:bg-padel-primary/20 rounded-xl border border-padel-primary/30 hover:border-padel-primary/60 transition-all group/btn">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-6 h-6 rounded-full bg-padel-primary flex items-center justify-center">
+                                                                        <Trophy className="w-3 h-3 text-black" />
+                                                                    </div>
+                                                                    <span className="text-[10px] font-black uppercase italic tracking-wider text-padel-primary">
+                                                                        Ver Evento Completo
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <button
+                                                                        onClick={async (e) => {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            if (!confirm(`¿Eliminar este evento completo (${groupTournaments.length} categorías)? No se puede deshacer.`)) return;
+                                                                            try {
+                                                                                await Promise.all(groupTournaments.map(t => dataService.deleteTournament(t.id)));
+                                                                                setTournaments(prev => prev.filter(t => !groupTournaments.some(g => g.id === t.id)));
+                                                                            } catch {
+                                                                                alert('Error al eliminar el evento');
+                                                                            }
+                                                                        }}
+                                                                        className="p-1.5 rounded-lg text-padel-primary/40 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                                                                        title="Eliminar evento completo"
+                                                                    >
+                                                                        <Trash2 className="w-3 h-3" />
+                                                                    </button>
+                                                                    <ChevronRight className="w-4 h-4 text-padel-primary" />
+                                                                </div>
+                                                            </div>
+                                                        </Link>
+                                                    )}
                                                     {groupTournaments.map(t => (
                                                         <Link key={t.id} href={`/tournaments/${t.id}`}>
                                                             <div className="flex items-center justify-between p-3 bg-white/5 hover:bg-padel-primary/10 rounded-xl border border-white/5 hover:border-padel-primary/30 transition-all group/btn">
@@ -175,6 +210,7 @@ export default function MyTournamentsPage() {
                                                         </Link>
                                                     ))}
                                                 </div>
+
                                             </div>
                                         </motion.div>
                                     );
@@ -189,7 +225,6 @@ export default function MyTournamentsPage() {
                 </div>
             </div>
 
-            <BottomNav />
         </div>
     );
 }

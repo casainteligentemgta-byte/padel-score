@@ -1,35 +1,26 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Sparkles,
-    TrendingUp,
     Target,
-    Newspaper,
     ArrowRight,
     Bot,
     Activity,
     DollarSign,
     Zap,
-    Share2,
     Palette,
     Send,
-    Image,
-    Camera,
-    Paperclip,
     Calendar,
     Shield,
     BarChart3,
-    Mic2,
     Play,
-    Video,
     X as CloseIcon
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
-import { useEffect } from 'react';
 
 export default function AgentCenter() {
     const { user } = useAuth();
@@ -38,6 +29,13 @@ export default function AgentCenter() {
     const [messages, setMessages] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [contextData, setContextData] = useState<any>(null);
+    const [debugInfo, setDebugInfo] = useState<string>('');
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Auto-scroll al último mensaje
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages, isLoading]);
 
     // Cargar contexto de la app para los agentes
     useEffect(() => {
@@ -76,6 +74,7 @@ export default function AgentCenter() {
         setMessages(prev => [...prev, userMessage]);
         setMessage('');
         setIsLoading(true);
+        setDebugInfo('');
 
         try {
             const response = await fetch('/api/ai', {
@@ -88,23 +87,34 @@ export default function AgentCenter() {
                 })
             });
 
-            const data = await response.json();
+            const rawText = await response.text();
+            setDebugInfo(`HTTP ${response.status} | ${rawText.substring(0, 200)}`);
 
-            const agentMessage = {
-                role: 'assistant',
-                content: data.content || "Lo siento, tengo problemas para conectarme.",
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
+            let data: any = {};
+            try { data = JSON.parse(rawText); } catch { data = { content: rawText }; }
 
-            setMessages(prev => [...prev, agentMessage]);
-        } catch (error) {
-            console.error("Error sending message:", error);
-            const errorMessage = {
+            if (!response.ok) {
+                setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    content: `❌ Error HTTP ${response.status}: ${data.error || data.content || rawText}`,
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }]);
+                return;
+            }
+
+            setMessages(prev => [...prev, {
                 role: 'assistant',
-                content: "Hubo un error al procesar tu mensaje. Verifica tu conexión.",
+                content: data.content || '⚠️ Respuesta vacía del servidor.',
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            setMessages(prev => [...prev, errorMessage]);
+            }]);
+        } catch (error: any) {
+            const errMsg = error?.message || String(error);
+            setDebugInfo(`FETCH ERROR: ${errMsg}`);
+            setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: `❌ Error de conexión: ${errMsg}`,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }]);
         } finally {
             setIsLoading(false);
         }
@@ -343,7 +353,7 @@ export default function AgentCenter() {
                         />
 
                         {/* Modal Container */}
-                        <div className="fixed inset-0 flex items-center justify-center z-[160] p-4 md:p-10 pointer-events-none">
+                        <div className="fixed inset-0 flex items-center justify-center z-[160] p-4 md:p-10">
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.9, y: 50 }}
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -378,7 +388,8 @@ export default function AgentCenter() {
                                 </div>
 
                                 {/* Chat Area */}
-                                <div className="flex-1 p-8 overflow-y-auto flex flex-col gap-6 no-scrollbar custom-chat-area">
+                                <div className="flex-1 min-h-0 p-8 overflow-y-auto flex flex-col gap-6 no-scrollbar"
+                                    style={{ scrollbarWidth: 'none' }}>
                                     {messages.map((msg, idx) => (
                                         <motion.div
                                             key={idx}
@@ -412,77 +423,52 @@ export default function AgentCenter() {
                                         </motion.div>
                                     )}
 
-                                    <div className="flex flex-col items-center justify-center text-center opacity-20 py-8 mt-auto">
-                                        {(() => {
-                                            const Icon = selectedAgent.icon;
-                                            return <Icon className="w-12 h-12 mb-4 text-gray-600" />;
-                                        })()}
-                                        <p className="text-sm font-black italic uppercase tracking-tighter">Fin de la conversación</p>
-                                    </div>
+                                    {/* Scroll anchor */}
+                                    <div ref={messagesEndRef} />
                                 </div>
 
                                 {/* Interaction Bar */}
-                                <div className="p-8 border-t border-white/5 bg-white/[0.01]">
-                                    <div className="flex items-end gap-4 max-w-5xl mx-auto glass p-2 rounded-3xl border border-white/10">
-                                        {/* Attachments */}
-                                        <div className="flex gap-2 p-1">
-                                            <div className="relative">
-                                                <motion.button
-                                                    whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.1)' }}
-                                                    whileTap={{ scale: 0.9 }}
-                                                    className="w-12 h-12 rounded-2xl flex items-center justify-center text-gray-400"
-                                                >
-                                                    <Image className="w-5 h-5" />
-                                                </motion.button>
-                                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" />
-                                            </div>
-                                            <motion.button
-                                                whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.1)' }}
-                                                whileTap={{ scale: 0.9 }}
-                                                className="w-12 h-12 rounded-2xl flex items-center justify-center text-gray-400"
-                                            >
-                                                <Camera className="w-5 h-5" />
-                                            </motion.button>
-                                            <div className="relative">
-                                                <motion.button
-                                                    whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.1)' }}
-                                                    whileTap={{ scale: 0.9 }}
-                                                    className="w-12 h-12 rounded-2xl flex items-center justify-center text-gray-400"
-                                                >
-                                                    <Paperclip className="w-5 h-5" />
-                                                </motion.button>
-                                                <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" />
-                                            </div>
-                                        </div>
+                                <div className="p-6 border-t border-white/5 bg-white/[0.01]">
+                                    <div className="flex items-end gap-3 max-w-5xl mx-auto glass p-2 rounded-3xl border border-white/10">
 
                                         {/* Text Input */}
                                         <div className="flex-1 relative">
                                             <textarea
                                                 rows={1}
                                                 value={message}
-                                                onChange={(e) => setMessage(e.target.value)}
+                                                onChange={(e) => {
+                                                    setMessage(e.target.value);
+                                                    e.target.style.height = 'auto';
+                                                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                                                }}
                                                 onKeyDown={(e) => {
                                                     if (e.key === 'Enter' && !e.shiftKey) {
                                                         e.preventDefault();
                                                         handleSendMessage();
                                                     }
                                                 }}
-                                                placeholder={`Enviar instrucciones a ${selectedAgent.name}...`}
-                                                className="w-full bg-transparent border-none text-white p-4 focus:ring-0 text-lg font-medium placeholder:text-gray-600 placeholder:italic resize-none no-scrollbar outline-none"
+                                                placeholder={`Escribe a ${selectedAgent.name}... (Enter para enviar)`}
+                                                disabled={isLoading}
+                                                className="w-full bg-transparent border-none text-white px-4 py-3 focus:ring-0 text-base font-medium placeholder:text-gray-600 placeholder:italic resize-none no-scrollbar outline-none min-h-[48px] max-h-[120px]"
+                                                style={{ height: '48px' }}
                                             />
                                         </div>
 
                                         {/* Send Button */}
                                         <motion.button
                                             onClick={handleSendMessage}
-                                            disabled={isLoading}
-                                            whileHover={{ scale: 1.05, boxShadow: '0 0 30px rgba(204,255,0,0.4)' }}
-                                            whileTap={{ scale: 0.9 }}
-                                            className={`bg-padel-primary text-black p-4 rounded-2xl flex items-center justify-center shadow-lg ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            disabled={isLoading || !message.trim()}
+                                            whileHover={!isLoading && message.trim() ? { scale: 1.05, boxShadow: '0 0 30px rgba(204,255,0,0.4)' } : {}}
+                                            whileTap={!isLoading && message.trim() ? { scale: 0.9 } : {}}
+                                            className={`shrink-0 p-4 rounded-2xl flex items-center justify-center shadow-lg transition-all ${isLoading || !message.trim()
+                                                ? 'bg-white/10 text-gray-500 cursor-not-allowed'
+                                                : 'bg-padel-primary text-black cursor-pointer'
+                                                }`}
                                         >
-                                            <Send className="w-6 h-6 fill-current" />
+                                            <Send className="w-5 h-5 fill-current" />
                                         </motion.button>
                                     </div>
+                                    <p className="text-center text-[10px] text-gray-700 mt-2 font-medium uppercase tracking-widest">Enter para enviar · Shift+Enter nueva línea</p>
                                 </div>
                             </motion.div>
                         </div>

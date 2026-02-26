@@ -6,7 +6,6 @@ import { systemMonitor } from '@/lib/systemMonitor';
 import { Shield, Activity, RefreshCw, AlertTriangle, Info, Terminal, Calendar } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Sidebar from '@/components/Sidebar';
-import BottomNav from '@/components/BottomNav';
 import { useRouter } from 'next/navigation';
 
 export default function AdminLogsPage() {
@@ -161,7 +160,6 @@ export default function AdminLogsPage() {
                 </div>
             </div>
 
-            <BottomNav />
         </div>
     );
 }

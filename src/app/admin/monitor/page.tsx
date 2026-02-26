@@ -91,7 +91,9 @@ export default function AdminMonitorPage() {
                             category: tournament.category,
                             t1Name: team1 ? `${team1.p1.name} / ${team1.p2.name}` : 'TBD',
                             t2Name: team2 ? `${team2.p1.name} / ${team2.p2.name}` : 'TBD',
-                            startTime: m.actualStartTime?.toDate() || new Date(Date.now() - 1000 * 60 * 30)
+                            startTime: m.actualStartTime
+                                ? (typeof m.actualStartTime?.toDate === 'function' ? m.actualStartTime.toDate() : new Date(m.actualStartTime))
+                                : new Date(Date.now() - 1000 * 60 * 30)
                         };
 
                         if (m.status === MatchStatus.LIVE || m.status === 'LIVE' || m.status === 'IN_PROGRESS') {
@@ -105,7 +107,12 @@ export default function AdminMonitorPage() {
             });
 
             setMatches(allLiveMatches);
-            setRecentFinished(allRecentFinished.sort((a, b) => b.endTime?.toDate().getTime() - a.endTime?.toDate().getTime()).slice(0, 6));
+            const toMs = (v: any) => {
+                if (!v) return 0;
+                if (typeof v?.toDate === 'function') return v.toDate().getTime();
+                return new Date(v).getTime();
+            };
+            setRecentFinished(allRecentFinished.sort((a, b) => toMs(b.endTime) - toMs(a.endTime)).slice(0, 6));
             setLoading(false);
         });
 
@@ -273,7 +280,7 @@ export default function AdminMonitorPage() {
                                     <div>
                                         <div className="flex justify-between items-start mb-4">
                                             <span className="px-3 py-1 bg-white/5 rounded-lg text-[9px] font-black uppercase text-gray-500">{m.category}</span>
-                                            <span className="text-[9px] font-black text-gray-600">{m.endTime?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <span className="text-[9px] font-black text-gray-600">{m.endTime ? (typeof m.endTime?.toDate === 'function' ? m.endTime.toDate() : new Date(m.endTime)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
                                         </div>
                                         <h4 className="text-white font-black italic uppercase text-lg leading-tight mb-2">
                                             {m.t1Name} vs {m.t2Name}

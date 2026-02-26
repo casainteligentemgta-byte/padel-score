@@ -91,24 +91,30 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
     const startMatch = async () => {
         if (!tournament || !match) return;
+        // Usar match.id (ID real resuelto) — NO matchId (param URL como 'court_2')
+        const realId = match.id;
         const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === matchId ? { ...m, status: MatchStatus.LIVE, startedAt: new Date().toISOString() } : m
+            m.id === realId ? { ...m, status: MatchStatus.LIVE, startedAt: new Date().toISOString() } : m
         );
         await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
     };
 
-    // Medical Timer logic
+    // Medical Timer logic — reinicia en loop hasta que el árbitro pulse Reanudar
     useEffect(() => {
-        let interval: any;
-        if (isMedicalTimeout && medicalTimeRemaining > 0) {
-            interval = setInterval(() => {
-                setMedicalTimeRemaining(prev => prev - 1);
-            }, 1000);
-        } else if (medicalTimeRemaining === 0) {
-            setIsMedicalTimeout(false);
-        }
+        if (!isMedicalTimeout) return;
+
+        const interval = setInterval(() => {
+            setMedicalTimeRemaining(prev => {
+                if (prev <= 1) {
+                    // Llegó a 0 → reiniciar automáticamente
+                    return 180;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
         return () => clearInterval(interval);
-    }, [isMedicalTimeout, medicalTimeRemaining]);
+    }, [isMedicalTimeout]);
 
     const formatDuration = (seconds: number) => {
         const h = Math.floor(seconds / 3600);
@@ -127,40 +133,85 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                 setTournament(tourneyData);
 
                 if (tourneyData.matches) {
-                    const foundMatch = tourneyData.matches.find((m: any) => m.id === matchId);
-                    if (foundMatch) {
-                        const team1 = foundMatch.team1Index > 0 ? tourneyData.teams?.[foundMatch.team1Index - 1] : null;
-                        const team2 = foundMatch.team2Index > 0 ? tourneyData.teams?.[foundMatch.team2Index - 1] : null;
+                    // Buscar por id exacto primero
+                    let foundMatch = tourneyData.matches.find((m: any) => m.id === matchId);
 
-                        const getPlayerNames = (team: any, idx: number) => {
-                            if (idx <= 0) return { p1: 'Por definir', p2: 'Por definir', full: 'Por definir' };
-                            // Assign sequential unique player numbers: team 1 → J1/J2, team 2 → J3/J4, etc.
-                            const p1Num = (idx * 2) - 1;
-                            const p2Num = (idx * 2);
-                            const p1Name = team?.p1?.name?.trim() || `Jugador ${p1Num}`;
-                            const p2Name = team?.p2?.name?.trim() || `Jugador ${p2Num}`;
-                            const p1Short = team?.p1?.name?.trim() || `J${p1Num}`;
-                            const p2Short = team?.p2?.name?.trim() || `J${p2Num}`;
-                            return {
-                                p1: p1Name,
-                                p2: p2Name,
-                                full: `${p1Short} / ${p2Short}`
-                            };
+                    // Fallback: si no se encontró por id, buscar por court o courtIndex
+                    // (cuando la URL viene como /score/court_1 o /score/1)
+                    if (!foundMatch) {
+                        const courtNum = matchId.startsWith('court_')
+                            ? parseInt(matchId.replace('court_', ''))
+                            : parseInt(matchId);
+                        if (!isNaN(courtNum)) {
+                            foundMatch = tourneyData.matches.find((m: any) =>
+                                m.court === courtNum ||
+                                m.courtIndex === courtNum - 1 ||
+                                m.courtIndex === courtNum
+                            ) ?? tourneyData.matches[courtNum - 1] ?? null;
+                        }
+                    }
+
+                    // Último fallback: primer partido disponible si sólo hay uno
+                    if (!foundMatch && tourneyData.matches.length === 1) {
+                        foundMatch = tourneyData.matches[0];
+                    }
+                    if (foundMatch) {
+                        // Formato legado: team por índice desde el array teams
+                        const legacyTeam1 = foundMatch.team1Index > 0 ? tourneyData.teams?.[foundMatch.team1Index - 1] : null;
+                        const legacyTeam2 = foundMatch.team2Index > 0 ? tourneyData.teams?.[foundMatch.team2Index - 1] : null;
+
+                        // Formato nuevo: team embebido directamente en el match (p1Name/p2Name)
+                        const embeddedTeam1 = foundMatch.team1 && (foundMatch.team1.p1Name || foundMatch.team1.p1?.name) ? foundMatch.team1 : null;
+                        const embeddedTeam2 = foundMatch.team2 && (foundMatch.team2.p1Name || foundMatch.team2.p1?.name) ? foundMatch.team2 : null;
+
+                        /**
+                         * Resuelve nombres de jugadores desde cualquier formato:
+                         *  - embeddedTeam: objeto del match con p1Name / p2Name (formato nuevo)
+                         *  - legacyTeam:   objeto del array teams con p1.name / p2.name (formato legacy)
+                         *  - matchItem:    el propio match puede tener team1Name / team2Name como string fallback
+                         */
+                        const resolveNames = (
+                            embeddedTeam: any,
+                            legacyTeam: any,
+                            idx: number,
+                            matchTeamName?: string
+                        ) => {
+                            // 1. Formato nuevo embebido
+                            const p1n =
+                                embeddedTeam?.p1Name?.trim() ||
+                                embeddedTeam?.p1?.name?.trim() ||
+                                legacyTeam?.p1Name?.trim() ||
+                                legacyTeam?.p1?.name?.trim() ||
+                                '';
+                            const p2n =
+                                embeddedTeam?.p2Name?.trim() ||
+                                embeddedTeam?.p2?.name?.trim() ||
+                                legacyTeam?.p2Name?.trim() ||
+                                legacyTeam?.p2?.name?.trim() ||
+                                '';
+
+                            // 2. Fallback: split del nombre compuesto "Jugador1 / Jugador2"
+                            const nameFallback = matchTeamName || embeddedTeam?.name || legacyTeam?.name || '';
+                            const parts = nameFallback.split('/').map((s: string) => s.trim());
+
+                            const p1Final = p1n || parts[0] || (idx > 0 ? `Jugador ${(idx * 2) - 1}` : 'Jugador 1');
+                            const p2Final = p2n || parts[1] || (idx > 0 ? `Jugador ${idx * 2}` : 'Jugador 2');
+
+                            // Fotos: solo disponibles en formato legacy
+                            const p1Photo = embeddedTeam?.p1?.photo || legacyTeam?.p1?.photo || null;
+                            const p2Photo = embeddedTeam?.p2?.photo || legacyTeam?.p2?.photo || null;
+
+                            return { p1: p1Final, p2: p2Final, full: `${p1Final} / ${p2Final}`, p1Photo, p2Photo };
                         };
+
+                        const t1 = resolveNames(embeddedTeam1, legacyTeam1, foundMatch.team1Index ?? 0, foundMatch.team1Name);
+                        const t2 = resolveNames(embeddedTeam2, legacyTeam2, foundMatch.team2Index ?? 0, foundMatch.team2Name);
 
                         setMatch({
                             ...foundMatch,
                             court: foundMatch.court || (foundMatch.courtIndex !== undefined ? foundMatch.courtIndex + 1 : undefined),
-                            team1: {
-                                ...getPlayerNames(team1, foundMatch.team1Index),
-                                p1Photo: team1?.p1?.photo || null,
-                                p2Photo: team1?.p2?.photo || null
-                            },
-                            team2: {
-                                ...getPlayerNames(team2, foundMatch.team2Index),
-                                p1Photo: team2?.p1?.photo || null,
-                                p2Photo: team2?.p2?.photo || null
-                            }
+                            team1: t1,
+                            team2: t2,
                         });
 
                         if (tourneyData.scoringSystem) {
@@ -187,7 +238,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         setHistory(prev => prev.slice(0, -1));
 
         const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === matchId ? {
+            m.id === match.id ? {
                 ...m,
                 points: previousState.points,
                 games: previousState.games,
@@ -405,7 +456,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     </button>
 
                     {/* Reloj + Botón Iniciar */}
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col items-center gap-1">
                         <span className="text-[10px] font-black italic text-gray-500 tracking-widest uppercase">Duración</span>
                         {match.status === MatchStatus.FINISHED ? (
                             <span className="text-3xl font-black italic text-white/40 tracking-tighter">{formatDuration(duration)}</span>
@@ -437,25 +488,62 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     />
                     <button
                         onClick={() => setShowMatchSelector(true)}
-                        className="flex items-center gap-3 px-6 py-3 bg-[#262626] border border-white/10 rounded-2xl text-[10px] font-black italic uppercase tracking-widest text-gray-300 hover:bg-[#333] transition-all"
+                        className="flex items-center justify-center gap-2.5 px-5 py-3 rounded-2xl text-[10px] font-black italic uppercase tracking-widest transition-all active:scale-95 bg-white border border-white/80 text-gray-800 hover:bg-white/90 shadow-md"
                     >
-                        <LayoutDashboard className="w-4 h-4" />
+                        {/* Flechas circulares SVG */}
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="w-5 h-5 flex-shrink-0 text-gray-800"
+                        >
+                            <path d="M17 2l4 4-4 4" />
+                            <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                            <path d="M7 22l-4-4 4-4" />
+                            <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                        </svg>
                         Cambiar Cancha
                     </button>
                     <button
                         onClick={handleMedicalTimeout}
-                        className={`flex items-center gap-3 px-6 py-3 border rounded-2xl text-[10px] font-black italic uppercase tracking-widest transition-all ${isMedicalTimeout ? 'bg-[#c2410c] border-[#c2410c] text-white' : 'bg-[#c2410c]/20 border-[#c2410c]/40 text-[#fb923c] hover:bg-[#c2410c]/30'}`}
+                        className={`flex items-center justify-center gap-2.5 px-5 py-3 rounded-2xl text-[10px] font-black italic uppercase tracking-widest transition-all active:scale-95 ${isMedicalTimeout
+                            ? 'bg-red-600 border border-red-500 text-white shadow-[0_0_20px_rgba(220,38,38,0.5)]'
+                            : 'bg-white border border-white/80 text-red-600 hover:bg-white/90 shadow-md'
+                            }`}
                     >
-                        <Stethoscope className={`w-4 h-4 ${isMedicalTimeout ? 'animate-pulse' : ''}`} />
+                        {/* Cruz roja / blanca SVG */}
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            className={`w-5 h-5 flex-shrink-0 ${isMedicalTimeout ? 'text-white animate-pulse' : 'text-red-600'}`}
+                        >
+                            <rect x="9" y="2" width="6" height="20" rx="2" />
+                            <rect x="2" y="9" width="20" height="6" rx="2" />
+                        </svg>
                         {isMedicalTimeout ? 'Reanudar' : 'Asistencia'}
                     </button>
                 </div>
 
-                <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-black italic text-gray-500 tracking-widest uppercase">Pista Central</span>
-                    <span className="text-xl font-black italic text-white uppercase tracking-tighter">
-                        {[match.roundName || match.groupName, tournament?.category].filter(Boolean).join(' · ') || 'Partido'}
+                <div className="flex flex-col items-center gap-0.5">
+                    {/* Pista — más grande */}
+                    <span className="text-2xl font-black italic text-white uppercase tracking-tighter leading-none">
+                        Pista {match.court ?? '-'}
                     </span>
+                    {/* Fase / Ronda — mediano */}
+                    {(match.roundName || match.groupName) && (
+                        <span className="text-sm font-black italic text-white/70 uppercase tracking-tight leading-none">
+                            {match.roundName || match.groupName}
+                        </span>
+                    )}
+                    {/* Categoría — más pequeño */}
+                    {tournament?.category && (
+                        <span className="text-[10px] font-black italic text-gray-500 uppercase tracking-widest leading-none">
+                            {tournament.category.replace(/_/g, ' ')}
+                        </span>
+                    )}
                 </div>
             </header>
 
@@ -463,6 +551,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             <main className="flex-1 flex gap-3 px-1">
                 {/* Team 1 Card */}
                 <div className="flex-1 bg-[#141414] border border-white/5 rounded-[2rem] p-4 flex flex-col items-center relative overflow-hidden group">
+
                     <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/5 to-transparent opacity-50" />
 
                     {/* Players Header */}
@@ -522,27 +611,29 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         </div>
                     </div>
 
-                    {/* Sets Progression */}
-                    <div className="flex gap-2 mb-3 relative z-10">
-                        {[1, 2, 3].map(setNum => {
-                            const currentSet = (match.sets?.t1 || 0) + (match.sets?.t2 || 0) + 1;
-                            const isCurrent = setNum === currentSet;
-                            return (
-                                <div key={setNum} className="flex flex-col items-center gap-2">
-                                    <span className="text-[8px] font-black italic text-gray-500 uppercase tracking-widest">Set {setNum}</span>
-                                    <div
-                                        className={`w-7 h-7 rounded-md border flex items-center justify-center text-sm font-black italic transition-all duration-500 ${isCurrent ? 'text-black scale-110 shadow-lg' : 'bg-white/5 border-white/5 text-gray-500'}`}
-                                        style={isCurrent ? { backgroundColor: primaryColor, borderColor: primaryColor } : {}}
-                                    >
-                                        {setNum < currentSet ? match.games?.t1 : isCurrent ? match.games?.t1 : '-'}
-                                    </div>
-                                </div>
-                            );
-                        })}
+
+                    {/* Games & Sets — Team 1 */}
+                    <div className="relative z-10 flex items-stretch gap-px mx-auto mb-3 rounded-2xl overflow-hidden border border-white/10 w-fit">
+                        {/* Games */}
+                        <div className="flex flex-col items-center px-6 py-2 bg-white/5">
+                            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30 mb-1">Games</span>
+                            <span className="text-2xl font-black italic leading-none" style={{ color: primaryColor }}>
+                                {match.games?.t1 ?? 0}
+                            </span>
+                        </div>
+                        {/* Divider */}
+                        <div className="w-px bg-white/10" />
+                        {/* Sets */}
+                        <div className="flex flex-col items-center px-6 py-2 bg-white/5">
+                            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30 mb-1">Sets</span>
+                            <span className="text-2xl font-black italic leading-none text-white">
+                                {match.sets?.t1 ?? 0}
+                            </span>
+                        </div>
                     </div>
 
                     {/* Points Interaction */}
-                    <div className="flex-1 flex items-center justify-center w-full relative z-10 gap-4">
+                    <div className="flex-1 flex items-center justify-center w-full relative z-10 gap-8">
                         <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={() => updateScore('t1', 'minus')}
@@ -558,7 +649,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                     key={match.points?.t1}
                                     initial={{ scale: 0.5, opacity: 0 }}
                                     animate={{ scale: 1, opacity: 1 }}
-                                    className="text-[6rem] font-black italic leading-none tracking-tighter text-white"
+                                    className="text-[6rem] font-black leading-none tracking-tighter text-white"
                                 >
                                     {match.points?.t1 || '0'}
                                 </motion.span>
@@ -568,12 +659,13 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={() => updateScore('t1', 'plus')}
-                            className="w-11 h-20 bg-padel-primary/10 border border-padel-primary/20 rounded-2xl flex items-center justify-center hover:bg-padel-primary/20 transition-all text-padel-primary"
+                            className="w-14 h-28 bg-padel-primary/10 border border-padel-primary/20 rounded-[1.5rem] flex items-center justify-center hover:bg-padel-primary/20 transition-all text-padel-primary"
                         >
                             <Plus className="w-8 h-8" />
                         </motion.button>
                     </div>
                 </div>
+
 
                 {/* Team 2 Card */}
                 <div className="flex-1 bg-[#141414] border border-white/5 rounded-[2.5rem] p-6 flex flex-col items-center relative overflow-hidden group">
@@ -640,28 +732,33 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         </div>
                     </div>
 
-                    {/* Sets Progression */}
-                    <div className="flex gap-2 mb-3 relative z-10">
-                        {[1, 2, 3].map(setNum => {
-                            const currentSet = (match.sets?.t1 || 0) + (match.sets?.t2 || 0) + 1;
-                            const isCurrent = setNum === currentSet;
-                            return (
-                                <div key={setNum} className="flex flex-col items-center gap-2">
-                                    <span className="text-[8px] font-black italic text-gray-500 uppercase tracking-widest">Set {setNum}</span>
-                                    <div className={`w-7 h-7 rounded-md border flex items-center justify-center text-sm font-black italic transition-all duration-500 ${isCurrent ? 'bg-padel-primary border-padel-primary text-black scale-110 shadow-lg' : 'bg-white/5 border-white/5 text-gray-500'}`}>
-                                        {setNum < currentSet ? match.games?.t2 : isCurrent ? match.games?.t2 : '-'}
-                                    </div>
-                                </div>
-                            );
-                        })}
+
+                    {/* Games & Sets — Team 2 */}
+                    <div className="relative z-10 flex items-stretch gap-px mx-auto mb-3 rounded-2xl overflow-hidden border border-white/10 w-fit">
+                        {/* Games */}
+                        <div className="flex flex-col items-center px-6 py-2 bg-white/5">
+                            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30 mb-1">Games</span>
+                            <span className="text-2xl font-black italic leading-none" style={{ color: primaryColor }}>
+                                {match.games?.t2 ?? 0}
+                            </span>
+                        </div>
+                        {/* Divider */}
+                        <div className="w-px bg-white/10" />
+                        {/* Sets */}
+                        <div className="flex flex-col items-center px-6 py-2 bg-white/5">
+                            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30 mb-1">Sets</span>
+                            <span className="text-2xl font-black italic leading-none text-white">
+                                {match.sets?.t2 ?? 0}
+                            </span>
+                        </div>
                     </div>
 
                     {/* Points Interaction */}
-                    <div className="flex-1 flex items-center justify-center w-full relative z-10 gap-4">
+                    <div className="flex-1 flex items-center justify-center w-full relative z-10 gap-8">
                         <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={() => updateScore('t2', 'minus')}
-                            className="w-11 h-20 bg-white/5 border border-white/5 rounded-2xl flex items-center justify-center hover:bg-white/10 transition-all text-gray-500"
+                            className="w-14 h-28 bg-white/5 border border-white/5 rounded-[1.5rem] flex items-center justify-center hover:bg-white/10 transition-all text-gray-500"
                         >
                             <Minus className="w-8 h-8" />
                         </motion.button>
@@ -673,7 +770,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                     key={match.points?.t2}
                                     initial={{ scale: 0.5, opacity: 0 }}
                                     animate={{ scale: 1, opacity: 1 }}
-                                    className="text-[6rem] font-black italic leading-none tracking-tighter text-white"
+                                    className="text-[6rem] font-black leading-none tracking-tighter text-white"
                                 >
                                     {match.points?.t2 || '0'}
                                 </motion.span>
@@ -683,7 +780,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={() => updateScore('t2', 'plus')}
-                            className="w-11 h-20 bg-padel-primary/10 border border-padel-primary/20 rounded-2xl flex items-center justify-center hover:bg-padel-primary/20 transition-all text-padel-primary"
+                            className="w-14 h-28 bg-padel-primary/10 border border-padel-primary/20 rounded-[1.5rem] flex items-center justify-center hover:bg-padel-primary/20 transition-all text-padel-primary"
                         >
                             <Plus className="w-8 h-8" />
                         </motion.button>
@@ -701,46 +798,130 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
             {/* Overlays */}
             <AnimatePresence>
-                {/* Medical Timeout Overlay */}
+                {/* Medical Timeout Overlay — Animación cinematográfica */}
                 {isMedicalTimeout && (
                     <motion.div
+                        key="medical-overlay"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-10"
+                        exit={{ opacity: 0, transition: { duration: 0.4 } }}
+                        className="fixed inset-0 z-[200] flex flex-col items-center justify-center overflow-hidden"
+                        style={{ background: 'radial-gradient(ellipse at center, #1a0000 0%, #000 70%)' }}
                     >
+                        {/* Fondo rojo pulsante */}
                         <motion.div
-                            initial={{ scale: 0.9, y: 20 }}
-                            animate={{ scale: 1, y: 0 }}
-                            className="text-center space-y-8"
-                        >
-                            <div className="relative inline-block">
-                                <motion.div
-                                    animate={{ scale: [1, 1.1, 1], opacity: [0.5, 1, 0.5] }}
-                                    transition={{ duration: 2, repeat: Infinity }}
-                                    className="absolute inset-0 bg-[#c2410c]/20 blur-3xl rounded-full"
-                                />
-                                <Stethoscope className="w-32 h-32 text-[#fb923c] relative z-10 mx-auto" />
-                            </div>
+                            animate={{ opacity: [0.08, 0.18, 0.08] }}
+                            transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+                            className="absolute inset-0"
+                            style={{ background: 'radial-gradient(ellipse at center, #dc2626 0%, transparent 70%)' }}
+                        />
 
-                            <div className="space-y-2">
-                                <h2 className="text-4xl font-black italic uppercase tracking-tighter">Asistencia Médica</h2>
-                                <p className="text-[#fb923c] font-bold uppercase tracking-[0.3em] text-xs">Tiempo de Recuperación</p>
-                            </div>
+                        {/* Radar rings */}
+                        {[0, 1, 2, 3].map(i => (
+                            <motion.div
+                                key={i}
+                                className="absolute rounded-full border border-red-600/40"
+                                initial={{ width: 80, height: 80, opacity: 0.9 }}
+                                animate={{ width: 700, height: 700, opacity: 0 }}
+                                transition={{
+                                    duration: 3.5,
+                                    repeat: Infinity,
+                                    delay: i * 0.85,
+                                    ease: 'easeOut'
+                                }}
+                            />
+                        ))}
 
-                            <div className="text-[12rem] font-black italic leading-none tracking-tighter text-white font-mono">
-                                {Math.floor(medicalTimeRemaining / 60)}:{String(medicalTimeRemaining % 60).padStart(2, '0')}
-                            </div>
-
-                            <button
-                                onClick={handleMedicalTimeout}
-                                className="px-12 py-6 bg-white text-black rounded-[2rem] font-black italic uppercase tracking-[0.2em] hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-white/10"
+                        {/* Cruz médica central */}
+                        <div className="relative flex items-center justify-center z-10 mb-10">
+                            {/* Glow */}
+                            <motion.div
+                                animate={{ scale: [1, 1.3, 1], opacity: [0.4, 0.8, 0.4] }}
+                                transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                                className="absolute w-40 h-40 rounded-full blur-3xl"
+                                style={{ backgroundColor: '#dc2626' }}
+                            />
+                            {/* Cruz SVG */}
+                            <motion.svg
+                                viewBox="0 0 80 80"
+                                className="w-32 h-32 relative z-10"
+                                animate={{ scale: [1, 1.06, 1] }}
+                                transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
                             >
-                                Reanudar Partido
-                            </button>
-                        </motion.div>
+                                <rect x="30" y="5" width="20" height="70" rx="5" fill="#dc2626" />
+                                <rect x="5" y="30" width="70" height="20" rx="5" fill="#dc2626" />
+                                {/* Brillo interior */}
+                                <rect x="30" y="5" width="8" height="70" rx="5" fill="white" opacity="0.15" />
+                                <rect x="5" y="30" width="70" height="8" rx="5" fill="white" opacity="0.15" />
+                            </motion.svg>
+                        </div>
+
+                        {/* Texto principal */}
+                        <div className="relative z-10 text-center space-y-3 mb-12 px-8">
+                            <motion.h2
+                                animate={{ opacity: [1, 0.6, 1] }}
+                                transition={{ duration: 2.2, repeat: Infinity }}
+                                className="text-5xl font-black uppercase tracking-tighter text-white"
+                                style={{ textShadow: '0 0 40px rgba(220,38,38,0.8)' }}
+                            >
+                                Asistencia Médica
+                            </motion.h2>
+                            <motion.div
+                                className="flex items-center justify-center gap-2"
+                                animate={{ opacity: [1, 0.3, 1] }}
+                                transition={{ duration: 1.1, repeat: Infinity }}
+                            >
+                                <span className="w-2 h-2 rounded-full bg-red-500" />
+                                <span className="text-red-400 font-black uppercase tracking-[0.4em] text-xs">
+                                    Partido en pausa
+                                </span>
+                                <span className="w-2 h-2 rounded-full bg-red-500" />
+                            </motion.div>
+                        </div>
+
+                        {/* Líneas de escaneo */}
+                        <motion.div
+                            className="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-red-500/60 to-transparent z-10"
+                            animate={{ top: ['10%', '90%', '10%'] }}
+                            transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
+                        />
+
+                        {/* Botón Reanudar */}
+                        <motion.button
+                            onClick={handleMedicalTimeout}
+                            whileTap={{ scale: 0.95 }}
+                            whileHover={{ scale: 1.04 }}
+                            className="relative z-20 px-14 py-5 bg-white text-black rounded-[2rem] font-black uppercase tracking-[0.25em] shadow-2xl text-sm"
+                            style={{ boxShadow: '0 0 40px rgba(255,255,255,0.2)' }}
+                        >
+                            ▶ Reanudar Partido
+                        </motion.button>
+
+                        {/* Partículas flotantes */}
+                        {[...Array(12)].map((_, i) => (
+                            <motion.div
+                                key={i}
+                                className="absolute w-1 h-1 rounded-full bg-red-500/60"
+                                style={{
+                                    left: `${8 + i * 7.5}%`,
+                                    bottom: '-10px',
+                                }}
+                                animate={{
+                                    y: [0, -(300 + (i % 4) * 80)],
+                                    opacity: [0, 0.8, 0],
+                                    x: [0, (i % 2 === 0 ? 1 : -1) * (10 + i * 3)],
+                                }}
+                                transition={{
+                                    duration: 3.5 + (i % 4) * 0.6,
+                                    repeat: Infinity,
+                                    delay: i * 0.28,
+                                    ease: 'easeOut',
+                                }}
+                            />
+                        ))}
                     </motion.div>
                 )}
+
 
                 {/* Match Selector Overlay */}
                 {showMatchSelector && (

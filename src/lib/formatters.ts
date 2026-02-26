@@ -19,3 +19,30 @@ export const formatDNI = (value: string) => {
 
     return `${prefix}${formattedNumber}`;
 };
+
+/**
+ * Formatea una fecha en DD/MM/AAAA (orden venezolano: día → mes → año).
+ * Acepta string ISO, Date, timestamp numérico, o Firestore Timestamp ({seconds}).
+ */
+export const formatDate = (value: string | Date | number | { seconds: number } | null | undefined): string => {
+    if (!value) return 'Sin fecha';
+    let date: Date;
+    if (typeof value === 'object' && 'seconds' in (value as any)) {
+        date = new Date((value as { seconds: number }).seconds * 1000);
+    } else {
+        date = new Date(value as string | number | Date);
+    }
+    if (isNaN(date.getTime())) return 'Sin fecha';
+    return date.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+
+/**
+ * Formatea fecha + hora: DD/MM/AAAA HH:MM
+ */
+export const formatDateTime = (value: string | Date | number | null | undefined): string => {
+    if (!value) return '-';
+    const date = new Date(value as string | number | Date);
+    if (isNaN(date.getTime())) return '-';
+    return `${date.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${date.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+};
+

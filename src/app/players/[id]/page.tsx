@@ -24,7 +24,6 @@ import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
-import BottomNav from '@/components/BottomNav';
 
 export default function PlayerProfilePage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -243,7 +242,6 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                 </footer>
             </div>
 
-            <BottomNav />
         </div>
     );
 }

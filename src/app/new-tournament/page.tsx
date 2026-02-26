@@ -28,6 +28,30 @@ import { dataService } from '@/lib/dataService';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { useEffect } from 'react';
 
+// ── Estado inicial del formulario ─────────────────────────────────────────
+const INITIAL_DATA = {
+    name: '',
+    type: TournamentType.AMERICANO_INDIVIDUAL,
+    gender: '' as 'MALE' | 'FEMALE' | 'MIXED' | '',
+    category: TournamentCategory.CUARTA,
+    pointsGoal: 24,
+    groupSize: 3,
+    matchFormat: 'ONE_SET_6' as 'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS',
+    scoringSystem: 'GOLDEN_POINT' as 'GOLDEN_POINT' | 'TRADITIONAL',
+    startDate: new Date().toISOString().split('T')[0],
+    startTime: '08:00',
+    endTime: '22:00',
+    complexName: '',
+    totalCourts: 4,
+    courtNames: [] as string[],
+    bufferMinutes: 2,
+    teams: [] as {
+        id: number;
+        p1: { id: string; name: string; lastName: string; age: string; photo: string; phone: string };
+        p2: { id: string; name: string; lastName: string; age: string; photo: string; phone: string };
+    }[]
+};
+
 export default function NewTournamentPage() {
     const router = useRouter();
     const { user, loading: authLoading } = useAuth();
@@ -38,35 +62,26 @@ export default function NewTournamentPage() {
             router.push('/');
         }
     }, [user, authLoading, router]);
-    const [tournamentData, setTournamentData] = useState({
-        name: '',
-        type: TournamentType.AMERICANO_INDIVIDUAL,
-        gender: '' as 'MALE' | 'FEMALE' | 'MIXED' | '',
-        category: TournamentCategory.CUARTA,
-        pointsGoal: 24,
-        groupSize: 3,
-        matchFormat: 'ONE_SET_6' as 'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS',
-        scoringSystem: 'GOLDEN_POINT' as 'GOLDEN_POINT' | 'TRADITIONAL',
-        startDate: new Date().toISOString().split('T')[0],
-        startTime: '08:00',
-        endTime: '22:00',
-        complexName: '',
-        totalCourts: 4,
-        courtNames: [] as string[],
-        bufferMinutes: 2,
-        teams: [
-            {
-                id: 1,
-                p1: { id: '', name: '', lastName: '', age: '', photo: '', phone: '' },
-                p2: { id: '', name: '', lastName: '', age: '', photo: '', phone: '' }
-            }
-        ]
-    });
+    const [tournamentData, setTournamentData] = useState({ ...INITIAL_DATA, startDate: new Date().toISOString().split('T')[0] });
     const [loading, setLoading] = useState(false);
     const [viewDate, setViewDate] = useState(new Date());
     const [availableParticipants, setAvailableParticipants] = useState<any[]>([]);
     const [availableGroups, setAvailableGroups] = useState<any[]>([]);
     const [fetchingData, setFetchingData] = useState(false);
+
+    // ── Reset completo al montar: garantiza plantilla en blanco en cada visita ──
+    useEffect(() => {
+        setStep(1);
+        setTournamentData({ ...INITIAL_DATA, startDate: new Date().toISOString().split('T')[0] });
+        setViewDate(new Date());
+        setLoading(false);
+        setAvailableParticipants([]);
+        setAvailableGroups([]);
+        setPlayerSearchQuery('');
+        setIsPlayerModalOpen(false);
+        setSelectorContext(null);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Estados para búsqueda y selección de jugadores de la base
     const [playerSearchQuery, setPlayerSearchQuery] = useState('');
@@ -121,6 +136,7 @@ export default function NewTournamentPage() {
         { id: TournamentCategory.SEXTA, label: '6ª Categoría' },
         { id: TournamentCategory.SEPTIMA, label: '7ª Categoría' },
         { id: TournamentCategory.MAS_45, label: 'Más 45' },
+        { id: TournamentCategory.MAS_50, label: 'Cat. 7 Más 50' },
         { id: TournamentCategory.SUMA_7, label: 'Suma 7' },
         { id: TournamentCategory.SUMA_8, label: 'Suma 8' },
         { id: TournamentCategory.SUMA_9, label: 'Suma 9' },
@@ -180,34 +196,95 @@ export default function NewTournamentPage() {
             let enrichedMatches: any[] = [];
             let groupAssignments: { [key: string]: string[] } = {};
 
-            if (tournamentData.type === TournamentType.ROUND_ROBIN) {
-                // Round Robin Group Logic
+            if (tournamentData.type === TournamentType.CRUZADO) {
+                // ── FORMATO CRUZADO ─────────────────────────────────────
+                const [y, mo, d] = (tournamentData.startDate || '').split('-').map(Number);
+                const startDateLocal = y ? new Date(y, mo - 1, d) : new Date();
+
+                // Construir grupos A y B respetando groupSize
+                const cruzTeams = [...tournamentData.teams];
+                const cruzGroupSize = tournamentData.groupSize || 3;
+                // Grupo A: primeros groupSize equipos; Grupo B: siguientes groupSize equipos
+                // Si hay más equipos, se distribuyen extra entre los grupos
+                const cruzHalf = Math.ceil(cruzTeams.length / 2);
+                const cruzGroupA = cruzTeams.slice(0, cruzHalf);
+                const cruzGroupB = cruzTeams.slice(cruzHalf);
+
+                // Guardar asignaciones de grupo con IDs de equipos
+                const cruzAssignments: Record<string, string[]> = {
+                    A: cruzGroupA.map((t: any) => String(t.id)),
+                    B: cruzGroupB.map((t: any) => String(t.id)),
+                };
+
+                const { crossMatches, qfMatches, groupAssignments: ga } = ScheduleEngine.generateCruzado({
+                    numTeams: tournamentData.teams.length,
+                    numCourts: Math.max(1, tournamentData.courtNames.length),
+                    clubHoursStart: tournamentData.startTime || '08:00',
+                    clubHoursEnd: tournamentData.endTime || '22:00',
+                    startDate: startDateLocal,
+                    matchDurationMinutes: 85,
+                });
+
+                // Combinar asignaciones de grupo (cruzadas) con las generadas por el engine
+                groupAssignments = { ...ga, ...cruzAssignments };
+
+                // Enriquecer crossMatches con nombres de cancha
+                const enrichedCross = crossMatches.map((cm: any, idx: number) => ({
+                    ...cm,
+                    id: `cruzado-${idx}-${Date.now()}`,
+                    courtName: tournamentData.courtNames?.[cm.courtIndex] || `Pista ${cm.courtIndex + 1}`,
+                    court: cm.courtIndex + 1,
+                }));
+
+                // QF placeholders
+                const enrichedQF = qfMatches.map((qm: any, idx: number) => ({
+                    ...qm,
+                    id: `qf-${idx}-${Date.now()}`,
+                    courtName: tournamentData.courtNames?.[qm.courtIndex] || `Pista ${qm.courtIndex + 1}`,
+                    court: qm.courtIndex + 1,
+                    team1Name: 'Por Definir (1°A)',
+                    team2Name: 'Por Definir (1°B)',
+                }));
+
+                enrichedMatches = [...enrichedCross, ...enrichedQF];
+
+            } else if (tournamentData.type === TournamentType.ROUND_ROBIN) {
+                // ── FORMATO ROUND ROBIN CON GRUPOS DE 3 o 4 EQUIPOS ─────
                 const teams = [...tournamentData.teams];
-                const groupSize = tournamentData.groupSize || 3;
-                const numGroups = Math.max(1, Math.round(teams.length / groupSize));
+                const groupSize = tournamentData.groupSize || 3; // 3 or 4 teams per group
 
-                let currentTeams = [...teams];
-                const groups: any[][] = [];
+                // ── Calcular número de grupos correctamente ──────────────
+                // Grupos completos de `groupSize`, el resto se distribuye
+                const numCompleteGroups = Math.floor(teams.length / groupSize);
+                const remainder = teams.length % groupSize;
+                // Si hay sobrante, se añade a grupos ya existentes (no se crea grupo extra incompleto)
+                // Mínimo 1 grupo
+                const numGroups = Math.max(1, numCompleteGroups + (remainder > 0 && numCompleteGroups === 0 ? 1 : 0));
 
-                // Initialize groups
-                for (let i = 0; i < numGroups; i++) groups.push([]);
+                // ── Inicializar grupos vacíos ────────────────────────────
+                const groups: any[][] = Array.from({ length: numGroups }, () => []);
 
-                // Distribute teams
-                let groupIdx = 0;
-                while (currentTeams.length > 0) {
-                    groups[groupIdx % numGroups].push(currentTeams.shift());
-                    groupIdx++;
+                // ── Distribuir equipos: llenar grupos de groupSize uno a uno ──
+                // Estrategia: asignar `groupSize` equipos a cada grupo secuencialmente.
+                // Los equipos sobrantes (remainder) se añaden al último grupo.
+                let teamPool = [...teams];
+                for (let g = 0; g < numGroups; g++) {
+                    // Dar `groupSize` equipos a este grupo si hay suficientes
+                    const toAdd = (g < numGroups - 1) ? groupSize : teamPool.length; // el último grupo absorbe el resto
+                    for (let k = 0; k < toAdd && teamPool.length > 0; k++) {
+                        groups[g].push(teamPool.shift());
+                    }
                 }
 
-                // Generate Group Matches
+                // ── Generar emparejamientos dentro de cada grupo (todos vs todos) ──
                 const groupNames = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
                 let allPairings: any[] = [];
 
                 groups.forEach((groupTeams, gIdx) => {
                     const groupName = groupNames[gIdx];
-                    groupAssignments[groupName] = groupTeams.map(t => String(t.id));
+                    groupAssignments[groupName] = groupTeams.map((t: any) => String(t.id));
 
-                    // Generate pairings for this group
+                    // Generar todos los emparejamientos DENTRO del grupo
                     for (let i = 0; i < groupTeams.length; i++) {
                         for (let j = i + 1; j < groupTeams.length; j++) {
                             allPairings.push({
@@ -217,45 +294,49 @@ export default function NewTournamentPage() {
                             });
                         }
                     }
+
+                    console.log(`[NewTournament] Grupo ${groupName}: ${groupTeams.length} equipos, ${groupTeams.length * (groupTeams.length - 1) / 2} partidos`);
                 });
 
                 const [y, m, d] = (tournamentData.startDate || "").split('-').map(Number);
                 const startDateLocal = y ? new Date(y, m - 1, d) : new Date();
 
-                // Schedule these pairings
-                const schedule = ScheduleEngine.generateSchedule({
-                    tournamentId: 'temporary',
-                    numTeams: tournamentData.teams.length, // Not strictly used for pairings here
-                    numCourts: Math.max(1, tournamentData.courtNames.length),
-                    clubHoursStart: tournamentData.startTime || "08:00",
-                    clubHoursEnd: tournamentData.endTime || "22:00",
-                    startDate: startDateLocal,
-                    matchDurationMinutes: matchDuration,
-                    bufferMinutes: 2,
-                    type: tournamentData.type
+                // ── Asignación directa de tiempos/canchas a los pairings ──────────────────
+                // No usamos generateSchedule (que trunca por horario) sino que asignamos
+                // slots directamente sobre los allPairings para garantizar TODOS los partidos.
+                const numCourts = Math.max(1, tournamentData.courtNames.length);
+                const [startH, startMin] = (tournamentData.startTime || "08:00").split(':').map(Number);
+                const slotMinutes = matchDuration + 2; // duración + buffer
+
+                // Matriz de siguiente slot disponible por cancha
+                const courtNextSlot: number[] = Array(numCourts).fill(startH * 60 + startMin);
+
+                enrichedMatches = allPairings.map((pairing, idx) => {
+                    // Elegir la cancha con el slot más temprano disponible (round-robin entre canchas)
+                    const courtIdx = idx % numCourts;
+                    const slotStart = courtNextSlot[courtIdx];
+                    courtNextSlot[courtIdx] += slotMinutes;
+
+                    // Construir fecha/hora del partido
+                    const matchDate = new Date(startDateLocal);
+                    matchDate.setHours(Math.floor(slotStart / 60), slotStart % 60, 0, 0);
+
+                    const t1Idx = tournamentData.teams.findIndex(t => t.id === pairing.team1.id);
+                    const t2Idx = tournamentData.teams.findIndex(t => t.id === pairing.team2.id);
+
+                    return {
+                        id: `match-${idx}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                        team1Index: t1Idx + 1,
+                        team2Index: t2Idx + 1,
+                        scheduledTime: matchDate.toISOString(),
+                        courtIndex: courtIdx,
+                        court: courtIdx + 1,
+                        courtName: tournamentData.courtNames?.[courtIdx] || `Pista ${courtIdx + 1}`,
+                        status: 'PENDING',
+                        stage: 'GROUP_STAGE',
+                        groupName: pairing.groupName
+                    };
                 });
-
-                // Assign our group pairings to the schedule slots
-                enrichedMatches = (schedule.matches || []).map((m: any, idx: number) => {
-                    if (idx < allPairings.length) {
-                        const pairing = allPairings[idx];
-                        // Find indexes in original teams array
-                        const t1Idx = tournamentData.teams.findIndex(t => t.id === pairing.team1.id);
-                        const t2Idx = tournamentData.teams.findIndex(t => t.id === pairing.team2.id);
-
-                        return {
-                            id: `match-${idx}-${Date.now()}`,
-                            team1Index: t1Idx + 1,
-                            team2Index: t2Idx + 1,
-                            scheduledTime: m.scheduledTime,
-                            courtIndex: m.courtIndex,
-                            courtName: tournamentData.courtNames?.[m.courtIndex] || `Pista ${m.courtIndex + 1}`,
-                            status: 'PENDING',
-                            groupName: pairing.groupName
-                        };
-                    }
-                    return null;
-                }).filter(m => m !== null);
 
             } else {
                 const [y, m, d] = (tournamentData.startDate || "").split('-').map(Number);
@@ -315,6 +396,9 @@ export default function NewTournamentPage() {
                 matchFormat: tournamentData.matchFormat,
                 scoringSystem: tournamentData.scoringSystem,
                 groupAssignments: groupAssignments,
+                advancementRule: tournamentData.type === TournamentType.ROUND_ROBIN
+                    ? { teamsPerGroup: tournamentData.groupSize, advanceCount: 2, nextRound: Object.keys(groupAssignments).length === 2 ? 'QF' : 'SF' }
+                    : null,
                 status: 'En Curso'
             };
 
@@ -767,7 +851,29 @@ export default function NewTournamentPage() {
                                                     <path d="M25 25 L75 75 M25 75 L75 25" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                                                 </svg>
                                             )
-                                        }
+                                        },
+                                        {
+                                            id: TournamentType.CRUZADO,
+                                            title: 'Cruzado',
+                                            description: 'Grupo A vs Grupo B. 2 juegos por equipo → los mejores avanzan a cuartos.',
+                                            badge: '⚡ NUEVO',
+                                            icon: (
+                                                <svg viewBox="0 0 100 100" className="w-16 h-16 text-padel-primary">
+                                                    {/* Group A left */}
+                                                    <circle cx="20" cy="30" r="6" fill="currentColor" opacity="0.9" />
+                                                    <circle cx="20" cy="50" r="6" fill="currentColor" opacity="0.9" />
+                                                    <circle cx="20" cy="70" r="6" fill="currentColor" opacity="0.9" />
+                                                    {/* Group B right */}
+                                                    <circle cx="80" cy="30" r="6" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.9" />
+                                                    <circle cx="80" cy="50" r="6" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.9" />
+                                                    <circle cx="80" cy="70" r="6" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.9" />
+                                                    {/* Cross arrows */}
+                                                    <path d="M26 30 L74 70 M26 50 L74 50 M26 70 L74 30" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
+                                                    {/* QF node center */}
+                                                    <rect x="43" y="43" width="14" height="14" rx="3" fill="currentColor" opacity="0.3" />
+                                                </svg>
+                                            )
+                                        },
                                     ].map((type) => (
                                         <button
                                             key={type.id}
@@ -776,22 +882,29 @@ export default function NewTournamentPage() {
                                                 if (type.id === TournamentType.ROUND_ROBIN) setStep(4);
                                                 else setStep(5);
                                             }}
-                                            className={`group relative overflow-hidden rounded-3xl border-2 transition-all p-8 flex items-center justify-between gap-6 ${tournamentData.type === type.id
+                                            className={`group relative overflow-hidden rounded-3xl border-2 transition-all p-6 flex items-center justify-between gap-4 ${tournamentData.type === type.id
                                                 ? 'border-padel-primary bg-padel-primary/5 shadow-[0_0_30px_rgba(204,255,0,0.1)]'
                                                 : 'border-white/5 bg-white/5 hover:border-white/10 hover:scale-[1.02]'
                                                 }`}
                                         >
                                             <div className="flex-1 text-left space-y-2">
-                                                <h3 className={`text-2xl font-black italic uppercase tracking-tighter ${tournamentData.type === type.id ? 'text-white' : 'text-gray-400'}`}>
-                                                    {type.title}
-                                                </h3>
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className={`text-2xl font-black italic uppercase tracking-tighter ${tournamentData.type === type.id ? 'text-white' : 'text-gray-400'}`}>
+                                                        {type.title}
+                                                    </h3>
+                                                    {'badge' in type && type.badge && (
+                                                        <span className="text-[8px] font-black uppercase bg-[#ccff00] text-black px-2 py-0.5 rounded-full tracking-widest animate-pulse">
+                                                            {type.badge}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p className={`text-[11px] font-medium leading-tight max-w-[200px] ${tournamentData.type === type.id ? 'text-gray-400' : 'text-gray-600'}`}>
                                                     {type.description}
                                                 </p>
 
-                                                {type.options && tournamentData.type === type.id && (
+                                                {'options' in type && type.options && tournamentData.type === type.id && (
                                                     <div className="flex gap-1.5 mt-3">
-                                                        {type.options.map(opt => (
+                                                        {type.options.map((opt: string) => (
                                                             <span key={opt} className="bg-padel-primary text-black text-[9px] font-black uppercase px-3 py-1 rounded-full italic tracking-tighter shadow-lg">
                                                                 {opt}
                                                             </span>
@@ -805,6 +918,130 @@ export default function NewTournamentPage() {
                                         </button>
                                     ))}
                                 </div>
+
+                                {/* ── Selector de tamaño de grupo (ROUND_ROBIN / CRUZADO) ── */}
+                                {(tournamentData.type === TournamentType.ROUND_ROBIN || tournamentData.type === TournamentType.CRUZADO) && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 12, scale: 0.97 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        className="mt-4 p-5 bg-[#ccff00]/5 border border-[#ccff00]/20 rounded-[2rem] space-y-4"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-2 h-2 rounded-full bg-[#ccff00] animate-pulse shadow-[0_0_8px_#ccff00]" />
+                                            <h4 className="text-[10px] font-black uppercase tracking-widest text-[#ccff00]">
+                                                Equipos por Grupo
+                                            </h4>
+                                            <div className="flex-1 h-px bg-[#ccff00]/10" />
+                                            <span className="text-[9px] font-bold text-gray-500 uppercase italic">
+                                                {tournamentData.type === TournamentType.CRUZADO ? 'Grupo A y Grupo B' : 'Por cada grupo'}
+                                            </span>
+                                        </div>
+
+                                        {/* Buttons 3 / 4 */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {[3, 4].map(size => {
+                                                const isSelected = tournamentData.groupSize === size;
+                                                // Preview calculation
+                                                const total = tournamentData.teams.length;
+                                                let preview = '';
+                                                if (tournamentData.type === TournamentType.ROUND_ROBIN) {
+                                                    const complete = Math.floor(total / size);
+                                                    const rem = total % size;
+                                                    if (complete === 0) {
+                                                        preview = total >= 2 ? `1 grupo de ${total}` : 'Añade equipos';
+                                                    } else if (rem === 0) {
+                                                        preview = `${complete} grupo${complete > 1 ? 's' : ''} de ${size}`;
+                                                    } else {
+                                                        preview = `${complete} grupo${complete > 1 ? 's' : ''} de ${size} + ${rem} extra en el último`;
+                                                    }
+                                                } else {
+                                                    // CRUZADO: 2 grupos
+                                                    const half = Math.ceil(total / 2);
+                                                    preview = `Grupo A: ${half} · Grupo B: ${total - half}`;
+                                                }
+                                                return (
+                                                    <button
+                                                        key={size}
+                                                        onClick={() => setTournamentData({ ...tournamentData, groupSize: size })}
+                                                        className={`group relative overflow-hidden rounded-[1.5rem] border-2 py-4 px-5 text-left transition-all ${isSelected
+                                                            ? 'border-[#ccff00] bg-[#ccff00]/10 shadow-[0_0_20px_rgba(204,255,0,0.15)]'
+                                                            : 'border-white/10 bg-white/[0.03] hover:border-white/20'
+                                                            }`}
+                                                    >
+                                                        <div className={`text-3xl font-black italic tracking-tighter leading-none ${isSelected ? 'text-[#ccff00]' : 'text-gray-500'}`}>
+                                                            {size}
+                                                        </div>
+                                                        <div className={`text-[9px] font-black uppercase tracking-widest mt-0.5 ${isSelected ? 'text-white' : 'text-gray-600'}`}>
+                                                            parejas / grupo
+                                                        </div>
+                                                        <div className={`text-[8px] font-bold mt-2 italic leading-tight ${isSelected ? 'text-[#ccff00]/70' : 'text-gray-700'}`}>
+                                                            {preview}
+                                                        </div>
+                                                        {isSelected && (
+                                                            <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-[#ccff00] flex items-center justify-center">
+                                                                <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                </svg>
+                                                            </div>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Visual group preview */}
+                                        {tournamentData.teams.length >= 2 && (
+                                            <div className="pt-1 space-y-2">
+                                                <p className="text-[8px] font-black uppercase tracking-widest text-gray-600">
+                                                    Vista previa de grupos
+                                                </p>
+                                                {(() => {
+                                                    const total = tournamentData.teams.length;
+                                                    const size = tournamentData.groupSize || 3;
+
+                                                    if (tournamentData.type === TournamentType.CRUZADO) {
+                                                        const half = Math.ceil(total / 2);
+                                                        const gA = tournamentData.teams.slice(0, half);
+                                                        const gB = tournamentData.teams.slice(half);
+                                                        return ['A', 'B'].map((gName, gi) => {
+                                                            const gTeams = gi === 0 ? gA : gB;
+                                                            return (
+                                                                <div key={gName} className="flex items-center gap-2 flex-wrap">
+                                                                    <span className="text-[9px] font-black text-[#ccff00] w-14 shrink-0">Grupo {gName}</span>
+                                                                    {gTeams.map((t: any, ti: number) => (
+                                                                        <span key={ti} className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[8px] font-bold text-gray-400">
+                                                                            {t.p1?.name || `E${ti + 1}`}{t.p2?.name ? ` / ${t.p2.name}` : ''}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            );
+                                                        });
+                                                    } else {
+                                                        const numComplete = Math.floor(total / size);
+                                                        const numGroups = Math.max(1, numComplete + (total % size > 0 && numComplete === 0 ? 1 : 0));
+                                                        const groupNames = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+                                                        const groups: any[][] = Array.from({ length: numGroups }, () => []);
+                                                        let pool = [...tournamentData.teams];
+                                                        for (let g = 0; g < numGroups; g++) {
+                                                            const toAdd = g < numGroups - 1 ? size : pool.length;
+                                                            for (let k = 0; k < toAdd && pool.length > 0; k++) groups[g].push(pool.shift());
+                                                        }
+                                                        return groups.map((gTeams, gIdx) => (
+                                                            <div key={gIdx} className="flex items-center gap-2 flex-wrap">
+                                                                <span className="text-[9px] font-black text-[#ccff00] w-14 shrink-0">Grupo {groupNames[gIdx]}</span>
+                                                                {gTeams.map((t: any, ti: number) => (
+                                                                    <span key={ti} className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[8px] font-bold text-gray-400">
+                                                                        {t.p1?.name || `E${ti + 1}`}{t.p2?.name ? ` / ${t.p2.name}` : ''}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ));
+                                                    }
+                                                })()}
+                                            </div>
+                                        )}
+                                    </motion.div>
+                                )}
 
                                 <div className="h-4 pb-4" />
                             </motion.div>
@@ -1084,7 +1321,7 @@ export default function NewTournamentPage() {
                             <motion.div
                                 key="step7"
                                 initial={{ opacity: 0, x: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
+                                animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
                                 className="glass p-5 md:p-8 space-y-6 md:space-y-8"
                             >
@@ -1102,6 +1339,123 @@ export default function NewTournamentPage() {
                                         </h2>
                                     </motion.div>
                                 </div>
+
+                                {/* ── Selector de Grupos para Round Robin / Cruzado ─────────── */}
+                                {(tournamentData.type === TournamentType.ROUND_ROBIN || tournamentData.type === TournamentType.CRUZADO) && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="mb-6 p-4 bg-[#ccff00]/5 border border-[#ccff00]/20 rounded-[1.75rem] space-y-4"
+                                    >
+                                        {/* Header */}
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-2 h-2 rounded-full bg-[#ccff00] animate-pulse shadow-[0_0_8px_#ccff00]" />
+                                            <h4 className="text-[10px] font-black uppercase tracking-widest text-[#ccff00]">
+                                                Equipos por Grupo
+                                            </h4>
+                                            <div className="flex-1 h-px bg-[#ccff00]/10" />
+                                            <span className="text-[9px] font-bold text-gray-500 uppercase italic">
+                                                {(() => {
+                                                    const total = tournamentData.teams.length;
+                                                    const size = tournamentData.groupSize || 3;
+                                                    if (total < size) return `Añade ${size - total} pareja${size - total > 1 ? 's' : ''} más`;
+                                                    const numGroups = Math.max(1, Math.floor(total / size));
+                                                    return `${numGroups} grupo${numGroups > 1 ? 's' : ''} · ${total} parejas`;
+                                                })()}
+                                            </span>
+                                        </div>
+
+                                        {/* Botones 3 / 4 */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {[3, 4].map(size => {
+                                                const isSelected = tournamentData.groupSize === size;
+                                                const total = tournamentData.teams.length;
+                                                const numGroups = total >= size ? Math.max(1, Math.floor(total / size)) : (total >= 2 ? 1 : 0);
+                                                const matchesPerGroup = size * (size - 1) / 2;
+                                                const advancingTeams = numGroups > 0 ? numGroups * 2 : 0;
+                                                const nextRound = numGroups === 2 ? 'Cuartos de Final' : numGroups > 2 ? 'Semifinales' : '—';
+
+                                                return (
+                                                    <button
+                                                        key={size}
+                                                        onClick={() => setTournamentData({ ...tournamentData, groupSize: size })}
+                                                        className={`group relative overflow-hidden rounded-[1.25rem] border-2 py-4 px-5 text-left transition-all ${isSelected
+                                                            ? 'border-[#ccff00] bg-[#ccff00]/10 shadow-[0_0_20px_rgba(204,255,0,0.15)]'
+                                                            : 'border-white/10 bg-white/[0.03] hover:border-white/20'
+                                                            }`}
+                                                    >
+                                                        <div className={`text-3xl font-black italic tracking-tighter leading-none ${isSelected ? 'text-[#ccff00]' : 'text-gray-500'}`}>
+                                                            {size}
+                                                        </div>
+                                                        <div className={`text-[9px] font-black uppercase tracking-widest mt-0.5 ${isSelected ? 'text-white' : 'text-gray-600'}`}>
+                                                            parejas / grupo
+                                                        </div>
+                                                        <div className={`text-[8px] font-bold mt-2 italic leading-tight ${isSelected ? 'text-[#ccff00]/70' : 'text-gray-700'}`}>
+                                                            {matchesPerGroup} partidos / grupo
+                                                        </div>
+                                                        {numGroups > 0 && (
+                                                            <div className={`text-[7px] font-bold mt-1 uppercase ${isSelected ? 'text-white/50' : 'text-gray-700'}`}>
+                                                                Top 2 → {nextRound}
+                                                            </div>
+                                                        )}
+                                                        {isSelected && (
+                                                            <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-[#ccff00] flex items-center justify-center">
+                                                                <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                </svg>
+                                                            </div>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Vista previa de distribución de grupos */}
+                                        {tournamentData.teams.length >= 2 && (() => {
+                                            const total = tournamentData.teams.length;
+                                            const size = tournamentData.groupSize || 3;
+                                            const numGroups = Math.max(1, Math.floor(total / size));
+                                            const groupNames = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+                                            const groups: any[][] = Array.from({ length: numGroups }, () => []);
+                                            let pool = [...tournamentData.teams];
+                                            for (let g = 0; g < numGroups; g++) {
+                                                const toAdd = g < numGroups - 1 ? size : pool.length;
+                                                for (let k = 0; k < toAdd && pool.length > 0; k++) groups[g].push(pool.shift());
+                                            }
+                                            const nextRound = numGroups === 2 ? 'Cuartos de Final' : 'Semifinales';
+                                            return (
+                                                <div className="pt-1 space-y-2 border-t border-[#ccff00]/10">
+                                                    <div className="flex items-center justify-between">
+                                                        <p className="text-[8px] font-black uppercase tracking-widest text-gray-600">
+                                                            Vista previa de grupos
+                                                        </p>
+                                                        <p className="text-[7px] font-bold italic text-[#ccff00]/50 uppercase">
+                                                            Los 2 mejores de cada grupo → {nextRound}
+                                                        </p>
+                                                    </div>
+                                                    {groups.map((gTeams, gIdx) => (
+                                                        <div key={gIdx} className="flex items-start gap-2 flex-wrap">
+                                                            <span className="text-[9px] font-black text-[#ccff00] w-14 shrink-0 pt-0.5">
+                                                                Grupo {groupNames[gIdx]}
+                                                            </span>
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {gTeams.map((t: any, ti: number) => (
+                                                                    <span key={ti} className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[8px] font-bold text-gray-400">
+                                                                        {t.p1?.name || `Pareja ${groups.slice(0, gIdx).reduce((acc, g) => acc + g.length, 0) + ti + 1}`}{t.p2?.name ? ` / ${t.p2.name}` : ''}
+                                                                    </span>
+                                                                ))}
+                                                                {/* Advance badge */}
+                                                                <span className="px-2 py-0.5 rounded-full bg-[#ccff00]/10 border border-[#ccff00]/20 text-[7px] font-black text-[#ccff00] uppercase italic">
+                                                                    Top 2 avanzan
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })()}
+                                    </motion.div>
+                                )}
 
                                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                                     <div className="flex items-center gap-4">
@@ -1150,96 +1504,116 @@ export default function NewTournamentPage() {
                                 </div>
 
                                 <div className="grid gap-4">
-                                    {tournamentData.teams.map((team, idx) => (
+                                    {tournamentData.teams.length === 0 ? (
                                         <motion.div
-                                            layout
-                                            initial={{ opacity: 0, scale: 0.95 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            key={team.id}
-                                            className="bg-white/5 p-6 rounded-3xl border border-white/10 space-y-6"
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="flex flex-col items-center justify-center py-16 gap-4 rounded-[2rem] border-2 border-dashed border-white/10"
                                         >
-                                            <div className="flex justify-between items-center">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="bg-padel-primary text-black font-black px-4 py-1 rounded-full text-[10px] uppercase italic tracking-tighter">
-                                                        Pareja {idx + 1}
-                                                    </span>
-
-                                                </div>
-                                                <button
-                                                    onClick={() => removeTeam(team.id)}
-                                                    className="text-red-500/50 hover:text-red-500 transition-colors p-2"
-                                                >
-                                                    <Trash2 className="w-5 h-5" />
-                                                </button>
+                                            <Users className="w-14 h-14 text-white/10" />
+                                            <div className="text-center space-y-1">
+                                                <p className="text-sm font-black uppercase italic text-gray-500 tracking-tighter">Sin parejas registradas</p>
+                                                <p className="text-[9px] font-bold text-gray-700 uppercase tracking-widest">Usa el botón «Añadir 1» o ingresa la cantidad arriba</p>
                                             </div>
+                                            <button
+                                                onClick={addTeam}
+                                                className="flex items-center gap-2 bg-padel-primary text-black px-6 py-3 rounded-xl font-black text-xs uppercase italic tracking-tighter hover:scale-105 transition-all shadow-[0_0_20px_rgba(204,255,0,0.2)]"
+                                            >
+                                                <Plus className="w-4 h-4" /> Añadir primera pareja
+                                            </button>
+                                        </motion.div>
+                                    ) : (
+                                        tournamentData.teams.map((team, idx) => (
+                                            <motion.div
+                                                layout
+                                                initial={{ opacity: 0, scale: 0.95 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                key={team.id}
+                                                className="bg-white/5 p-6 rounded-3xl border border-white/10 space-y-6"
+                                            >
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="bg-padel-primary text-black font-black px-4 py-1 rounded-full text-[10px] uppercase italic tracking-tighter">
+                                                            Pareja {idx + 1}
+                                                        </span>
 
-                                            <div className="grid md:grid-cols-2 gap-8">
-                                                {[1, 2].map((pNum) => {
-                                                    const pKey = `p${pNum}` as 'p1' | 'p2';
-                                                    const player = team[pKey];
-                                                    const playerIndex = idx * 2 + pNum;
+                                                    </div>
+                                                    <button
+                                                        onClick={() => removeTeam(team.id)}
+                                                        className="text-red-500/50 hover:text-red-500 transition-colors p-2"
+                                                    >
+                                                        <Trash2 className="w-5 h-5" />
+                                                    </button>
+                                                </div>
 
-                                                    return (
-                                                        <div key={pKey} className="space-y-4">
-                                                            <div className="flex items-center justify-between gap-4 mb-2">
-                                                                <div className="flex items-center gap-4">
-                                                                    <div className="relative group">
-                                                                        <div className="w-16 h-16 rounded-2xl bg-white/10 border-2 border-dashed border-white/20 flex items-center justify-center overflow-hidden transition-all group-hover:border-padel-primary/50 text-gray-500 group-hover:text-padel-primary">
-                                                                            {player.photo ? (
-                                                                                <img src={player.photo} alt="Profile" className="w-full h-full object-cover" />
-                                                                            ) : (
-                                                                                <Camera className="w-6 h-6" />
-                                                                            )}
+                                                <div className="grid md:grid-cols-2 gap-8">
+                                                    {[1, 2].map((pNum) => {
+                                                        const pKey = `p${pNum}` as 'p1' | 'p2';
+                                                        const player = team[pKey];
+                                                        const playerIndex = idx * 2 + pNum;
+
+                                                        return (
+                                                            <div key={pKey} className="space-y-4">
+                                                                <div className="flex items-center justify-between gap-4 mb-2">
+                                                                    <div className="flex items-center gap-4">
+                                                                        <div className="relative group">
+                                                                            <div className="w-16 h-16 rounded-2xl bg-white/10 border-2 border-dashed border-white/20 flex items-center justify-center overflow-hidden transition-all group-hover:border-padel-primary/50 text-gray-500 group-hover:text-padel-primary">
+                                                                                {player.photo ? (
+                                                                                    <img src={player.photo} alt="Profile" className="w-full h-full object-cover" />
+                                                                                ) : (
+                                                                                    <Camera className="w-6 h-6" />
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-none mb-1">
+                                                                                Jugador <span className="text-padel-primary">{playerIndex}</span>
+                                                                            </p>
+                                                                            <p className="text-padel-primary/60 font-black italic tracking-tighter leading-none text-[8px] uppercase">ID #{String(playerIndex).padStart(4, '0')}</p>
                                                                         </div>
                                                                     </div>
-                                                                    <div>
-                                                                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-none mb-1">
-                                                                            Jugador <span className="text-padel-primary">{playerIndex}</span>
-                                                                        </p>
-                                                                        <p className="text-padel-primary/60 font-black italic tracking-tighter leading-none text-[8px] uppercase">ID #{String(playerIndex).padStart(4, '0')}</p>
+
+                                                                    {/* Selector de jugadores desde la base */}
+                                                                    <button
+                                                                        onClick={() => openPlayerSelector(team.id, pKey)}
+                                                                        className="bg-padel-primary/10 hover:bg-padel-primary/20 border border-padel-primary/20 rounded-lg px-3 py-1.5 text-[10px] uppercase font-black text-padel-primary transition-all flex items-center gap-2 tracking-tighter italic group/btn"
+                                                                    >
+                                                                        BUSCAR JUGADOR <ChevronDown className="w-3 h-3 group-hover/btn:translate-y-0.5 transition-transform" />
+                                                                    </button>
+                                                                </div>
+
+                                                                <div className="grid grid-cols-2 gap-3">
+                                                                    <div className="space-y-1">
+                                                                        <label className="text-[8px] uppercase text-gray-500 font-black">Nombre</label>
+                                                                        <input
+                                                                            type="text"
+                                                                            placeholder={`Ej. Jugador ${playerIndex}`}
+                                                                            className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-padel-primary w-full placeholder:text-gray-700 font-bold"
+                                                                            value={player.name}
+                                                                            onChange={(e) => {
+                                                                                updateTeamMember(team.id, pKey, 'id', '');
+                                                                                updateTeamMember(team.id, pKey, 'name', e.target.value);
+                                                                            }}
+                                                                        />
+                                                                    </div>
+                                                                    <div className="space-y-1">
+                                                                        <label className="text-[8px] uppercase text-gray-500 font-black">Apellido</label>
+                                                                        <input
+                                                                            type="text"
+                                                                            placeholder="Ej. Pérez"
+                                                                            className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-padel-primary w-full placeholder:text-gray-700 font-bold"
+                                                                            value={player.lastName}
+                                                                            onChange={(e) => updateTeamMember(team.id, pKey, 'lastName', e.target.value)}
+                                                                        />
                                                                     </div>
                                                                 </div>
-
-                                                                {/* Selector de jugadores desde la base */}
-                                                                <button
-                                                                    onClick={() => openPlayerSelector(team.id, pKey)}
-                                                                    className="bg-padel-primary/10 hover:bg-padel-primary/20 border border-padel-primary/20 rounded-lg px-3 py-1.5 text-[10px] uppercase font-black text-padel-primary transition-all flex items-center gap-2 tracking-tighter italic group/btn"
-                                                                >
-                                                                    BUSCAR JUGADOR <ChevronDown className="w-3 h-3 group-hover/btn:translate-y-0.5 transition-transform" />
-                                                                </button>
                                                             </div>
-
-                                                            <div className="grid grid-cols-2 gap-3">
-                                                                <div className="space-y-1">
-                                                                    <label className="text-[8px] uppercase text-gray-500 font-black">Nombre</label>
-                                                                    <input
-                                                                        type="text"
-                                                                        placeholder={`Ej. Jugador ${playerIndex}`}
-                                                                        className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-padel-primary w-full placeholder:text-gray-700 font-bold"
-                                                                        value={player.name}
-                                                                        onChange={(e) => {
-                                                                            updateTeamMember(team.id, pKey, 'id', '');
-                                                                            updateTeamMember(team.id, pKey, 'name', e.target.value);
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                                <div className="space-y-1">
-                                                                    <label className="text-[8px] uppercase text-gray-500 font-black">Apellido</label>
-                                                                    <input
-                                                                        type="text"
-                                                                        placeholder="Ej. Pérez"
-                                                                        className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-padel-primary w-full placeholder:text-gray-700 font-bold"
-                                                                        value={player.lastName}
-                                                                        onChange={(e) => updateTeamMember(team.id, pKey, 'lastName', e.target.value)}
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </motion.div>
-                                    ))}
+                                                        );
+                                                    })}
+                                                </div>
+                                            </motion.div>
+                                        )))
+                                    }
                                 </div>
                             </motion.div>
                         )}

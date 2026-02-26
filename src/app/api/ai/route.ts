@@ -98,65 +98,107 @@ export async function POST(req: Request) {
     try {
         const { agentId, message, context } = await req.json();
 
-        const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+        const GROQ_API_KEY = process.env.GROQ_API_KEY;
+        const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
-        if (!GEMINI_API_KEY) {
+        // 1. System prompt compacto
+        const agentPersonas: Record<string, string> = {
+            organizer: 'Eres el Organizador Pro de Padel Score. Ayudas a organizar torneos americanos de pádel, calcular fixtures, rankings y gestionar partidos. Responde siempre en español de manera concisa.',
+            coach: 'Eres el Coach de Padel Score. Experto en técnica de pádel, estrategias y entrenamiento. Responde siempre en español de manera concisa.',
+            analyst: 'Eres el Analista de Padel Score. Analizas estadísticas de torneos y jugadores. Responde siempre en español de manera concisa.',
+            safeguard: 'Eres SafeGuard Pro de Padel Score. Ayudas con seguridad e integridad de datos del club. Responde siempre en español de manera concisa.',
+        };
+
+        const contextSummary = context
+            ? ` El club tiene: ${context.totalTournaments || 0} torneos, ${context.totalPlayers || 0} jugadores, $${context.totalExpenses || 0} en gastos.`
+            : '';
+
+        // 2. RAG (truncado a 400 chars para caber en contexto)
+        const { context: ragContext, sources } = await fetchRAGContext(message);
+        const ragSnippet = ragContext ? ragContext.substring(0, 400) : '';
+        const ragBlock = ragSnippet ? ` Contexto extra: ${ragSnippet}` : '';
+
+        const systemPrompt = ((agentPersonas[agentId] || agentPersonas.organizer) + contextSummary + ragBlock).substring(0, 1200);
+
+        const messages = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: message },
+        ];
+
+        // ── 3a. Intentar con GROQ primero (gratis, sin restricciones geográficas) ──
+        if (GROQ_API_KEY) {
+            const GROQ_MODELS = [
+                'llama-3.3-70b-versatile',
+                'llama-3.1-8b-instant',
+                'mixtral-8x7b-32768',
+            ];
+            for (const model of GROQ_MODELS) {
+                try {
+                    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${GROQ_API_KEY}`,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 800 }),
+                    });
+                    const groqData = await groqRes.json();
+                    console.log(`[Groq] model=${model} status=${groqRes.status}`);
+                    if (!groqRes.ok || groqData.error) continue;
+                    const text = groqData.choices?.[0]?.message?.content;
+                    if (text && text.trim()) {
+                        const sourcesFooter = sources.length > 0
+                            ? `\n\n---\n📌 *Fuentes: ${sources.join(', ')}*` : '';
+                        return NextResponse.json({ role: 'assistant', content: text + sourcesFooter, ragUsed: sources.length > 0, sources });
+                    }
+                } catch { /* continuar con siguiente modelo */ }
+            }
+        }
+
+        // ── 3b. Fallback: OpenRouter ──
+        if (!OPENROUTER_API_KEY) {
             return NextResponse.json({
                 role: 'assistant',
-                content: '⚠️ Error: GEMINI_API_KEY no configurada. Por favor, añade la API Key a las variables de entorno.',
+                content: '⚠️ No hay clave de IA configurada. Agrega GROQ_API_KEY en .env.local (gratis en console.groq.com).',
+                ragUsed: false, sources: [],
             });
         }
 
-        // 1. Recuperar documentos RAG relevantes de Firestore
-        const { context: ragContext, sources } = await fetchRAGContext(message);
+        const OR_MODELS = [
+            'qwen/qwen3-4b:free',
+            'google/gemma-3-4b-it:free',
+            'meta-llama/llama-3.2-3b-instruct:free',
+        ];
 
-        // 2. Construir el system prompt con conocimiento de pádel + contexto dinámico
-        const baseSystemPrompt = buildSystemPrompt(agentId, context);
-
-        // 3. Añadir contexto RAG si hay documentos relevantes
-        const ragBlock = ragContext
-            ? `\n\n## 📚 DOCUMENTOS ADICIONALES RELEVANTES (Base de Conocimiento del Club)\n${ragContext}\n\nINSTRUCCIÓN: Si alguno de estos documentos es relevante para la pregunta, usa su información y cítalo en tu respuesta.`
-            : '';
-
-        const fullSystemPrompt = baseSystemPrompt + ragBlock;
-
-        // 4. Llamada a Gemini 1.5 Flash
-        const geminiRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-            {
+        for (const model of OR_MODELS) {
+            const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{ text: `${fullSystemPrompt}\n\n---\n\nUSUARIO: ${message}` }],
-                    }],
-                    generationConfig: {
-                        temperature: 0.7,
-                        maxOutputTokens: 1200,
-                    },
-                }),
-            }
-        );
-
-        const geminiData = await geminiRes.json();
-        const responseText =
-            geminiData.candidates?.[0]?.content?.parts?.[0]?.text ||
-            'No pude procesar la solicitud. Por favor, intenta de nuevo.';
-
-        // 5. Si había fuentes RAG, añadir footer de fuentes
-        const sourcesFooter = sources.length > 0
-            ? `\n\n---\n📌 *Fuentes consultadas: ${sources.join(', ')}*`
-            : '';
+                headers: {
+                    'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': 'https://padel-score-pro.vercel.app',
+                    'X-Title': 'Padel Score Pro Agents',
+                },
+                body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 600 }),
+            });
+            const orData = await res.json();
+            const content = orData?.choices?.[0]?.message?.content;
+            console.log(`[OpenRouter] model=${model} status=${res.status} content=${String(content).substring(0, 40)}`);
+            if (!res.ok || orData.error || !content) continue;
+            const sourcesFooter = sources.length > 0 ? `\n\n---\n📌 *Fuentes: ${sources.join(', ')}*` : '';
+            return NextResponse.json({ role: 'assistant', content: content + sourcesFooter, ragUsed: sources.length > 0, sources });
+        }
 
         return NextResponse.json({
             role: 'assistant',
-            content: responseText + sourcesFooter,
-            ragUsed: sources.length > 0,
-            sources,
+            content: '⚠️ Todos los modelos están temporalmente ocupados. Intenta en unos segundos o crea una key gratuita en console.groq.com',
+            ragUsed: false, sources: [],
         });
+
     } catch (error: unknown) {
         const err = error as Error;
         console.error('AI Error:', err);
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }
+

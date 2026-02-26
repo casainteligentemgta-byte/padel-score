@@ -16,7 +16,8 @@ import {
     Monitor,
     LayoutDashboard,
     Megaphone,
-    Brain
+    Brain,
+    Swords
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -33,6 +34,7 @@ export default function Sidebar() {
     ];
 
     const adminItems = [
+        { name: 'Americano PRO', href: '/americano', icon: Swords },
         { name: 'Generador Maestro', href: '/admin/master-generator', icon: Sparkles },
         { name: 'Módulo Pizarras', href: '/admin/boards', icon: LayoutDashboard },
         { name: 'Agentes AI', href: '/agents', icon: Sparkles },

@@ -8,6 +8,9 @@ export class ScheduleEngine {
     /**
    * Genera los matches para un torneo basándose en la configuración.
    */
+    /** Slot fijo entre partidos en la misma cancha (minutos) */
+    static readonly SLOT_MINUTES = 85;
+
     static generateSchedule(config: ScheduleConfig) {
         if (config.numTeams < 2) {
             console.warn('[ScheduleEngine] Not enough teams to generate a schedule');
@@ -26,12 +29,12 @@ export class ScheduleEngine {
             clubHoursEnd,
             startDate,
             matchDurationMinutes,
-            bufferMinutes,
             type
         } = config;
 
-        let pairings: [number, number][] = [];
+        const slotMinutes = ScheduleEngine.SLOT_MINUTES; // 85 min entre partidos en la misma cancha
 
+        let pairings: [number, number][] = [];
         if (
             type === TournamentType.AMERICANO_INDIVIDUAL ||
             type === TournamentType.AMERICANO_DUPLA ||
@@ -42,86 +45,89 @@ export class ScheduleEngine {
             pairings = this.generateBasicPairings(numTeams);
         }
 
-        // Proper Fisher-Yates Shuffle for pairings
+        // Shuffle Fisher-Yates
         for (let i = pairings.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [pairings[i], pairings[j]] = [pairings[j], pairings[i]];
         }
 
-        console.log(`[ScheduleEngine] Generated ${pairings.length} pairings for ${numTeams} teams`);
+        console.log(`[ScheduleEngine] ${pairings.length} pairings for ${numTeams} teams, ${numCourts} courts`);
 
-        const timeSlots = this.generateTimeSlots(startDate, clubHoursStart, clubHoursEnd, matchDurationMinutes, bufferMinutes);
-        console.log(`[ScheduleEngine] Generated ${timeSlots.length} time slots`);
+        // Parse club hours
+        const [startH, startM] = (clubHoursStart || '08:00').split(':').map(Number);
+        const [endH, endM] = (clubHoursEnd || '22:00').split(':').map(Number);
+
+        const clubOpen = new Date(startDate);
+        clubOpen.setHours(startH, startM, 0, 0);
+
+        const clubClose = new Date(startDate);
+        clubClose.setHours(endH, endM, 0, 0);
+        if (clubClose <= clubOpen) clubClose.setDate(clubClose.getDate() + 1);
+
+        // ── Cada cancha tiene su propio timeline, todas empiezan en clubOpen ──
+        const courtNextTime: Date[] = Array.from({ length: numCourts }, () => new Date(clubOpen));
+        const teamLastSlot: { [k: number]: number } = {}; // evitar descanso 0 entre partidos
 
         const matches: any[] = [];
-        const teamLastPlayed: { [key: number]: number } = {};
-
         let pairingIndex = 0;
         const totalPairings = pairings.length;
+        let globalSlot = 0;
 
-        for (let slotIdx = 0; slotIdx < timeSlots.length; slotIdx++) {
-            const slotStart = timeSlots[slotIdx];
+        while (pairingIndex < totalPairings) {
+            let assignedThisRound = false;
 
-            for (let c = 0; c < numCourts; c++) {
-                if (pairingIndex >= totalPairings) break;
+            for (let c = 0; c < numCourts && pairingIndex < totalPairings; c++) {
+                const courtTime = courtNextTime[c];
+                const matchEnd = new Date(courtTime.getTime() + matchDurationMinutes * 60000);
+                if (matchEnd > clubClose) continue; // cancha cerrada
 
+                // Buscar pareja válida (ninguno jugó en el slot anterior)
                 let foundIdx = -1;
-                for (let i = pairingIndex; i < totalPairings; i++) {
-                    const [t1, t2] = pairings[i];
-
-                    const t1LastIdx = teamLastPlayed[t1] !== undefined ? teamLastPlayed[t1] : -2;
-                    const t2LastIdx = teamLastPlayed[t2] !== undefined ? teamLastPlayed[t2] : -2;
-
-                    if (slotIdx - t1LastIdx > 1 && slotIdx - t2LastIdx > 1) {
-                        foundIdx = i;
-                        break;
-                    }
-                }
-
-                if (foundIdx === -1) {
+                for (let pass = 0; pass < 2 && foundIdx === -1; pass++) {
                     for (let i = pairingIndex; i < totalPairings; i++) {
                         const [t1, t2] = pairings[i];
-                        const t1LastIdx = teamLastPlayed[t1] !== undefined ? teamLastPlayed[t1] : -2;
-                        const t2LastIdx = teamLastPlayed[t2] !== undefined ? teamLastPlayed[t2] : -2;
-
-                        if (t1LastIdx < slotIdx && t2LastIdx < slotIdx) {
-                            foundIdx = i;
-                            break;
+                        const t1Last = teamLastSlot[t1] ?? -2;
+                        const t2Last = teamLastSlot[t2] ?? -2;
+                        if (pass === 0) {
+                            if (globalSlot - t1Last > 1 && globalSlot - t2Last > 1) { foundIdx = i; break; }
+                        } else {
+                            if (t1Last < globalSlot && t2Last < globalSlot) { foundIdx = i; break; }
                         }
                     }
                 }
 
                 if (foundIdx !== -1) {
                     const [t1, t2] = pairings[foundIdx];
-
                     matches.push({
                         team1Index: t1,
                         team2Index: t2,
-                        scheduledTime: new Date(slotStart),
+                        scheduledTime: new Date(courtTime),
                         courtIndex: c,
                         status: MatchStatus.PENDING
                     });
-
-                    // Swap using a temporary variable to avoid any destructuring issues if necessary
-                    const temp = pairings[pairingIndex];
-                    pairings[pairingIndex] = pairings[foundIdx];
-                    pairings[foundIdx] = temp;
-
-                    teamLastPlayed[t1] = slotIdx;
-                    teamLastPlayed[t2] = slotIdx;
+                    // Avanzar el timeline de esta cancha 85 min
+                    courtNextTime[c] = new Date(courtTime.getTime() + slotMinutes * 60000);
+                    teamLastSlot[t1] = globalSlot;
+                    teamLastSlot[t2] = globalSlot;
+                    // Swap al frente
+                    [pairings[pairingIndex], pairings[foundIdx]] = [pairings[foundIdx], pairings[pairingIndex]];
                     pairingIndex++;
+                    assignedThisRound = true;
                 }
             }
+
+            globalSlot++;
+            if (!assignedThisRound) break; // no se pudo asignar nada, todas las canchas cerradas
         }
 
-        console.log(`[ScheduleEngine] Final matches scheduled: ${matches.length}`);
+        console.log(`[ScheduleEngine] Scheduled: ${matches.length} / ${totalPairings}`);
 
         return {
             matches,
             totalMatches: matches.length,
             pairingsGenerated: totalPairings,
             notScheduled: totalPairings - matches.length,
-            estimatedHours: (matches.length / numCourts) * (matchDurationMinutes / 60)
+            estimatedHours: (matches.length / numCourts) * (slotMinutes / 60)
         };
     }
 
@@ -363,4 +369,147 @@ export class ScheduleEngine {
 
         return { matches: bracketMatches };
     }
+
+    /**
+     * FORMATO CRUZADO
+     * ─────────────────────────────────────────────────────────────────
+     * 1. Divide N equipos en Grupo A y Grupo B (mitades iguales).
+     * 2. Genera exactamente 2 partidos cruzados (A vs B) por equipo.
+     * 3. Agenda los partidos en canchas con el slot de 85 minutos.
+     * 4. Devuelve metadata de grupos y cuartos de final (4 partidos placeholders).
+     * ─────────────────────────────────────────────────────────────────
+     */
+    static generateCruzado(config: {
+        numTeams: number;
+        numCourts: number;
+        clubHoursStart: string;
+        clubHoursEnd: string;
+        startDate: Date;
+        matchDurationMinutes?: number;
+        teams?: any[];
+    }) {
+        const {
+            numTeams,
+            numCourts,
+            clubHoursStart,
+            clubHoursEnd,
+            startDate,
+            matchDurationMinutes = 85,
+        } = config;
+
+        if (numTeams < 4) {
+            console.warn('[ScheduleEngine.Cruzado] Se necesitan al menos 4 equipos');
+            return { crossMatches: [], qfMatches: [], groupA: [], groupB: [], groupAssignments: {} };
+        }
+
+        // ── 1. Dividir equipos en dos grupos ──────────────────────────
+        const half = Math.floor(numTeams / 2);
+        // Índices 1-based de equipos
+        const groupA: number[] = Array.from({ length: half }, (_, i) => i + 1);
+        const groupB: number[] = Array.from({ length: numTeams - half }, (_, i) => half + i + 1);
+
+        // ── 2. Generar emparejamientos cruzados (2 por equipo) ─────────
+        //   Algoritmo: round-robin entre A y B para asegurar que
+        //   cada equipo juegue exactamente 2 veces contra el otro grupo.
+        const crossPairings: [number, number][] = this.generateCrossGroupPairings(groupA, groupB);
+
+        // ── 3. Agendar en canchas (mismo algoritmo de SLOT_MINUTES) ────
+        const slotMinutes = this.SLOT_MINUTES;
+        const [startH, startM] = (clubHoursStart || '08:00').split(':').map(Number);
+        const [endH, endM] = (clubHoursEnd || '22:00').split(':').map(Number);
+
+        const clubOpen = new Date(startDate);
+        clubOpen.setHours(startH, startM, 0, 0);
+        const clubClose = new Date(startDate);
+        clubClose.setHours(endH, endM, 0, 0);
+        if (clubClose <= clubOpen) clubClose.setDate(clubClose.getDate() + 1);
+
+        const courtNextTime: Date[] = Array.from({ length: numCourts }, () => new Date(clubOpen));
+        const crossMatches: any[] = [];
+
+        crossPairings.forEach((pair, idx) => {
+            // Elegir la cancha que tiene el próximo slot disponible más pronto
+            let bestCourt = 0;
+            for (let c = 1; c < numCourts; c++) {
+                if (courtNextTime[c] < courtNextTime[bestCourt]) bestCourt = c;
+            }
+            const courtTime = courtNextTime[bestCourt];
+            const matchEnd = new Date(courtTime.getTime() + matchDurationMinutes * 60000);
+            if (matchEnd > clubClose) return; // Sin espacio
+
+            crossMatches.push({
+                id: `cruzado-${idx}-${Date.now()}-${Math.floor(Math.random() * 9999)}`,
+                team1Index: pair[0],
+                team2Index: pair[1],
+                scheduledTime: new Date(courtTime),
+                courtIndex: bestCourt,
+                status: MatchStatus.PENDING,
+                stage: 'GROUP_STAGE',
+                groupName: 'CRUZADO',
+                roundName: 'Fase Cruzada',
+            });
+
+            courtNextTime[bestCourt] = new Date(courtTime.getTime() + slotMinutes * 60000);
+        });
+
+        // ── 4. Cuartos de final placeholders (4 partidos TBD) ──────────
+        // Se programan 85 min después del último partido de la fase cruzada
+        const lastMatchTime = crossMatches.reduce((max, m) => {
+            const t = new Date(m.scheduledTime).getTime();
+            return t > max ? t : max;
+        }, clubOpen.getTime());
+
+        const qfStart = new Date(lastMatchTime + slotMinutes * 60000);
+        const qfMatches: any[] = [];
+        for (let i = 0; i < 4; i++) {
+            qfMatches.push({
+                id: `qf-${i}-${Date.now()}-${Math.floor(Math.random() * 9999)}`,
+                team1Index: -1, // TBD — se asigna tras la fase cruzada
+                team2Index: -1,
+                scheduledTime: new Date(qfStart.getTime() + Math.floor(i / numCourts) * slotMinutes * 60000),
+                courtIndex: i % numCourts,
+                status: MatchStatus.PENDING,
+                stage: 'MAIN_DRAW',
+                roundName: 'CUARTOS DE FINAL',
+                isQF: true,
+            });
+        }
+
+        const groupAssignments: Record<string, string[]> = {
+            A: groupA.map(String),
+            B: groupB.map(String),
+        };
+
+        return { crossMatches, qfMatches, groupA, groupB, groupAssignments };
+    }
+
+    /**
+     * Para N_A equipos en A y N_B equipos en B, asigna exactamente 2 rivales
+     * del otro grupo a cada equipo (usando round-robin bipartito).
+     */
+    private static generateCrossGroupPairings(groupA: number[], groupB: number[]): [number, number][] {
+        const pairings: [number, number][] = [];
+        const aLen = groupA.length;
+        const bLen = groupB.length;
+
+        // Cada equipo de A juega exactamente 2 veces contra B
+        // Ronda 1: A[i] vs B[i % bLen]
+        // Ronda 2: A[i] vs B[(i + 1) % bLen]
+        for (let i = 0; i < aLen; i++) {
+            pairings.push([groupA[i], groupB[i % bLen]]);
+        }
+        for (let i = 0; i < aLen; i++) {
+            pairings.push([groupA[i], groupB[(i + 1) % bLen]]);
+        }
+
+        // Deduplicar si aLen === 1 ó bLen === 1
+        const seen = new Set<string>();
+        return pairings.filter(([a, b]) => {
+            const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }
 }
+

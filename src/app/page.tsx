@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Users, Calendar, ArrowRight, Play, Sparkles, ExternalLink } from 'lucide-react';
 import LoginButton from '@/components/LoginButton';
 import Sidebar from '@/components/Sidebar';
-import BottomNav from '@/components/BottomNav';
 import { dataService } from '@/lib/dataService';
 
 export default function LandingPage() {
@@ -186,7 +185,6 @@ export default function LandingPage() {
                     Optimizado para iPad Landscape • SMART PADEL Pro v1.0
                 </div>
             </div>
-            <BottomNav />
         </div>
     );
 }

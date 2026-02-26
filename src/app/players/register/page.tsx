@@ -22,7 +22,6 @@ import { dataService } from '@/lib/dataService';
 import { useAuth } from '@/lib/AuthContext';
 import { formatDNI } from '@/lib/formatters';
 import Sidebar from '@/components/Sidebar';
-import BottomNav from '@/components/BottomNav';
 
 export default function PlayerRegistrationPage() {
     const router = useRouter();
