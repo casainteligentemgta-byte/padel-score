@@ -2,123 +2,46 @@ import { NextResponse } from 'next/server';
 import { buildSystemPrompt } from '@/lib/padelKnowledge';
 
 // RAG: recupera documentos relevantes desde Firestore (server-side)
-async function fetchRAGContext(userQuery: string): Promise<{ context: string; sources: string[] }> {
-    try {
-        // Usamos la Firebase REST API directamente (sin el SDK cliente en el servidor)
-        const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-        const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-
-        if (!projectId || !apiKey) return { context: '', sources: [] };
-
-        const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/knowledge_base?key=${apiKey}&pageSize=50`;
-        const res = await fetch(url);
-        if (!res.ok) return { context: '', sources: [] };
-
-        const data = await res.json();
-        const rawDocs = data.documents || [];
-
-        // Parsear documentos de Firestore REST format
-        interface FirestoreField {
-            stringValue?: string;
-            booleanValue?: boolean;
-            arrayValue?: { values?: FirestoreField[] };
-        }
-        interface FirestoreDoc {
-            name: string;
-            fields?: Record<string, FirestoreField>;
-        }
-        const docs = rawDocs
-            .map((d: FirestoreDoc) => {
-                if (!d.fields) return null;
-                const f = d.fields;
-                return {
-                    title: f.title?.stringValue || '',
-                    content: f.content?.stringValue || '',
-                    category: f.category?.stringValue || 'other',
-                    tags: (f.tags?.arrayValue?.values || []).map((v: FirestoreField) => v.stringValue || ''),
-                    source: f.source?.stringValue || '',
-                    isActive: f.isActive?.booleanValue ?? true,
-                };
-            })
-            .filter((d: { isActive: boolean } | null) => d && d.isActive);
-
-        if (docs.length === 0) return { context: '', sources: [] };
-
-        // Score por relevancia
-        const queryLower = userQuery.toLowerCase();
-        const queryWords = queryLower.split(/\s+/).filter((w: string) => w.length > 3);
-
-        interface DocItem {
-            title: string;
-            content: string;
-            category: string;
-            tags: string[];
-            source: string;
-            isActive: boolean;
-        }
-
-        const scored = docs
-            .map((doc: DocItem) => {
-                let score = 0;
-                const titleLower = doc.title.toLowerCase();
-                queryWords.forEach((w: string) => { if (titleLower.includes(w)) score += 5; });
-                doc.tags.forEach((tag: string) => {
-                    const tagL = tag.toLowerCase();
-                    queryWords.forEach((w: string) => { if (tagL.includes(w) || w.includes(tagL)) score += 8; });
-                    if (queryLower.includes(tagL)) score += 10;
-                });
-                const contentMatches = queryWords.reduce((sum: number, w: string) => {
-                    return sum + Math.min((doc.content.toLowerCase().match(new RegExp(w, 'g')) || []).length, 5);
-                }, 0);
-                score += contentMatches;
-                return { doc, score };
-            })
-            .filter((item: { score: number }) => item.score > 0)
-            .sort((a: { score: number }, b: { score: number }) => b.score - a.score)
-            .slice(0, 3);
-
-        if (scored.length === 0) return { context: '', sources: [] };
-
-        const context = scored
-            .map((item: { doc: DocItem }) => `### ${item.doc.title}\n${item.doc.content}`)
-            .join('\n\n---\n\n');
-
-        const sources = scored
-            .map((item: { doc: DocItem }) => item.doc.source || item.doc.title)
-            .filter(Boolean);
-
-        return { context, sources };
-    } catch (e) {
-        console.error('[RAG API] Error:', e);
-        return { context: '', sources: [] };
-    }
-}
 
 export async function POST(req: Request) {
     try {
-        const { agentId, message, context } = await req.json();
+        const body = await req.json();
+
+        // Determinar formato (Agentes o Crónica)
+        let agentId = body.agentId || body.role || 'organizer';
+        let message = body.message || body.prompt || '';
+        const context = body.context;
+
+        if (!message) {
+            return NextResponse.json({ error: 'Message or prompt is required' }, { status: 400 });
+        }
+
+        // Mapear roles antiguos a nuevos agentes si es necesario
+        if (agentId === 'reporter') agentId = 'media';
+        if (agentId === 'analyst') agentId = 'stats';
+        if (agentId === 'coach') agentId = 'organizer';
 
         const GROQ_API_KEY = process.env.GROQ_API_KEY;
         const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
         // 1. System prompt compacto
         const agentPersonas: Record<string, string> = {
-            organizer: 'Eres el Organizador Pro de Padel Score. Ayudas a organizar torneos americanos de pádel, calcular fixtures, rankings y gestionar partidos. Responde siempre en español de manera concisa.',
-            coach: 'Eres el Coach de Padel Score. Experto en técnica de pádel, estrategias y entrenamiento. Responde siempre en español de manera concisa.',
-            analyst: 'Eres el Analista de Padel Score. Analizas estadísticas de torneos y jugadores. Responde siempre en español de manera concisa.',
-            safeguard: 'Eres SafeGuard Pro de Padel Score. Ayudas con seguridad e integridad de datos del club. Responde siempre en español de manera concisa.',
+            safeguard: 'Eres SafeGuard Pro de Padel Score. Especialista en seguridad, auditoría de logs y protección de datos. Tu estilo es profesional, directo y vigilante. Responde siempre en español.',
+            media: 'Eres Media Master de Padel Score. Especialista en prensa, creación de contenido y marketing deportivo. Tu estilo es vibrante, creativo y entusiasta. Responde siempre en español.',
+            stats: 'Eres Stats Guru de Padel Score. Experto en análisis de datos, rendimiento de jugadores y estadísticas avanzadas. Tu estilo es analítico, basado en datos y preciso. Responde siempre en español.',
+            organizer: 'Eres el Organizador Pro de Padel Score. Experto en logística de torneos, fixtures y gestión de tiempos. Tu estilo es práctico, eficiente y organizado. Responde siempre en español.',
+            midas: 'Eres Agente Midas de Padel Score. Consultor financiero especializado en ROI y rentabilidad de clubes. Tu estilo es estratégico, enfocado en el valor y el ahorro. Responde siempre en español.',
+            aura: 'Eres Aura Design de Padel Score. Especialista en UX/UI y estética futurista para clubes de pádel. Tu estilo es sofisticado, minimalista y vanguardista. Responde siempre en español.'
         };
 
         const contextSummary = context
             ? ` El club tiene: ${context.totalTournaments || 0} torneos, ${context.totalPlayers || 0} jugadores, $${context.totalExpenses || 0} en gastos.`
             : '';
 
-        // 2. RAG (truncado a 400 chars para caber en contexto)
-        const { context: ragContext, sources } = await fetchRAGContext(message);
-        const ragSnippet = ragContext ? ragContext.substring(0, 400) : '';
-        const ragBlock = ragSnippet ? ` Contexto extra: ${ragSnippet}` : '';
+        // 2. RAG
+        const { ragBlock, sources } = await fetchRAGContext(message, agentId);
 
-        const systemPrompt = ((agentPersonas[agentId] || agentPersonas.organizer) + contextSummary + ragBlock).substring(0, 1200);
+        const systemPrompt = ((agentPersonas[agentId] || agentPersonas.organizer) + contextSummary + (ragBlock || '')).substring(0, 2000);
 
         const messages = [
             { role: 'system', content: systemPrompt },
@@ -149,7 +72,14 @@ export async function POST(req: Request) {
                     if (text && text.trim()) {
                         const sourcesFooter = sources.length > 0
                             ? `\n\n---\n📌 *Fuentes: ${sources.join(', ')}*` : '';
-                        return NextResponse.json({ role: 'assistant', content: text + sourcesFooter, ragUsed: sources.length > 0, sources });
+                        const fullResponse = text + sourcesFooter;
+                        return NextResponse.json({
+                            role: 'assistant',
+                            content: fullResponse,
+                            text: fullResponse, // Compatibilidad con crónicas
+                            ragUsed: sources.length > 0,
+                            sources
+                        });
                     }
                 } catch { /* continuar con siguiente modelo */ }
             }
@@ -186,7 +116,14 @@ export async function POST(req: Request) {
             console.log(`[OpenRouter] model=${model} status=${res.status} content=${String(content).substring(0, 40)}`);
             if (!res.ok || orData.error || !content) continue;
             const sourcesFooter = sources.length > 0 ? `\n\n---\n📌 *Fuentes: ${sources.join(', ')}*` : '';
-            return NextResponse.json({ role: 'assistant', content: content + sourcesFooter, ragUsed: sources.length > 0, sources });
+            const fullResponse = content + sourcesFooter;
+            return NextResponse.json({
+                role: 'assistant',
+                content: fullResponse,
+                text: fullResponse, // Compatibilidad con crónicas
+                ragUsed: sources.length > 0,
+                sources
+            });
         }
 
         return NextResponse.json({
@@ -199,6 +136,71 @@ export async function POST(req: Request) {
         const err = error as Error;
         console.error('AI Error:', err);
         return NextResponse.json({ error: err.message }, { status: 500 });
+    }
+}
+
+// ── RAG RELEVANCE ENGINE (SERVER SIDE) ──────────────────────────────────────────
+async function fetchRAGContext(query: string, agentId: string) {
+    try {
+        const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+        const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+        if (!apiKey || !projectId) return { ragBlock: '', sources: [] };
+
+        const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/knowledge_base?key=${apiKey}&pageSize=100`;
+        const res = await fetch(url);
+        if (!res.ok) return { ragBlock: '', sources: [] };
+
+        const data = await res.json();
+        const docs = (data.documents || []).map((d: any) => ({
+            id: d.name.split('/').pop(),
+            title: d.fields.title?.stringValue || 'Sin Título',
+            content: d.fields.content?.stringValue || '',
+            tags: (d.fields.tags?.arrayValue?.values || []).map((v: any) => v.stringValue || ''),
+            category: d.fields.category?.stringValue || 'general'
+        }));
+
+        const queryLower = query.toLowerCase();
+        const queryWords = queryLower.split(/\s+/).filter(w => w.length > 3);
+
+        const scored = docs.map((doc: any) => {
+            let score = 0;
+            const titleLower = doc.title.toLowerCase();
+            queryWords.forEach(w => { if (titleLower.includes(w)) score += 5; });
+
+            doc.tags.forEach((tag: string) => {
+                const tagL = tag.toLowerCase();
+                queryWords.forEach(w => { if (tagL.includes(w)) score += 8; });
+            });
+
+            const contentMatches = queryWords.reduce((sum, w) => {
+                try {
+                    const escapedWord = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const matches = (doc.content.toLowerCase().match(new RegExp(escapedWord, 'g')) || []).length;
+                    return sum + Math.min(matches, 5);
+                } catch {
+                    return sum;
+                }
+            }, 0);
+
+            score += contentMatches;
+            return { doc, score };
+        });
+
+        const relevant = scored
+            .filter((s: any) => s.score > 2)
+            .sort((a: any, b: any) => b.score - a.score)
+            .slice(0, 3);
+
+        const ragBlock = relevant.length > 0
+            ? `\nCONTEXTO DE CONOCIMIENTO:\n${relevant.map((s: any) => `[${s.doc.title}]: ${s.doc.content}`).join('\n')}\n`
+            : '';
+
+        return { ragBlock, sources: relevant.map((s: any) => s.doc.title) };
+
+    } catch (e) {
+        console.error('RAG Engine Error:', e);
+        return { ragBlock: '', sources: [] };
     }
 }
 

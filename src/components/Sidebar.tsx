@@ -17,7 +17,9 @@ import {
     LayoutDashboard,
     Megaphone,
     Brain,
-    Swords
+    Swords,
+    DollarSign,
+    Radio
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -34,17 +36,11 @@ export default function Sidebar() {
     ];
 
     const adminItems = [
-        { name: 'Americano PRO', href: '/americano', icon: Swords },
         { name: 'Generador Maestro', href: '/admin/master-generator', icon: Sparkles },
-        { name: 'Módulo Pizarras', href: '/admin/boards', icon: LayoutDashboard },
-        { name: 'Agentes AI', href: '/agents', icon: Sparkles },
-        { name: 'Base Conocimiento IA', href: '/admin/knowledge', icon: Brain },
-        { name: 'Agregar Jugador', href: '/players/register', icon: UserPlus },
+        { name: 'Control de Gastos', href: '/expenses', icon: DollarSign },
+        { name: 'Agentes AI', href: '/agents', icon: Brain },
         { name: 'Jugadores', href: '/players', icon: Users },
-        { name: 'Publicidad', href: '/admin/ads', icon: Megaphone },
-        { name: 'Monitor Canchas', href: '/admin/monitor', icon: Monitor },
-        { name: 'Gestión Usuarios', href: '/admin/users', icon: Settings },
-        { name: 'Vigilancia (Logs)', href: '/admin/logs', icon: Shield },
+        { name: 'Publicidad', href: '/admin/publicidad', icon: Megaphone },
     ];
 
     return (
@@ -144,12 +140,14 @@ export default function Sidebar() {
                             </nav>
 
                             <div className="pt-4 mt-auto border-t border-white/5 space-y-1">
-                                <button
+                                <Link
+                                    href="/admin/settings"
+                                    onClick={() => setIsOpen(false)}
                                     className="w-full flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-500 hover:bg-white/5 hover:text-white transition-all"
                                 >
                                     <Settings className="w-4 h-4" />
                                     <span className="font-bold text-xs uppercase italic">Ajustes</span>
-                                </button>
+                                </Link>
                                 <button
                                     onClick={() => {
                                         logout();

@@ -10,7 +10,7 @@ import {
     Calendar, Clock, RefreshCw, Trophy, ArrowLeft,
     Gamepad2, Monitor, Camera,
     Tv, Flag, LayoutGrid, Users, Award, TrendingUp,
-    Plus, Trash2, FileText, Download, Edit3, Save, X
+    Plus, Trash2, FileText, Download, Edit3, Save, X, Share2
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -554,22 +554,60 @@ function GroupsView({ tournaments }: { tournaments: Record<string, any> }) {
     );
 }
 
+// ── Placeholder para pistas vacías ──────────────────────────────────────────
+function PlaceholderMatchCard({ rank, mode = 'pending' }: { rank: number; mode?: 'pending' | 'live' }) {
+    const rankLabel = ['1°', '2°', '3°', '4°', '5°', '6°'];
+    return (
+        <div className="rounded-2xl border border-white/[0.05] bg-white/[0.02] flex flex-col h-full opacity-30 min-h-[140px]">
+            <div className="px-2 pt-2 pb-1.5 flex items-center justify-between border-b border-white/[0.04]">
+                <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">
+                    {mode === 'live' ? `PISTA ${rank + 1}` : rankLabel[rank] ?? `${rank + 1}°`}
+                </span>
+                <span className="text-[7px] font-bold text-gray-600 uppercase tracking-tighter">Disponible</span>
+            </div>
+            <div className="flex-1 flex flex-col items-center justify-center p-3 opacity-20">
+                <div className="w-8 h-8 rounded-full border border-dashed border-white/20 flex items-center justify-center mb-1">
+                    <Trophy className="w-3.5 h-3.5 text-gray-400" />
+                </div>
+                <p className="text-[8px] font-black text-gray-400 uppercase italic tracking-widest text-center leading-none">Pista Libre</p>
+            </div>
+        </div>
+    );
+}
+
 // ── "Por Comenzar" action card (top 3 only) ────────────────────────────────
 function NextMatchCard({ match, rank, compact = false }: { match: any; rank: number; compact?: boolean }) {
     const [t1p1, t1p2] = resolveTeamNames(match.team1, match.team1Name);
     const [t2p1, t2p2] = resolveTeamNames(match.team2, match.team2Name);
+    const isLive = match.status === MatchStatus.LIVE;
 
-    const rankColors = ['text-[#ccff00]', 'text-white/80', 'text-white/50', 'text-white/30', 'text-white/20', 'text-white/15'];
-    const rankBg = [
-        'bg-[#ccff00]/10 border-[#ccff00]/30',
-        'bg-white/5 border-white/15',
-        'bg-white/[0.03] border-white/10',
-        'bg-white/[0.02] border-white/[0.07]',
-        'bg-white/[0.02] border-white/[0.06]',
-        'bg-white/[0.01] border-white/[0.05]',
-    ];
-    const rankLabel = ['1°', '2°', '3°', '4°', '5°', '6°'];
-    const rankLabelFull = ['1° Siguiente', '2° Salida', '3° Espera', '4° Cola', '5° Cola', '6° Cola'];
+    const rankColors = isLive
+        ? ['text-emerald-400', 'text-emerald-400', 'text-emerald-400', 'text-emerald-400', 'text-emerald-400', 'text-emerald-400']
+        : ['text-[#ccff00]', 'text-white/80', 'text-white/50', 'text-white/30', 'text-white/20', 'text-white/15'];
+
+    const rankBg = isLive
+        ? [
+            'bg-emerald-500/10 border-emerald-500/30',
+            'bg-emerald-500/10 border-emerald-500/25',
+            'bg-emerald-500/5 border-emerald-500/20',
+            'bg-emerald-500/5 border-emerald-500/15',
+            'bg-emerald-500/5 border-emerald-500/10',
+            'bg-emerald-500/5 border-emerald-500/10',
+        ]
+        : [
+            'bg-[#ccff00]/10 border-[#ccff00]/30',
+            'bg-white/5 border-white/15',
+            'bg-white/[0.03] border-white/10',
+            'bg-white/[0.02] border-white/[0.07]',
+            'bg-white/[0.02] border-white/[0.06]',
+            'bg-white/[0.01] border-white/[0.05]',
+        ];
+
+    const rankLabel = isLive ? ['LIVE', 'LIVE', 'LIVE', 'LIVE', 'LIVE', 'LIVE'] : ['1°', '2°', '3°', '4°', '5°', '6°'];
+    const rankLabelFull = isLive
+        ? ['Partido en Curso', 'Partido en Curso', 'Partido en Curso', 'Partido en Curso', 'Partido en Curso', 'Partido en Curso']
+        : ['1° Siguiente', '2° Salida', '3° Espera', '4° Cola', '5° Cola', '6° Cola'];
+
     const safeRank = Math.min(rank, rankColors.length - 1);
 
     const matchKey = match.id || (match.court ? `court_${match.court}` : (match.courtIndex != null ? `court_${match.courtIndex + 1}` : 'court_1'));
@@ -581,7 +619,6 @@ function NextMatchCard({ match, rank, compact = false }: { match: any; rank: num
     const adsHref = `/tournaments/${match._tournamentId}/control/broadcasting`;
 
     if (compact) {
-        // ── Modo compacto: 3 por fila en el grid ─────────────────────────────
         return (
             <motion.div
                 initial={{ opacity: 0, y: 8 }}
@@ -592,11 +629,14 @@ function NextMatchCard({ match, rank, compact = false }: { match: any; rank: num
             >
                 {/* Cabecera compacta */}
                 <div className="px-2 pt-2 pb-1.5 flex items-center justify-between gap-1 border-b border-white/[0.06]">
-                    <span className={`text-[8px] font-black uppercase tracking-widest ${rankColors[safeRank]}`}>
-                        {rankLabel[safeRank]}
-                    </span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                        {isLive && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                        <span className={`text-[8px] font-black uppercase tracking-widest truncate ${rankColors[safeRank]}`}>
+                            {isLive ? `PISTA ${match.court ?? '-'}` : rankLabel[safeRank]}
+                        </span>
+                    </div>
                     <span className="text-[8px] font-bold text-gray-500 italic">
-                        PISTA {match.court ?? '-'} · {formatHHMM(match.scheduledTime)}
+                        {isLive ? `${match.score1 ?? 0} - ${match.score2 ?? 0}` : formatHHMM(match.scheduledTime)}
                     </span>
                 </div>
 
@@ -604,12 +644,10 @@ function NextMatchCard({ match, rank, compact = false }: { match: any; rank: num
                 <div className="px-2 py-2 flex-1 flex flex-col gap-1">
                     <div className="text-center">
                         <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate">{t1p1}</p>
-                        {t1p2 && <p className="text-[8px] font-bold text-gray-500 uppercase tracking-tight truncate">{t1p2}</p>}
                     </div>
-                    <div className="text-[8px] font-black text-gray-600 text-center italic">vs</div>
+                    <div className="text-[8px] font-black text-gray-600 text-center italic leading-none">vs</div>
                     <div className="text-center">
                         <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate">{t2p1}</p>
-                        {t2p2 && <p className="text-[8px] font-bold text-gray-500 uppercase tracking-tight truncate">{t2p2}</p>}
                     </div>
                 </div>
 
@@ -618,11 +656,11 @@ function NextMatchCard({ match, rank, compact = false }: { match: any; rank: num
                     <Link
                         href={controlHref}
                         className={`flex flex-col items-center justify-center gap-1 py-2 transition-all active:scale-95
-                            ${rank === 0 ? 'bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20' : 'bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-[#ccff00]'}`}
+                            ${isLive ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : rank === 0 ? 'bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20' : 'bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-[#ccff00]'}`}
                     >
                         <div className="relative">
                             <Gamepad2 className="w-3.5 h-3.5" />
-                            {rank === 0 && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#ccff00] shadow-[0_0_4px_#ccff00] animate-pulse" />}
+                            {(isLive || rank === 0) && <span className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400' : 'bg-[#ccff00]'} shadow-[0_0_4px_currentColor] animate-pulse`} />}
                         </div>
                         <span className="text-[6px] font-black uppercase tracking-tight">Control</span>
                     </Link>
@@ -648,7 +686,7 @@ function NextMatchCard({ match, rank, compact = false }: { match: any; rank: num
                         className="flex flex-col items-center justify-center gap-1 py-2 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-yellow-400 transition-all active:scale-95"
                     >
                         <Tv className="w-3.5 h-3.5" />
-                        <span className="text-[6px] font-black uppercase tracking-tight">Publicidad</span>
+                        <span className="text-[6px] font-black uppercase tracking-tight">Ads</span>
                     </Link>
                 </div>
             </motion.div>
@@ -1359,27 +1397,24 @@ function EventView() {
     const toMinute = (v: any) => Math.floor(toMs(v) / 60000);
     const earliestMinute = allPending.length > 0 ? toMinute(allPending[0].scheduledTime) : null;
 
-    // "Next up" = partidos del slot más próximo (mismo minuto), cap = numCanchas
-    // Mostramos máximo un partido por cancha disponible en el complejo
-    const nextUpMatches = (
-        earliestMinute !== null
-            ? allPending.filter(m => toMinute(m.scheduledTime) === earliestMinute)
-            : allPending
-    ).slice(0, numCanchas);
+    // "Next up" = Siempre los primeros 3 (cap solicitado por usuario), sin filtrar por minuto exacto
+    // para asegurar que la cuadrícula esté siempre llena si hay partidos.
+    const DISPLAY_GRID_LIMIT = 3;
+    const nextUpMatches = allPending.slice(0, DISPLAY_GRID_LIMIT);
 
-    // ── De todos los partidos LIVE, solo los primeros numCanchas (por cancha) son efectivamente en vivo ──
-    const effectiveLiveIds = new Set(
-        allMatches
-            .filter(m => m.status === MatchStatus.LIVE)
-            .sort((a, b) => Number(a.court ?? 99) - Number(b.court ?? 99))
-            .slice(0, numCanchas)
-            .map(m => m.id)
-    );
+    // ── De todos los partidos LIVE, solo los primeros 3 (cap solicitado) son efectivamente en vivo ──
+    const effectiveLiveMatches = allMatches
+        .filter(m => m.status === MatchStatus.LIVE)
+        .sort((a, b) => Number(a.court ?? 99) - Number(b.court ?? 99))
+        .slice(0, DISPLAY_GRID_LIMIT);
+
+    const effectiveLiveIds = new Set(effectiveLiveMatches.map(m => m.id));
 
     // Summary counts
     const rawLiveCnt = allMatches.filter(m => m.status === MatchStatus.LIVE).length;
-    const liveCnt = Math.min(rawLiveCnt, numCanchas);   // cap visual al nº de canchas
-    const pendCnt = allMatches.filter(m => m.status === MatchStatus.PENDING).length;
+    const liveCnt = Math.min(rawLiveCnt, DISPLAY_GRID_LIMIT);   // cap visual
+    const rawPendCnt = allMatches.filter(m => m.status === MatchStatus.PENDING).length;
+    const pendCnt = Math.min(rawPendCnt, DISPLAY_GRID_LIMIT);   // cap visual
     const finCnt = allMatches.filter(m => m.status === MatchStatus.FINISHED).length;
 
     const eventName = Object.values(tournaments)[0]?.complexName ?? 'Evento';
@@ -1532,81 +1567,86 @@ function EventView() {
                     </AnimatePresence>
                 )}
 
-                {/* ── "Por Comenzar" special section: show only next 3 ── */}
+                {/* ── "Por Comenzar" special section ── */}
                 {!isGroupsTab && !isRulesTab && activeTab === MatchStatus.PENDING && (
                     <AnimatePresence mode="popLayout">
-                        {nextUpMatches.length === 0 ? (
+                        <div key="pending-view" className="space-y-4">
+                            {/* Next wave label */}
                             <motion.div
-                                key="empty-pending"
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                className="py-24 text-center space-y-4"
+                                className="flex items-center gap-3 px-1 pb-1"
                             >
-                                <Trophy className="w-16 h-16 text-white/5 mx-auto" />
-                                <p className="text-gray-600 text-xs uppercase font-bold tracking-widest">No hay partidos por comenzar</p>
-                            </motion.div>
-                        ) : (
-                            <>
-                                {/* Next wave label */}
-                                <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    className="flex items-center gap-3 px-1 pb-1"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-[#ccff00] animate-pulse shadow-[0_0_8px_#ccff00]" />
-                                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#ccff00]">
-                                            Próximos a las {formatHHMM(nextUpMatches[0]?.scheduledTime)}
-                                        </span>
-                                    </div>
-                                    <div className="flex-1 h-px bg-[#ccff00]/10" />
-                                    <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
-                                        {nextUpMatches.length} pista{nextUpMatches.length !== 1 ? 's' : ''}
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-[#ccff00] animate-pulse shadow-[0_0_8px_#ccff00]" />
+                                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#ccff00]">
+                                        {nextUpMatches.length > 0
+                                            ? `Próximos a las ${formatHHMM(nextUpMatches[0]?.scheduledTime)}`
+                                            : 'Siguientes Salidas'}
                                     </span>
-                                </motion.div>
-
-                                {/* Grid 3 columnas: 1-3 arriba / 4-6 abajo */}
-                                <div className="grid grid-cols-3 gap-2">
-                                    {nextUpMatches.map((match, rank) => (
-                                        <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact />
-                                    ))}
                                 </div>
+                                <div className="flex-1 h-px bg-[#ccff00]/10" />
+                                <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
+                                    {numCanchas} pista{numCanchas !== 1 ? 's' : ''} disponibles
+                                </span>
+                            </motion.div>
 
-                                {/* Rest of pending matches */}
-                                {allPending.length > nextUpMatches.length && (
-                                    <div className="space-y-3 mt-6">
-                                        <div className="flex items-center gap-3 px-1 pb-1">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full bg-red-500/40" />
-                                                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">
-                                                    Partidos en Cola
-                                                </span>
-                                            </div>
-                                            <div className="flex-1 h-px bg-white/5" />
-                                            <span className="text-[8px] font-bold text-gray-700 uppercase tracking-widest">
-                                                {allPending.length - nextUpMatches.length} restantes
-                                            </span>
-                                        </div>
-                                        <div className="space-y-3">
-                                            {allPending.slice(numCanchas).map((match, idx) => (
-                                                <MatchCard
-                                                    key={match.id ?? idx}
-                                                    match={match}
-                                                    idx={idx}
-                                                    isEffectivelyLive={false}
-                                                    isNextUp={false}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
+                            {/* Grid limitado a 3 slots */}
+                            <div className="grid grid-cols-3 gap-2">
+                                {nextUpMatches.map((match, rank) => (
+                                    <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact />
+                                ))}
+                                {/* Padding para completar los 3 slots siempre */}
+                                {nextUpMatches.length < DISPLAY_GRID_LIMIT && (
+                                    Array.from({ length: DISPLAY_GRID_LIMIT - nextUpMatches.length }).map((_, i) => (
+                                        <PlaceholderMatchCard key={`pend-pad-${i}`} rank={nextUpMatches.length + i} mode="pending" />
+                                    ))
                                 )}
-                            </>
-                        )}
+                            </div>
+                        </div>
                     </AnimatePresence>
                 )}
 
-                {/* ── All other tabs: show full filtered list ── */}
-                {!isGroupsTab && !isRulesTab && activeTab !== MatchStatus.PENDING && (
+                {/* ── "En Vivo" special section ── */}
+                {!isGroupsTab && !isRulesTab && activeTab === MatchStatus.LIVE && (
+                    <AnimatePresence mode="popLayout">
+                        <div key="live-view" className="space-y-4">
+                            {/* Live label */}
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="flex items-center gap-3 px-1 pb-1"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
+                                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-400">
+                                        Partidos en acción
+                                    </span>
+                                </div>
+                                <div className="flex-1 h-px bg-emerald-500/10" />
+                                <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
+                                    {numCanchas} pista{numCanchas !== 1 ? 's' : ''} en complejo
+                                </span>
+                            </motion.div>
+
+                            {/* Grid limitado a 3 slots */}
+                            <div className="grid grid-cols-3 gap-2">
+                                {effectiveLiveMatches.map((match, rank) => (
+                                    <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact />
+                                ))}
+                                {/* Relleno para siempre mostrar 3 slots */}
+                                {effectiveLiveMatches.length < DISPLAY_GRID_LIMIT && (
+                                    Array.from({ length: DISPLAY_GRID_LIMIT - effectiveLiveMatches.length }).map((_, i) => (
+                                        <PlaceholderMatchCard key={`live-pad-${i}`} rank={effectiveLiveMatches.length + i} mode="live" />
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </AnimatePresence>
+                )}
+
+                {/* ── All other tabs: show full filtered list (Finished, etc) ── */}
+                {!isGroupsTab && !isRulesTab && activeTab !== MatchStatus.PENDING && activeTab !== MatchStatus.LIVE && (
                     <AnimatePresence mode="popLayout">
                         {filtered.length === 0 ? (
                             <motion.div
@@ -1636,7 +1676,7 @@ function EventView() {
                     </AnimatePresence>
                 )}
             </div>
-        </div>
+        </div >
     );
 }
 

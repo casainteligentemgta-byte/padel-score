@@ -29,7 +29,8 @@ import {
     Tv,
     Radio,
     Camera,
-    Trash2
+    Trash2,
+    Brain
 } from 'lucide-react';
 import Link from 'next/link';
 import { MatchStatus, TournamentType, ScheduleConfig } from '@/types/tournament';
@@ -41,6 +42,7 @@ import { db } from '@/lib/firebase';
 import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import GroupPhaseView from '@/components/GroupPhaseView';
 import TournamentPhaseManager from '@/components/TournamentPhaseManager';
+import Sidebar from '@/components/Sidebar';
 
 
 
@@ -795,10 +797,13 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
 
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit">
-            <header className="bg-[#0a0a0a]/90 backdrop-blur-md border-b border-white/10 flex-shrink-0">
-                <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-3">
+            <Sidebar />
+
+            {/* Sticky Header */}
+            <header className="sticky top-0 z-[60] bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 pb-2">
+                <div className="max-w-4xl mx-auto px-6 pt-6 flex justify-between items-center mb-6">
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3 ml-12 md:ml-0">
                             <Link href="/tournaments" className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors">
                                 <span className="material-symbols-outlined text-sm">arrow_back</span>
                             </Link>
@@ -815,30 +820,55 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                             </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 md:gap-2">
+                        {canManageTournament && (
+                            <>
+                                <Link
+                                    href="/expenses"
+                                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-gray-400"
+                                    title="Control de Gastos"
+                                >
+                                    <DollarSign className="w-4 h-4" />
+                                </Link>
+                                <Link
+                                    href="/live"
+                                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white/5 border border-white/10 hover:bg-red-500/10 hover:text-red-500 transition-all text-gray-400"
+                                    title="Central en Vivo"
+                                >
+                                    <Radio className="w-4 h-4" />
+                                </Link>
+                                <Link
+                                    href="/agents"
+                                    className="w-9 h-9 flex items-center justify-center rounded-full bg-white/5 border border-white/10 hover:bg-padel-primary/10 hover:text-padel-primary transition-all text-gray-400"
+                                    title="Agentes AI"
+                                >
+                                    <Brain className="w-4 h-4" />
+                                </Link>
+                            </>
+                        )}
                         {canManageMatches && (
                             <Link
                                 href={`/tournaments/${id}/control`}
-                                className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-gray-400"
+                                className="w-9 h-9 flex items-center justify-center rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-gray-400"
                                 title="Panel de Gestión"
                             >
-                                <LayoutDashboard className="w-5 h-5" />
+                                <LayoutDashboard className="w-4 h-4" />
                             </Link>
                         )}
                         {isAdmin && (
                             <Link
                                 href={`/tournaments/${id}/master`}
-                                className="w-10 h-10 flex items-center justify-center rounded-full bg-padel-primary/10 border border-padel-primary/20 hover:bg-padel-primary/20 transition-all text-padel-primary"
+                                className="w-9 h-9 flex items-center justify-center rounded-full bg-padel-primary/10 border border-padel-primary/20 hover:bg-padel-primary/20 transition-all text-padel-primary"
                                 title="Master Central Dashboard"
                             >
-                                <Zap className="w-5 h-5" />
+                                <Zap className="w-4 h-4" />
                             </Link>
                         )}
                         <button
                             onClick={() => setIsShareModalOpen(true)}
-                            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
+                            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
                         >
-                            <Share2 className="w-5 h-5 text-padel-primary" />
+                            <Share2 className="w-4 h-4 text-padel-primary" />
                         </button>
                     </div>
                 </div>
@@ -1875,31 +1905,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                 }
             </AnimatePresence >
 
-            {/* Navigation Bar */}
-            < nav className="bg-[#0a0a0a] border-t border-white/5 px-8 py-3 pb-8 flex justify-between items-center z-50 flex-shrink-0" >
-                <Link href="/tournaments" className="flex flex-col items-center gap-1 text-gray-500 hover:text-white transition-colors">
-                    <Trophy className="w-5 h-5" />
-                    <span className="text-[10px] font-bold uppercase tracking-tighter">Torneos</span>
-                </Link>
-                <button
-                    onClick={() => setActiveTab('Todas')}
-                    className={`flex flex-col items-center gap-1 ${activeTab !== 'Ranking' ? 'text-padel-primary' : 'text-gray-500 hover:text-white'} transition-colors`}
-                >
-                    <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: activeTab !== 'Ranking' ? "'FILL' 1" : "" }}>account_tree</span>
-                    <span className="text-[10px] font-bold uppercase tracking-tighter">Cuadros</span>
-                </button>
-                <button
-                    onClick={() => setActiveTab('Ranking')}
-                    className={`flex flex-col items-center gap-1 ${activeTab === 'Ranking' ? 'text-padel-primary' : 'text-gray-500 hover:text-white'} transition-colors`}
-                >
-                    <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: activeTab === 'Ranking' ? "'FILL' 1" : "" }}>analytics</span>
-                    <span className="text-[10px] font-bold uppercase tracking-tighter">Ranking</span>
-                </button>
-                <button className="flex flex-col items-center gap-1 text-gray-500 hover:text-white transition-colors">
-                    <User className="w-5 h-5" />
-                    <span className="text-[10px] font-bold uppercase tracking-tighter">Perfil</span>
-                </button>
-            </nav >
+
 
             {/* Share Modal */}
             <AnimatePresence>
