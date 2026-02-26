@@ -412,27 +412,7 @@ function GroupsView({ tournaments }: { tournaments: Record<string, any> }) {
                                 </div>
                             </div>
 
-                            {/* Menu de acciones para partidos activos */}
-                            {(isLive || !isDone) && (
-                                <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t border-white/[0.04]">
-                                    <Link href={`/tournaments/${activeTournament.id}/score/${m.id || `court_${m.court}`}`} className="flex flex-col items-center justify-center gap-1 py-2 text-gray-500 hover:text-[#ccff00] transition-colors">
-                                        <Gamepad2 className="w-3 h-3" />
-                                        <span className="text-[6px] font-black uppercase tracking-widest">Control</span>
-                                    </Link>
-                                    <Link href={`/tournaments/${activeTournament.id}/display/${m.id}`} target="_blank" className="flex flex-col items-center justify-center gap-1 py-2 text-gray-500 hover:text-white transition-colors">
-                                        <Monitor className="w-3 h-3" />
-                                        <span className="text-[6px] font-black uppercase tracking-widest">Pizarra</span>
-                                    </Link>
-                                    <Link href={`/tournaments/${activeTournament.id}/control/broadcasting`} target="_blank" className="flex flex-col items-center justify-center gap-1 py-2 text-gray-500 hover:text-orange-400 transition-colors">
-                                        <Camera className="w-3 h-3" />
-                                        <span className="text-[6px] font-black uppercase tracking-widest">Cámaras</span>
-                                    </Link>
-                                    <Link href={`/tournaments/${activeTournament.id}/control/broadcasting`} target="_blank" className="flex flex-col items-center justify-center gap-1 py-2 text-gray-500 hover:text-yellow-400 transition-colors">
-                                        <Tv className="w-3 h-3" />
-                                        <span className="text-[6px] font-black uppercase tracking-widest">Publicidad</span>
-                                    </Link>
-                                </div>
-                            )}
+                            {/* Menu de acciones removido por solicitud de usuario en vista clasificación */}
                         </div>
                     );
                 })}
@@ -892,79 +872,9 @@ function MatchCard({ match, idx, isNextUp, isEffectivelyLive }: {
                 </div>
             </div>
 
-            {/* Dock de acciones para partidos EN VIVO o PENDIENTES */}
+            {/* Dock de acciones removido por solicitud de usuario */}
             {(isLive || isPending) && (
-                <div className={`grid gap-px border-t ${isEffectivelyLive ? 'grid-cols-5 bg-emerald-900/[0.08] border-emerald-700/20'
-                    : (isLive || isNextUp) ? 'grid-cols-4 bg-yellow-900/[0.08] border-yellow-700/20'
-                        : 'grid-cols-4 bg-red-900/[0.06] border-red-900/20'
-                    }`}>
-                    {/* CONTROL */}
-                    <Link
-                        href={controlHref}
-                        className={`flex flex-col items-center justify-center gap-1.5 py-3 transition-all active:scale-95
-                            ${isEffectivelyLive
-                                ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-                                : (isLive || isNextUp)
-                                    ? 'bg-yellow-500/10 text-yellow-300 hover:bg-yellow-500/20'
-                                    : 'bg-white/[0.02] text-red-400/50 hover:bg-red-500/10 hover:text-red-300'
-                            }`}
-                    >
-                        <div className="relative">
-                            <Gamepad2 className="w-4 h-4" />
-                            {isEffectivelyLive && (
-                                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399] animate-pulse" />
-                            )}
-                            {(isLive && !isEffectivelyLive || isNextUp && !isLive) && (
-                                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-yellow-400 shadow-[0_0_6px_#facc15] animate-pulse" />
-                            )}
-                        </div>
-                        <span className="text-[8px] font-black uppercase tracking-widest">Control</span>
-                    </Link>
-
-                    {/* PIZARRA */}
-                    <Link
-                        href={pizarraHref}
-                        target="_blank"
-                        className="flex flex-col items-center justify-center gap-1.5 py-3 bg-white/[0.02] text-gray-400 hover:bg-white/[0.06] hover:text-white transition-all active:scale-95"
-                    >
-                        <Monitor className="w-4 h-4" />
-                        <span className="text-[8px] font-black uppercase tracking-widest">Pizarra</span>
-                    </Link>
-
-                    {/* CÁMARAS */}
-                    <Link
-                        href={`/tournaments/${match._tournamentId}/control/broadcasting`}
-                        target="_blank"
-                        className="flex flex-col items-center justify-center gap-1.5 py-3 bg-white/[0.02] text-gray-400 hover:bg-white/[0.06] hover:text-orange-400 transition-all active:scale-95"
-                    >
-                        <Camera className="w-4 h-4" />
-                        <span className="text-[8px] font-black uppercase tracking-widest">Cámaras</span>
-                    </Link>
-
-                    {/* PUBLICIDAD */}
-                    <Link
-                        href={`/tournaments/${match._tournamentId}/control/broadcasting`}
-                        target="_blank"
-                        className="flex flex-col items-center justify-center gap-1.5 py-3 bg-white/[0.02] text-gray-400 hover:bg-white/[0.06] hover:text-yellow-400 transition-all active:scale-95"
-                    >
-                        <Tv className="w-4 h-4" />
-                        <span className="text-[8px] font-black uppercase tracking-widest">Publicidad</span>
-                    </Link>
-
-                    {/* TERMINAR — solo en vivo */}
-                    {isEffectivelyLive && (
-                        <button
-                            onClick={endMatch}
-                            disabled={ending}
-                            className="flex flex-col items-center justify-center gap-1.5 py-3 bg-red-900/20 text-red-500 hover:bg-red-600/30 hover:text-red-300 transition-all active:scale-95 disabled:opacity-50"
-                        >
-                            <Flag className="w-4 h-4" />
-                            <span className="text-[8px] font-black uppercase tracking-widest">
-                                {ending ? '...' : 'Terminar'}
-                            </span>
-                        </button>
-                    )}
-                </div>
+                <div className="h-1 bg-white/5" />
             )}
 
             {/* Footer link — solo en finalizados */}
@@ -1397,24 +1307,19 @@ function EventView() {
     const toMinute = (v: any) => Math.floor(toMs(v) / 60000);
     const earliestMinute = allPending.length > 0 ? toMinute(allPending[0].scheduledTime) : null;
 
-    // "Next up" = Siempre los primeros 3 (cap solicitado por usuario), sin filtrar por minuto exacto
-    // para asegurar que la cuadrícula esté siempre llena si hay partidos.
-    const DISPLAY_GRID_LIMIT = 3;
-    const nextUpMatches = allPending.slice(0, DISPLAY_GRID_LIMIT);
+    // "Next up" = Todos los pendientes en una cuadrícula de 3 columnas (antes limitado a 3)
+    const nextUpMatches = allPending;
 
-    // ── De todos los partidos LIVE, solo los primeros 3 (cap solicitado) son efectivamente en vivo ──
+    // ── Todos los partidos LIVE ──
     const effectiveLiveMatches = allMatches
         .filter(m => m.status === MatchStatus.LIVE)
-        .sort((a, b) => Number(a.court ?? 99) - Number(b.court ?? 99))
-        .slice(0, DISPLAY_GRID_LIMIT);
+        .sort((a, b) => Number(a.court ?? 99) - Number(b.court ?? 99));
 
     const effectiveLiveIds = new Set(effectiveLiveMatches.map(m => m.id));
 
     // Summary counts
-    const rawLiveCnt = allMatches.filter(m => m.status === MatchStatus.LIVE).length;
-    const liveCnt = Math.min(rawLiveCnt, DISPLAY_GRID_LIMIT);   // cap visual
-    const rawPendCnt = allMatches.filter(m => m.status === MatchStatus.PENDING).length;
-    const pendCnt = Math.min(rawPendCnt, DISPLAY_GRID_LIMIT);   // cap visual
+    const liveCnt = allMatches.filter(m => m.status === MatchStatus.LIVE).length;
+    const pendCnt = allMatches.filter(m => m.status === MatchStatus.PENDING).length;
     const finCnt = allMatches.filter(m => m.status === MatchStatus.FINISHED).length;
 
     const eventName = Object.values(tournaments)[0]?.complexName ?? 'Evento';
@@ -1591,14 +1496,14 @@ function EventView() {
                                 </span>
                             </motion.div>
 
-                            {/* Grid limitado a 3 slots */}
+                            {/* Grid de 3 columnas */}
                             <div className="grid grid-cols-3 gap-2">
                                 {nextUpMatches.map((match, rank) => (
                                     <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact />
                                 ))}
-                                {/* Padding para completar los 3 slots siempre */}
-                                {nextUpMatches.length < DISPLAY_GRID_LIMIT && (
-                                    Array.from({ length: DISPLAY_GRID_LIMIT - nextUpMatches.length }).map((_, i) => (
+                                {/* Relleno para completar al menos la primera fila de 3 */}
+                                {nextUpMatches.length < 3 && (
+                                    Array.from({ length: 3 - nextUpMatches.length }).map((_, i) => (
                                         <PlaceholderMatchCard key={`pend-pad-${i}`} rank={nextUpMatches.length + i} mode="pending" />
                                     ))
                                 )}
@@ -1629,14 +1534,14 @@ function EventView() {
                                 </span>
                             </motion.div>
 
-                            {/* Grid limitado a 3 slots */}
+                            {/* Grid de 3 columnas */}
                             <div className="grid grid-cols-3 gap-2">
                                 {effectiveLiveMatches.map((match, rank) => (
                                     <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact />
                                 ))}
-                                {/* Relleno para siempre mostrar 3 slots */}
-                                {effectiveLiveMatches.length < DISPLAY_GRID_LIMIT && (
-                                    Array.from({ length: DISPLAY_GRID_LIMIT - effectiveLiveMatches.length }).map((_, i) => (
+                                {/* Relleno para completar al menos la primera fila de 3 */}
+                                {effectiveLiveMatches.length < 3 && (
+                                    Array.from({ length: 3 - effectiveLiveMatches.length }).map((_, i) => (
                                         <PlaceholderMatchCard key={`live-pad-${i}`} rank={effectiveLiveMatches.length + i} mode="live" />
                                     ))
                                 )}
