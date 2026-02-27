@@ -15,6 +15,7 @@ export interface CategoryConfig {
     setFormat: 'TIE_BREAK' | 'SUPER_TIE_BREAK' | 'NO_TIE_BREAK'; // Formato del 6-6
     matchFormat: '2SETS_STB' | '3SETS';  // Formato del partido: 2 sets + Super TB  ó  3 sets al mejor de 3
     groupSize?: 3 | 4;              // Equipos por grupo (Round Robin)
+    pointsGoal?: number;            // Americano/Dupla fija: a cuántos puntos (ej. 16, 24)
 }
 
 export interface MasterScheduleConfig {
