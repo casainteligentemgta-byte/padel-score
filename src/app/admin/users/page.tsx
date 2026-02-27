@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, updateProfile, signOut, onAuthStateChanged } from 'firebase/auth';
 import { firebaseConfig } from '@/lib/firebase';
+import { CANCHA_IDS, getCanchaLabel } from '@/lib/markerCanchas';
 
 export default function AdminUsersPage() {
     const { profile, isAdmin, loading: authLoading } = useAuth();
@@ -22,7 +23,6 @@ export default function AdminUsersPage() {
     const [updating, setUpdating] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<any>(null);
-    const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
     const [formData, setFormData] = useState({
         name: '',
         email: '',
@@ -54,8 +54,10 @@ export default function AdminUsersPage() {
     const handleRoleChange = async (uid: string, newRole: string) => {
         setUpdating(uid);
         try {
-            await dataService.setUserProfile(uid, { role: newRole });
-            setUsers(users.map(u => u.uid === uid ? { ...u, role: newRole } : u));
+            const update: any = { role: newRole };
+            if (newRole !== ROLES.MARKER) update.markerCanchas = [];
+            await dataService.setUserProfile(uid, update);
+            setUsers(users.map(u => u.uid === uid ? { ...u, ...update } : u));
         } catch (err) {
             console.error(err);
             alert('Error al actualizar el rol');
@@ -64,8 +66,24 @@ export default function AdminUsersPage() {
         }
     };
 
-    const togglePasswordVisibility = (uid: string) => {
-        setShowPasswords(prev => ({ ...prev, [uid]: !prev[uid] }));
+    const handleSetMarkerCanchas = async (uid: string, canchas: string[]) => {
+        setUpdating(uid);
+        try {
+            await dataService.setUserProfile(uid, { markerCanchas: canchas });
+            setUsers(users.map(u => u.uid === uid ? { ...u, markerCanchas: canchas } : u));
+        } catch (err) {
+            console.error(err);
+            alert('Error al actualizar canchas');
+        } finally {
+            setUpdating(null);
+        }
+    };
+
+    const toggleCanchaForUser = (uid: string, canchaId: string) => {
+        const u = users.find(x => x.uid === uid);
+        const current: string[] = Array.isArray(u?.markerCanchas) ? u.markerCanchas : [];
+        const next = current.includes(canchaId) ? current.filter(c => c !== canchaId) : [...current, canchaId];
+        handleSetMarkerCanchas(uid, next);
     };
 
     const handleEditClick = (user: any) => {
@@ -73,7 +91,7 @@ export default function AdminUsersPage() {
         setFormData({
             name: user.name || '',
             email: user.email || '',
-            password: user.password || '',
+            password: '',
             role: user.role || ROLES.PLAYER
         });
         setIsModalOpen(true);
@@ -104,7 +122,6 @@ export default function AdminUsersPage() {
                     name: formData.name,
                     role: formData.role
                 };
-                if (formData.password) updateData.password = formData.password;
 
                 await dataService.setUserProfile(editingUser.uid, updateData);
                 setUsers(users.map(u => u.uid === editingUser.uid ? { ...u, ...updateData } : u));
@@ -123,13 +140,13 @@ export default function AdminUsersPage() {
                     // Actualizar el perfil en Auth (opcional)
                     await updateProfile(newUser, { displayName: formData.name });
 
-                    // Guardar en Firestore
+                    // Guardar en Firestore (marcadores autorizados por defecto)
                     const userProfile = {
                         uid: newUser.uid,
                         name: formData.name,
                         email: formData.email,
-                        password: formData.password, // Guardamos la clave para que el admin la vea
                         role: formData.role,
+                        markerCanchas: formData.role === ROLES.MARKER ? [] : undefined,
                         createdAt: new Date().toISOString()
                     };
 
@@ -188,8 +205,9 @@ export default function AdminUsersPage() {
                 <div className="grid grid-cols-12 px-6 py-4 bg-white/5 rounded-t-2xl border-x border-t border-white/10 text-[10px] font-black uppercase text-gray-500 tracking-widest italic">
                     <div className="col-span-4">Usuario</div>
                     <div className="col-span-3">Email</div>
-                    <div className="col-span-2">Clave</div>
+                    <div className="col-span-1">Seguridad</div>
                     <div className="col-span-2 text-center">Rol</div>
+                    <div className="col-span-2 text-center">Autorizado</div>
                     <div className="col-span-1 text-right">Acciones</div>
                 </div>
 
@@ -213,18 +231,7 @@ export default function AdminUsersPage() {
                                 <span className="truncate">{u.email}</span>
                             </div>
 
-                            {/* Password Visibility */}
-                            <div className="col-span-2 flex items-center gap-2">
-                                <button
-                                    onClick={() => togglePasswordVisibility(u.uid)}
-                                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-                                >
-                                    {showPasswords[u.uid] ? <EyeOff className="w-4 h-4 text-padel-primary" /> : <Eye className="w-4 h-4 text-gray-500" />}
-                                </button>
-                                <span className="font-mono text-xs tracking-widest text-gray-400">
-                                    {showPasswords[u.uid] ? (u.password || '******') : '••••••'}
-                                </span>
-                            </div>
+                            <div className="col-span-1 text-xs text-gray-500">Auth</div>
 
                             {/* Role Select */}
                             <div className="col-span-2 flex justify-center">
@@ -243,7 +250,29 @@ export default function AdminUsersPage() {
                                 </select>
                             </div>
 
-                            {/* Actions */}
+                            {/* Canchas asignadas (solo marcadores): solo puede marcar en estas pistas */}
+                            <div className="col-span-2 flex justify-center items-center gap-1 flex-wrap">
+                                {u.role === ROLES.MARKER ? (
+                                    CANCHA_IDS.map((cId) => {
+                                        const active = (u.markerCanchas || []).includes(cId);
+                                        return (
+                                            <button
+                                                key={cId}
+                                                type="button"
+                                                onClick={() => toggleCanchaForUser(u.uid, cId)}
+                                                disabled={updating === u.uid}
+                                                title={getCanchaLabel(cId)}
+                                                className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all ${active ? 'bg-padel-primary/30 text-padel-primary border border-padel-primary/50' : 'bg-white/5 text-gray-600 border border-white/10 hover:border-white/20'}`}
+                                            >
+                                                {cId.replace('cancha_', '')}
+                                            </button>
+                                        );
+                                    })
+                                ) : (
+                                    <span className="text-gray-600">—</span>
+                                )}
+                            </div>
+
                             <div className="col-span-1 text-right">
                                 <button
                                     onClick={() => handleEditClick(u)}

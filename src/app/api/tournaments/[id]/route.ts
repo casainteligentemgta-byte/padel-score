@@ -1,12 +1,20 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAuth } from '@/lib/authServer';
+import { validateTournamentId } from '@/lib/apiValidation';
 
 export async function GET(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const authResult = await requireAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
     try {
         const { id } = await params;
+        const idValidation = validateTournamentId(id);
+        if (idValidation.error) {
+            return NextResponse.json({ error: idValidation.error }, { status: 400 });
+        }
 
         const tournament = await prisma.tournament.findUnique({
             where: { id },

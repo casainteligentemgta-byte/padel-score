@@ -49,7 +49,7 @@ import Sidebar from '@/components/Sidebar';
 export default function TournamentDashboard({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const router = useRouter();
-    const { user, profile, isAdmin, isMarker, loading: authLoading } = useAuth();
+    const { user, profile, isAdmin, markerCanchas, loading: authLoading } = useAuth();
     const [tournament, setTournament] = useState<any>(null);
     const [matches, setMatches] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -67,7 +67,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const [confirmDelete, setConfirmDelete] = useState(false);
 
     const isOwner = tournament?.ownerId === user?.uid;
-    const canManageMatches = isOwner || isAdmin || isMarker;
+    const canManageMatches = isOwner || isAdmin || (profile?.role === 'marker' && (markerCanchas?.length ?? 0) > 0);
     const canManageTournament = isOwner || isAdmin;
 
     // We allow guests to view the dashboard
@@ -86,7 +86,47 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         const unsubscribe = onSnapshot(docRef, (docSnap) => {
             try {
                 if (docSnap.exists()) {
-                    const tourneyData = { id: docSnap.id, ...docSnap.data() } as any;
+                    let tourneyData = { id: docSnap.id, ...docSnap.data() } as any;
+                    const rawMatches = tourneyData.matches;
+                    const teamsArray = Array.isArray(tourneyData.teams) ? tourneyData.teams : [];
+
+                    // Si no hay groupAssignments pero hay partidos de "Fase de Grupos", inferir grupos (torneos del Generador Maestro antiguos)
+                    if ((!tourneyData.groupAssignments || Object.keys(tourneyData.groupAssignments).length === 0) && Array.isArray(rawMatches) && teamsArray.length > 0) {
+                        const groupMatches = rawMatches.filter((m: any) => m.roundName === 'Fase de Grupos');
+                        if (groupMatches.length > 0) {
+                            const idToIdx: Record<string, number> = {};
+                            teamsArray.forEach((t: any, i: number) => { if (t?.id) idToIdx[String(t.id)] = i; });
+                            const parent: Record<string, string> = {};
+                            const getTeamId = (m: any, side: 'team1' | 'team2'): string | null => {
+                                const t = m[side];
+                                if (!t || t.isTBD) return null;
+                                const id = t.id ?? t.p1?.id;
+                                return id ? String(id) : null;
+                            };
+                            teamsArray.forEach((t: any) => { if (t?.id) parent[String(t.id)] = String(t.id); });
+                            const find = (x: string) => { if (parent[x] !== x) parent[x] = find(parent[x]); return parent[x]; };
+                            const union = (a: string, b: string) => { parent[find(a)] = find(b); };
+                            groupMatches.forEach((m: any) => {
+                                const id1 = getTeamId(m, 'team1');
+                                const id2 = getTeamId(m, 'team2');
+                                if (id1 && id2 && id1 !== id2) union(id1, id2);
+                            });
+                            const groupsById: Record<string, string[]> = {};
+                            Object.keys(parent).forEach(id => {
+                                const root = find(id);
+                                if (!groupsById[root]) groupsById[root] = [];
+                                groupsById[root].push(id);
+                            });
+                            const inferred: Record<string, string[]> = {};
+                            Object.values(groupsById).filter(g => g.length > 0).sort((a, b) => b.length - a.length).forEach((g, i) => {
+                                inferred[String.fromCharCode(65 + i)] = g;
+                            });
+                            if (Object.keys(inferred).length > 0) {
+                                tourneyData = { ...tourneyData, groupAssignments: inferred };
+                            }
+                        }
+                    }
+
                     setTournament(tourneyData);
 
                     // Initialize active group if none selected
@@ -97,44 +137,65 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                         }
                     }
 
-                    if (tourneyData.matches) {
-                        const enriched = tourneyData.matches.map((m: any) => {
-                            const team1 = (m.team1Index > 0 && tourneyData.teams) ? tourneyData.teams[m.team1Index - 1] : null;
-                            const team2 = (m.team2Index > 0 && tourneyData.teams) ? tourneyData.teams[m.team2Index - 1] : null;
+                    if (Array.isArray(rawMatches) && rawMatches.length >= 0) {
+                        const getPlayerName = (p: any, teamIdx: number, slot: 1 | 2) => {
+                            if (teamIdx <= 0) return 'Por definir';
+                            const name = p?.name?.trim();
+                            if (name && name !== '') return name;
+                            const index = (teamIdx * 2) - (slot === 1 ? 1 : 0);
+                            return `Jugador ${index}`;
+                        };
 
-                            const getPlayerName = (p: any, teamIdx: number, slot: 1 | 2) => {
-                                if (teamIdx <= 0) return 'Por definir';
-                                const name = p?.name?.trim();
-                                if (name && name !== '') return name;
-                                // Sequential unique numbering: team 1 → J1/J2, team 2 → J3/J4, etc.
-                                const index = (teamIdx * 2) - (slot === 1 ? 1 : 0);
-                                return `Jugador ${index}`;
-                            };
-
+                        const buildTeamDisplay = (m: any, side: 'team1' | 'team2') => {
+                            const idx = side === 'team1' ? m.team1Index : m.team2Index;
+                            const teamFromIdx = (typeof idx === 'number' && idx > 0 && teamsArray[idx - 1]) ? teamsArray[idx - 1] : null;
+                            // Formato Generador Maestro: partido ya trae team1/team2 y team1Name/team2Name
+                            const rawTeam = m[side];
+                            const rawName = side === 'team1' ? m.team1Name : m.team2Name;
+                            if (rawTeam && (rawTeam.teamLabel || rawTeam.p1 || rawTeam.p2)) {
+                                const name = rawName || rawTeam.teamLabel || (rawTeam.p1?.name && rawTeam.p2?.name ? `${rawTeam.p1.name} / ${rawTeam.p2.name}` : '?');
+                                return {
+                                    name: typeof name === 'string' ? name : '?',
+                                    p1Name: rawTeam.p1?.name?.trim() || null,
+                                    p2Name: rawTeam.p2?.name?.trim() || null,
+                                    photo1: rawTeam.p1?.photo ?? null,
+                                    photo2: rawTeam.p2?.photo ?? null,
+                                    phone1: rawTeam.p1?.phone ?? null,
+                                    phone2: rawTeam.p2?.phone ?? null
+                                };
+                            }
+                            if (teamFromIdx) {
+                                return {
+                                    name: `${getPlayerName(teamFromIdx.p1, idx, 1)} / ${getPlayerName(teamFromIdx.p2, idx, 2)}`,
+                                    p1Name: getPlayerName(teamFromIdx.p1, idx, 1),
+                                    p2Name: getPlayerName(teamFromIdx.p2, idx, 2),
+                                    photo1: teamFromIdx.p1?.photo ?? null,
+                                    photo2: teamFromIdx.p2?.photo ?? null,
+                                    phone1: teamFromIdx.p1?.phone ?? null,
+                                    phone2: teamFromIdx.p2?.phone ?? null
+                                };
+                            }
                             return {
-                                ...m,
-                                court: m.court || (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined),
-                                team1: {
-                                    name: team1 ? `${getPlayerName(team1.p1, m.team1Index, 1)} / ${getPlayerName(team1.p2, m.team1Index, 2)}` : (m.team1Index <= 0 ? 'Por definir' : `Equipo ${m.team1Index}`),
-                                    p1Name: team1 ? getPlayerName(team1.p1, m.team1Index, 1) : null,
-                                    p2Name: team1 ? getPlayerName(team1.p2, m.team1Index, 2) : null,
-                                    photo1: team1?.p1?.photo || null,
-                                    photo2: team1?.p2?.photo || null,
-                                    phone1: team1?.p1?.phone || null,
-                                    phone2: team1?.p2?.phone || null
-                                },
-                                team2: {
-                                    name: team2 ? `${getPlayerName(team2.p1, m.team2Index, 1)} / ${getPlayerName(team2.p2, m.team2Index, 2)}` : (m.team2Index <= 0 ? 'Por definir' : `Equipo ${m.team2Index}`),
-                                    p1Name: team2 ? getPlayerName(team2.p1, m.team2Index, 1) : null,
-                                    p2Name: team2 ? getPlayerName(team2.p2, m.team2Index, 2) : null,
-                                    photo1: team2?.p1?.photo || null,
-                                    photo2: team2?.p2?.photo || null,
-                                    phone1: team2?.p1?.phone || null,
-                                    phone2: team2?.p2?.phone || null
-                                }
+                                name: (typeof idx === 'number' && idx <= 0) ? 'Por definir' : (rawName || 'Por definir'),
+                                p1Name: null,
+                                p2Name: null,
+                                photo1: null,
+                                photo2: null,
+                                phone1: null,
+                                phone2: null
                             };
-                        });
+                        };
+
+                        const enriched = rawMatches.map((m: any) => ({
+                            ...m,
+                            court: m.court ?? (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined),
+                            courtName: m.courtName ?? (m.court ? `Pista ${m.court}` : undefined),
+                            team1: buildTeamDisplay(m, 'team1'),
+                            team2: buildTeamDisplay(m, 'team2')
+                        }));
                         setMatches(enriched);
+                    } else {
+                        setMatches([]);
                     }
                 } else {
                     setError('El torneo no existe o ha sido eliminado.');
@@ -163,61 +224,6 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         const { team1, team2, ...rest } = m;
         return rest;
     });
-
-    const generateMatches = async () => {
-        if (!tournament) return;
-        setLoading(true);
-        try {
-            console.log('[Dashboard] Generating schedule...');
-            if (!tournament.teams || tournament.teams.length < 2) {
-                alert('Se necesitan al menos 2 parejas para generar partidos');
-                return;
-            }
-
-            const [y, m, d] = (tournament.startDate || "").split('-').map(Number);
-            const startDateLocal = y ? new Date(y, m - 1, d) : new Date();
-
-            const schedule = ScheduleEngine.generateSchedule({
-                tournamentId: id,
-                numTeams: tournament.teams.length,
-                numCourts: tournament.totalCourts || 4,
-                clubHoursStart: tournament.startTime || "08:00",
-                clubHoursEnd: tournament.endTime || "22:00",
-                startDate: startDateLocal,
-                matchDurationMinutes: tournament.type === TournamentType.ROUND_ROBIN ? 45 : 90,
-                bufferMinutes: tournament.bufferMinutes || 15,
-                type: tournament.type || TournamentType.AMERICANO_INDIVIDUAL
-            });
-
-            const lightMatches = (schedule.matches || []).map((m: any, idx: number) => {
-                return {
-                    id: `match-${idx}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                    ...m,
-                    stage: tournament.type === TournamentType.ROUND_ROBIN ? 'GROUP_STAGE' : undefined,
-                    court: m.courtIndex + 1,
-                    courtName: tournament.courtNames?.[m.courtIndex] || `Pista ${m.courtIndex + 1}`,
-                    status: MatchStatus.PENDING
-                };
-            }).sort((a, b) => {
-                const timeDiff = new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime();
-                if (timeDiff !== 0) return timeDiff;
-                return a.courtIndex - b.courtIndex;
-            });
-
-            console.log(`[Dashboard] Generated ${lightMatches.length} matches, saving to DB...`);
-            await updateDoc(doc(db, 'tournaments', id), {
-                matches: lightMatches,
-                updatedAt: new Date()
-            });
-
-            alert(`¡Se han generado ${lightMatches.length} partidos correctamente!`);
-        } catch (error) {
-            console.error('[Dashboard] Error generating matches:', error);
-            alert('Error al generar los partidos.');
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const generateMainDraw = async (currentMatches?: any[]) => {
         if (!tournament || !isRoundRobin) return;
@@ -1402,17 +1408,10 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                         </div>
                                         <div className="space-y-3">
                                             <h3 className="text-3xl font-black uppercase italic tracking-tighter">Sin encuentros</h3>
-                                            <p className="text-gray-500 text-xs max-w-xs mx-auto font-bold uppercase tracking-widest leading-relaxed">No hay partidos programados para esta sección.</p>
+                                            <p className="text-gray-500 text-xs max-w-xs mx-auto font-bold uppercase tracking-widest leading-relaxed">
+                                                Los partidos pasan a estar en vivo cuando un marcador o un administrador den Iniciar partido en la pantalla del marcador.
+                                            </p>
                                         </div>
-                                        {canManageTournament && (
-                                            <button
-                                                onClick={generateMatches}
-                                                disabled={loading}
-                                                className="bg-padel-primary text-black px-16 py-5 rounded-2xl font-black text-xs uppercase italic tracking-widest hover:scale-105 transition-all shadow-[0_20px_60px_rgba(204,255,0,0.2)] disabled:opacity-50"
-                                            >
-                                                {loading ? 'CALCULANDO...' : 'GENERAR FIXTURE'}
-                                            </button>
-                                        )}
                                     </div>
                                 ) : (
                                     <div className={(() => {
@@ -1562,9 +1561,9 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                             );
 
                                                             return (
-                                                                <div className="flex flex-col">
+                                                                <div className="flex flex-col flex-1 min-h-0">
                                                                     {/* Header columnas */}
-                                                                    <div className="flex h-6 border-b border-white/[0.12] bg-white/[0.05]">
+                                                                    <div className="flex h-6 border-b border-white/[0.12] bg-white/[0.05] shrink-0">
                                                                         <div className="flex-1" />
                                                                         <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center`}>
                                                                             <span className="text-[8px] font-black uppercase tracking-widest text-white/25">P</span>
@@ -1693,9 +1692,9 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                             );
                                                         })()}
 
-                                                        {/* Dock de acciones: 4 botones (Control, Pizarra, Cámaras, Publicidad) */}
+                                                        {/* Dock de acciones: 4 botones (Control, Pizarra, Cámaras, Publicidad) — marco hasta aquí */}
                                                         {canManageMatches && match.status !== MatchStatus.FINISHED && (
-                                                            <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t border-white/[0.08]">
+                                                            <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t border-white/[0.08] shrink-0 rounded-b-[2rem]">
                                                                 {/* CONTROL */}
                                                                 <Link
                                                                     href={`/tournaments/${id}/score/${match.id}`}

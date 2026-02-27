@@ -22,11 +22,18 @@ interface AuthContextType {
     signInWithEmail: (email: string, pass: string) => Promise<void>;
     signUpWithEmail: (email: string, pass: string, name: string) => Promise<void>;
     forgotPassword: (email: string) => Promise<void>;
-    enableDevMode: () => void;
+    enableDevMode: () => void | Promise<void>;
     logout: () => Promise<void>;
+    /** Admin: acceso total */
     isAdmin: boolean;
+    /** Jugador: solo ver pizarras, tablas de posiciones y torneos */
     isPlayer: boolean;
+    /** Marcador: ver + acceder al marcador solo en las canchas asignadas */
     isMarker: boolean;
+    /** Canchas en las que el marcador está autorizado a marcar (ej. ['cancha_1', 'cancha_3']) */
+    markerCanchas: string[];
+    /** true si el usuario puede marcar en esta cancha (admin o marcador con esa cancha asignada) */
+    canMarkInCancha: (canchaId: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -42,6 +49,8 @@ const AuthContext = createContext<AuthContextType>({
     isAdmin: false,
     isPlayer: false,
     isMarker: false,
+    markerCanchas: [],
+    canMarkInCancha: () => false,
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -49,8 +58,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [profile, setProfile] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // MODO DESARROLLADOR: Habilitar una sesión falsa para simulación si es necesario
-    const enableDevMode = () => {
+    // MODO DESARROLLADOR: Simulación con sesión real para poder guardar torneos en Firestore
+    const enableDevMode = async () => {
+        const devEmail = process.env.NEXT_PUBLIC_DEV_EMAIL?.trim();
+        const devPassword = process.env.NEXT_PUBLIC_DEV_PASSWORD?.trim();
+        if (devEmail && devPassword) {
+            try {
+                await signInWithEmailAndPassword(auth, devEmail, devPassword);
+                // onAuthStateChanged se disparará y cargará user + profile real; podrás guardar torneos
+                return;
+            } catch (e) {
+                console.warn('AuthContext: Simulación con credenciales reales falló, usando usuario mock (no se podrá guardar):', e);
+            }
+        }
+        // Sin env o fallo: usuario mock solo en estado (la app funciona pero Firestore rechazará guardar)
         const mockUser = {
             uid: 'CMWhNg0MYIgiczQGkGGLl1tKn6A2',
             displayName: 'Luis Mata (Owner)',
@@ -193,6 +214,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const isAdmin = profile?.role === ROLES.ADMIN || user?.email === 'casainteligentemgta@gmail.com';
     const isPlayer = profile?.role === ROLES.PLAYER;
     const isMarker = profile?.role === ROLES.MARKER;
+    /** Canchas asignadas al marcador por el admin (solo aplica si role === marker) */
+    const markerCanchas: string[] = isMarker && Array.isArray(profile?.markerCanchas) ? profile.markerCanchas : [];
+    const canMarkInCancha = (canchaId: string) => isAdmin || (isMarker && markerCanchas.includes(canchaId));
 
     return (
         <AuthContext.Provider value={{
@@ -207,7 +231,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             logout,
             isAdmin,
             isPlayer,
-            isMarker
+            isMarker,
+            markerCanchas,
+            canMarkInCancha
         }}>
             {loading ? (
                 <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-[#ccff00] font-black italic uppercase tracking-tighter text-2xl animate-pulse">

@@ -33,14 +33,15 @@ import { Bluetooth, LayoutDashboard, Search, ListFilter } from 'lucide-react';
 export default function RefereeScoreboard({ params }: { params: Promise<{ id: string, matchId: string }> }) {
     const { id, matchId } = use(params);
     const router = useRouter();
-    const { user, profile, isAdmin, isMarker, loading: authLoading } = useAuth();
+    const { user, profile, isAdmin, canMarkInCancha, loading: authLoading } = useAuth();
     const [tournament, setTournament] = useState<any>(null);
     const [match, setMatch] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [showMatchSelector, setShowMatchSelector] = useState(false);
     const [showAdjustModal, setShowAdjustModal] = useState(false);
 
-    const canControl = isAdmin || isMarker || tournament?.ownerId === user?.uid;
+    const matchCourt = match?.court ?? (match?.courtIndex != null ? match.courtIndex + 1 : 1);
+    const canControl = isAdmin || (profile?.role === 'marker' && canMarkInCancha(`cancha_${matchCourt}`)) || tournament?.ownerId === user?.uid;
 
     const primaryColor = tournament?.broadcastingSettings?.primaryColor || '#ccff00';
     const [history, setHistory] = useState<any[]>([]);
@@ -607,7 +608,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     </motion.button>
 
                     <div className="flex flex-col items-center select-none">
-                        <h1 className="text-4xl font-black italic uppercase tracking-tighter text-white leading-none mb-2 text-center">
+                        <h1 className="label-cancha-hero mb-2 text-center">
                             {match.courtName || (match.court ? `Pista ${match.court}` : 'Pista 1')}
                         </h1>
                         <div className="flex flex-col items-center gap-1.5">

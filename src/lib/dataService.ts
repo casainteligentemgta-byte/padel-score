@@ -10,7 +10,8 @@ import {
     deleteDoc,
     doc,
     setDoc,
-    serverTimestamp
+    serverTimestamp,
+    deleteField
 } from 'firebase/firestore';
 import { storage } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -151,6 +152,20 @@ export const dataService = {
         return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
     },
 
+    /** Elimina el campo password de todos los perfiles en Firestore (seguridad, una sola vez). */
+    async removePasswordsFromAllUsers(): Promise<number> {
+        const snapshot = await getDocs(collection(db, 'users'));
+        let count = 0;
+        for (const d of snapshot.docs) {
+            const data = d.data();
+            if (data && 'password' in data) {
+                await updateDoc(doc(db, 'users', d.id), { password: deleteField() });
+                count++;
+            }
+        }
+        return count;
+    },
+
     // Publicidad / Ads
     async createAd(data: any, ownerId: string) {
         return await addDoc(collection(db, 'ads'), {
@@ -175,7 +190,29 @@ export const dataService = {
         const fileRef = ref(storage, path);
         await uploadBytes(fileRef, file);
         return await getDownloadURL(fileRef);
+    },
+
+    /** Configuración global del club (admin). Firestore: admin/settings */
+    async getAdminSettings(): Promise<AdminSettings | null> {
+        const docRef = doc(db, 'admin', 'settings');
+        const snap = await getDoc(docRef);
+        return snap.exists() ? (snap.data() as AdminSettings) : null;
+    },
+
+    async setAdminSettings(data: Partial<AdminSettings>): Promise<void> {
+        const docRef = doc(db, 'admin', 'settings');
+        await setDoc(docRef, {
+            ...data,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
     }
+};
+
+export type AdminSettings = {
+    clubName?: string;
+    appTitle?: string;
+    timezone?: string;
+    updatedAt?: any;
 };
 
 export const ROLES = {

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, use } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { useRTDBRole } from '@/lib/useRTDBRole';
 import { rtdb } from '@/lib/rtdb';
 import { ref, onValue, off } from 'firebase/database';
 import {
@@ -15,8 +14,10 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Crosshair, Wifi, WifiOff, ChevronUp, ChevronDown,
-    Play, Square, RefreshCw, Shield, Trophy, Zap, Star
+    Play, Square, RefreshCw, Shield, Trophy, Zap, Star, AlertCircle
 } from 'lucide-react';
+import { getCanchaLabel } from '@/lib/markerCanchas';
+import Link from 'next/link';
 
 const PUNTOS_NORMAL = ['0', '15', '30', '40', 'AD'];
 const PUNTOS_TB = Array.from({ length: 21 }, (_, i) => String(i)); // 0..20 (más que suficiente)
@@ -24,9 +25,9 @@ const NUM_CANCHAS = 6;
 
 export default function MarkerControlPage({ params }: { params: Promise<{ canchaId: string }> }) {
     const { canchaId } = use(params);
-    const { user, profile } = useAuth();
-    const { rol, canchaAsignada, loading: roleLoading } = useRTDBRole(user?.uid);
+    const { user, canMarkInCancha, markerCanchas } = useAuth();
     const router = useRouter();
+    const [accessDenied, setAccessDenied] = useState(false);
 
     const [canchaData, setCanchaData] = useState<any>(null);
     const [loadingCancha, setLoadingCancha] = useState(true);
@@ -40,15 +41,16 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
     const isEnVivo = canchaData?.estado === 'en_vivo';
     const marcador = canchaData?.marcador;
 
-    // ── Guard de acceso ────────────────────────────────────────────────────
+    // ── Guard: solo admin o marcador autorizado para esta cancha ───────────
     useEffect(() => {
-        if (roleLoading) return;
-        const esAdmin = rol === 'admin' || user?.email === 'casainteligentemgta@gmail.com';
-        const esMarkerDeEstaCancha = rol === 'marker' && canchaAsignada === canchaId;
-        if (!esAdmin && !esMarkerDeEstaCancha) {
+        if (!user) {
             router.replace('/');
+            return;
         }
-    }, [rol, canchaAsignada, canchaId, roleLoading, router, user]);
+        if (!canMarkInCancha(canchaId)) {
+            setAccessDenied(true);
+        }
+    }, [user, canchaId, canMarkInCancha]);
 
     // ── Escuchar estado de la cancha en RTDB ───────────────────────────────
     useEffect(() => {
@@ -138,6 +140,39 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
         await actualizarMarcador(canchaId, { golden_point: !marcador.golden_point });
     };
 
+    // ── Acceso denegado a esta cancha ───────────────────────────────────────
+    if (accessDenied) {
+        const canchaLabel = getCanchaLabel(canchaId);
+        return (
+            <div className="min-h-screen bg-[#050505] text-white font-outfit flex flex-col items-center justify-center px-6">
+                <div className="max-w-sm w-full text-center space-y-6">
+                    <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto">
+                        <AlertCircle className="w-8 h-8 text-amber-400" />
+                    </div>
+                    <div>
+                        <h1 className="text-lg font-black uppercase tracking-wide text-white mb-2">
+                            Sin acceso a {canchaLabel}
+                        </h1>
+                        <p className="text-sm text-gray-400">
+                            No tienes permiso para marcar en esta pista. Solo puedes usar las canchas que te asignó el administrador.
+                            {markerCanchas.length > 0 && (
+                                <span className="block mt-2 text-gray-500 text-xs">
+                                    Tus pistas: {markerCanchas.map(id => getCanchaLabel(id)).join(', ')}
+                                </span>
+                            )}
+                        </p>
+                    </div>
+                    <Link
+                        href="/tournaments"
+                        className="inline-flex items-center justify-center gap-2 w-full bg-padel-primary text-black py-4 rounded-2xl font-black uppercase italic tracking-tight hover:opacity-90 transition-opacity"
+                    >
+                        Ir a torneos
+                    </Link>
+                </div>
+            </div>
+        );
+    }
+
     // ── Loading ────────────────────────────────────────────────────────────
     if (roleLoading || loadingCancha) {
         return (
@@ -157,10 +192,10 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
                             <Crosshair className="w-5 h-5 text-padel-primary" />
                         </div>
                         <div>
-                            <h1 className="font-black italic uppercase tracking-tighter text-lg">
-                                PISTA <span className="text-padel-primary">{canchaNum}</span>
+                            <h1 className="label-cancha">
+                                Pista <span className="text-padel-primary">{canchaNum}</span>
                             </h1>
-                            <p className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-600">
+                            <p className="subtitle-page text-gray-600">
                                 Control de Puntos
                             </p>
                         </div>

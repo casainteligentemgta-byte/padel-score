@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { dataService, ROLES } from '@/lib/dataService';
+import { dataService, ROLES, type AdminSettings } from '@/lib/dataService';
 import {
     Shield, User, Mail, RefreshCw, ChevronRight, Save,
     ShieldCheck, UserCircle, Target, Plus, Edit2, Key,
@@ -11,24 +11,31 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CANCHA_IDS, getCanchaLabel } from '@/lib/markerCanchas';
+import { useAppSettings } from '@/lib/AppSettingsContext';
 
 export default function AdminSettingsPage() {
     const { profile, isAdmin, loading: authLoading } = useAuth();
+    const { refresh: refreshAppSettings } = useAppSettings();
     const router = useRouter();
 
     const [activeTab, setActiveTab] = useState<'users' | 'general' | 'perfil'>('users');
     const [users, setUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [updating, setUpdating] = useState<string | null>(null);
+    const [cleaningPasswords, setCleaningPasswords] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<any>(null);
-    const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
     const [formData, setFormData] = useState({
         name: '',
         email: '',
         password: '',
         role: ROLES.PLAYER
     });
+
+    const [generalSettings, setGeneralSettings] = useState<Partial<AdminSettings>>({});
+    const [generalLoading, setGeneralLoading] = useState(false);
+    const [generalSaving, setGeneralSaving] = useState(false);
 
     useEffect(() => {
         if (!authLoading && !isAdmin) {
@@ -51,11 +58,46 @@ export default function AdminSettingsPage() {
         if (isAdmin) loadUsers();
     }, [isAdmin]);
 
+    const loadGeneralSettings = async () => {
+        setGeneralLoading(true);
+        try {
+            const data = await dataService.getAdminSettings();
+            setGeneralSettings(data || {});
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setGeneralLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (isAdmin && activeTab === 'general') loadGeneralSettings();
+    }, [isAdmin, activeTab]);
+
+    const handleSaveGeneral = async () => {
+        setGeneralSaving(true);
+        try {
+            await dataService.setAdminSettings({
+                clubName: generalSettings.clubName ?? '',
+                appTitle: generalSettings.appTitle ?? '',
+                timezone: generalSettings.timezone ?? ''
+            });
+            await refreshAppSettings();
+            alert('Configuración guardada.');
+        } catch (e: any) {
+            alert('Error: ' + (e?.message || e));
+        } finally {
+            setGeneralSaving(false);
+        }
+    };
+
     const handleRoleChange = async (uid: string, newRole: string) => {
         setUpdating(uid);
         try {
-            await dataService.setUserProfile(uid, { role: newRole });
-            setUsers(users.map(u => u.uid === uid ? { ...u, role: newRole } : u));
+            const update: any = { role: newRole };
+            if (newRole !== ROLES.MARKER) update.markerCanchas = [];
+            await dataService.setUserProfile(uid, update);
+            setUsers(users.map(u => u.uid === uid ? { ...u, ...update } : u));
         } catch (err) {
             console.error(err);
         } finally {
@@ -63,8 +105,23 @@ export default function AdminSettingsPage() {
         }
     };
 
-    const togglePasswordVisibility = (uid: string) => {
-        setShowPasswords(prev => ({ ...prev, [uid]: !prev[uid] }));
+    const handleSetMarkerCanchas = async (uid: string, canchas: string[]) => {
+        setUpdating(uid);
+        try {
+            await dataService.setUserProfile(uid, { markerCanchas: canchas });
+            setUsers(users.map(u => u.uid === uid ? { ...u, markerCanchas: canchas } : u));
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setUpdating(null);
+        }
+    };
+
+    const toggleCanchaForUser = (uid: string, canchaId: string) => {
+        const u = users.find(x => x.uid === uid);
+        const current: string[] = Array.isArray(u?.markerCanchas) ? u.markerCanchas : [];
+        const next = current.includes(canchaId) ? current.filter(c => c !== canchaId) : [...current, canchaId];
+        handleSetMarkerCanchas(uid, next);
     };
 
     const handleEditClick = (user: any) => {
@@ -72,7 +129,7 @@ export default function AdminSettingsPage() {
         setFormData({
             name: user.name || '',
             email: user.email || '',
-            password: user.password || '',
+            password: '',
             role: user.role || ROLES.PLAYER
         });
         setIsModalOpen(true);
@@ -89,6 +146,20 @@ export default function AdminSettingsPage() {
         setIsModalOpen(true);
     };
 
+    const handleCleanupPasswords = async () => {
+        if (!confirm('¿Eliminar el campo contraseña de todos los perfiles en la base de datos? (Recomendado por seguridad, una sola vez).')) return;
+        setCleaningPasswords(true);
+        try {
+            const count = await dataService.removePasswordsFromAllUsers();
+            alert(`Listo. Se eliminó el campo contraseña de ${count} perfil(es).`);
+            await loadUsers();
+        } catch (e: any) {
+            alert('Error: ' + (e?.message || e));
+        } finally {
+            setCleaningPasswords(false);
+        }
+    };
+
     const handleSaveUser = async () => {
         if (!formData.name || !formData.email || (!editingUser && !formData.password)) {
             alert('Por favor completa todos los campos obligatorios');
@@ -100,15 +171,17 @@ export default function AdminSettingsPage() {
             if (editingUser) {
                 await dataService.setUserProfile(editingUser.uid, {
                     name: formData.name,
-                    role: formData.role,
-                    password: formData.password
+                    role: formData.role
                 });
             } else {
                 // Para crear un usuario nuevo con Auth, se requeriría una función de Cloud Functions
                 // o usar una API secundaria. Por ahora lo guardamos en el perfil.
                 const newUid = `user_${Date.now()}`;
                 await dataService.setUserProfile(newUid, {
-                    ...formData,
+                    uid: newUid,
+                    name: formData.name,
+                    email: formData.email,
+                    role: formData.role,
                     uid: newUid,
                     createdAt: new Date().toISOString()
                 });
@@ -172,28 +245,39 @@ export default function AdminSettingsPage() {
                         exit={{ opacity: 0, y: -10 }}
                         className="space-y-6"
                     >
-                        <div className="flex justify-between items-center mb-6">
+                        <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
                             <p className="text-gray-500 font-medium uppercase tracking-widest text-[10px]">Control de roles y permisos del sistema.</p>
-                            <button
-                                onClick={handleAddClick}
-                                className="bg-padel-primary/10 border border-padel-primary/30 text-padel-primary px-6 py-2.5 rounded-xl font-black text-[10px] tracking-widest uppercase flex items-center gap-2 hover:bg-padel-primary hover:text-black transition-all"
-                            >
-                                <Plus className="w-4 h-4" /> Nuevo Acceso
-                            </button>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleCleanupPasswords}
+                                    disabled={cleaningPasswords}
+                                    className="bg-white/5 border border-white/10 text-gray-400 px-4 py-2.5 rounded-xl font-bold text-[10px] tracking-widest uppercase flex items-center gap-2 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50"
+                                >
+                                    {cleaningPasswords ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                                    {cleaningPasswords ? 'Limpiando…' : 'Limpiar contraseñas guardadas'}
+                                </button>
+                                <button
+                                    onClick={handleAddClick}
+                                    className="bg-padel-primary/10 border border-padel-primary/30 text-padel-primary px-6 py-2.5 rounded-xl font-black text-[10px] tracking-widest uppercase flex items-center gap-2 hover:bg-padel-primary hover:text-black transition-all"
+                                >
+                                    <Plus className="w-4 h-4" /> Nuevo Acceso
+                                </button>
+                            </div>
                         </div>
 
                         <div className="glass rounded-[2rem] border border-white/5 overflow-hidden">
                             <div className="grid grid-cols-12 px-8 py-5 bg-white/[0.03] border-b border-white/5 text-[10px] font-black uppercase text-gray-500 tracking-widest italic">
-                                <div className="col-span-4">Usuario</div>
+                                <div className="col-span-3">Usuario</div>
                                 <div className="col-span-3">Email</div>
-                                <div className="col-span-2">Clave</div>
+                                <div className="col-span-1">Seg.</div>
                                 <div className="col-span-2 text-center">Rol</div>
+                                <div className="col-span-2 text-center">Canchas</div>
                                 <div className="col-span-1 text-right">Edit</div>
                             </div>
                             <div className="divide-y divide-white/5">
                                 {users.map((u) => (
                                     <div key={u.uid} className="grid grid-cols-12 items-center px-8 py-5 hover:bg-white/[0.01] transition-colors group">
-                                        <div className="col-span-4 flex items-center gap-4">
+                                        <div className="col-span-3 flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-xl bg-padel-primary/10 flex items-center justify-center text-padel-primary border border-padel-primary/10">
                                                 {u.role === ROLES.ADMIN ? <Shield className="w-5 h-5" /> : <User className="w-5 h-5" />}
                                             </div>
@@ -202,17 +286,10 @@ export default function AdminSettingsPage() {
                                                 <p className="text-[9px] text-gray-600 font-bold tracking-widest">ID: {u.uid.slice(0, 8)}</p>
                                             </div>
                                         </div>
-                                        <div className="col-span-3 text-gray-400 text-xs font-medium lowercase">
+                                        <div className="col-span-3 text-gray-400 text-xs font-medium lowercase truncate">
                                             {u.email}
                                         </div>
-                                        <div className="col-span-2 flex items-center gap-3">
-                                            <button onClick={() => togglePasswordVisibility(u.uid)} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-                                                {showPasswords[u.uid] ? <EyeOff className="w-3.5 h-3.5 text-padel-primary" /> : <Eye className="w-3.5 h-3.5 text-gray-600" />}
-                                            </button>
-                                            <span className="font-mono text-[10px] tracking-widest text-gray-500 uppercase">
-                                                {showPasswords[u.uid] ? (u.password || '******') : '••••••'}
-                                            </span>
-                                        </div>
+                                        <div className="col-span-1 text-[10px] text-gray-600">Auth</div>
                                         <div className="col-span-2 flex justify-center">
                                             <select
                                                 value={u.role}
@@ -224,6 +301,27 @@ export default function AdminSettingsPage() {
                                                 <option value={ROLES.MARKER}>MARKER</option>
                                                 <option value={ROLES.PLAYER}>PLAYER</option>
                                             </select>
+                                        </div>
+                                        <div className="col-span-2 flex justify-center gap-1 flex-wrap">
+                                            {u.role === ROLES.MARKER ? (
+                                                CANCHA_IDS.map((cId) => {
+                                                    const active = (u.markerCanchas || []).includes(cId);
+                                                    return (
+                                                        <button
+                                                            key={cId}
+                                                            type="button"
+                                                            onClick={() => toggleCanchaForUser(u.uid, cId)}
+                                                            disabled={updating === u.uid}
+                                                            title={getCanchaLabel(cId)}
+                                                            className={`w-7 h-7 rounded text-[9px] font-black ${active ? 'bg-padel-primary/30 text-padel-primary border border-padel-primary/50' : 'bg-white/5 text-gray-600 border border-white/10'}`}
+                                                        >
+                                                            {cId.replace('cancha_', '')}
+                                                        </button>
+                                                    );
+                                                })
+                                            ) : (
+                                                <span className="text-gray-600">—</span>
+                                            )}
                                         </div>
                                         <div className="col-span-1 text-right">
                                             <button onClick={() => handleEditClick(u)} className="p-2 text-gray-600 hover:text-padel-primary transition-colors">
@@ -241,13 +339,63 @@ export default function AdminSettingsPage() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
-                        className="py-20 text-center"
+                        className="space-y-6"
                     >
-                        <div className="w-20 h-20 rounded-full bg-white/5 border border-white/5 flex items-center justify-center mx-auto mb-6">
-                            <Lock className="w-10 h-10 text-gray-800" />
-                        </div>
-                        <h3 className="text-xl font-black italic uppercase tracking-tighter text-gray-600">Configuración General <span className="text-white/20">Próximamente</span></h3>
-                        <p className="text-xs text-gray-700 font-bold uppercase tracking-widest mt-2">Módulo en desarrollo para control global del club.</p>
+                        <p className="text-gray-500 font-medium uppercase tracking-widest text-[10px]">Nombre del club, título de la app y zona horaria.</p>
+                        {generalLoading ? (
+                            <div className="flex items-center justify-center py-20">
+                                <RefreshCw className="w-10 h-10 text-padel-primary animate-spin" />
+                            </div>
+                        ) : (
+                            <div className="glass rounded-[2rem] border border-white/5 overflow-hidden p-8 space-y-6">
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest block mb-2">Nombre del club</label>
+                                    <input
+                                        type="text"
+                                        value={generalSettings.clubName ?? ''}
+                                        onChange={e => setGeneralSettings(s => ({ ...s, clubName: e.target.value }))}
+                                        placeholder="Ej. Club Pádel Norte"
+                                        className="w-full bg-black border border-white/10 rounded-2xl px-5 py-3 text-white font-medium outline-none focus:border-padel-primary/50 transition-colors placeholder:text-gray-600"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest block mb-2">Título de la aplicación</label>
+                                    <input
+                                        type="text"
+                                        value={generalSettings.appTitle ?? ''}
+                                        onChange={e => setGeneralSettings(s => ({ ...s, appTitle: e.target.value }))}
+                                        placeholder="Ej. Padel Score / Smart Padel"
+                                        className="w-full bg-black border border-white/10 rounded-2xl px-5 py-3 text-white font-medium outline-none focus:border-padel-primary/50 transition-colors placeholder:text-gray-600"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest block mb-2">Zona horaria</label>
+                                    <select
+                                        value={generalSettings.timezone ?? ''}
+                                        onChange={e => setGeneralSettings(s => ({ ...s, timezone: e.target.value }))}
+                                        className="w-full bg-black border border-white/10 rounded-2xl px-5 py-3 text-white font-medium outline-none focus:border-padel-primary/50 transition-colors"
+                                    >
+                                        <option value="">Sin especificar</option>
+                                        <option value="Europe/Madrid">Europe/Madrid</option>
+                                        <option value="Europe/Barcelona">Europe/Barcelona</option>
+                                        <option value="America/Argentina/Buenos_Aires">America/Argentina/Buenos_Aires</option>
+                                        <option value="America/Mexico_City">America/Mexico_City</option>
+                                        <option value="America/Chile/Santiago">America/Santiago</option>
+                                        <option value="UTC">UTC</option>
+                                    </select>
+                                </div>
+                                <div className="pt-2">
+                                    <button
+                                        onClick={handleSaveGeneral}
+                                        disabled={generalSaving}
+                                        className="bg-padel-primary text-black px-8 py-3.5 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50"
+                                    >
+                                        {generalSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                        Guardar configuración
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -292,13 +440,13 @@ export default function AdminSettingsPage() {
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Pass (Visual)</label>
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Nota interna (no contraseña)</label>
                                         <input
                                             type="text"
                                             value={formData.password}
                                             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                                             className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-white font-mono text-sm"
-                                            placeholder="••••••••"
+                                            placeholder="Ej: enviaste email de alta el 01/03"
                                         />
                                     </div>
                                 </div>

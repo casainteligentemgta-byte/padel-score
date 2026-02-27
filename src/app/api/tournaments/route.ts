@@ -2,10 +2,18 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { TournamentType, TournamentCategory } from '@/types/tournament';
+import { requireAuth } from '@/lib/authServer';
+import { validateTournamentBody } from '@/lib/apiValidation';
 
 export async function POST(req: Request) {
+    const authResult = await requireAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
     try {
         const body = await req.json();
+        const validation = validateTournamentBody(body);
+        if (validation.error) {
+            return NextResponse.json({ error: validation.error }, { status: 400 });
+        }
         const {
             name,
             type,
@@ -18,10 +26,6 @@ export async function POST(req: Request) {
             totalCourts,
             bufferMinutes
         } = body;
-
-        if (!name || !startDate) {
-            return NextResponse.json({ error: 'Nombre y fecha de inicio son requeridos' }, { status: 400 });
-        }
 
         // 1. Generar el calendario primero (para el modo demo y el real)
         const schedule = ScheduleEngine.generateSchedule({

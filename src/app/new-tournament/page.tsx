@@ -54,14 +54,19 @@ const INITIAL_DATA = {
 
 export default function NewTournamentPage() {
     const router = useRouter();
-    const { user, loading: authLoading } = useAuth();
+    const { user, profile, loading: authLoading } = useAuth();
     const [step, setStep] = useState(1);
 
     useEffect(() => {
-        if (!authLoading && !user) {
+        if (authLoading) return;
+        if (!user) {
             router.push('/');
+            return;
         }
-    }, [user, authLoading, router]);
+        // Solo admin puede crear torneos; jugador y marcador van a torneos
+        const isAdmin = profile?.role === 'admin' || user?.email === 'casainteligentemgta@gmail.com';
+        if (!isAdmin) router.replace('/tournaments');
+    }, [user, profile, authLoading, router]);
     const [tournamentData, setTournamentData] = useState({ ...INITIAL_DATA, startDate: new Date().toISOString().split('T')[0] });
     const [loading, setLoading] = useState(false);
     const [viewDate, setViewDate] = useState(new Date());
@@ -494,6 +499,14 @@ export default function NewTournamentPage() {
             setSelectorContext(null);
         }
     };
+
+    if (authLoading || !user) {
+        return (
+            <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+                <RefreshCw className="w-8 h-8 text-padel-primary animate-spin" />
+            </div>
+        );
+    }
 
     return (
         <div className="ipad-screen-container h-screen overflow-hidden flex flex-col bg-[#0a0a0a] text-white font-outfit">

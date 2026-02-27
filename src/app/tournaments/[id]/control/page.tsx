@@ -211,7 +211,7 @@ function ControlMatchCard({
                     <span className={`text-[9px] font-black uppercase tracking-widest ${isLive ? 'text-red-400' : isFinished ? 'text-gray-600' : 'text-gray-500'}`}>
                         {isLive ? '● En Vivo' : isFinished ? 'Finalizado' : formatTime(match.scheduledTime)}
                     </span>
-                    <span className="text-[9px] font-bold text-gray-700 uppercase">· Pista {match.court || '–'}</span>
+                    <span className="label-cancha-meta">· Pista {match.court || '–'}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                     {match.isStreaming && (
@@ -412,7 +412,7 @@ function PhaseSection({
 export default function ControlPanel({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const router = useRouter();
-    const { user, isAdmin, isMarker, loading: authLoading } = useAuth();
+    const { user, isAdmin, loading: authLoading } = useAuth();
 
     const [tournament, setTournament] = useState<any>(null);
     const [matches, setMatches] = useState<EnrichedMatch[]>([]);
@@ -421,7 +421,8 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
     const [currentTime, setCurrentTime] = useState(new Date());
     const [activePhaseTab, setActivePhaseTab] = useState<'activa' | 'proximos' | 'finalizados'>('activa');
 
-    const canOperate = isAdmin || isMarker;
+    const isOwner = !!user && !!tournament && tournament.ownerId === user.uid;
+    const canOperate = isAdmin || isOwner;
 
     // Clock
     useEffect(() => {
@@ -615,7 +616,7 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
         <div className="h-screen bg-black flex flex-col items-center justify-center gap-4 text-center p-6">
             <Lock className="w-12 h-12 text-red-500/40" />
             <h1 className="text-xl font-black italic uppercase">Acceso Restringido</h1>
-            <p className="text-gray-500 text-sm max-w-xs">Este panel es exclusivo para Administradores y Markers del torneo.</p>
+            <p className="text-gray-500 text-sm max-w-xs">Este panel es exclusivo para Administradores o el creador del torneo.</p>
             <button onClick={() => router.back()} className="mt-4 px-6 py-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-black uppercase tracking-widest transition-all">
                 Volver
             </button>

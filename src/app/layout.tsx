@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Outfit, Public_Sans } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
+import { AppSettingsProvider } from "@/lib/AppSettingsContext";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
@@ -24,9 +25,11 @@ export default function RootLayout({
             </head>
             <body suppressHydrationWarning className="font-outfit antialiased">
                 <AuthProvider>
-                    <main className="min-h-screen">
-                        {children}
-                    </main>
+                    <AppSettingsProvider>
+                        <main className="min-h-screen">
+                            {children}
+                        </main>
+                    </AppSettingsProvider>
                 </AuthProvider>
             </body>
         </html>

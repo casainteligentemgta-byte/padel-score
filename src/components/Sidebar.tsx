@@ -5,34 +5,34 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Menu,
     X,
-    UserPlus,
     Trophy,
     Users,
     Settings,
     LogOut,
     Sparkles,
     Home,
-    Shield,
-    Monitor,
-    LayoutDashboard,
     Megaphone,
     Brain,
-    Swords,
     DollarSign,
-    Radio
+    Crosshair
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
-import { useRouter, usePathname } from 'next/navigation';
+import { useAppSettings } from '@/lib/AppSettingsContext';
+import { useRouter } from 'next/navigation';
+import { getCanchaLabel } from '@/lib/markerCanchas';
 
 export default function Sidebar() {
     const [isOpen, setIsOpen] = useState(false);
-    const { user, logout, isAdmin, isMarker } = useAuth();
+    const { logout, isAdmin, markerCanchas } = useAuth();
+    const { appTitle, clubName } = useAppSettings();
     const router = useRouter();
 
+    // Jugador: Inicio + Torneos. Marcador: además enlaces a sus canchas asignadas.
     const menuItems = [
         { name: 'Inicio', href: '/', icon: Home },
         { name: 'Torneos', href: '/tournaments', icon: Trophy },
+        ...(markerCanchas?.length > 0 ? markerCanchas.map((c) => ({ name: `Marcador ${getCanchaLabel(c)}`, href: `/marker/${c}`, icon: Crosshair })) : []),
     ];
 
     const adminItems = [
@@ -73,20 +73,25 @@ export default function Sidebar() {
                             className="fixed top-0 left-0 bottom-0 w-[280px] bg-black/40 backdrop-blur-2xl border-r border-white/10 z-[120] p-6 flex flex-col shadow-[20px_0_50px_rgba(0,0,0,0.5)]"
                         >
                             <div className="flex justify-between items-center mb-6 flex-shrink-0">
-                                <div className="text-xl font-black italic uppercase tracking-tighter text-white flex items-center">
-                                    <motion.div
-                                        animate={{
-                                            y: [0, -10, 0],
-                                            scaleY: [1, 0.8, 1],
-                                        }}
-                                        transition={{
-                                            duration: 0.8,
-                                            repeat: Infinity,
-                                            ease: "easeInOut"
-                                        }}
-                                        className="w-4 h-4 bg-padel-primary rounded-full mr-2 shadow-[0_4px_10px_rgba(204,255,0,0.3)]"
-                                    />
-                                    SMART <span className="text-padel-primary">PADEL</span>
+                                <div className="flex flex-col gap-0.5">
+                                    <div className="text-xl font-black italic uppercase tracking-tighter text-white flex items-center">
+                                        <motion.div
+                                            animate={{
+                                                y: [0, -10, 0],
+                                                scaleY: [1, 0.8, 1],
+                                            }}
+                                            transition={{
+                                                duration: 0.8,
+                                                repeat: Infinity,
+                                                ease: "easeInOut"
+                                            }}
+                                            className="w-4 h-4 bg-padel-primary rounded-full mr-2 shadow-[0_4px_10px_rgba(204,255,0,0.3)] flex-shrink-0"
+                                        />
+                                        <span className="truncate">{appTitle || 'Smart Padel'}</span>
+                                    </div>
+                                    {clubName ? (
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 truncate pl-6">{clubName}</p>
+                                    ) : null}
                                 </div>
                                 <button
                                     onClick={() => setIsOpen(false)}
@@ -140,14 +145,16 @@ export default function Sidebar() {
                             </nav>
 
                             <div className="pt-4 mt-auto border-t border-white/5 space-y-1">
-                                <Link
-                                    href="/admin/settings"
-                                    onClick={() => setIsOpen(false)}
-                                    className="w-full flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-500 hover:bg-white/5 hover:text-white transition-all"
-                                >
-                                    <Settings className="w-4 h-4" />
-                                    <span className="font-bold text-xs uppercase italic">Ajustes</span>
-                                </Link>
+                                {isAdmin && (
+                                    <Link
+                                        href="/admin/settings"
+                                        onClick={() => setIsOpen(false)}
+                                        className="w-full flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-500 hover:bg-white/5 hover:text-white transition-all"
+                                    >
+                                        <Settings className="w-4 h-4" />
+                                        <span className="font-bold text-xs uppercase italic">Ajustes</span>
+                                    </Link>
+                                )}
                                 <button
                                     onClick={() => {
                                         logout();

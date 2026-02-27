@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     LogIn,
@@ -20,8 +20,12 @@ import Link from 'next/link';
 
 export default function LoginPage() {
     const [success, setSuccess] = useState<string | null>(null);
-    const { signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
+    const { user, loading: authLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
     const router = useRouter();
+
+    useEffect(() => {
+        if (!authLoading && user) router.replace('/tournaments');
+    }, [authLoading, user, router]);
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -38,10 +42,12 @@ export default function LoginPage() {
         setSuccess(null);
         try {
             await signInWithGoogle();
-            router.push('/');
+            router.push('/tournaments');
         } catch (err: any) {
             console.error(err);
-            if (err.code === 'auth/configuration-not-found' || err.code === 'auth/unauthorized-domain') {
+            if (err.code === 'auth/operation-not-allowed') {
+                setError('El inicio de sesión con Google no está habilitado. En Firebase Console → Authentication → Sign-in method, activa "Google".');
+            } else if (err.code === 'auth/configuration-not-found' || err.code === 'auth/unauthorized-domain') {
                 setError('Google Sign-In requiere configuración de dominio o deploy. Prueba con Email/Contraseña o el Modo Simulación en local.');
             } else {
                 setError('Error al conectar con Google. Por favor intenta de nuevo.');
@@ -84,10 +90,12 @@ export default function LoginPage() {
             } else {
                 await signUpWithEmail(formData.email, formData.password, formData.name);
             }
-            router.push('/');
+            router.push('/tournaments');
         } catch (err: any) {
             console.error(err);
-            if (err.code === 'auth/configuration-not-found') {
+            if (err.code === 'auth/operation-not-allowed') {
+                setError('El inicio de sesión con Email/Contraseña no está habilitado. En Firebase Console → Authentication → Sign-in method, activa "Correo electrónico/contraseña".');
+            } else if (err.code === 'auth/configuration-not-found') {
                 setError('El servicio de Autenticación no está activado en tu proyecto de Firebase. Por favor, actívalo en la Consola de Firebase > Authentication > Sign-in method.');
             } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
                 setError('Credenciales incorrectas (Email o Contraseña).');
@@ -96,12 +104,20 @@ export default function LoginPage() {
             } else if (err.code === 'auth/weak-password') {
                 setError('La contraseña debe tener al menos 6 caracteres.');
             } else {
-                setError('Error en la autenticación. Revisa tu conexión o credenciales.');
+                setError(`Error en la autenticación (${err.code || 'sin-código'}). Revisa tu conexión o credenciales.`);
             }
         } finally {
             setLoading(false);
         }
     };
+
+    if (authLoading) {
+        return (
+            <div className="min-h-screen bg-black flex items-center justify-center">
+                <RefreshCw className="w-8 h-8 text-padel-primary animate-spin" />
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-black flex items-center justify-center p-6 font-outfit relative overflow-hidden">
@@ -275,7 +291,7 @@ export default function LoginPage() {
                         className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-2xl font-black uppercase italic text-sm hover:bg-white/10 transition-all flex items-center justify-center gap-3 relative group"
                     >
                         <Chrome className="w-5 h-5 absolute left-6 group-hover:scale-110 transition-transform" />
-                        Google Cloud
+                        Ingresar con Google
                     </button>
                 </div>
 
@@ -286,7 +302,7 @@ export default function LoginPage() {
                             onClick={() => {
                                 console.log("Manual trigger: enableDevMode");
                                 enableDevMode();
-                                router.push('/');
+                                router.push('/tournaments');
                             }}
                             className="text-padel-primary hover:underline ml-2"
                         >

@@ -269,7 +269,7 @@ export default function PreMatchControl({ params }: { params: Promise<{ id: stri
                                 {isAlreadyLive ? '● En Vivo' : '⏱ Por Comenzar'}
                             </span>
                         </div>
-                        <span className="text-[9px] font-bold text-gray-600 italic">Pista {match.court}</span>
+                        <span className="label-cancha-meta italic">Pista {match.court}</span>
                     </div>
 
                     {/* Players */}
@@ -408,7 +408,7 @@ export default function PreMatchControl({ params }: { params: Promise<{ id: stri
                                     {/* Header */}
                                     <div className="flex items-center justify-between mb-auto">
                                         <div>
-                                            <p className="text-[7px] font-black uppercase text-gray-600 tracking-widest">Pista {match.court}</p>
+                                            <p className="label-cancha-meta">Pista {match.court}</p>
                                             <p className="text-[10px] font-black italic uppercase tracking-tight text-white/70">{(tournament?.category || '').replace(/_/g, ' ')}</p>
                                         </div>
                                         <div className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-white/10 bg-white/5">
@@ -482,7 +482,7 @@ export default function PreMatchControl({ params }: { params: Promise<{ id: stri
                         >
                             <div className="rounded-[2rem] bg-white/[0.03] border border-white/[0.07] overflow-hidden">
                                 <div className="px-5 py-4 border-b border-white/[0.06]">
-                                    <h2 className="text-[10px] font-black uppercase tracking-widest text-white/60">Cámaras — Pista {match.court}</h2>
+                                    <h2 className="label-cancha-meta text-white/60">Cámaras — Pista {match.court}</h2>
                                     <p className="text-[8px] text-gray-600 font-bold mt-0.5">Cámaras configuradas en el módulo de broadcasting</p>
                                 </div>
 

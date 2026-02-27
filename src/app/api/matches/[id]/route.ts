@@ -2,14 +2,27 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { MatchStatus } from '@/types/tournament';
+import { requireRole } from '@/lib/authServer';
+import { validateMatchBody, validateMatchId } from '@/lib/apiValidation';
 
 export async function PATCH(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const authResult = await requireRole(req, ['admin', 'marker']);
+    if (authResult instanceof NextResponse) return authResult;
     try {
         const { id } = await params;
-        const { status, score, actualStartTime, actualEndTime } = await req.json();
+        const idValidation = validateMatchId(id);
+        if (idValidation.error) {
+            return NextResponse.json({ error: idValidation.error }, { status: 400 });
+        }
+        const body = await req.json();
+        const bodyValidation = validateMatchBody(body);
+        if (bodyValidation.error) {
+            return NextResponse.json({ error: bodyValidation.error }, { status: 400 });
+        }
+        const { status, score, actualStartTime, actualEndTime } = body;
 
         // 1. Actualizar el match actual
         const updatedMatch = await prisma.match.update({

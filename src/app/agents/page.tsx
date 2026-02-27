@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import { useAuth } from '@/lib/AuthContext';
+import { getAuthHeaders } from '@/lib/apiAuth';
 import { dataService } from '@/lib/dataService';
 import { systemMonitor } from '@/lib/systemMonitor';
 import {
@@ -279,10 +280,18 @@ export default function AgentCenter() {
         try {
             const response = await fetch('/api/ai', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                 body: JSON.stringify({ agentId: selectedAgent.id, message: userMessage.content, context: contextData })
             });
             const data = await response.json();
+            if (response.status === 429) {
+                setMessages(prev => [...prev, { role: 'assistant', content: '⏳ Demasiadas peticiones. Espera un minuto e intenta de nuevo.', timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+                return;
+            }
+            if (!response.ok) {
+                setMessages(prev => [...prev, { role: 'assistant', content: `❌ ${data.error || 'Error de comunicación.'}`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+                return;
+            }
             setMessages(prev => [...prev, { role: 'assistant', content: data.content || 'Respuesta vacía.', timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
         } catch (error) {
             setMessages(prev => [...prev, { role: 'assistant', content: '❌ Error de comunicación.', timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);

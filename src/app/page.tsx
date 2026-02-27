@@ -1,14 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Lock, User, RefreshCw, CheckCircle2, AlertCircle, ChevronRight, Zap } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
+import { useAppSettings } from '@/lib/AppSettingsContext';
 import { useRouter } from 'next/navigation';
 
 export default function LandingPage() {
-    const { user, logout, signInWithEmail, signUpWithEmail, enableDevMode } = useAuth();
+    const { user, logout, loading: authLoading, signInWithEmail, signUpWithEmail, enableDevMode } = useAuth();
+    const { appTitle } = useAppSettings();
     const router = useRouter();
+
+    useEffect(() => {
+        if (!authLoading && user) router.replace('/tournaments');
+    }, [authLoading, user, router]);
 
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
@@ -27,14 +33,16 @@ export default function LandingPage() {
             }
             router.push('/tournaments');
         } catch (err: any) {
-            if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+            if (err.code === 'auth/operation-not-allowed') {
+                setError('El inicio de sesión con Email/Contraseña no está habilitado. En Firebase Console → Authentication → Sign-in method, activa "Correo electrónico/contraseña".');
+            } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
                 setError('Email o contraseña incorrectos.');
             } else if (err.code === 'auth/email-already-in-use') {
                 setError('El email ya está registrado.');
             } else if (err.code === 'auth/weak-password') {
                 setError('La contraseña debe tener al menos 6 caracteres.');
             } else {
-                setError('Error en la autenticación. Revisa tu conexión.');
+                setError(`Error en la autenticación (${err.code || 'sin-código'}). Revisa tu conexión.`);
             }
         } finally {
             setLoading(false);
@@ -45,6 +53,14 @@ export default function LandingPage() {
         enableDevMode();
         router.push('/tournaments');
     };
+
+    if (authLoading) {
+        return (
+            <div className="h-dvh bg-[#0a0a0a] flex items-center justify-center">
+                <RefreshCw className="w-8 h-8 text-padel-primary animate-spin" />
+            </div>
+        );
+    }
 
     return (
         <div className="h-dvh bg-[#0a0a0a] text-white flex flex-col items-center justify-center relative overflow-hidden px-5">
@@ -87,13 +103,24 @@ export default function LandingPage() {
                         className="text-4xl font-black italic tracking-tighter uppercase leading-none select-none"
                         style={{ textShadow: '0 4px 30px rgba(204,255,0,0.12)' }}
                     >
-                        SMART{' '}
-                        <span
-                            className="text-padel-primary"
-                            style={{ textShadow: '0 0 40px rgba(204,255,0,0.45), 0 4px 20px rgba(204,255,0,0.25)' }}
-                        >
-                            PADEL
-                        </span>
+                        {(() => {
+                            const t = (appTitle || 'Smart Padel').trim().toUpperCase();
+                            const i = t.indexOf(' ');
+                            if (i > 0) {
+                                return (
+                                    <>
+                                        {t.slice(0, i)}{' '}
+                                        <span
+                                            className="text-padel-primary"
+                                            style={{ textShadow: '0 0 40px rgba(204,255,0,0.45), 0 4px 20px rgba(204,255,0,0.25)' }}
+                                        >
+                                            {t.slice(i + 1)}
+                                        </span>
+                                    </>
+                                );
+                            }
+                            return <span className="text-padel-primary" style={{ textShadow: '0 0 40px rgba(204,255,0,0.45), 0 4px 20px rgba(204,255,0,0.25)' }}>{t}</span>;
+                        })()}
                     </h1>
 
                     <p className="text-[10px] text-gray-600 font-bold uppercase tracking-[0.22em]">

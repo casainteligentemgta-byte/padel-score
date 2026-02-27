@@ -13,7 +13,7 @@ import { BouncingBall } from '@/components/BouncingBall';
 import { formatDate } from '@/lib/formatters';
 
 export default function MyTournamentsPage() {
-    const { user, loading: authLoading } = useAuth();
+    const { user, isAdmin, loading: authLoading } = useAuth();
     const [tournaments, setTournaments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -74,26 +74,44 @@ export default function MyTournamentsPage() {
             <Sidebar />
 
             {/* ── Header compacto ── */}
-            <div className="flex items-center gap-3 mb-2 flex-shrink-0 pl-20 md:pl-24">
-                <BouncingBall size={28} />
-                <div>
-                    <h1 className="text-2xl font-black italic uppercase tracking-tighter leading-none">
-                        <span className="text-padel-primary">Torneos</span>
-                    </h1>
-                    <p className="text-gray-600 font-bold uppercase tracking-widest text-[9px] mt-0.5">Gestiona tus competencias</p>
+            <div className="flex items-center justify-between gap-3 mb-2 flex-shrink-0 pl-20 md:pl-24 pr-4">
+                <div className="flex items-center gap-3">
+                    <BouncingBall size={28} />
+                    <div>
+                        <h1 className="title-page leading-none">
+                            <span className="text-padel-primary">Torneos</span>
+                        </h1>
+                        <p className="subtitle-page text-gray-600 mt-0.5">Gestiona tus competencias</p>
+                    </div>
                 </div>
+                {isAdmin && (
+                <Link
+                    href="/new-tournament"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-padel-primary text-black rounded-xl font-black text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-transform shadow-[0_4px_14px_rgba(204,255,0,0.25)]"
+                >
+                    <Plus className="w-4 h-4" /> Nuevo torneo
+                </Link>
+            )}
             </div>
 
             {/* ── Lista scrollable ── */}
             <div className="ipad-scroll-area pb-2">
                 <div className="max-w-6xl mx-auto">
                     {tournaments.length === 0 ? (
-                        <div className="glass p-8 text-center border-dashed border-2 border-white/5 space-y-4">
+                        <div className="glass p-8 text-center border-dashed border-2 border-white/5 space-y-6">
                             <div className="inline-flex p-4 rounded-full bg-white/5 text-gray-600">
                                 <Trophy className="w-8 h-8" />
                             </div>
                             <h2 className="text-xl font-bold">No tienes torneos aún</h2>
                             <p className="text-gray-500 text-sm">Comienza creando tu primer torneo profesional ahora mismo.</p>
+                            {isAdmin && (
+                                <Link
+                                    href="/new-tournament"
+                                    className="inline-flex items-center gap-2 px-6 py-3 bg-padel-primary text-black rounded-xl font-black text-sm uppercase tracking-widest hover:scale-105 transition-transform"
+                                >
+                                    <Plus className="w-5 h-5" /> Crear mi primer torneo
+                                </Link>
+                            )}
                         </div>
                     ) : (
                         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">

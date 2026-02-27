@@ -28,7 +28,64 @@ import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournam
 import { MasterScheduleEngine, MasterScheduleConfig, CategoryConfig } from '@/services/MasterScheduleEngine';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
+import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
+
+// Colores fijos por formato (icono siempre a color)
+const FORMAT_COLORS = {
+    AMERICANO: '#ccff00',   // padel primary
+    DUPLA_FIJA: '#22d3ee',  // cyan
+    ROUND_ROBIN: '#818cf8', // indigo
+    ELIMINACION_DIRECTA: '#fb923c', // orange
+    COMBINADO: '#a78bfa',  // violet
+} as const;
+
+// Iconos alusivos por formato — siempre a color
+const FormatIcons = {
+    AMERICANO: ({ className = 'w-5 h-5', color = FORMAT_COLORS.AMERICANO }: { className?: string; color?: string }) => (
+        <svg className={className} style={{ color }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 1.5">
+            <circle cx="12" cy="12" r="7" strokeDasharray="3 2" />
+            <circle cx="12" cy="5" r="1.8" fill="currentColor" stroke="none" />
+            <circle cx="19" cy="12" r="1.8" fill="currentColor" stroke="none" />
+            <circle cx="12" cy="19" r="1.8" fill="currentColor" stroke="none" />
+            <circle cx="5" cy="12" r="1.8" fill="currentColor" stroke="none" />
+            <line x1="12" y1="12" x2="12" y2="6.8" strokeDasharray="1 1" />
+            <line x1="12" y1="12" x2="17.2" y2="12" strokeDasharray="1 1" />
+            <line x1="12" y1="12" x2="12" y2="17.2" strokeDasharray="1 1" />
+            <line x1="12" y1="12" x2="6.8" y2="12" strokeDasharray="1 1" />
+        </svg>
+    ),
+    DUPLA_FIJA: ({ className = 'w-5 h-5', color = FORMAT_COLORS.DUPLA_FIJA }: { className?: string; color?: string }) => (
+        <svg className={className} style={{ color }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <rect x="6" y="3" width="12" height="7" rx="1" />
+            <rect x="6" y="12" width="12" height="7" rx="1" />
+            <line x1="11" y1="19" x2="11" y2="22" />
+            <line x1="13" y1="19" x2="13" y2="22" />
+        </svg>
+    ),
+    ELIMINATORIO: ({ className = 'w-5 h-5', color = FORMAT_COLORS.ELIMINACION_DIRECTA }: { className?: string; color?: string }) => (
+        <svg className={className} style={{ color }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+            <path d="M5 6h5v2H5z M14 6h5v2h-5z" />
+            <path d="M7.5 8v3 M16.5 8v3" />
+            <path d="M7.5 11H12v2H7.5M12 11h4.5v2H12" />
+            <path d="M12 13v4" />
+            <path d="M9 17h6v2H9z" />
+        </svg>
+    ),
+    ROUND_ROBIN: ({ className = 'w-5 h-5', color = FORMAT_COLORS.ROUND_ROBIN }: { className?: string; color?: string }) => (
+        <svg className={className} style={{ color }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 1.5">
+            <rect x="4" y="4" width="16" height="16" rx="2" strokeDasharray="3 2" />
+            <path d="M4 4l16 16M20 4L4 20" strokeDasharray="2 1" />
+        </svg>
+    ),
+    COMBINADO: ({ className = 'w-5 h-5', color = FORMAT_COLORS.COMBINADO }: { className?: string; color?: string }) => (
+        <svg className={className} style={{ color }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <circle cx="9" cy="9" r="4" opacity="0.8" />
+            <circle cx="15" cy="15" r="4" opacity="0.8" />
+            <path d="M9 13v2m0-2a4 4 0 0 1 4-4m-4 4a4 4 0 0 0 4 4" strokeLinecap="round" />
+        </svg>
+    ),
+};
 
 // Luxury Theme Colors
 const COLORS = [
@@ -113,7 +170,7 @@ export default function MasterGeneratorPage() {
     const [pendingMatchFormat, setPendingMatchFormat] = useState<'2SETS_STB' | '3SETS'>('2SETS_STB');
     const [pendingGroupSize, setPendingGroupSize] = useState<3 | 4>(4);
     // Tipo de torneo y puntos para Americano
-    const [pendingTournamentType, setPendingTournamentType] = useState<'AMERICANO' | 'DUPLA_FIJA' | 'ROUND_ROBIN' | 'ELIMINACION_DIRECTA'>('AMERICANO');
+    const [pendingTournamentType, setPendingTournamentType] = useState<'AMERICANO' | 'DUPLA_FIJA' | 'ROUND_ROBIN' | 'ELIMINACION_DIRECTA' | 'COMBINADO'>('AMERICANO');
     const [pendingPointsGoal, setPendingPointsGoal] = useState<number>(16);
     // Formato de partido para Round Robin
     const [pendingRRFormat, setPendingRRFormat] = useState<'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS'>('ONE_SET_6');
@@ -357,46 +414,114 @@ export default function MasterGeneratorPage() {
         }, 1200);
     };
 
+    /** Quita undefined y convierte Date a string para que Firestore acepte el documento. */
+    const sanitizeForFirestore = (obj: any): any => {
+        if (obj === null || obj === undefined) return null;
+        if (Array.isArray(obj)) return obj.map(sanitizeForFirestore);
+        if (obj instanceof Date) return obj.toISOString();
+        if (typeof obj === 'object') {
+            const out: Record<string, any> = {};
+            for (const [k, v] of Object.entries(obj)) {
+                if (v === undefined) continue;
+                out[k] = sanitizeForFirestore(v);
+            }
+            return out;
+        }
+        return obj;
+    };
+
     const handleFinalSave = async () => {
         if (!user) return alert('Debes iniciar sesión para crear torneos');
+        const currentUser = auth.currentUser;
+        if (!currentUser?.uid) {
+            alert('Sesión no detectada por Firebase. Cierra sesión, vuelve a entrar e inténtalo de nuevo.');
+            return;
+        }
         if (generatedMatches.length === 0) return alert('No hay partidos generados para guardar');
 
         setIsSaving(true);
         try {
-            // Generar un torneo por cada categoría
-            const savePromises = eventData.categories.map(async (cat, idx) => {
+            const results: { id: string; name: string }[] = [];
+            for (const cat of eventData.categories) {
                 const categoryMatches = generatedMatches.filter(m => m.categoryId === cat.id);
+                if (categoryMatches.length === 0) continue;
 
-                // Si por alguna razón no hay partidos para esta categoría, no la creamos
-                if (categoryMatches.length === 0) return null;
+                const teams = cat.teams ?? [];
+                const groupSize = (cat.groupSize === 3 || cat.groupSize === 4) ? cat.groupSize : 4;
+                // Misma lógica que MasterScheduleEngine: dividir equipos en grupos A, B, C...
+                const groupAssignments: Record<string, string[]> = {};
+                for (let i = 0; i < teams.length; i += groupSize) {
+                    const chunk = teams.slice(i, i + groupSize);
+                    const groupName = String.fromCharCode(65 + Object.keys(groupAssignments).length);
+                    groupAssignments[groupName] = chunk.map((t: any) => String(t?.id ?? ''));
+                }
+
+                const teamIdToIndex = new Map<string, number>();
+                teams.forEach((t: any, idx: number) => { if (t?.id) teamIdToIndex.set(String(t.id), idx + 1); });
+
+                // Cada partido: id, stage para grupos, team1Index/team2Index para la vista de grupos
+                const matchesWithIds = categoryMatches.map((m: any, i: number) => {
+                    const t1Id = m.team1?.id ?? m.team1?.p1?.id;
+                    const t2Id = m.team2?.id ?? m.team2?.p1?.id;
+                    const team1Index = t1Id ? teamIdToIndex.get(String(t1Id)) : undefined;
+                    const team2Index = t2Id ? teamIdToIndex.get(String(t2Id)) : undefined;
+                    const isGroupStage = m.roundName === 'Fase de Grupos';
+                    return {
+                        ...m,
+                        id: m.id || `m-${cat.id}-${i}-${Date.now().toString(36)}`,
+                        scheduledTime: typeof m.scheduledTime === 'string' ? m.scheduledTime : (m.scheduledTime instanceof Date ? m.scheduledTime.toISOString() : new Date().toISOString()),
+                        status: m.status ?? MatchStatus.PENDING,
+                        stage: isGroupStage ? 'GROUP_STAGE' : (m.roundName === 'SEMIFINAL' ? 'SEMIFINAL' : m.roundName === 'FINAL' ? 'FINAL' : undefined),
+                        ...(team1Index != null && { team1Index }),
+                        ...(team2Index != null && { team2Index }),
+                    };
+                });
 
                 const tournamentToSave = {
                     name: `${eventData.tournamentName} - ${cat.category} ${catLabels[cat.gender]}`,
-                    type: cat.type,
+                    type: cat.type ?? TournamentType.ROUND_ROBIN,
                     category: cat.category,
                     gender: cat.gender,
                     startDate: eventData.startDate,
+                    endDate: eventData.endDate,
                     startTime: eventData.dailyStartTime,
                     endTime: eventData.dailyEndTime,
-                    complexName: eventData.complexName,
-                    totalCourts: eventData.numCourts,
-                    courtNames: eventData.courtNames,
-                    bufferMinutes: eventData.bufferMinutes,
-                    teams: cat.teams,
-                    matches: categoryMatches,
-                    pointsGoal: 24, // Default for master gen
-                    status: 'Programado'
+                    complexName: eventData.complexName ?? '',
+                    totalCourts: eventData.numCourts ?? 3,
+                    courtNames: eventData.courtNames ?? [],
+                    bufferMinutes: eventData.bufferMinutes ?? 10,
+                    teams: cat.teams ?? [],
+                    matches: matchesWithIds,
+                    groupAssignments: Object.keys(groupAssignments).length > 0 ? groupAssignments : undefined,
+                    groupSize: groupSize,
+                    pointsGoal: cat.pointsGoal ?? 24,
+                    status: 'Programado',
                 };
 
-                return dataService.createTournament(tournamentToSave, user.uid);
-            });
+                const docRef = await dataService.createTournament(sanitizeForFirestore(tournamentToSave), currentUser.uid);
+                results.push({ id: docRef.id, name: tournamentToSave.name });
+            }
 
-            await Promise.all(savePromises);
-            alert('¡Evento Maestro creado con éxito! Se han generado todos los torneos por categoría.');
+            if (results.length === 0) {
+                alert('No se pudo crear ningún torneo. Asegúrate de que cada categoría tenga partidos generados.');
+                return;
+            }
+            alert(`¡Evento creado! Se guardaron ${results.length} torneo(s): ${results.map(r => r.name).join(', ')}`);
             router.push('/tournaments');
         } catch (error: any) {
             console.error('Error saving master event:', error);
-            alert('Error al guardar el evento: ' + error.message);
+            const code = error?.code || '';
+            const msg = error?.message || String(error);
+            const isPermission = code === 'permission-denied' || msg.toLowerCase().includes('permission');
+            if (isPermission) {
+                alert(
+                    `Error de permisos (${code || 'permission-denied'}).\n\n` +
+                    '• Cierra sesión, vuelve a entrar y prueba de nuevo.\n' +
+                    '• Si sigue fallando, en Firebase Console → Firestore → Reglas, verifica que esté desplegado "allow read, write: if request.auth != null" para tournaments.'
+                );
+            } else {
+                alert(`Error al guardar: ${msg}`);
+            }
         } finally {
             setIsSaving(false);
         }
@@ -476,21 +601,23 @@ export default function MasterGeneratorPage() {
                                         <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
                                             <Users className="w-3 h-3 text-padel-primary" /> Número de Parejas
                                         </label>
-                                        <div className="grid grid-cols-7 gap-1">
+                                        <div className="grid grid-cols-7 gap-2">
                                             {[4, 6, 8, 10, 12, 14, 16].map(n => (
                                                 <button
                                                     key={n}
+                                                    type="button"
                                                     onClick={() => setPendingNumTeams(n)}
-                                                    className={`py-1.5 rounded-lg text-xs font-black transition-all ${pendingNumTeams === n ? 'bg-padel-primary text-black shadow-md' : 'bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}
+                                                    className={`min-h-[44px] py-2 rounded-lg text-xs md:text-sm font-black transition-all select-none touch-manipulation active:scale-[0.98] ${pendingNumTeams === n ? 'bg-padel-primary text-black shadow-md' : 'bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}
                                                 >
                                                     {n}
                                                 </button>
                                             ))}
                                         </div>
-                                        <div className="flex items-center gap-3 bg-black/40 border border-zinc-800 rounded-xl px-3 py-2">
+                                        <div className="flex items-center gap-3 bg-black/40 border border-zinc-800 rounded-xl px-4 py-3">
                                             <button
+                                                type="button"
                                                 onClick={() => setPendingNumTeams(t => Math.max(2, t - 1))}
-                                                className="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-sm text-white transition-all active:scale-95"
+                                                className="min-w-[44px] min-h-[44px] rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-lg text-white transition-all active:scale-95 select-none touch-manipulation"
                                             >−</button>
                                             <div className="flex-1 text-center">
                                                 <span className="text-2xl font-black text-padel-primary">{pendingNumTeams}</span>
@@ -499,8 +626,9 @@ export default function MasterGeneratorPage() {
                                                 </span>
                                             </div>
                                             <button
+                                                type="button"
                                                 onClick={() => setPendingNumTeams(t => Math.min(64, t + 1))}
-                                                className="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-sm text-white transition-all active:scale-95"
+                                                className="min-w-[44px] min-h-[44px] rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-lg text-white transition-all active:scale-95 select-none touch-manipulation"
                                             >+</button>
                                         </div>
                                     </div>
@@ -519,8 +647,9 @@ export default function MasterGeneratorPage() {
                                                 return (
                                                     <button
                                                         key={size}
+                                                        type="button"
                                                         onClick={() => setPendingGroupSize(size)}
-                                                        className={`relative p-3 rounded-xl border text-left transition-all ${isSelected
+                                                        className={`relative min-h-[72px] md:min-h-[80px] p-4 rounded-xl border text-left transition-all select-none touch-manipulation active:scale-[0.98] ${isSelected
                                                             ? 'border-padel-primary bg-padel-primary/10 shadow-[0_0_16px_rgba(204,255,0,0.12)]'
                                                             : 'border-zinc-800 bg-black/30 hover:border-zinc-700'
                                                             }`}
@@ -545,102 +674,148 @@ export default function MasterGeneratorPage() {
                                 {/* ── Columna Derecha: Tipo de Torneo + config condicional ── */}
                                 <div className="space-y-3">
 
-                                    {/* Tipo de Torneo */}
+                                    {/* Tipo de Torneo – botones estilo tarjeta como en el mock */}
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                            <Trophy className="w-3 h-3 text-padel-primary" /> Tipo de Torneo
+                                            <Trophy className="w-3 h-3 text-padel-primary" /> Formato del Torneo
                                         </label>
-                                        <div className="flex flex-col gap-1.5">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                                             {([
-                                                { val: 'AMERICANO' as const, label: 'Americano', desc: 'Parejas rotativas' },
-                                                { val: 'DUPLA_FIJA' as const, label: 'Dupla Fija', desc: 'Parejas estables' },
-                                                { val: 'ROUND_ROBIN' as const, label: 'Round Robin', desc: 'Fase de grupos' },
-                                                { val: 'ELIMINACION_DIRECTA' as const, label: 'Eliminación Directa', desc: 'Llave de cuadro' },
+                                                { val: 'AMERICANO' as const, label: 'Americano', desc: 'Parejas rotativas, todos con todos.' },
+                                                { val: 'DUPLA_FIJA' as const, label: 'Dupla Fija', desc: 'Parejas estables, puntuación acumulada.' },
+                                                { val: 'ROUND_ROBIN' as const, label: 'Round Robin', desc: 'Grupos todos contra todos.' },
+                                                { val: 'ELIMINACION_DIRECTA' as const, label: 'Eliminación directa', desc: 'Llaves, el perdedor queda fuera.' },
+                                                { val: 'COMBINADO' as const, label: 'Combinado', desc: 'Fase de grupos + eliminatoria.' },
                                             ]).map(opt => {
                                                 const isSelected = pendingTournamentType === opt.val;
                                                 return (
                                                     <button
                                                         key={opt.val}
+                                                        type="button"
                                                         onClick={() => setPendingTournamentType(opt.val)}
-                                                        className={`w-full py-2.5 px-4 rounded-2xl border-2 text-left font-black italic text-[11px] uppercase tracking-wider transition-all ${isSelected
-                                                            ? 'bg-padel-primary border-padel-primary text-black shadow-[0_0_20px_rgba(204,255,0,0.25)]'
-                                                            : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'
-                                                            }`}
+                                                        className={`relative flex flex-col items-start justify-between rounded-2xl px-4 py-4 min-h-[80px] md:min-h-[88px] text-left transition-all border min-w-0 select-none touch-manipulation active:scale-[0.98] ${
+                                                            isSelected
+                                                                ? 'bg-padel-primary/10 border-padel-primary text-white shadow-[0_0_20px_rgba(204,255,0,0.3)]'
+                                                                : 'bg-zinc-900/80 border-zinc-800 text-zinc-300 hover:border-padel-primary/40 hover:bg-zinc-900'
+                                                        }`}
                                                     >
-                                                        {opt.label}
-                                                        <span className={`block text-[8px] font-bold mt-0.5 normal-case tracking-normal ${isSelected ? 'text-black/60' : 'text-zinc-600'
-                                                            }`}>{opt.desc}</span>
+                                                        <div className="flex items-start justify-between w-full gap-2 mb-1.5 min-w-0">
+                                                            <span className="text-[11px] md:text-xs font-black italic uppercase tracking-wider break-words leading-tight flex-1 min-w-0">
+                                                                {opt.label}
+                                                            </span>
+                                                            <div
+                                                                className="w-9 h-9 md:w-10 md:h-10 rounded-xl border flex items-center justify-center shrink-0 bg-black/50 border-zinc-700"
+                                                                style={isSelected ? { borderColor: FORMAT_COLORS[opt.val], boxShadow: `0 0 12px ${FORMAT_COLORS[opt.val]}40` } : undefined}
+                                                            >
+                                                                {opt.val === 'AMERICANO' && <FormatIcons.AMERICANO className="w-5 h-5 md:w-6 md:h-6" />}
+                                                                {opt.val === 'DUPLA_FIJA' && <FormatIcons.DUPLA_FIJA className="w-5 h-5 md:w-6 md:h-6" />}
+                                                                {opt.val === 'ROUND_ROBIN' && <FormatIcons.ROUND_ROBIN className="w-5 h-5 md:w-6 md:h-6" />}
+                                                                {opt.val === 'ELIMINACION_DIRECTA' && <FormatIcons.ELIMINATORIO className="w-5 h-5 md:w-6 md:h-6" />}
+                                                                {opt.val === 'COMBINADO' && <FormatIcons.COMBINADO className="w-5 h-5 md:w-6 md:h-6" />}
+                                                            </div>
+                                                        </div>
+                                                        <p className={`text-[10px] md:text-[11px] font-medium leading-tight line-clamp-2 ${isSelected ? 'text-zinc-100' : 'text-zinc-400'}`}>
+                                                            {opt.desc}
+                                                        </p>
                                                     </button>
                                                 );
                                             })}
                                         </div>
                                     </div>
 
-                                    {/* Puntos — solo Americano / Dupla Fija */}
-                                    {(pendingTournamentType === 'AMERICANO' || pendingTournamentType === 'DUPLA_FIJA') && (
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                <Sparkles className="w-3 h-3 text-yellow-400" /> A cuántos puntos
-                                            </label>
-                                            <div className="flex flex-col gap-1.5">
-                                                {[4, 8, 12, 16, 20, 24].map(pts => {
-                                                    const isSelected = pendingPointsGoal === pts;
-                                                    return (
-                                                        <button
-                                                            key={pts}
-                                                            onClick={() => setPendingPointsGoal(pts)}
-                                                            className={`w-full py-2 px-4 rounded-2xl border-2 font-black italic text-[11px] uppercase tracking-wider transition-all ${isSelected
-                                                                ? 'bg-padel-primary border-padel-primary text-black shadow-[0_0_16px_rgba(204,255,0,0.2)]'
-                                                                : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'
-                                                                }`}
-                                                        >
-                                                            {pts} puntos
-                                                        </button>
-                                                    );
-                                                })}
+                                    {/* Zona de opciones por formato — min-height para equilibrar sin huecos */}
+                                    <div className="min-h-[280px] md:min-h-[300px] flex flex-col">
+                                        {/* Puntos — solo Americano / Dupla Fija */}
+                                        {(pendingTournamentType === 'AMERICANO' || pendingTournamentType === 'DUPLA_FIJA') && (
+                                            <div className="space-y-1.5 flex-1">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                    <Sparkles className="w-3 h-3 text-yellow-400" /> A cuántos puntos
+                                                </label>
+                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                    {[4, 8, 12, 16, 20, 24].map(pts => {
+                                                        const isSelected = pendingPointsGoal === pts;
+                                                        return (
+                                                            <button
+                                                                key={pts}
+                                                                type="button"
+                                                                onClick={() => setPendingPointsGoal(pts)}
+                                                                className={`min-h-[48px] py-3 px-3 rounded-2xl border-2 font-black italic text-xs md:text-sm uppercase tracking-wider transition-all select-none touch-manipulation active:scale-[0.98] ${isSelected
+                                                                    ? 'bg-padel-primary border-padel-primary text-black shadow-[0_0_16px_rgba(204,255,0,0.2)]'
+                                                                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'
+                                                                    }`}
+                                                            >
+                                                                {pts} pt
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
 
-                                    {/* Formato de Partido — solo Round Robin */}
-                                    {pendingTournamentType === 'ROUND_ROBIN' && (
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                <Layout className="w-3 h-3 text-blue-400" /> Formato de Partido
-                                            </label>
-                                            <div className="flex flex-col gap-1.5">
-                                                {([
-                                                    { val: 'ONE_SET_6' as const, label: '1 Set (a 6 juegos)' },
-                                                    { val: 'ONE_SET_9' as const, label: '1 Set (a 9 juegos)' },
-                                                    { val: 'TWO_SHORT_SETS' as const, label: '2 Sets Cortos (a 4) + MTB' },
-                                                    { val: 'TWO_NORMAL_SETS' as const, label: '2 Sets Normales (a 6) + MTB' },
-                                                ]).map(opt => {
-                                                    const isSelected = pendingRRFormat === opt.val;
-                                                    return (
-                                                        <button
-                                                            key={opt.val}
-                                                            onClick={() => setPendingRRFormat(opt.val)}
-                                                            className={`w-full py-2.5 px-4 rounded-2xl border-2 text-left font-black italic text-[11px] uppercase tracking-wider transition-all ${isSelected
-                                                                ? 'bg-padel-primary border-padel-primary text-black shadow-[0_0_20px_rgba(204,255,0,0.25)]'
-                                                                : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'
-                                                                }`}
-                                                        >
-                                                            {opt.label}
-                                                        </button>
-                                                    );
-                                                })}
+                                        {/* Formato de Partido — solo Round Robin */}
+                                        {pendingTournamentType === 'ROUND_ROBIN' && (
+                                            <div className="space-y-1.5 flex-1">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                    <Layout className="w-3 h-3 text-blue-400" /> Formato de Partido
+                                                </label>
+                                                <div className="flex flex-col gap-2 md:gap-2.5">
+                                                    {([
+                                                        { val: 'ONE_SET_6' as const, label: '1 Set (a 6 juegos)' },
+                                                        { val: 'ONE_SET_9' as const, label: '1 Set (a 9 juegos)' },
+                                                        { val: 'TWO_SHORT_SETS' as const, label: '2 Sets Cortos (a 4) + MTB' },
+                                                        { val: 'TWO_NORMAL_SETS' as const, label: '2 Sets Normales (a 6) + MTB' },
+                                                    ]).map(opt => {
+                                                        const isSelected = pendingRRFormat === opt.val;
+                                                        return (
+                                                            <button
+                                                                key={opt.val}
+                                                                type="button"
+                                                                onClick={() => setPendingRRFormat(opt.val)}
+                                                                className={`w-full min-h-[48px] py-3 px-5 rounded-2xl border-2 text-left font-black italic text-xs md:text-sm uppercase tracking-wider transition-all select-none touch-manipulation active:scale-[0.98] ${isSelected
+                                                                    ? 'bg-padel-primary border-padel-primary text-black shadow-[0_0_20px_rgba(204,255,0,0.25)]'
+                                                                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'
+                                                                    }`}
+                                                            >
+                                                                {opt.label}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+
+                                        {/* Eliminación directa — sin opciones extra, bloque ocupado */}
+                                        {pendingTournamentType === 'ELIMINACION_DIRECTA' && (
+                                            <div className="flex-1 flex flex-col items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/40 py-8 px-4 text-center">
+                                                <div className="w-14 h-14 rounded-2xl border-2 flex items-center justify-center mb-3" style={{ borderColor: FORMAT_COLORS.ELIMINACION_DIRECTA }}>
+                                                    <FormatIcons.ELIMINATORIO className="w-8 h-8" />
+                                                </div>
+                                                <p className="text-xs font-black uppercase tracking-wider text-zinc-400">Sin opciones adicionales</p>
+                                                <p className="text-[10px] text-zinc-500 mt-1">Llaves automáticas según parejas</p>
+                                            </div>
+                                        )}
+
+                                        {/* Combinado — fase grupos + eliminatoria, bloque ocupado */}
+                                        {pendingTournamentType === 'COMBINADO' && (
+                                            <div className="flex-1 flex flex-col items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/40 py-8 px-4 text-center">
+                                                <div className="w-14 h-14 rounded-2xl border-2 flex items-center justify-center mb-3" style={{ borderColor: FORMAT_COLORS.COMBINADO }}>
+                                                    <FormatIcons.COMBINADO className="w-8 h-8" />
+                                                </div>
+                                                <p className="text-xs font-black uppercase tracking-wider text-zinc-400">Fase de grupos + eliminatoria</p>
+                                                <p className="text-[10px] text-zinc-500 mt-1">Configuración próxima</p>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Confirm — full width */}
+                            {/* Confirm — full width, touch-friendly */}
                             <button
+                                type="button"
                                 onClick={confirmAddCategory}
-                                className="w-full bg-padel-primary hover:bg-white text-black font-black py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm"
+                                className="w-full min-h-[52px] md:min-h-[56px] bg-padel-primary hover:bg-white text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm md:text-base select-none touch-manipulation -mt-2"
                             >
-                                <Plus className="w-4 h-4" /> AÑADIR CATEGORÍA
+                                <Plus className="w-5 h-5 md:w-6 md:h-6" /> AÑADIR CATEGORÍA
                             </button>
                         </motion.div>
                     </motion.div>
@@ -1191,8 +1366,8 @@ export default function MasterGeneratorPage() {
                                             </div>
                                         </div>
                                         <div className="flex gap-3">
-                                            <button className="flex items-center gap-2 px-6 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg shadow-black/40 group">
-                                                <Share2 className="w-4 h-4 text-padel-primary group-hover:scale-110 transition-transform" />
+                                            <button type="button" className="min-h-[48px] flex items-center justify-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-sm font-bold transition-all active:scale-[0.98] shadow-lg shadow-black/40 group select-none touch-manipulation">
+                                                <Share2 className="w-5 h-5 text-padel-primary group-hover:scale-110 transition-transform" />
                                                 Compartir
                                             </button>
                                             <span className="bg-padel-primary/10 text-padel-primary px-4 py-2 rounded-xl text-sm font-bold border border-padel-primary/20 leading-none flex items-center">
@@ -1297,39 +1472,43 @@ export default function MasterGeneratorPage() {
                             <div className="mt-4 pt-4 border-t border-zinc-800 space-y-2">
                                 {step < 3 ? (
                                     <button
+                                        type="button"
                                         onClick={nextStep}
-                                        className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all text-sm"
+                                        className="w-full min-h-[52px] md:min-h-[56px] bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all text-sm md:text-base select-none touch-manipulation active:scale-[0.98]"
                                     >
-                                        Continuar <ChevronRight className="w-4 h-4" />
+                                        Continuar <ChevronRight className="w-5 h-5" />
                                     </button>
                                 ) : step === 3 ? (
                                     <button
+                                        type="button"
                                         onClick={handleGenerate}
                                         disabled={isGenerating}
-                                        className="w-full bg-padel-primary hover:bg-white text-black font-black py-3 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed group text-sm"
+                                        className="w-full min-h-[52px] md:min-h-[56px] bg-padel-primary hover:bg-white text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed group text-sm md:text-base select-none touch-manipulation active:scale-[0.98]"
                                     >
                                         {isGenerating ? (
                                             <>Calculando...</>
                                         ) : (
-                                            <>GENERAR FIXTURE <Sparkles className="w-4 h-4 group-hover:scale-125 transition-transform" /></>
+                                            <>GENERAR FIXTURE <Sparkles className="w-5 h-5 group-hover:scale-125 transition-transform" /></>
                                         )}
                                     </button>
                                 ) : (
                                     <div className="space-y-2">
                                         <button
+                                            type="button"
                                             onClick={handleFinalSave}
                                             disabled={isSaving}
-                                            className="w-full bg-padel-primary hover:bg-white text-black font-black py-3 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 group shadow-[0_6px_20px_rgba(204,255,0,0.2)] text-sm"
+                                            className="w-full min-h-[52px] md:min-h-[56px] bg-padel-primary hover:bg-white text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 group shadow-[0_6px_20px_rgba(204,255,0,0.2)] text-sm md:text-base select-none touch-manipulation active:scale-[0.98]"
                                         >
                                             {isSaving ? (
                                                 <>Creando...</>
                                             ) : (
-                                                <>CREAR EVENTO <Database className="w-4 h-4 group-hover:rotate-12 transition-transform" /></>
+                                                <>CREAR EVENTO <Database className="w-5 h-5 group-hover:rotate-12 transition-transform" /></>
                                             )}
                                         </button>
                                         <button
+                                            type="button"
                                             onClick={() => setStep(1)}
-                                            className="w-full bg-zinc-900 border border-zinc-800 text-zinc-400 font-bold py-2.5 rounded-xl transition-all hover:bg-zinc-800 text-sm"
+                                            className="w-full min-h-[48px] bg-zinc-900 border border-zinc-800 text-zinc-400 font-bold py-3 rounded-xl transition-all hover:bg-zinc-800 text-sm select-none touch-manipulation active:scale-[0.98]"
                                         >
                                             Descartar
                                         </button>
@@ -1338,8 +1517,9 @@ export default function MasterGeneratorPage() {
 
                                 {step > 1 && (
                                     <button
+                                        type="button"
                                         onClick={prevStep}
-                                        className="w-full bg-zinc-900 border border-zinc-800 text-zinc-400 font-bold py-2.5 rounded-xl transition-all hover:bg-zinc-800 text-sm"
+                                        className="w-full min-h-[48px] bg-zinc-900 border border-zinc-800 text-zinc-400 font-bold py-3 rounded-xl transition-all hover:bg-zinc-800 text-sm select-none touch-manipulation active:scale-[0.98]"
                                     >
                                         Atrás
                                     </button>

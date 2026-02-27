@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
+import { getAuthHeaders } from '@/lib/apiAuth';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query as fsQuery } from 'firebase/firestore';
@@ -380,10 +381,18 @@ export default function AdminCombinedAdsMonitorPage() {
 
             const response = await fetch('/api/ai', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                 body: JSON.stringify({ prompt, role: 'reporter' })
             });
             const data = await response.json();
+            if (response.status === 429) {
+                notify('err', 'Demasiadas peticiones. Espera un minuto e intenta de nuevo.');
+                return;
+            }
+            if (!response.ok) {
+                notify('err', data.error || 'Error al generar la crónica');
+                return;
+            }
             const fullText = data.text || '';
             const lines = fullText.split('\n');
             const title = lines[0].replace(/Title:|Título:/i, '').trim() || "Crónica del Partido";

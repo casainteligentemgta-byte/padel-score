@@ -126,7 +126,7 @@ export default function TVKioskPage() {
                                 </div>
                                 <div>
                                     <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white">{liveMatch.tournamentName}</h2>
-                                    <p className="text-xl font-bold uppercase tracking-widest text-padel-primary">Pista {liveMatch.court} • {liveMatch.category}</p>
+                                    <p className="label-cancha text-xl text-padel-primary">Pista {liveMatch.court} • {liveMatch.category}</p>
                                 </div>
                             </div>
                             <div className="text-right">

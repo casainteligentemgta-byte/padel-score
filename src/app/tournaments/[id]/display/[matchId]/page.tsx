@@ -37,6 +37,16 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const [tickerActivo, setTickerActivo] = useState(false);
     const [tickerVelocidad, setTickerVelocidad] = useState(30);
 
+    // Estilo del reloj según ocasión (halloween, navidad, etc.) — desde módulo Publicidad
+    const [relojOcasion, setRelojOcasion] = useState<string>('default');
+
+    useEffect(() => {
+        const relojRef = ref(rtdb, 'publicidad_master/reloj_ocasion');
+        const handler = (snap: any) => setRelojOcasion(snap.val() || 'default');
+        onValue(relojRef, handler);
+        return () => off(relojRef, 'value', handler);
+    }, []);
+
     useEffect(() => {
         const tickerRef = ref(rtdb, 'publicidad_master/ticker');
         const handler = (snap: any) => {
@@ -356,6 +366,16 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return suffix ? `${base} ${suffix}` : base;
     };
 
+    const matchTimeDisplay = (() => {
+        const raw = match?.scheduledTime || match?.time;
+        if (!raw) return null;
+        const d = typeof raw?.toDate === 'function' ? raw.toDate() : new Date(raw);
+        if (isNaN(d.getTime())) return null;
+        return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+    })();
+
+    const relojTheme = relojOcasion || 'default';
+
     return (
         <div
             className={`h-screen w-screen text-white overflow-hidden font-outfit relative flex flex-col transition-colors duration-1000 ${isFinal ? 'bg-[#000] border-8 border-[#FFD700]/20' : 'bg-[#050505]'}`}
@@ -404,8 +424,8 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     </div>
                                 )}
                                 <div className="flex flex-col items-start justify-center" style={{ gap: 'clamp(1px,0.25vh,5px)' }}>
-                                    {/* Pista — grande */}
-                                    <span className="font-black italic uppercase tracking-tighter text-white leading-none"
+                                    {/* Pista — grande (clamp para display TV) */}
+                                    <span className="label-cancha leading-none"
                                         style={{ fontSize: 'clamp(16px,2.2vw,38px)' }}>
                                         Pista {match.court ?? '-'}
                                     </span>
@@ -440,28 +460,36 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 </div>
                             </div>
 
-                            {/* Center: Sponsor Logo (Rotating) */}
-                            {tournament?.broadcastingSettings?.sponsors?.filter((s: any) => s.active).length > 0 && (
-                                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-3">
-                                    <span className="text-[8px] font-black italic text-gray-700 uppercase tracking-[0.4em] rotate-180" style={{ writingMode: 'vertical-rl' }}>PATROCINA</span>
-                                    <div className="w-[clamp(50px,7vw,140px)] h-[clamp(24px,3vh,50px)] relative">
-                                        <AnimatePresence mode="wait">
-                                            <motion.img
-                                                key={sponsorIdx}
-                                                src={tournament.broadcastingSettings.sponsors.filter((s: any) => s.active)[sponsorIdx]?.logoUrl}
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                exit={{ opacity: 0, y: -10 }}
-                                                transition={{ duration: 0.5 }}
-                                                className="w-full h-full object-contain"
-                                            />
-                                        </AnimatePresence>
+                            {/* Center: Hora del partido */}
+                            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center">
+                                {matchTimeDisplay && (
+                                    <>
+                                        <span className="font-bold uppercase text-white/50 tracking-[0.35em] leading-none" style={{ fontSize: 'clamp(6px,0.7vw,11px)' }}>Partido</span>
+                                        <span className="font-black italic tracking-tighter leading-none mt-0.5" style={{ fontSize: 'clamp(20px,2.8vw,48px)', color: primaryColor }}>{matchTimeDisplay}</span>
+                                    </>
+                                )}
+                                {tournament?.broadcastingSettings?.sponsors?.filter((s: any) => s.active).length > 0 && (
+                                    <div className="flex items-center gap-2 mt-2 opacity-60">
+                                        <span className="text-[7px] font-black italic text-gray-600 uppercase tracking-[0.3em]" style={{ writingMode: 'vertical-rl' }}>PATROCINA</span>
+                                        <div className="w-[clamp(40px,5vw,100px)] h-[clamp(18px,2.2vh,36px)] relative">
+                                            <AnimatePresence mode="wait">
+                                                <motion.img
+                                                    key={sponsorIdx}
+                                                    src={tournament.broadcastingSettings.sponsors.filter((s: any) => s.active)[sponsorIdx]?.logoUrl}
+                                                    initial={{ opacity: 0, y: 8 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    exit={{ opacity: 0, y: -8 }}
+                                                    transition={{ duration: 0.5 }}
+                                                    className="w-full h-full object-contain"
+                                                />
+                                            </AnimatePresence>
+                                        </div>
+                                        <span className="text-[7px] font-black italic text-gray-600 uppercase tracking-[0.3em]" style={{ writingMode: 'vertical-rl' }}>SPONSOR</span>
                                     </div>
-                                    <span className="text-[8px] font-black italic text-gray-700 uppercase tracking-[0.4em]" style={{ writingMode: 'vertical-rl' }}>SPONSOR</span>
-                                </div>
-                            )}
+                                )}
+                            </div>
 
-                            {/* Right: Date / Time / Temp — horizontal pill */}
+                            {/* Right: Date / Time / Temp — horizontal pill (estilo según ocasión) */}
 
                             {/* Right: Date / Time / Temp — horizontal pill */}
                             <div className={`flex items-center border transition-all relative overflow-hidden ${tournament?.broadcastingSettings?.clockStyle === 'broadcast'

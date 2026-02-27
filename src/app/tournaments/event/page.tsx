@@ -408,7 +408,7 @@ function GroupsView({ tournaments }: { tournaments: Record<string, any> }) {
                                     ) : (
                                         <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">{formatHHMM(m.scheduledTime)}</span>
                                     )}
-                                    <span className="text-[7px] font-bold text-gray-700 uppercase">Pista {m.court ?? '-'}</span>
+                                    <span className="label-cancha-meta text-[9px]">Pista {m.court ?? '-'}</span>
                                 </div>
                             </div>
 
@@ -549,7 +549,7 @@ function PlaceholderMatchCard({ rank, mode = 'pending' }: { rank: number; mode?:
                 <div className="w-8 h-8 rounded-full border border-dashed border-white/20 flex items-center justify-center mb-1">
                     <Trophy className="w-3.5 h-3.5 text-gray-400" />
                 </div>
-                <p className="text-[8px] font-black text-gray-400 uppercase italic tracking-widest text-center leading-none">Pista Libre</p>
+                <p className="label-cancha-meta text-center leading-none text-gray-400">Pista Libre</p>
             </div>
         </div>
     );
@@ -689,7 +689,7 @@ function NextMatchCard({ match, rank, compact = false }: { match: any; rank: num
                         {rankLabelFull[safeRank] ?? `${rank + 1}° Pista`}
                     </span>
                     <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 bg-[#ccff00]/40`} />
-                    <span className="text-[10px] font-black text-gray-500 italic">
+                    <span className="label-cancha-meta italic">
                         Pista {match.court ?? '-'} · {formatHHMM(match.scheduledTime)}
                     </span>
                 </div>

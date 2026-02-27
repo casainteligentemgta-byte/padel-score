@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
+import { requireAuth } from '@/lib/authServer';
 
-export async function GET() {
+export async function GET(req: Request) {
+    const authResult = await requireAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
     try {
         // Obtenemos todos los datos relevantes del club para la IA
         const [tournamentsSnap, expensesSnap, participantsSnap] = await Promise.all([

@@ -1,20 +1,31 @@
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/authServer';
+import { validateAiBody } from '@/lib/apiValidation';
+import { checkRateLimit } from '@/lib/rateLimit';
 import { buildSystemPrompt } from '@/lib/padelKnowledge';
 
 // RAG: recupera documentos relevantes desde Firestore (server-side)
 
 export async function POST(req: Request) {
+    if (!checkRateLimit(req)) {
+        return NextResponse.json(
+            { error: 'Demasiadas peticiones. Espera un minuto e intenta de nuevo.' },
+            { status: 429 }
+        );
+    }
+    const authResult = await requireAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
     try {
         const body = await req.json();
+        const validation = validateAiBody(body);
+        if (validation.error) {
+            return NextResponse.json({ error: validation.error }, { status: 400 });
+        }
 
         // Determinar formato (Agentes o Crónica)
         let agentId = body.agentId || body.role || 'organizer';
         let message = body.message || body.prompt || '';
         const context = body.context;
-
-        if (!message) {
-            return NextResponse.json({ error: 'Message or prompt is required' }, { status: 400 });
-        }
 
         // Mapear roles antiguos a nuevos agentes si es necesario
         if (agentId === 'reporter') agentId = 'media';

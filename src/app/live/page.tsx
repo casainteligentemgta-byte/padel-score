@@ -140,7 +140,7 @@ export default function LiveBracketsPage() {
                                                     <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: m.primaryColor }} />
                                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{m.tournamentName}</p>
                                                 </div>
-                                                <h3 className="text-2xl font-black italic uppercase tracking-tighter leading-tight mt-1">
+                                                <h3 className="label-cancha text-2xl leading-tight mt-1">
                                                     Pista {m.court} • <span className="text-padel-primary opacity-80">{m.category}</span>
                                                 </h3>
                                             </div>

@@ -1,0 +1,65 @@
+'use client';
+
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { dataService, type AdminSettings } from './dataService';
+
+const DEFAULTS = { appTitle: 'Smart Padel', clubName: '' };
+
+type AppSettingsContextValue = {
+    appTitle: string;
+    clubName: string;
+    timezone: string;
+    loading: boolean;
+    refresh: () => Promise<void>;
+};
+
+const AppSettingsContext = createContext<AppSettingsContextValue>({
+    ...DEFAULTS,
+    timezone: '',
+    loading: true,
+    refresh: async () => {},
+});
+
+export function AppSettingsProvider({ children }: { children: React.ReactNode }) {
+    const [settings, setSettings] = useState<Partial<AdminSettings>>(DEFAULTS);
+    const [loading, setLoading] = useState(true);
+
+    const load = async () => {
+        try {
+            const data = await dataService.getAdminSettings();
+            setSettings({
+                appTitle: data?.appTitle || DEFAULTS.appTitle,
+                clubName: data?.clubName ?? DEFAULTS.clubName,
+                timezone: data?.timezone ?? ''
+            });
+        } catch {
+            setSettings(DEFAULTS);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        load();
+    }, []);
+
+    const value: AppSettingsContextValue = {
+        appTitle: settings.appTitle ?? DEFAULTS.appTitle,
+        clubName: settings.clubName ?? DEFAULTS.clubName,
+        timezone: settings.timezone ?? '',
+        loading,
+        refresh: load
+    };
+
+    return (
+        <AppSettingsContext.Provider value={value}>
+            {children}
+        </AppSettingsContext.Provider>
+    );
+}
+
+export function useAppSettings() {
+    const ctx = useContext(AppSettingsContext);
+    if (!ctx) throw new Error('useAppSettings must be used within AppSettingsProvider');
+    return ctx;
+}
