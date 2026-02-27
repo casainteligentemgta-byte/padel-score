@@ -494,7 +494,7 @@ export default function MasterGeneratorPage() {
                     matches: matchesWithIds,
                     groupAssignments: Object.keys(groupAssignments).length > 0 ? groupAssignments : undefined,
                     groupSize: groupSize,
-                    pointsGoal: (cat as { pointsGoal?: number }).pointsGoal ?? 24,
+                    pointsGoal: (cat as any).pointsGoal ?? 24,
                     status: 'Programado',
                 };
 
