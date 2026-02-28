@@ -174,8 +174,7 @@ export default function AdminSettingsPage() {
                     role: formData.role
                 });
             } else {
-                // Para crear un usuario nuevo con Auth, se requeriría una función de Cloud Functions
-                // o usar una API secundaria. Por ahora lo guardamos en el perfil.
+                // Crear usuario nuevo (perfil; Auth requeriría Cloud Functions).
                 const newUid = `user_${Date.now()}`;
                 await dataService.setUserProfile(newUid, {
                     uid: newUid,
