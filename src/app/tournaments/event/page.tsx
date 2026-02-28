@@ -1531,7 +1531,7 @@ function EventView() {
                                 exit={{ opacity: 0, y: -10 }}
                                 transition={{ duration: 0.2 }}
                             >
-                                <RulesView tournaments={tournaments} canManage={canManageTournament} />
+                                <RulesView tournaments={tournaments} canManage={!!canManageTournament} />
                             </motion.div>
                         ) : /* ── Pending View ── */
                             activeTab === MatchStatus.PENDING ? (
