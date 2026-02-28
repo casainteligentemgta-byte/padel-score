@@ -1251,24 +1251,24 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                 );
                                             })()}
                                             <TournamentPhaseManager
-                                            tournament={tournament}
-                                            matches={matches}
-                                            canManage={canManageTournament}
-                                            onSaveResult={handleSaveGroupResult}
-                                            onFinishGroupPhase={() => generateMainDraw()}
-                                            onResetElimination={async () => {
-                                                // Eliminar partidos de llave y restaurar edición de grupos
-                                                const groupOnly = matches.filter(m =>
-                                                    m.stage === 'GROUP_STAGE' || m.groupName != null
-                                                );
-                                                await updateDoc(doc(db, 'tournaments', id), {
-                                                    matches: stripMatches(groupOnly),
-                                                    mainDrawGenerated: false,
-                                                    updatedAt: new Date(),
-                                                });
-                                                setMatches(groupOnly);
-                                            }}
-                                        />
+                                                tournament={tournament}
+                                                matches={matches}
+                                                canManage={canManageTournament}
+                                                onSaveResult={handleSaveGroupResult}
+                                                onFinishGroupPhase={() => generateMainDraw()}
+                                                onResetElimination={async () => {
+                                                    // Eliminar partidos de llave y restaurar edición de grupos
+                                                    const groupOnly = matches.filter(m =>
+                                                        m.stage === 'GROUP_STAGE' || m.groupName != null
+                                                    );
+                                                    await updateDoc(doc(db, 'tournaments', id), {
+                                                        matches: stripMatches(groupOnly),
+                                                        mainDrawGenerated: false,
+                                                        updatedAt: new Date(),
+                                                    });
+                                                    setMatches(groupOnly);
+                                                }}
+                                            />
                                         </div>
                                     );
                                 })() : (() => {
@@ -1590,7 +1590,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                     <span className="text-[8px] font-black text-white/30 uppercase italic tracking-widest border border-white/10 px-1.5 py-0.5 rounded-full bg-white/5">Finalizado</span>
                                                                 ) : delayInfo ? (
                                                                     <span className="text-[8px] font-black text-orange-400 bg-orange-500/10 border border-orange-500/30 px-1.5 py-0.5 rounded-full italic uppercase tracking-widest animate-pulse">
-                                                                        ⚠ ~{delayInfo.totalDelayMinutes}m
+                                                                        ⚠ ~{delayInfo.delayMins}m
                                                                     </span>
                                                                 ) : match.groupName && match.roundName === 'Fase de Grupos' ? (
                                                                     <span className="text-[8px] font-black text-padel-primary/40 uppercase tracking-widest italic border border-padel-primary/10 px-1.5 py-0.5 rounded-full bg-padel-primary/5">
