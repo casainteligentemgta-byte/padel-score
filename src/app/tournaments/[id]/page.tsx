@@ -1227,7 +1227,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                     <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
                                                         <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
                                                             <span className="text-xs font-black uppercase tracking-widest text-gray-400">Verificación del sorteo</span>
-                                                            {(okNoDuplicates && okTotal) ? <CheckCircle2 className="w-4 h-4 text-green-500" title="Sorteo correcto" /> : <AlertTriangle className="w-4 h-4 text-amber-500" title="Revisar asignación" />}
+                                                            {(okNoDuplicates && okTotal) ? <CheckCircle2 className="w-4 h-4 text-green-500" aria-label="Sorteo correcto" /> : <AlertTriangle className="w-4 h-4 text-amber-500" aria-label="Revisar asignación" />}
                                                         </div>
                                                         <div className="p-4 space-y-3">
                                                             {groupNames.map(g => {
