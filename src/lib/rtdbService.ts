@@ -168,3 +168,76 @@ export async function setTickerConfig(activo: boolean, texto: string, velocidad_
     });
     await update(ref(rtdb, 'publicidad_master'), { ultimo_update: Date.now() });
 }
+
+// ─── PIZARRA: CRONÓMETRO, RELOJ, LOGOS, TICKER, ANIMACIONES ─────────────────
+
+export type CronometroTipo = 'default' | 'minimal' | 'broadcast' | 'digital';
+export type RelojTipo = 'default' | 'broadcast' | 'custom';
+
+/** Tipo de cronómetro (duración del partido) en la pizarra */
+export async function setCronometroTipo(tipo: CronometroTipo) {
+    await update(ref(rtdb, 'publicidad_master'), { cronometro_tipo: tipo, ultimo_update: Date.now() });
+}
+
+/** Estilo del reloj (hora del día). reloj_ocasion se mantiene por compatibilidad. */
+export async function setRelojTipo(tipo: RelojTipo) {
+    await update(ref(rtdb, 'publicidad_master'), { reloj_tipo: tipo, reloj_ocasion: tipo, ultimo_update: Date.now() });
+}
+
+/** Modelos de reloj: cada uno tiene id, nombre, items (urls), rotacion_seg */
+export async function setRelojModelo(modeloId: string, data: { nombre: string; items: { url: string; orden: number }[]; rotacion_seg: number }) {
+    await set(ref(rtdb, `publicidad_master/reloj_modelos/${modeloId}`), data);
+    await update(ref(rtdb, 'publicidad_master'), { ultimo_update: Date.now() });
+}
+
+/** Selecciona qué modelo de reloj está activo */
+export async function setRelojModeloActivo(modeloId: string | null) {
+    await update(ref(rtdb, 'publicidad_master'), { reloj_modelo_activo: modeloId ?? null, ultimo_update: Date.now() });
+}
+
+/** Logo evento (esquina superior izquierda): lista de items y rotación */
+export async function setLogoEvento(items: { id: string; url: string; orden: number }[], rotacion_seg: number) {
+    const obj: Record<string, { url: string; orden: number }> = {};
+    items.forEach(i => { obj[i.id] = { url: i.url, orden: i.orden }; });
+    await set(ref(rtdb, 'publicidad_master/logo_evento'), { items: obj, rotacion_seg });
+    await update(ref(rtdb, 'publicidad_master'), { ultimo_update: Date.now() });
+}
+
+/** Logos patrocinantes (esquina): lista y rotación */
+export async function setLogosPatrocinantes(items: { id: string; url: string; orden: number }[], rotacion_seg: number) {
+    const obj: Record<string, { url: string; orden: number }> = {};
+    items.forEach(i => { obj[i.id] = { url: i.url, orden: i.orden }; });
+    await set(ref(rtdb, 'publicidad_master/logos_patrocinantes'), { items: obj, rotacion_seg });
+    await update(ref(rtdb, 'publicidad_master'), { ultimo_update: Date.now() });
+}
+
+/** Video esquina: lista y rotación */
+export async function setVideoEsquina(items: { id: string; url: string; orden: number }[], rotacion_seg: number) {
+    const obj: Record<string, { url: string; orden: number }> = {};
+    items.forEach(i => { obj[i.id] = { url: i.url, orden: i.orden }; });
+    await set(ref(rtdb, 'publicidad_master/video_esquina'), { items: obj, rotacion_seg });
+    await update(ref(rtdb, 'publicidad_master'), { ultimo_update: Date.now() });
+}
+
+/** Ticker: tipo (texto | animado) y lista de animaciones para la tira */
+export async function setTickerTipoYAnimaciones(tipo: 'texto' | 'animado', animaciones: { id: string; url: string; orden: number }[]) {
+    const obj: Record<string, { url: string; orden: number }> = {};
+    animaciones.forEach(a => { obj[a.id] = { url: a.url, orden: a.orden }; });
+    await update(ref(rtdb, 'publicidad_master/ticker'), { tipo_animacion: tipo, animaciones: obj });
+    await update(ref(rtdb, 'publicidad_master'), { ultimo_update: Date.now() });
+}
+
+/** Animaciones del marcador: se cargan aquí y se disparan desde el marker (botones debajo de los puntos) */
+export async function setAnimacionMarcador(animId: string, data: { nombre: string; url: string } | null) {
+    if (data === null) {
+        await set(ref(rtdb, `publicidad_master/animaciones_marcador/${animId}`), null);
+    } else {
+        await set(ref(rtdb, `publicidad_master/animaciones_marcador/${animId}`), data);
+    }
+    await update(ref(rtdb, 'publicidad_master'), { ultimo_update: Date.now() });
+}
+
+/** El marker dispara una animación en la pizarra (por cancha) */
+export async function dispararAnimacionMarcador(canchaId: string, animId: string | null) {
+    await update(ref(rtdb, `canchas/${canchaId}/animacion_actual`), animId ? { id: animId, ts: Date.now() } : null);
+}

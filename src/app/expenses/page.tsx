@@ -12,8 +12,10 @@ import {
     TrendingDown,
     RefreshCw,
     Trash2,
-    PieChart
+    PieChart,
+    ChevronLeft
 } from 'lucide-react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function ExpensesPage() {
@@ -96,6 +98,14 @@ export default function ExpensesPage() {
     return (
         <div className="min-h-screen bg-[#0a0a0a] text-white p-6 md:p-12 font-outfit">
             <div className="max-w-6xl mx-auto">
+                {/* Botón atrás */}
+                <Link
+                    href="/"
+                    className="inline-flex items-center gap-2 text-gray-400 hover:text-padel-primary transition-colors mb-6 text-sm font-bold uppercase tracking-widest"
+                >
+                    <ChevronLeft className="w-5 h-5" />
+                    Atrás
+                </Link>
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
                     <div>

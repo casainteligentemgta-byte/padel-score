@@ -9,7 +9,8 @@ import {
     createUserWithEmailAndPassword,
     signOut,
     updateProfile,
-    sendPasswordResetEmail
+    sendPasswordResetEmail,
+    signInAnonymously
 } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
 import { dataService, ROLES } from '@/lib/dataService';
@@ -71,7 +72,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 console.warn('AuthContext: Simulación con credenciales reales falló, usando usuario mock (no se podrá guardar):', e);
             }
         }
-        // Sin env o fallo: usuario mock solo en estado (la app funciona pero Firestore rechazará guardar)
+        // Fallback: anonymous login to have a real Firebase session
+        try {
+            await signInAnonymously(auth);
+            // After signing in, we can still set the mock profile as admin for UI purposes
+            setProfile({ role: ROLES.ADMIN, name: 'Luis Mata (Mock Admin)' });
+            return;
+        } catch (e) {
+            console.error('AuthContext: Anonymous sign-in failed:', e);
+        }
+
+        // Ultimate fallback: mock user only (Firestore will fail if rules require auth)
         const mockUser = {
             uid: 'CMWhNg0MYIgiczQGkGGLl1tKn6A2',
             displayName: 'Luis Mata (Owner)',
@@ -111,9 +122,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     useEffect(() => {
+        const el = document.getElementById('root-loading');
+        if (el) el.style.setProperty('display', 'none');
         (window as any).enableDevMode = enableDevMode;
 
-        // Safety timeout to prevent permanent hang
+        // Safety timeout to prevent permanent hang (2s para que la página se vea antes en local)
         const safetyTimeout = setTimeout(() => {
             setLoading((prev: boolean) => {
                 if (prev) {
@@ -122,7 +135,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 }
                 return prev;
             });
-        }, 5000);
+        }, 2000);
 
         const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
             console.log("AuthContext: onAuthStateChanged", firebaseUser?.email || "No user");
@@ -236,9 +249,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             canMarkInCancha
         }}>
             {loading ? (
-                <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-[#ccff00] font-black italic uppercase tracking-tighter text-2xl animate-pulse">
-                    Padel <span className="text-white ml-2">Smart</span>
-                    <div className="ml-4 w-4 h-4 rounded-full bg-[#ccff00] animate-bounce" />
+                <div
+                    className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-2xl animate-pulse"
+                    style={{ minHeight: '100dvh', background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccff00', fontWeight: 900 }}
+                >
+                    <span>Padel</span>
+                    <span style={{ color: '#fff', marginLeft: 8 }}>Smart</span>
+                    <div style={{ marginLeft: 16, width: 16, height: 16, borderRadius: '50%', background: '#ccff00' }} />
                 </div>
             ) : children}
         </AuthContext.Provider>

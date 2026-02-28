@@ -4,6 +4,7 @@ export enum TournamentType {
     KNOCKOUT = 'KNOCKOUT',                         // Eliminación directa
     ROUND_ROBIN = 'ROUND_ROBIN',                   // Liga / Grupos / Round Robin
     CRUZADO = 'CRUZADO',                           // Grupo A vs Grupo B → Cuartos de final
+    CUADRO_CONSOLACION = 'CUADRO_CONSOLACION',     // Cuadro principal + llave consolación (mín. 2 partidos por pareja)
 }
 
 

@@ -37,14 +37,29 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const [tickerActivo, setTickerActivo] = useState(false);
     const [tickerVelocidad, setTickerVelocidad] = useState(30);
 
-    // Estilo del reloj según ocasión (halloween, navidad, etc.) — desde módulo Publicidad
+    // Estilo del reloj y del cronómetro — desde módulo Publicidad
     const [relojOcasion, setRelojOcasion] = useState<string>('default');
+    const [cronometroTipo, setCronometroTipo] = useState<string>('default');
+    const [animacionActual, setAnimacionActual] = useState<{ id: string; ts: number } | null>(null);
+    const [animacionesMarcador, setAnimacionesMarcador] = useState<Record<string, { nombre: string; url: string }>>({});
 
     useEffect(() => {
         const relojRef = ref(rtdb, 'publicidad_master/reloj_ocasion');
         const handler = (snap: any) => setRelojOcasion(snap.val() || 'default');
         onValue(relojRef, handler);
         return () => off(relojRef, 'value', handler);
+    }, []);
+    useEffect(() => {
+        const refCron = ref(rtdb, 'publicidad_master/cronometro_tipo');
+        const h = (snap: any) => setCronometroTipo(snap.val() || 'default');
+        onValue(refCron, h);
+        return () => off(refCron, 'value', h);
+    }, []);
+    useEffect(() => {
+        const refAnim = ref(rtdb, 'publicidad_master/animaciones_marcador');
+        const h = (snap: any) => setAnimacionesMarcador(snap.val() || {});
+        onValue(refAnim, h);
+        return () => off(refAnim, 'value', h);
     }, []);
 
     useEffect(() => {
@@ -117,24 +132,38 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return () => clearInterval(id);
     }, [tournament?.broadcastingSettings?.sponsors]);
 
-    // Match Duration Counter
+    // Hora de inicio del partido (misma fuente que el marcador: startedAt/actualStartTime)
+    const getMatchStartTimeMs = (m: any): number | null => {
+        const raw = m?.startedAt ?? m?.actualStartTime ?? m?.startTime ?? liveMarcador?.match_start_time;
+        if (raw == null) return null;
+        if (typeof raw?.toDate === 'function') return raw.toDate().getTime();
+        if (typeof raw?.seconds === 'number') return raw.seconds * 1000;
+        const d = new Date(raw);
+        return isNaN(d.getTime()) ? null : d.getTime();
+    };
+
+    // Match Duration Counter — mismo tiempo que el marcador, actualización cada segundo
     useEffect(() => {
         if (match?.status !== MatchStatus.LIVE && match?.status !== 'live') {
             setMatchDuration('');
             return;
         }
+        const startMs = getMatchStartTimeMs(match);
+        if (startMs == null) {
+            setMatchDuration('');
+            return;
+        }
         const update = () => {
-            const start = match?.startTime || liveMarcador?.match_start_time || match?.updatedAt;
-            if (!start) return;
-            const diff = Date.now() - (start.seconds ? start.seconds * 1000 : new Date(start).getTime());
-            const mins = Math.floor(diff / 60000);
-            const hrs = Math.floor(mins / 60);
-            setMatchDuration(hrs > 0 ? `${hrs}h ${mins % 60}m` : `${mins}m`);
+            const elapsedSec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+            const h = Math.floor(elapsedSec / 3600);
+            const m = Math.floor((elapsedSec % 3600) / 60);
+            const s = elapsedSec % 60;
+            setMatchDuration(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
         };
         update();
-        const id = setInterval(update, 60000);
+        const id = setInterval(update, 1000);
         return () => clearInterval(id);
-    }, [match?.status, match?.startTime, liveMarcador?.match_start_time]);
+    }, [match?.status, match?.startedAt, match?.actualStartTime, match?.startTime, liveMarcador?.match_start_time]);
 
     // Temperature (Open-Meteo) — Isla de Margarita
 
@@ -160,7 +189,6 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     }, [match?.points?.t1, match?.points?.t2]);
 
     // ── Sincronizar marcador RTDB ───────────────────────────────────────
-    // match.court puede ser 1, 2, 3... → canchaId = 'cancha_1', 'cancha_2'...
     useEffect(() => {
         if (!match?.court) return;
         const canchaId = `cancha_${match.court}`;
@@ -169,6 +197,23 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         onValue(marcRef, handler);
         return () => off(marcRef, 'value', handler);
     }, [match?.court]);
+
+    // Animación actual disparada por el marker (botones debajo de los puntos)
+    useEffect(() => {
+        if (!match?.court) return;
+        const canchaId = `cancha_${match.court}`;
+        const animRef = ref(rtdb, `canchas/${canchaId}/animacion_actual`);
+        const handler = (snap: any) => setAnimacionActual(snap.val());
+        onValue(animRef, handler);
+        return () => off(animRef, 'value', handler);
+    }, [match?.court]);
+
+    // Auto-ocultar overlay de animación tras 5s
+    useEffect(() => {
+        if (!animacionActual?.id) return;
+        const t = setTimeout(() => setAnimacionActual(null), 5000);
+        return () => clearTimeout(t);
+    }, [animacionActual?.id, animacionActual?.ts]);
 
     // Data Sync
     useEffect(() => {
@@ -521,8 +566,14 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                         {matchDuration && (
                                             <>
                                                 <div className="w-1 h-1 bg-gray-700 rounded-full" />
-                                                <span className="font-black italic uppercase text-padel-primary tracking-widest leading-none"
-                                                    style={{ fontSize: 'clamp(6px,0.65vw,10px)' }}>{matchDuration}</span>
+                                                <span
+                                                    className={`font-black italic uppercase tracking-widest leading-none ${
+                                                        cronometroTipo === 'minimal' ? 'text-white/90 text-[0.6em]' :
+                                                        cronometroTipo === 'broadcast' ? 'text-padel-primary drop-shadow-[0_0_8px_rgba(204,255,0,0.4)]' :
+                                                        cronometroTipo === 'digital' ? 'text-cyan-400 font-mono tabular-nums' : 'text-padel-primary'
+                                                    }`}
+                                                    style={{ fontSize: 'clamp(6px,0.65vw,10px)' }}
+                                                >{matchDuration}</span>
                                             </>
                                         )}
                                     </div>
@@ -876,6 +927,28 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                             />
                         )}
 
+                        {/* Overlay animación disparada por el marker (debajo de los puntos) */}
+                        <AnimatePresence>
+                            {animacionActual?.id && animacionesMarcador[animacionActual.id]?.url && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ duration: 0.3 }}
+                                    className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 pointer-events-none"
+                                >
+                                    {/\.(gif|webp|mp4|webm|mov)(\?|$)/i.test(animacionesMarcador[animacionActual.id].url) ? (
+                                        animacionesMarcador[animacionActual.id].url.match(/\.(mp4|webm|mov)(\?|$)/i) ? (
+                                            <video src={animacionesMarcador[animacionActual.id].url} autoPlay muted playsInline className="max-w-full max-h-full object-contain" />
+                                        ) : (
+                                            <img src={animacionesMarcador[animacionActual.id].url} alt="" className="max-w-full max-h-full object-contain" />
+                                        )
+                                    ) : (
+                                        <img src={animacionesMarcador[animacionActual.id].url} alt="" className="max-w-full max-h-full object-contain" />
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </motion.div>
                 ) : (
                     /* ══════════════ AD MODE ══════════════ */

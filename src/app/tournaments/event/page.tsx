@@ -10,10 +10,12 @@ import {
     Calendar, Clock, RefreshCw, Trophy, ArrowLeft,
     Gamepad2, Monitor, Camera,
     Tv, Flag, LayoutGrid, Users, Award, TrendingUp,
-    Plus, Trash2, FileText, Download, Edit3, Save, X, Share2
+    Plus, Trash2, FileText, Download, Edit3, Save, X, Share2, Mail
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 const toMs = (v: any): number => {
@@ -1143,14 +1145,71 @@ function EventView() {
     const tournamentIds = idsParam ? idsParam.split(',').filter(Boolean) : [];
 
     const { user } = useAuth();
-    const canManageTournament = user && (Object.values(tournaments).some((t: any) => t.owners?.includes(user.email)) || user.email === 'admin@padelscore.pro');
-
     const [tournaments, setTournaments] = useState<Record<string, any>>({});
+    const canManageTournament = user && (Object.values(tournaments).some((t: any) => t.owners?.includes(user.email)) || user.email === 'admin@padelscore.pro');
     const [allMatches, setAllMatches] = useState<any[]>([]);
     const [activeTab, setActiveTab] = useState<string>('all');
     const isGroupsTab = activeTab === 'groups';
     const isRulesTab = activeTab === 'rules';
     const [loading, setLoading] = useState(true);
+    const [showShareModal, setShowShareModal] = useState(false);
+
+    const generateMatchesPDF = () => {
+        const doc = new jsPDF() as any;
+        const eventName = Object.values(tournaments)[0]?.complexName ?? 'Evento de Padel';
+        const eventDate = Object.values(tournaments)[0]?.startDate
+            ? new Date(Object.values(tournaments)[0].startDate).toLocaleDateString('es-ES')
+            : '';
+
+        // PDF Styling
+        doc.setFillColor(10, 10, 10);
+        doc.rect(0, 0, 210, 20, 'F');
+        doc.setTextColor(204, 255, 0);
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.text(eventName.toUpperCase(), 15, 14);
+
+        doc.setTextColor(100, 100, 100);
+        doc.setFontSize(10);
+        doc.text(`PLANILLA DE JUEGOS - ${eventDate}`, 150, 14);
+
+        const tableData = allMatches.map(m => [
+            formatHHMM(m.scheduledTime),
+            `Pista ${m.court}`,
+            formatCategory(m._category),
+            m.team1.name,
+            m.team2.name,
+            m.status === MatchStatus.FINISHED ? `${m.score1} - ${m.score2}` : (m.status === MatchStatus.LIVE ? 'En Vivo' : 'Pendiente')
+        ]);
+
+        doc.autoTable({
+            startY: 25,
+            head: [['Hora', 'Pista', 'Categoría', 'Equipo 1', 'Equipo 2', 'Resultado']],
+            body: tableData,
+            styles: { fontSize: 8, font: 'helvetica', cellPadding: 4, valign: 'middle' },
+            headStyles: { fillColor: [0, 0, 0], textColor: [204, 255, 0], fontStyle: 'bold', minCellHeight: 10 },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { left: 15, right: 15 },
+            theme: 'striped'
+        });
+
+        doc.save(`Planilla_${eventName.replace(/\s+/g, '_')}.pdf`);
+    };
+
+    const handleShare = (type: 'whatsapp' | 'email' | 'download') => {
+        const eventName = Object.values(tournaments)[0]?.complexName ?? 'Evento de Padel';
+        const shareUrl = window.location.href;
+        const text = `Te comparto la planilla de juegos del evento *${eventName}*.\nPuedes ver los resultados en tiempo real aquí: ${shareUrl}`;
+
+        if (type === 'whatsapp') {
+            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+        } else if (type === 'email') {
+            window.open(`mailto:?subject=${encodeURIComponent(`Planilla Padel - ${eventName}`)}&body=${encodeURIComponent(text)}`, '_blank');
+        } else if (type === 'download') {
+            generateMatchesPDF();
+        }
+        setShowShareModal(false);
+    };
 
     // Subscribe to all tournaments in parallel via onSnapshot
     useEffect(() => {
@@ -1251,7 +1310,7 @@ function EventView() {
 
     // ── Tabla de complejos conocidos (fuente de verdad de canchas por complejo) ──
     const KNOWN_COMPLEXES: Record<string, number> = {
-        'Margarita Padel': 6,
+        'Margarita Padel': 3,
         'Tibisay': 3,
         'Sun Sol Costa Azul': 4,
         'Food Kart': 3,
@@ -1307,8 +1366,8 @@ function EventView() {
     const toMinute = (v: any) => Math.floor(toMs(v) / 60000);
     const earliestMinute = allPending.length > 0 ? toMinute(allPending[0].scheduledTime) : null;
 
-    // "Next up" = Todos los pendientes en una cuadrícula de 3 columnas (antes limitado a 3)
-    const nextUpMatches = allPending;
+    // "Next up" = Los próximos partidos limitados por la cantidad de canchas disponibles
+    const nextUpMatches = allPending.slice(0, numCanchas);
 
     // ── Todos los partidos LIVE ──
     const effectiveLiveMatches = allMatches
@@ -1376,6 +1435,14 @@ function EventView() {
                             Vista completa del evento
                         </p>
                     </div>
+
+                    <button
+                        onClick={() => setShowShareModal(true)}
+                        className="w-10 h-10 rounded-2xl bg-[#ccff00] text-black shadow-[0_4px_16px_rgba(204,255,0,0.3)] flex items-center justify-center transition-all hover:scale-105 active:scale-95 flex-shrink-0"
+                        title="Compartir planilla"
+                    >
+                        <Share2 className="w-5 h-5" />
+                    </button>
                 </div>
 
                 {/* Meta row */}
@@ -1442,146 +1509,210 @@ function EventView() {
             </div>
 
             {/* ── Match list ──────────────────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 pb-24">
-
-                {/* ── Groups tab ── */}
-                {isGroupsTab && (
-                    <AnimatePresence mode="wait">
+            <div className="flex-1 overflow-y-auto px-4 py-4 pb-24 relative">
+                <AnimatePresence mode="wait">
+                    {/* ── Groups View ── */}
+                    {isGroupsTab ? (
                         <motion.div
                             key="groups-view"
-                            initial={{ opacity: 0, y: 8 }}
+                            initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.2 }}
                         >
                             <GroupsView tournaments={tournaments} />
                         </motion.div>
-                    </AnimatePresence>
-                )}
-
-                {/* ── Rules tab ── */}
-                {isRulesTab && (
-                    <AnimatePresence mode="wait">
-                        <motion.div
-                            key="rules-view"
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0 }}
-                        >
-                            <RulesView tournaments={tournaments} canManage={canManageTournament} />
-                        </motion.div>
-                    </AnimatePresence>
-                )}
-
-                {/* ── "Por Comenzar" special section ── */}
-                {!isGroupsTab && !isRulesTab && activeTab === MatchStatus.PENDING && (
-                    <AnimatePresence mode="popLayout">
-                        <div key="pending-view" className="space-y-4">
-                            {/* Next wave label */}
+                    ) : /* ── Rules View ── */
+                        isRulesTab ? (
                             <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="flex items-center gap-3 px-1 pb-1"
+                                key="rules-view"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                transition={{ duration: 0.2 }}
                             >
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-[#ccff00] animate-pulse shadow-[0_0_8px_#ccff00]" />
-                                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#ccff00]">
-                                        {nextUpMatches.length > 0
-                                            ? `Próximos a las ${formatHHMM(nextUpMatches[0]?.scheduledTime)}`
-                                            : 'Siguientes Salidas'}
-                                    </span>
-                                </div>
-                                <div className="flex-1 h-px bg-[#ccff00]/10" />
-                                <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
-                                    {numCanchas} pista{numCanchas !== 1 ? 's' : ''} disponibles
-                                </span>
+                                <RulesView tournaments={tournaments} canManage={canManageTournament} />
                             </motion.div>
+                        ) : /* ── Pending View ── */
+                            activeTab === MatchStatus.PENDING ? (
+                                <motion.div
+                                    key="pending-view"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="space-y-4"
+                                >
+                                    <div className="flex items-center gap-3 px-1 pb-1">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-[#ccff00] animate-pulse shadow-[0_0_8px_#ccff00]" />
+                                            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#ccff00]">
+                                                {nextUpMatches.length > 0
+                                                    ? `Próximos a las ${formatHHMM(nextUpMatches[0]?.scheduledTime)}`
+                                                    : 'Siguientes Salidas'}
+                                            </span>
+                                        </div>
+                                        <div className="flex-1 h-px bg-[#ccff00]/10" />
+                                        <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
+                                            {numCanchas} pista{numCanchas !== 1 ? 's' : ''} disponibles
+                                        </span>
+                                    </div>
 
-                            {/* Grid de 3 columnas */}
-                            <div className="grid grid-cols-3 gap-2">
-                                {nextUpMatches.map((match, rank) => (
-                                    <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact />
-                                ))}
-                                {/* Relleno para completar al menos la primera fila de 3 */}
-                                {nextUpMatches.length < 3 && (
-                                    Array.from({ length: 3 - nextUpMatches.length }).map((_, i) => (
-                                        <PlaceholderMatchCard key={`pend-pad-${i}`} rank={nextUpMatches.length + i} mode="pending" />
-                                    ))
+                                    <div
+                                        className="grid gap-2"
+                                        style={{ gridTemplateColumns: `repeat(${numCanchas}, minmax(0, 1fr))` }}
+                                    >
+                                        {nextUpMatches.map((match, rank) => (
+                                            <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact />
+                                        ))}
+                                        {nextUpMatches.length < numCanchas && (
+                                            Array.from({ length: numCanchas - nextUpMatches.length }).map((_, i) => (
+                                                <PlaceholderMatchCard key={`pend-pad-${i}`} rank={nextUpMatches.length + i} mode="pending" />
+                                            ))
+                                        )}
+                                    </div>
+                                </motion.div>
+                            ) : /* ── Live View ── */
+                                activeTab === MatchStatus.LIVE ? (
+                                    <motion.div
+                                        key="live-view"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="space-y-4"
+                                    >
+                                        <div className="flex items-center gap-3 px-1 pb-1">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
+                                                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-400">
+                                                    Partidos en acción
+                                                </span>
+                                            </div>
+                                            <div className="flex-1 h-px bg-emerald-500/10" />
+                                            <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
+                                                {numCanchas} pista{numCanchas !== 1 ? 's' : ''} en complejo
+                                            </span>
+                                        </div>
+
+                                        <div
+                                            className="grid gap-2"
+                                            style={{ gridTemplateColumns: `repeat(${numCanchas}, minmax(0, 1fr))` }}
+                                        >
+                                            {effectiveLiveMatches.map((match, rank) => (
+                                                <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact />
+                                            ))}
+                                            {effectiveLiveMatches.length < numCanchas && (
+                                                Array.from({ length: numCanchas - effectiveLiveMatches.length }).map((_, i) => (
+                                                    <PlaceholderMatchCard key={`live-pad-${i}`} rank={effectiveLiveMatches.length + i} mode="live" />
+                                                ))
+                                            )}
+                                        </div>
+                                    </motion.div>
+                                ) : (
+                                    /* ── List/All other views ── */
+                                    <motion.div
+                                        key="list-view"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="space-y-3"
+                                    >
+                                        {filtered.length === 0 ? (
+                                            <div className="py-24 text-center space-y-4">
+                                                <Trophy className="w-16 h-16 text-white/5 mx-auto" />
+                                                <p className="text-gray-600 text-xs uppercase font-bold tracking-widest">No hay partidos en esta sección</p>
+                                            </div>
+                                        ) : (
+                                            filtered.map((match, idx) => (
+                                                <MatchCard
+                                                    key={match.id ?? idx}
+                                                    match={match}
+                                                    idx={idx}
+                                                    isEffectivelyLive={effectiveLiveIds.has(match.id)}
+                                                    isNextUp={
+                                                        match.status === MatchStatus.PENDING &&
+                                                        earliestMinute !== null &&
+                                                        toMinute(match.scheduledTime) === earliestMinute
+                                                    }
+                                                />
+                                            ))
+                                        )}
+                                    </motion.div>
                                 )}
-                            </div>
-                        </div>
-                    </AnimatePresence>
-                )}
-
-                {/* ── "En Vivo" special section ── */}
-                {!isGroupsTab && !isRulesTab && activeTab === MatchStatus.LIVE && (
-                    <AnimatePresence mode="popLayout">
-                        <div key="live-view" className="space-y-4">
-                            {/* Live label */}
-                            <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="flex items-center gap-3 px-1 pb-1"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
-                                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-400">
-                                        Partidos en acción
-                                    </span>
-                                </div>
-                                <div className="flex-1 h-px bg-emerald-500/10" />
-                                <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
-                                    {numCanchas} pista{numCanchas !== 1 ? 's' : ''} en complejo
-                                </span>
-                            </motion.div>
-
-                            {/* Grid de 3 columnas */}
-                            <div className="grid grid-cols-3 gap-2">
-                                {effectiveLiveMatches.map((match, rank) => (
-                                    <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact />
-                                ))}
-                                {/* Relleno para completar al menos la primera fila de 3 */}
-                                {effectiveLiveMatches.length < 3 && (
-                                    Array.from({ length: 3 - effectiveLiveMatches.length }).map((_, i) => (
-                                        <PlaceholderMatchCard key={`live-pad-${i}`} rank={effectiveLiveMatches.length + i} mode="live" />
-                                    ))
-                                )}
-                            </div>
-                        </div>
-                    </AnimatePresence>
-                )}
-
-                {/* ── All other tabs: show full filtered list (Finished, etc) ── */}
-                {!isGroupsTab && !isRulesTab && activeTab !== MatchStatus.PENDING && activeTab !== MatchStatus.LIVE && (
-                    <AnimatePresence mode="popLayout">
-                        {filtered.length === 0 ? (
-                            <motion.div
-                                key="empty"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="py-24 text-center space-y-4"
-                            >
-                                <Trophy className="w-16 h-16 text-white/5 mx-auto" />
-                                <p className="text-gray-600 text-xs uppercase font-bold tracking-widest">No hay partidos en esta sección</p>
-                            </motion.div>
-                        ) : (
-                            filtered.map((match, idx) => (
-                                <MatchCard
-                                    key={match.id ?? idx}
-                                    match={match}
-                                    idx={idx}
-                                    isEffectivelyLive={effectiveLiveIds.has(match.id)}
-                                    isNextUp={
-                                        match.status === MatchStatus.PENDING &&
-                                        earliestMinute !== null &&
-                                        toMinute(match.scheduledTime) === earliestMinute
-                                    }
-                                />
-                            ))
-                        )}
-                    </AnimatePresence>
-                )}
+                </AnimatePresence>
             </div>
-        </div >
+
+            {/* ── Share Modal ── */}
+            <AnimatePresence>
+                {showShareModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            className="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl"
+                        >
+                            <div className="p-6 text-center space-y-6">
+                                <div className="space-y-2">
+                                    <div className="w-16 h-16 bg-[#ccff00]/10 rounded-3xl flex items-center justify-center mx-auto">
+                                        <Share2 className="w-8 h-8 text-[#ccff00]" />
+                                    </div>
+                                    <h2 className="text-xl font-black uppercase italic tracking-tight text-white">Compartir Planilla</h2>
+                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Selecciona el medio de envío</p>
+                                </div>
+
+                                <div className="grid gap-3">
+                                    <button
+                                        onClick={() => handleShare('whatsapp')}
+                                        className="flex items-center gap-4 p-4 rounded-3xl bg-green-500/10 border border-green-500/20 text-green-400 hover:bg-green-500/20 transition-all text-left"
+                                    >
+                                        <div className="w-10 h-10 rounded-2xl bg-green-500/10 flex items-center justify-center">
+                                            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.414 0 0 5.414 0 12.05c0 2.123.553 4.197 1.603 6.034L0 24l6.113-1.603a11.845 11.845 0 005.937 1.603h.005c6.637 0 12.05-5.414 12.05-12.05 0-3.217-1.252-6.242-3.523-8.513z" /></svg>
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-[11px] font-black uppercase italic tracking-tight text-white mb-0.5">WhatsApp</p>
+                                            <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Enlace directo al chat</p>
+                                        </div>
+                                    </button>
+
+                                    <button
+                                        onClick={() => handleShare('email')}
+                                        className="flex items-center gap-4 p-4 rounded-3xl bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 transition-all text-left"
+                                    >
+                                        <div className="w-10 h-10 rounded-2xl bg-blue-500/10 flex items-center justify-center">
+                                            <Mail className="w-5 h-5" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-[11px] font-black uppercase italic tracking-tight text-white mb-0.5">E-mail</p>
+                                            <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Enviar por correo</p>
+                                        </div>
+                                    </button>
+
+                                    <button
+                                        onClick={() => handleShare('download')}
+                                        className="flex items-center gap-4 p-4 rounded-3xl bg-[#ccff00]/10 border border-[#ccff00]/20 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all text-left"
+                                    >
+                                        <div className="w-10 h-10 rounded-2xl bg-[#ccff00]/10 flex items-center justify-center">
+                                            <Download className="w-5 h-5" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-[11px] font-black uppercase italic tracking-tight text-white mb-0.5">Descargar PDF</p>
+                                            <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Archivo para impresión</p>
+                                        </div>
+                                    </button>
+                                </div>
+
+                                <button
+                                    onClick={() => setShowShareModal(false)}
+                                    className="w-full py-4 text-[10px] font-black uppercase tracking-[0.2em] text-gray-600 hover:text-white transition-colors"
+                                >
+                                    Cerrar
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+        </div>
     );
 }
 

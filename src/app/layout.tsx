@@ -1,12 +1,7 @@
 import type { Metadata } from "next";
-import { Inter, Outfit, Public_Sans } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
 import { AppSettingsProvider } from "@/lib/AppSettingsContext";
-
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
-const publicSans = Public_Sans({ subsets: ["latin"], variable: "--font-public-sans" });
 
 export const metadata: Metadata = {
     title: "Smart Padel | Tournament Manager",
@@ -19,11 +14,17 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="es" suppressHydrationWarning className={`${inter.variable} ${outfit.variable} ${publicSans.variable}`}>
+        <html lang="es" suppressHydrationWarning>
             <head>
                 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+                <link rel="preconnect" href="https://fonts.googleapis.com" />
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
             </head>
-            <body suppressHydrationWarning className="font-outfit antialiased">
+            <body suppressHydrationWarning style={{ margin: 0, backgroundColor: "#0a0a0a", color: "#fff", fontFamily: "system-ui, sans-serif", minHeight: "100vh" }}>
+                <div id="root-loading" style={{ position: "fixed", inset: 0, background: "#0a0a0a", color: "#ccff00", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, fontSize: 22, fontWeight: 700, zIndex: 99999 }}>
+                    <span>Smart Padel</span>
+                    <span style={{ fontSize: 14, color: "#888" }}>Si ves este texto, el servidor está respondiendo.</span>
+                </div>
                 <AuthProvider>
                     <AppSettingsProvider>
                         <main className="min-h-screen">

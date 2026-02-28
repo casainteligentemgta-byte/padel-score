@@ -10,15 +10,16 @@ import { ref as dbRef, onValue, off, set, remove, push } from 'firebase/database
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { rtdb } from '@/lib/rtdb';
 import { storage } from '@/lib/firebase';
-import { setModoPublicidad, toggleCarrusel, setImagenCarrusel, deleteImagenCarrusel, setTickerConfig } from '@/lib/rtdbService';
+import { setModoPublicidad, toggleCarrusel, setImagenCarrusel, deleteImagenCarrusel, setTickerConfig, setCronometroTipo, setRelojTipo, setRelojModelo, setRelojModeloActivo, setLogoEvento, setLogosPatrocinantes, setVideoEsquina, setTickerTipoYAnimaciones, setAnimacionMarcador, type CronometroTipo, type RelojTipo } from '@/lib/rtdbService';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Megaphone, Image as ImageIcon, Clock, Video,
     ToggleLeft, ToggleRight, Trash2, Plus, RefreshCw,
     Upload, CheckCircle2, AlertCircle, Radio, Link as LinkIcon,
     Play, Film, BookImage, X, Save, MessageSquare,
-    Monitor, Maximize2, Zap, Trophy, Check, Layout, Youtube, Settings,
-    ChevronRight, ExternalLink, MapPin, Search as SearchIcon
+    Monitor, Maximize2, Zap,     Trophy, Check, Layout, Youtube, Settings,
+    ChevronRight, ExternalLink, MapPin, Search as SearchIcon,
+    Timer, ImagePlus, Sparkles, Type
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
@@ -288,6 +289,73 @@ function MediaRow({ item, onUsarFija, onUsarCarrusel, onDelete }: {
     );
 }
 
+// ── Animaciones del marcador (lista + agregar desde biblioteca o URL) ─────────
+function AnimacionesMarcadorCard({ adData, biblioteca, onNotify }: { adData: any; biblioteca: MediaItem[]; onNotify: (type: 'ok' | 'err', msg: string) => void }) {
+    const [nombre, setNombre] = useState('');
+    const [url, setUrl] = useState('');
+    const [adding, setAdding] = useState(false);
+    const list = adData?.animaciones_marcador && typeof adData.animaciones_marcador === 'object' ? Object.entries(adData.animaciones_marcador) as [string, { nombre: string; url: string }][] : [];
+
+    const handleAdd = async (itemUrl?: string) => {
+        const u = itemUrl || url.trim();
+        const n = nombre.trim() || 'Animación';
+        if (!u) return onNotify('err', 'Indica URL o elige de la biblioteca');
+        setAdding(true);
+        try {
+            const id = `anim_${Date.now()}`;
+            await setAnimacionMarcador(id, { nombre: n, url: u });
+            onNotify('ok', 'Animación añadida. Ya aparece en el marker.');
+            setNombre(''); setUrl('');
+        } catch (e) { onNotify('err', 'Error al guardar'); }
+        finally { setAdding(false); }
+    };
+
+    const handleDelete = async (animId: string) => {
+        try {
+            await setAnimacionMarcador(animId, null);
+            onNotify('ok', 'Animación eliminada');
+        } catch { onNotify('err', 'Error'); }
+    };
+
+    return (
+        <Card title="Animaciones del marcador" icon={Sparkles}>
+            <p className="text-[10px] text-gray-500 mb-3">El marker dispara estas animaciones con botones debajo de los puntos del game; se ven en la pizarra.</p>
+            <div className="space-y-2 mb-3">
+                <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre (ej: Celebración)"
+                    className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600" />
+                <input value={url} onChange={e => setUrl(e.target.value)} placeholder="URL de imagen/GIF/video"
+                    className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600" />
+                <div className="flex gap-2">
+                    <button onClick={() => handleAdd()} disabled={adding || !url.trim()}
+                        className="flex-1 py-2 rounded-lg bg-padel-primary text-black text-[10px] font-black uppercase disabled:opacity-50">Añadir por URL</button>
+                    {biblioteca.length > 0 && (
+                        <select onChange={e => { const u = e.target.value; if (u) handleAdd(u); e.target.value = ''; }}
+                            className="flex-1 py-2 rounded-lg bg-white/5 border border-white/10 text-[10px] text-white">
+                            <option value="">Desde biblioteca...</option>
+                            {biblioteca.map(b => <option key={b.id} value={b.url}>{b.nombre}</option>)}
+                        </select>
+                    )}
+                </div>
+            </div>
+            {list.length > 0 ? (
+                <ul className="space-y-1.5">
+                    {list.map(([id, a]) => (
+                        <li key={id} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/40 border border-white/10">
+                            <div className="w-10 h-8 rounded overflow-hidden bg-black shrink-0">
+                                {/\.(mp4|webm|gif)(\?|$)/i.test(a.url) ? <video src={a.url} className="w-full h-full object-cover" muted /> : <img src={a.url} alt="" className="w-full h-full object-cover" />}
+                            </div>
+                            <span className="flex-1 text-[10px] font-bold text-white truncate">{a.nombre || id}</span>
+                            <button onClick={() => handleDelete(id)} className="p-1.5 rounded-lg text-red-400 hover:bg-red-400/10"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <p className="text-[9px] text-gray-600 py-2">Aún no hay animaciones. Añade una por URL o desde la biblioteca.</p>
+            )}
+        </Card>
+    );
+}
+
 // ── Card wrapper ──────────────────────────────────────────────────────────────
 function Card({ title, icon: Icon, active, children }: {
     title: string;
@@ -339,6 +407,8 @@ export default function AdminCombinedAdsMonitorPage() {
     const [uploadProgress, setUploadProgress] = useState<number | null>(null);
     const [feedback, setFeedback] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null);
     const [previewUrl, setPreviewUrl] = useState('');
+    // Subsección del módulo Publicidad: principal (biblioteca + ticker) o pizarra (cronómetro, reloj, logos, animaciones)
+    const [adsSubSection, setAdsSubSection] = useState<'principal' | 'pizarra'>('principal');
 
     // ── MONITOR STATES ────────────────────────────────────────────────────────
     const [matches, setMatches] = useState<any[]>([]);
@@ -685,6 +755,79 @@ export default function AdminCombinedAdsMonitorPage() {
                                 ))}
                             </div>
 
+                            {/* Subsección: Biblioteca/Ticker vs Pizarra (cronómetro, reloj, logos, animaciones) */}
+                            <div className="flex gap-2 p-1 bg-white/5 rounded-xl border border-white/10 w-fit">
+                                <button
+                                    onClick={() => setAdsSubSection('principal')}
+                                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${adsSubSection === 'principal' ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}
+                                >
+                                    Biblioteca · Ticker
+                                </button>
+                                <button
+                                    onClick={() => setAdsSubSection('pizarra')}
+                                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${adsSubSection === 'pizarra' ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}
+                                >
+                                    <Monitor className="w-3.5 h-3.5" /> Pizarra
+                                </button>
+                            </div>
+
+                            {adsSubSection === 'pizarra' ? (
+                                <div className="space-y-6">
+                                    {/* ── Cronómetro (duración del partido, centro pizarra) ── */}
+                                    <Card title="Cronómetro (duración del partido)" icon={Timer}>
+                                        <p className="text-[10px] text-gray-500 mb-3">Estilo del cronómetro que aparece en el centro de la pizarra.</p>
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                            {(['default', 'minimal', 'broadcast', 'digital'] as CronometroTipo[]).map(t => (
+                                                <button
+                                                    key={t}
+                                                    onClick={async () => { await setCronometroTipo(t); notify('ok', 'Cronómetro actualizado'); }}
+                                                    className={`py-3 px-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${adData?.cronometro_tipo === t ? 'border-padel-primary bg-padel-primary/10 text-padel-primary' : 'border-white/10 text-gray-500 hover:border-white/20'}`}
+                                                >
+                                                    {t === 'default' && 'Clásico'}
+                                                    {t === 'minimal' && 'Minimal'}
+                                                    {t === 'broadcast' && 'Broadcast'}
+                                                    {t === 'digital' && 'Digital'}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </Card>
+                                    {/* ── Reloj (hora del día) ── */}
+                                    <Card title="Reloj (hora del día)" icon={Clock}>
+                                        <p className="text-[10px] text-gray-500 mb-3">Tipo de reloj y modelos con imagen/fondo. Carga archivos o URLs y define tiempo de rotación.</p>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <span className="text-[10px] font-black uppercase text-gray-500 block mb-1">Tipo</span>
+                                                <div className="flex gap-2 flex-wrap">
+                                                    {(['default', 'broadcast', 'custom'] as RelojTipo[]).map(t => (
+                                                        <button
+                                                            key={t}
+                                                            onClick={async () => { await setRelojTipo(t); notify('ok', 'Reloj actualizado'); }}
+                                                            className={`py-2 px-3 rounded-lg border text-[10px] font-black uppercase ${adData?.reloj_tipo === t || adData?.reloj_ocasion === t ? 'border-padel-primary bg-padel-primary/10 text-padel-primary' : 'border-white/10 text-gray-500'}`}
+                                                        >
+                                                            {t === 'default' && 'Por defecto'}
+                                                            {t === 'broadcast' && 'Broadcast'}
+                                                            {t === 'custom' && 'Personalizado'}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <p className="text-[9px] text-gray-600">Los modelos personalizados se configuran con imagen de fondo en el torneo (broadcastingSettings.clockImageUrl).</p>
+                                        </div>
+                                    </Card>
+                                    {/* ── Logo evento, Patrocinantes, Video (esquina superior izquierda) ── */}
+                                    <Card title="Logo del evento y patrocinantes (esquina superior izquierda)" icon={ImagePlus}>
+                                        <p className="text-[10px] text-gray-500 mb-3">Sube logos o URLs. Cada bloque tiene su lista y tiempo de rotación (segundos).</p>
+                                        <p className="text-[9px] text-gray-600">Usa la Biblioteca arriba para subir imágenes; luego asígnalas a Logo evento o Patrocinantes desde la biblioteca o desde el torneo.</p>
+                                    </Card>
+                                    {/* ── Ticker (tira inferior) con texto y animaciones ── */}
+                                    <Card title="Tira informativa inferior (texto y animaciones)" icon={Type}>
+                                        <p className="text-[10px] text-gray-500 mb-3">Además del texto, puedes activar animaciones de caracteres. Las animaciones se cargan en Biblioteca y se asignan al ticker.</p>
+                                        <p className="text-[9px] text-gray-600">El tipo de ticker (solo texto / con animaciones) y la velocidad se configuran en la pestaña Biblioteca · Ticker.</p>
+                                    </Card>
+                                    {/* ── Animaciones del marcador ── */}
+                                    <AnimacionesMarcadorCard adData={adData} biblioteca={biblioteca} onNotify={notify} />
+                                </div>
+                            ) : (
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 <div className="space-y-6">
                                     <Card title="Agregar a Biblioteca" icon={BookImage}>
@@ -804,6 +947,7 @@ export default function AdminCombinedAdsMonitorPage() {
                                     />
                                 </div>
                             </div>
+                            )}
                         </motion.div>
                     ) : activeTab === 'monitor' ? (
                         <motion.div

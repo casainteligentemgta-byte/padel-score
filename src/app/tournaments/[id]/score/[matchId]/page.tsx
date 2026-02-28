@@ -25,6 +25,9 @@ import {
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { ref, onValue, off } from 'firebase/database';
+import { rtdb } from '@/lib/rtdb';
+import { dispararAnimacionMarcador } from '@/lib/rtdbService';
 import { MatchStatus } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
 import RefereeRemoteControl from '@/components/RefereeRemoteControl';
@@ -53,10 +56,18 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     const [tiebreakTo, setTiebreakTo] = useState(7);
     const [finishClicks, setFinishClicks] = useState(0);
     const [now, setNow] = useState(new Date());
+    const [animacionesMarcador, setAnimacionesMarcador] = useState<Record<string, { nombre: string; url: string }>>({});
 
     useEffect(() => {
         const timer = setInterval(() => setNow(new Date()), 1000);
         return () => clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        const animRef = ref(rtdb, 'publicidad_master/animaciones_marcador');
+        const handler = (snap: any) => setAnimacionesMarcador(snap.val() || {});
+        onValue(animRef, handler);
+        return () => off(animRef, 'value', handler);
     }, []);
 
     const handleFinishMatch = async () => {
@@ -90,60 +101,70 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     };
 
 
+    // ── Hora de inicio del partido (persistida en Firestore: no se pierde al cerrar la página) ──
+    const getMatchStartTimeMs = (m: any): number | null => {
+        const raw = m?.startedAt ?? m?.actualStartTime;
+        if (raw == null) return null;
+        const d = typeof raw?.toDate === 'function' ? raw.toDate() : new Date(raw);
+        return isNaN(d.getTime()) ? null : d.getTime();
+    };
+    const getMatchEndTimeMs = (m: any): number | null => {
+        const raw = m?.finishedAt ?? m?.actualEndTime;
+        if (raw == null) return null;
+        const d = typeof raw?.toDate === 'function' ? raw.toDate() : new Date(raw);
+        return isNaN(d.getTime()) ? null : d.getTime();
+    };
+
     // ── Timer robusto ────────────────────────────────────────────────────────
-    // Usamos refs para que el intervalo no se destruya en cada snapshot de Firestore.
-    // El reloj corre sin pausa desde startMatch() hasta que el último punto es anotado.
+    // El reloj usa startedAt/actualStartTime guardados en Firestore; al reabrir la página el tiempo se restaura.
     const timerRef = useRef<any>(null);
-    const prevStatusRef = useRef<string>('');
 
     useEffect(() => {
         if (!match) return;
 
         const status = match.status as string;
 
-        // Partido FINALIZADO: detener reloj y fijar duración total
+        // Partido FINALIZADO: detener reloj y fijar duración total desde datos guardados
         if (status === MatchStatus.FINISHED) {
             if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-            if (match.startedAt && match.finishedAt) {
-                const total = Math.floor((new Date(match.finishedAt).getTime() - new Date(match.startedAt).getTime()) / 1000);
-                setDuration(total);
+            const startMs = getMatchStartTimeMs(match);
+            const endMs = getMatchEndTimeMs(match);
+            if (startMs != null && endMs != null) {
+                setDuration(Math.floor((endMs - startMs) / 1000));
             }
-            prevStatusRef.current = status;
             return;
         }
 
-        // Partido LIVE o PAUSED: arrancar el reloj solo si no estaba ya corriendo
+        // Partido LIVE o PAUSED: arrancar el reloj y sincronizar con hora guardada (persiste al cerrar/abrir)
         if (status === MatchStatus.LIVE || status === MatchStatus.PAUSED) {
             if (!timerRef.current) {
-                // Sincronizar desde startedAt por si venimos de una recarga
-                if (match?.startedAt) {
-                    const elapsed = Math.floor((Date.now() - new Date(match.startedAt).getTime()) / 1000);
-                    setDuration(elapsed);
+                const startMs = getMatchStartTimeMs(match);
+                if (startMs != null) {
+                    const elapsed = Math.floor((Date.now() - startMs) / 1000);
+                    setDuration(Math.max(0, elapsed));
                 }
                 timerRef.current = setInterval(() => {
                     setDuration(prev => prev + 1);
                 }, 1000);
             }
-            prevStatusRef.current = status;
             return;
         }
 
-        // Cualquier otro estado (PENDING, etc.): detener si estaba corriendo
+        // PENDING u otro: detener reloj
         if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-        prevStatusRef.current = status;
 
         return () => {
             if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
         };
-        // Solo re-ejecutar cuando el status o el startedAt cambian (no en cada snapshot de puntos)
-    }, [match?.status, match?.startedAt, match?.finishedAt]);
+    }, [match?.status, match?.startedAt, match?.actualStartTime, match?.finishedAt, match?.actualEndTime]);
 
     const startMatch = async () => {
         if (!tournament || !match) return;
-        // Usar match.id (ID real resuelto) — NO matchId (param URL como 'court_2')
         const realId = match.id;
+        const nowIso = new Date().toISOString();
+        // Persistir startedAt y actualStartTime para que el crono se mantenga al cerrar/reabrir la página
         const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === realId ? { ...m, status: MatchStatus.LIVE, startedAt: new Date().toISOString() } : m
+            m.id === realId ? { ...m, status: MatchStatus.LIVE, startedAt: nowIso, actualStartTime: nowIso } : m
         );
         await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
     };
@@ -723,7 +744,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             </header>
 
             {/* Rectangle 2 & 3: Middle Content */}
-            <main className="flex-1 flex gap-4 min-h-0 overflow-hidden">
+            <main className="flex-1 flex flex-wrap gap-4 min-h-0 overflow-hidden content-start">
                 {/* Team 1 Card */}
                 <div className="flex-1 glass rounded-[3rem] p-8 flex flex-col items-center relative overflow-hidden group shadow-2xl">
                     <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/[0.04] to-transparent opacity-50" />
@@ -940,6 +961,27 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         </motion.button>
                     </div>
                 </div>
+
+                {/* Animaciones pizarra: botones debajo de los puntos del game (disparan en la pantalla de la pizarra) */}
+                {Object.keys(animacionesMarcador).length > 0 && (
+                    <div className="w-full flex-[1_1_100%] flex flex-col gap-2 p-3 bg-black/30 border border-white/10 rounded-2xl self-start">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Animaciones pizarra</span>
+                        <div className="flex flex-wrap gap-2">
+                            {Object.entries(animacionesMarcador).map(([animId, a]) => (
+                                <motion.button
+                                    key={animId}
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => dispararAnimacionMarcador(`cancha_${matchCourt}`, animId)}
+                                    className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-widest text-padel-primary hover:bg-padel-primary/10 hover:border-padel-primary/30 transition-all flex items-center gap-1.5"
+                                >
+                                    <Zap className="w-3.5 h-3.5" />
+                                    {a.nombre || animId}
+                                </motion.button>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </main>
 
             {/* Rectangle 4: Footer */}

@@ -45,6 +45,8 @@ const INITIAL_DATA = {
     totalCourts: 4,
     courtNames: [] as string[],
     bufferMinutes: 2,
+    advanceCount: 2,
+    isReduced: false,
     teams: [] as {
         id: number;
         p1: { id: string; name: string; lastName: string; age: string; photo: string; phone: string };
@@ -289,14 +291,33 @@ export default function NewTournamentPage() {
                     const groupName = groupNames[gIdx];
                     groupAssignments[groupName] = groupTeams.map((t: any) => String(t.id));
 
-                    // Generar todos los emparejamientos DENTRO del grupo
-                    for (let i = 0; i < groupTeams.length; i++) {
-                        for (let j = i + 1; j < groupTeams.length; j++) {
+                    // Generar emparejamientos dentro de cada grupo
+                    if (tournamentData.isReduced && groupTeams.length === 4) {
+                        // MODO REDUCIDO (4 equipos, 2 juegos cada uno → 4 juegos total/grupo)
+                        // Parejas: (0vs1, 2vs3) -> Jornada 1 | (0vs2, 1vs3) -> Jornada 2
+                        const pairs = [
+                            { t1: 0, t2: 1 },
+                            { t1: 2, t2: 3 },
+                            { t1: 0, t2: 2 },
+                            { t1: 1, t2: 3 }
+                        ];
+                        pairs.forEach(p => {
                             allPairings.push({
-                                team1: groupTeams[i],
-                                team2: groupTeams[j],
+                                team1: groupTeams[p.t1],
+                                team2: groupTeams[p.t2],
                                 groupName: groupName
                             });
+                        });
+                    } else {
+                        // MODO NORMAL (Todos vs Todos)
+                        for (let i = 0; i < groupTeams.length; i++) {
+                            for (let j = i + 1; j < groupTeams.length; j++) {
+                                allPairings.push({
+                                    team1: groupTeams[i],
+                                    team2: groupTeams[j],
+                                    groupName: groupName
+                                });
+                            }
                         }
                     }
 
@@ -339,9 +360,96 @@ export default function NewTournamentPage() {
                         courtName: tournamentData.courtNames?.[courtIdx] || `Pista ${courtIdx + 1}`,
                         status: 'PENDING',
                         stage: 'GROUP_STAGE',
-                        groupName: pairing.groupName
                     };
                 });
+
+                // ── Generar Eliminatorias Automáticas si hay Avance ──────────
+                if (tournamentData.advanceCount > 0) {
+                    const numGroupsGenerated = Object.keys(groupAssignments).length;
+                    const totalAdvancing = numGroupsGenerated * tournamentData.advanceCount;
+
+                    // Encontrar el último tiempo de la fase de grupos
+                    const lastGroupSlot = Math.max(...courtNextSlot);
+                    let knockoutSlot = lastGroupSlot + slotMinutes;
+
+                    if (totalAdvancing === 4 && numGroupsGenerated === 2) {
+                        // SEMIFINALES (2 grupos, pasan 2 → 4 equipos)
+                        const sfMatches = [
+                            {
+                                id: `sf-1-${Date.now()}`,
+                                team1Index: -1, // Placeholder 1°A
+                                team2Index: -2, // Placeholder 2°B
+                                team1Name: '1° Grupo A',
+                                team2Name: '2° Grupo B',
+                                scheduledTime: '', // Se asignará abajo
+                                courtIndex: 0,
+                                court: 1,
+                                courtName: tournamentData.courtNames?.[0] || 'Pista 1',
+                                status: 'PENDING',
+                                stage: 'MAIN_DRAW',
+                                roundName: 'SEMIFINALES',
+                                placeholder: '1A_VS_2B'
+                            },
+                            {
+                                id: `sf-2-${Date.now()}`,
+                                team1Index: -3, // Placeholder 1°B
+                                team2Index: -4, // Placeholder 2°A
+                                team1Name: '1° Grupo B',
+                                team2Name: '2° Grupo A',
+                                scheduledTime: '',
+                                courtIndex: numCourts > 1 ? 1 : 0,
+                                court: numCourts > 1 ? 2 : 1,
+                                courtName: tournamentData.courtNames?.[numCourts > 1 ? 1 : 0] || `Pista ${numCourts > 1 ? 2 : 1}`,
+                                status: 'PENDING',
+                                stage: 'MAIN_DRAW',
+                                roundName: 'SEMIFINALES',
+                                placeholder: '1B_VS_2A'
+                            }
+                        ];
+
+                        // Asignar tiempos a SF
+                        sfMatches[0].scheduledTime = new Date(startDateLocal.getTime() + (knockoutSlot * 60000)).toISOString();
+                        if (numCourts === 1) knockoutSlot += slotMinutes;
+                        sfMatches[1].scheduledTime = new Date(startDateLocal.getTime() + (knockoutSlot * 60000)).toISOString();
+
+                        knockoutSlot += slotMinutes;
+
+                        // FINAL
+                        const finalMatch = {
+                            id: `final-${Date.now()}`,
+                            team1Index: -5,
+                            team2Index: -6,
+                            team1Name: 'Ganador SF1',
+                            team2Name: 'Ganador SF2',
+                            scheduledTime: new Date(startDateLocal.getTime() + (knockoutSlot * 60000)).toISOString(),
+                            courtIndex: 0,
+                            court: 1,
+                            courtName: tournamentData.courtNames?.[0] || 'Pista 1',
+                            status: 'PENDING',
+                            stage: 'MAIN_DRAW',
+                            roundName: 'FINAL'
+                        };
+
+                        enrichedMatches = [...enrichedMatches, ...sfMatches, finalMatch];
+                    } else if (totalAdvancing === 2 && numGroupsGenerated === 2) {
+                        // FINAL DIRECTA (2 grupos, pasa 1 → 2 equipos)
+                        const finalMatch = {
+                            id: `final-${Date.now()}`,
+                            team1Index: -1,
+                            team2Index: -2,
+                            team1Name: '1° Grupo A',
+                            team2Name: '1° Grupo B',
+                            scheduledTime: new Date(startDateLocal.getTime() + (knockoutSlot * 60000)).toISOString(),
+                            courtIndex: 0,
+                            court: 1,
+                            courtName: tournamentData.courtNames?.[0] || 'Pista 1',
+                            status: 'PENDING',
+                            stage: 'MAIN_DRAW',
+                            roundName: 'FINAL'
+                        };
+                        enrichedMatches = [...enrichedMatches, finalMatch];
+                    }
+                }
 
             } else {
                 const [y, m, d] = (tournamentData.startDate || "").split('-').map(Number);
@@ -398,11 +506,12 @@ export default function NewTournamentPage() {
                 matches: enrichedMatches,
                 pointsGoal: tournamentData.pointsGoal,
                 groupSize: tournamentData.groupSize,
+                isReduced: tournamentData.isReduced,
                 matchFormat: tournamentData.matchFormat,
                 scoringSystem: tournamentData.scoringSystem,
                 groupAssignments: groupAssignments,
                 advancementRule: tournamentData.type === TournamentType.ROUND_ROBIN
-                    ? { teamsPerGroup: tournamentData.groupSize, advanceCount: 2, nextRound: Object.keys(groupAssignments).length === 2 ? 'QF' : 'SF' }
+                    ? { teamsPerGroup: tournamentData.groupSize, advanceCount: tournamentData.advanceCount, nextRound: Object.keys(groupAssignments).length === 2 ? 'QF' : 'SF' }
                     : null,
                 status: 'En Curso'
             };
@@ -958,14 +1067,15 @@ export default function NewTournamentPage() {
                                                 const total = tournamentData.teams.length;
                                                 let preview = '';
                                                 if (tournamentData.type === TournamentType.ROUND_ROBIN) {
+                                                    const gamesPerTeam = (size === 4 && tournamentData.isReduced && isSelected) ? 2 : (size - 1);
                                                     const complete = Math.floor(total / size);
                                                     const rem = total % size;
                                                     if (complete === 0) {
-                                                        preview = total >= 2 ? `1 grupo de ${total}` : 'Añade equipos';
+                                                        preview = total >= 2 ? `1 grupo de ${total} (${gamesPerTeam} jueg./eq)` : 'Añade equipos';
                                                     } else if (rem === 0) {
-                                                        preview = `${complete} grupo${complete > 1 ? 's' : ''} de ${size}`;
+                                                        preview = `${complete} grupo${complete > 1 ? 's' : ''} de ${size} (${gamesPerTeam} jueg./eq)`;
                                                     } else {
-                                                        preview = `${complete} grupo${complete > 1 ? 's' : ''} de ${size} + ${rem} extra en el último`;
+                                                        preview = `${complete} grupo${complete > 1 ? 's' : ''} de ${size} + ${rem} extra`;
                                                     }
                                                 } else {
                                                     // CRUZADO: 2 grupos
@@ -975,7 +1085,7 @@ export default function NewTournamentPage() {
                                                 return (
                                                     <button
                                                         key={size}
-                                                        onClick={() => setTournamentData({ ...tournamentData, groupSize: size })}
+                                                        onClick={() => setTournamentData({ ...tournamentData, groupSize: size, isReduced: size === 4 ? tournamentData.isReduced : false })}
                                                         className={`group relative overflow-hidden rounded-[1.5rem] border-2 py-4 px-5 text-left transition-all ${isSelected
                                                             ? 'border-[#ccff00] bg-[#ccff00]/10 shadow-[0_0_20px_rgba(204,255,0,0.15)]'
                                                             : 'border-white/10 bg-white/[0.03] hover:border-white/20'
@@ -1002,57 +1112,125 @@ export default function NewTournamentPage() {
                                             })}
                                         </div>
 
-                                        {/* Visual group preview */}
-                                        {tournamentData.teams.length >= 2 && (
-                                            <div className="pt-1 space-y-2">
-                                                <p className="text-[8px] font-black uppercase tracking-widest text-gray-600">
-                                                    Vista previa de grupos
-                                                </p>
-                                                {(() => {
-                                                    const total = tournamentData.teams.length;
-                                                    const size = tournamentData.groupSize || 3;
+                                        {/* Advancement Shortcut for Round Robin */}
+                                        {
+                                            tournamentData.type === TournamentType.ROUND_ROBIN && (
+                                                <div className="flex flex-col gap-2 pt-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <Trophy className="w-3 h-3 text-[#ccff00]" />
+                                                        <span className="text-[9px] font-black uppercase text-gray-500">Configuración de Avance</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {[
+                                                            { count: 1, label: 'Solo 1º' },
+                                                            { count: 2, label: '1º y 2º' }
+                                                        ].map((cfg) => (
+                                                            <div key={cfg.count} className="relative">
+                                                                <button
+                                                                    onClick={() => setTournamentData({ ...tournamentData, advanceCount: cfg.count })}
+                                                                    className={`w-full py-2.5 rounded-xl border text-[9px] font-black uppercase tracking-tighter transition-all ${tournamentData.advanceCount === cfg.count
+                                                                        ? 'bg-[#ccff00] border-[#ccff00] text-black shadow-[0_0_15px_rgba(204,255,0,0.3)] scale-[1.02]'
+                                                                        : 'bg-white/5 border-white/10 text-gray-600 hover:border-white/20'
+                                                                        }`}
+                                                                >
+                                                                    {cfg.label} Avanza{cfg.count > 1 ? 'n' : ''}
+                                                                </button>
+                                                                {tournamentData.advanceCount === cfg.count && (
+                                                                    <motion.div layoutId="adv-check" className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#ccff00] border border-black flex items-center justify-center">
+                                                                        <svg className="w-2 h-2 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={5}>
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                        </svg>
+                                                                    </motion.div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    <p className="text-[7px] text-gray-600 font-bold uppercase italic leading-none px-1">
+                                                        {tournamentData.advanceCount === 2
+                                                            ? '✓ Los dos mejores de cada grupo pasan a Semifinales (1ºA vs 2ºB / 1ºB vs 2ºA)'
+                                                            : '✓ Solo el mejor de cada grupo pasa a la Final'}
+                                                    </p>
 
-                                                    if (tournamentData.type === TournamentType.CRUZADO) {
-                                                        const half = Math.ceil(total / 2);
-                                                        const gA = tournamentData.teams.slice(0, half);
-                                                        const gB = tournamentData.teams.slice(half);
-                                                        return ['A', 'B'].map((gName, gi) => {
-                                                            const gTeams = gi === 0 ? gA : gB;
-                                                            return (
-                                                                <div key={gName} className="flex items-center gap-2 flex-wrap">
-                                                                    <span className="text-[9px] font-black text-[#ccff00] w-14 shrink-0">Grupo {gName}</span>
+                                                    {/* Rapid Classification Toggle for Groups of 4 */}
+                                                    {tournamentData.groupSize === 4 && (
+                                                        <div className="pt-2 border-t border-white/5 mt-1">
+                                                            <button
+                                                                onClick={() => setTournamentData(prev => ({ ...prev, isReduced: !prev.isReduced }))}
+                                                                className={`w-full py-2.5 rounded-xl border flex items-center justify-between px-4 transition-all ${tournamentData.isReduced
+                                                                    ? 'bg-orange-500/20 border-orange-500 text-orange-200'
+                                                                    : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'
+                                                                    }`}
+                                                            >
+                                                                <div className="flex items-center gap-2">
+                                                                    <RefreshCw className={`w-3 h-3 ${tournamentData.isReduced ? 'animate-spin-slow' : ''}`} />
+                                                                    <div className="text-left">
+                                                                        <span className="block text-[9px] font-black uppercase tracking-tighter">Clasificación Rápida</span>
+                                                                        <span className="block text-[7px] font-bold uppercase opacity-60">2 juegos por equipo (Suman 11 total)</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${tournamentData.isReduced ? 'border-orange-500 bg-orange-500' : 'border-white/20'}`}>
+                                                                    {tournamentData.isReduced && <svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                                                                </div>
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )
+                                        }
+
+                                        {/* Visual group preview */}
+                                        {
+                                            tournamentData.teams.length >= 2 && (
+                                                <div className="pt-1 space-y-2">
+                                                    <p className="text-[8px] font-black uppercase tracking-widest text-gray-600">
+                                                        Vista previa de grupos
+                                                    </p>
+                                                    {(() => {
+                                                        const total = tournamentData.teams.length;
+                                                        const size = tournamentData.groupSize || 3;
+
+                                                        if (tournamentData.type === TournamentType.CRUZADO) {
+                                                            const half = Math.ceil(total / 2);
+                                                            const gA = tournamentData.teams.slice(0, half);
+                                                            const gB = tournamentData.teams.slice(half);
+                                                            return ['A', 'B'].map((gName, gi) => {
+                                                                const gTeams = gi === 0 ? gA : gB;
+                                                                return (
+                                                                    <div key={gName} className="flex items-center gap-2 flex-wrap">
+                                                                        <span className="text-[9px] font-black text-[#ccff00] w-14 shrink-0">Grupo {gName}</span>
+                                                                        {gTeams.map((t: any, ti: number) => (
+                                                                            <span key={ti} className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[8px] font-bold text-gray-400">
+                                                                                {t.p1?.name || `E${ti + 1}`}{t.p2?.name ? ` / ${t.p2.name}` : ''}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                );
+                                                            });
+                                                        } else {
+                                                            const numComplete = Math.floor(total / size);
+                                                            const numGroups = Math.max(1, numComplete + (total % size > 0 && numComplete === 0 ? 1 : 0));
+                                                            const groupNames = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+                                                            const groups: any[][] = Array.from({ length: numGroups }, () => []);
+                                                            let pool = [...tournamentData.teams];
+                                                            for (let g = 0; g < numGroups; g++) {
+                                                                const toAdd = g < numGroups - 1 ? size : pool.length;
+                                                                for (let k = 0; k < toAdd && pool.length > 0; k++) groups[g].push(pool.shift());
+                                                            }
+                                                            return groups.map((gTeams, gIdx) => (
+                                                                <div key={gIdx} className="flex items-center gap-2 flex-wrap">
+                                                                    <span className="text-[9px] font-black text-[#ccff00] w-14 shrink-0">Grupo {groupNames[gIdx]}</span>
                                                                     {gTeams.map((t: any, ti: number) => (
                                                                         <span key={ti} className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[8px] font-bold text-gray-400">
                                                                             {t.p1?.name || `E${ti + 1}`}{t.p2?.name ? ` / ${t.p2.name}` : ''}
                                                                         </span>
                                                                     ))}
                                                                 </div>
-                                                            );
-                                                        });
-                                                    } else {
-                                                        const numComplete = Math.floor(total / size);
-                                                        const numGroups = Math.max(1, numComplete + (total % size > 0 && numComplete === 0 ? 1 : 0));
-                                                        const groupNames = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-                                                        const groups: any[][] = Array.from({ length: numGroups }, () => []);
-                                                        let pool = [...tournamentData.teams];
-                                                        for (let g = 0; g < numGroups; g++) {
-                                                            const toAdd = g < numGroups - 1 ? size : pool.length;
-                                                            for (let k = 0; k < toAdd && pool.length > 0; k++) groups[g].push(pool.shift());
+                                                            ));
                                                         }
-                                                        return groups.map((gTeams, gIdx) => (
-                                                            <div key={gIdx} className="flex items-center gap-2 flex-wrap">
-                                                                <span className="text-[9px] font-black text-[#ccff00] w-14 shrink-0">Grupo {groupNames[gIdx]}</span>
-                                                                {gTeams.map((t: any, ti: number) => (
-                                                                    <span key={ti} className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[8px] font-bold text-gray-400">
-                                                                        {t.p1?.name || `E${ti + 1}`}{t.p2?.name ? ` / ${t.p2.name}` : ''}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        ));
-                                                    }
-                                                })()}
-                                            </div>
-                                        )}
+                                                    })()}
+                                                </div>
+                                            )
+                                        }
                                     </motion.div>
                                 )}
 
@@ -1102,7 +1280,7 @@ export default function NewTournamentPage() {
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                                         {/* Group Size */}
                                         <div className="space-y-4">
                                             <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Tamaño de Grupos</label>
@@ -1120,8 +1298,56 @@ export default function NewTournamentPage() {
                                                 ))}
                                             </div>
                                             <p className="text-[8px] text-gray-600 font-bold uppercase leading-tight italic px-1">
-                                                * Los grupos se conforman por 3 o 4 parejas cada uno. El sistema balanceará las sobrantes.
+                                                * El sistema conformará grupos de 3 o 4 parejas.
                                             </p>
+                                        </div>
+
+                                        {/* Advancement Rule */}
+                                        <div className="space-y-4">
+                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Clasificación</label>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                {[
+                                                    { count: 1, label: 'Solo 1º de Grupo', desc: 'Solo el ganador avanza' },
+                                                    { count: 2, label: '1º y 2º de Grupo', desc: 'Los dos mejores avanzan' },
+                                                ].map(rule => (
+                                                    <button
+                                                        key={rule.count}
+                                                        onClick={() => setTournamentData({ ...tournamentData, advanceCount: rule.count })}
+                                                        className={`p-4 rounded-xl text-left transition-all border ${tournamentData.advanceCount === rule.count
+                                                            ? 'bg-padel-primary border-padel-primary text-black shadow-lg scale-[1.02]'
+                                                            : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
+                                                    >
+                                                        <span className="block font-black italic text-xs uppercase mb-1">{rule.label}</span>
+                                                        <span className={`block text-[8px] font-bold uppercase opacity-60 ${tournamentData.advanceCount === rule.count ? 'text-black' : 'text-gray-600'}`}>
+                                                            {rule.desc}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <p className="text-[8px] text-gray-600 font-bold uppercase leading-tight italic px-1">
+                                                * Determina cuántos equipos avanzan por grupo a eliminatorias.
+                                            </p>
+
+                                            {/* Rapid mode toggle duplicated in Step 4 for accessibility */}
+                                            {tournamentData.groupSize === 4 && (
+                                                <div className="pt-2">
+                                                    <button
+                                                        onClick={() => setTournamentData(prev => ({ ...prev, isReduced: !prev.isReduced }))}
+                                                        className={`w-full p-4 rounded-xl border flex flex-col gap-1 transition-all ${tournamentData.isReduced
+                                                                ? 'bg-orange-500 border-orange-500 text-black shadow-lg scale-[1.02]'
+                                                                : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'
+                                                            }`}
+                                                    >
+                                                        <div className="flex items-center justify-between w-full">
+                                                            <span className="font-black italic text-xs uppercase">Clasificación Rápida</span>
+                                                            <RefreshCw className={`w-3 h-3 ${tournamentData.isReduced ? 'animate-spin-slow' : ''}`} />
+                                                        </div>
+                                                        <span className={`text-[8px] font-bold uppercase ${tournamentData.isReduced ? 'text-black opacity-80' : 'text-gray-600'}`}>
+                                                            Reduce a 2 juegos por equipo (Total 11)
+                                                        </span>
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Match Format */}

@@ -84,14 +84,6 @@ export default function MyTournamentsPage() {
                         <p className="subtitle-page text-gray-600 mt-0.5">Gestiona tus competencias</p>
                     </div>
                 </div>
-                {isAdmin && (
-                <Link
-                    href="/new-tournament"
-                    className="flex items-center gap-2 px-4 py-2.5 bg-padel-primary text-black rounded-xl font-black text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-transform shadow-[0_4px_14px_rgba(204,255,0,0.25)]"
-                >
-                    <Plus className="w-4 h-4" /> Nuevo torneo
-                </Link>
-            )}
             </div>
 
             {/* ── Lista scrollable ── */}
@@ -103,15 +95,7 @@ export default function MyTournamentsPage() {
                                 <Trophy className="w-8 h-8" />
                             </div>
                             <h2 className="text-xl font-bold">No tienes torneos aún</h2>
-                            <p className="text-gray-500 text-sm">Comienza creando tu primer torneo profesional ahora mismo.</p>
-                            {isAdmin && (
-                                <Link
-                                    href="/new-tournament"
-                                    className="inline-flex items-center gap-2 px-6 py-3 bg-padel-primary text-black rounded-xl font-black text-sm uppercase tracking-widest hover:scale-105 transition-transform"
-                                >
-                                    <Plus className="w-5 h-5" /> Crear mi primer torneo
-                                </Link>
-                            )}
+                            <p className="text-gray-500 text-sm">Próximamente verás aquí la lista de tus competencias activas.</p>
                         </div>
                     ) : (
                         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">

@@ -492,8 +492,9 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
     const startMatch = async (matchId: string) => {
         setUpdatingId(matchId);
         try {
+            const nowIso = new Date().toISOString();
             const updated = matches.map(m => m.id === matchId
-                ? { ...m, status: MatchStatus.LIVE, actualStartTime: new Date().toISOString(), sets: { t1: 0, t2: 0 }, games: { t1: 0, t2: 0 }, points: { t1: 0, t2: 0 }, server: { team: 1 as 1, player: 1 as 1 } }
+                ? { ...m, status: MatchStatus.LIVE, actualStartTime: nowIso, startedAt: nowIso, sets: { t1: 0, t2: 0 }, games: { t1: 0, t2: 0 }, points: { t1: 0, t2: 0 }, server: { team: 1 as 1, player: 1 as 1 } }
                 : m
             );
             await updateDoc(doc(db, 'tournaments', id), { matches: stripMatches(updated), updatedAt: new Date() });

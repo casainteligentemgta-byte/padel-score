@@ -15,7 +15,11 @@ export interface CategoryConfig {
     setFormat: 'TIE_BREAK' | 'SUPER_TIE_BREAK' | 'NO_TIE_BREAK'; // Formato del 6-6
     matchFormat: '2SETS_STB' | '3SETS';  // Formato del partido: 2 sets + Super TB  ó  3 sets al mejor de 3
     groupSize?: 3 | 4;              // Equipos por grupo (Round Robin)
+    advanceCount?: 1 | 2;           // Clasificados por grupo (1 o 2)
+    quickQualification?: boolean;   // Si true: solo 2 partidos por grupo (clasificación rápida)
     pointsGoal?: number;            // Americano/Dupla fija: a cuántos puntos (ej. 16, 24)
+    /** Cuadro con Consolación: formato de partido → 50 min (Set 9) o 60 min (2 sets + STB) */
+    consolacionMatchFormat?: 'ONE_SET_9' | 'TWO_SHORT_SETS';
 }
 
 export interface MasterScheduleConfig {
@@ -61,13 +65,15 @@ export class MasterScheduleEngine {
                 return;
             }
 
-            const pairings = this.generatePairings(cat);
-            const groupCount = pairings.filter(p => p.roundName === 'Fase de Grupos').length;
-            const semiCount = pairings.filter(p => p.roundName === 'SEMIFINAL').length;
-            const finalCount = pairings.filter(p => p.roundName === 'FINAL').length;
+            const pairings = cat.type === TournamentType.CUADRO_CONSOLACION
+                ? this.generateConsolacionPairings(cat)
+                : this.generatePairings(cat);
+            const groupCount = pairings.filter((p: any) => p.roundName === 'Fase de Grupos').length;
+            const semiCount = pairings.filter((p: any) => p.roundName === 'SEMIFINAL' || p.roundName === 'Principal SF').length;
+            const finalCount = pairings.filter((p: any) => p.roundName === 'FINAL' || p.roundName === 'Principal FINAL').length;
             console.log(`[Engine] Cat ${cat.gender}-${cat.category}: ${cat.teams.length} equipos → ${groupCount} grupos + ${semiCount} semis + ${finalCount} finales`);
 
-            pairings.forEach(pair => {
+            pairings.forEach((pair: any) => {
                 // Resolver el nombre del equipo para la UI:
                 // - Equipo real: "Jugador 1 / Jugador 2"
                 // - Equipo TBD (knockout): usar teamLabel ("1° Grupo A", "Ganador SF1"…)
@@ -82,7 +88,7 @@ export class MasterScheduleEngine {
 
                 allMatches.push({
                     categoryId: cat.id,
-                    category: cat.category,        // ← valor del enum (SEPTIMA, SEXTA…)
+                    category: cat.category,
                     categoryName: `${cat.gender} - ${cat.category}`,
                     team1: pair.team1,
                     team2: pair.team2,
@@ -92,71 +98,43 @@ export class MasterScheduleEngine {
                     playerIds: pair.isKnockout ? [] : this.getTeamPlayerIds(pair.team1, pair.team2),
                     isFinal: pair.isFinal,
                     isKnockout: pair.isKnockout,
+                    ...(pair.advancementLogic && { advancementLogic: pair.advancementLogic }),
                 });
             });
         });
 
-        // Log detallado de distribución por fase — útil para diagnosticar orden incorrecto
-        const byPhase = { group: 0, semi: 0, final: 0 };
-        allMatches.forEach(m => {
-            if (m.roundName === 'Fase de Grupos') byPhase.group++;
-            else if (m.roundName === 'SEMIFINAL') byPhase.semi++;
-            else if (m.roundName === 'FINAL') byPhase.final++;
-        });
-        console.log(`[Engine] Total: ${allMatches.length} partidos → Grupos: ${byPhase.group} | Semis: ${byPhase.semi} | Finales: ${byPhase.final}`);
+        // Log detallado de distribución por fase
+        const byPhase: Record<string, number> = {};
+        allMatches.forEach(m => { byPhase[m.roundName] = (byPhase[m.roundName] || 0) + 1; });
+        console.log(`[Engine] Total: ${allMatches.length} partidos →`, byPhase);
 
         if (allMatches.length === 0) {
             return { matches: [], notScheduled: 0, totalMatches: 0 };
         }
 
-        // ── 2. Separar en 3 cubos de fase estricta ───────────────────────────
-        // REGLA DE NEGOCIO: primero se terminan TODOS los partidos de grupo de
-        // TODAS las categorías (aleatorios), luego TODAS las semis ordenadas por
-        // prioridad (Séptima primero, luego Sexta…), luego las finales igual.
-        //
-        // Prioridad eliminatorias: categorías numéricamente altas van primero.
-        // Un partido de Séptima se agenda ANTES que uno de Sexta, etc.
+        // ── 2. Separar en cubos de fase (orden: Grupos → Principal → Consolación → SEMIFINAL/FINAL RR) ─────
         const KNOCKOUT_PRIORITY: Record<string, number> = {
-            // Categorías numéricas — mayor número = mayor prioridad (primero en cancha)
-            SEPTIMA: 1,
-            SEXTA: 2,
-            QUINTA: 3,
-            CUARTA: 4,
-            TERCERA: 5,
-            SEGUNDA: 6,
-            PRIMERA: 7,
-            // Sumas — después de las categorías por nivel
-            SUMA_7: 8,
-            SUMA_8: 9,
-            SUMA_9: 10,
-            SUMA_10: 11,
-            SUMA_11: 12,
-            // Veteranos
-            MAS_45: 13,
-            MAS_50: 14,
-            // Genéricos al final
-            MIXED: 15,
-            MALE: 16,
-            FEMALE: 17,
+            SEPTIMA: 1, SEXTA: 2, QUINTA: 3, CUARTA: 4, TERCERA: 5, SEGUNDA: 6, PRIMERA: 7,
+            SUMA_7: 8, SUMA_8: 9, SUMA_9: 10, SUMA_10: 11, SUMA_11: 12,
+            MAS_45: 13, MAS_50: 14, MIXED: 15, MALE: 16, FEMALE: 17,
         };
-
-        /** Ordena los partidos de eliminación por categoría usando el valor del enum.
-         *  `a.category` = 'SEPTIMA' | 'SEXTA'… — coincide con las claves de KNOCKOUT_PRIORITY. */
         const sortByKnockoutPriority = (matches: any[]): any[] =>
-            [...matches].sort((a, b) => {
-                const pa = KNOCKOUT_PRIORITY[a.category] ?? 99;
-                const pb = KNOCKOUT_PRIORITY[b.category] ?? 99;
-                return pa - pb;
-            });
+            [...matches].sort((a, b) => (KNOCKOUT_PRIORITY[a.category] ?? 99) - (KNOCKOUT_PRIORITY[b.category] ?? 99));
 
-        const phases: Array<{ name: string; queue: any[] }> = [
-            // Grupos: totalmente aleatorios (mezcla categorías en las canchas)
-            { name: 'Fase de Grupos', queue: this.shuffle(allMatches.filter(m => m.roundName === 'Fase de Grupos')) },
-            // Semis: Séptima primero, luego Sexta, etc.
-            { name: 'SEMIFINAL', queue: sortByKnockoutPriority(allMatches.filter(m => m.roundName === 'SEMIFINAL')) },
-            // Finales: mismo orden de prioridad
-            { name: 'FINAL', queue: sortByKnockoutPriority(allMatches.filter(m => m.roundName === 'FINAL')) },
-        ].filter(p => p.queue.length > 0);
+        const phaseOrder = [
+            'Fase de Grupos',
+            'Principal R1', 'Principal SF', 'Principal FINAL',
+            'Consolación R1', 'Consolación FINAL',
+            'SEMIFINAL', 'FINAL',
+        ];
+        const phases: Array<{ name: string; queue: any[] }> = phaseOrder
+            .map(name => ({
+                name,
+                queue: name === 'Fase de Grupos'
+                    ? this.shuffle(allMatches.filter(m => m.roundName === name))
+                    : sortByKnockoutPriority(allMatches.filter(m => m.roundName === name)),
+            }))
+            .filter(p => p.queue.length > 0);
 
         console.log(`[Engine] Fases → ${phases.map(p => `${p.name}: ${p.queue.length}`).join(' | ')}`);
 
@@ -275,6 +253,56 @@ export class MasterScheduleEngine {
         return slots;
     }
 
+    /**
+     * Cuadro con Consolación: cuadro principal + llave de consolación.
+     * Quien pierde en R1 del principal pasa a consolación → mínimo 2 partidos por pareja.
+     * roundName: Principal R1 | Principal SF | Principal FINAL | Consolación R1 | Consolación FINAL
+     */
+    private static generateConsolacionPairings(cat: CategoryConfig): Array<{
+        team1: any; team2: any;
+        roundName: string;
+        isKnockout: boolean;
+        isFinal: boolean;
+        advancementLogic?: string;
+    }> {
+        const result: Array<{ team1: any; team2: any; roundName: string; isKnockout: boolean; isFinal: boolean; advancementLogic?: string }> = [];
+        const teams = [...cat.teams];
+        const n = teams.length;
+        if (n < 2) return result;
+
+        const tbd = (label: string, id: string) => ({
+            p1: { id: `tbd_${id}`, name: label },
+            p2: { id: `tbd_${id}_p2`, name: '' },
+            isTBD: true,
+            teamLabel: label,
+        });
+
+        if (n <= 4) {
+            // Bracket de 4: P1, P2 (R1), Principal SF, Principal FINAL; Consolación: 1 partido (2 perdedores R1)
+            const [t0, t1, t2, t3] = teams;
+            result.push({ team1: t0, team2: t3, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1' });
+            result.push({ team1: t1, team2: t2, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1' });
+            result.push({ team1: tbd('Gan. P1', 'p1'), team2: tbd('Gan. P2', 'p2'), roundName: 'Principal SF', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Principal FINAL' });
+            result.push({ team1: tbd('Gan. SF', 'sf'), team2: tbd('Finalista', 'sf2'), roundName: 'Principal FINAL', isKnockout: true, isFinal: true });
+            result.push({ team1: tbd('Perd. P1', 'c1'), team2: tbd('Perd. P2', 'c2'), roundName: 'Consolación R1', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Consolación FINAL' });
+            result.push({ team1: tbd('Gan. C1', 'c1w'), team2: tbd('Gan. C2', 'c2w'), roundName: 'Consolación FINAL', isKnockout: true, isFinal: true });
+        } else {
+            // Bracket de 8: 4 R1, 2 SF, 1 FINAL principal; 2 Consolación R1, 1 Consolación FINAL
+            const [t0, t1, t2, t3, t4, t5, t6, t7] = teams.slice(0, 8);
+            result.push({ team1: t0, team2: t7, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1' });
+            result.push({ team1: t1, team2: t6, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1' });
+            result.push({ team1: t2, team2: t5, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1' });
+            result.push({ team1: t3, team2: t4, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1' });
+            result.push({ team1: tbd('Gan. P1', 'p1'), team2: tbd('Gan. P4', 'p4'), roundName: 'Principal SF', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Principal FINAL' });
+            result.push({ team1: tbd('Gan. P2', 'p2'), team2: tbd('Gan. P3', 'p3'), roundName: 'Principal SF', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Principal FINAL' });
+            result.push({ team1: tbd('Gan. SF1', 'sf1'), team2: tbd('Gan. SF2', 'sf2'), roundName: 'Principal FINAL', isKnockout: true, isFinal: true });
+            result.push({ team1: tbd('Perd. P1', 'c1'), team2: tbd('Perd. P2', 'c2'), roundName: 'Consolación R1', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Consolación FINAL' });
+            result.push({ team1: tbd('Perd. P3', 'c3'), team2: tbd('Perd. P4', 'c4'), roundName: 'Consolación R1', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Consolación FINAL' });
+            result.push({ team1: tbd('Gan. C1', 'c1w'), team2: tbd('Gan. C2', 'c2w'), roundName: 'Consolación FINAL', isKnockout: true, isFinal: true });
+        }
+        return result;
+    }
+
     /** Genera los emparejamientos respetando la estructura de grupos.
      *  Devuelve objetos { team1, team2, roundName, isKnockout, isFinal }
      *  con roundName incrustado. Solo genera semifinales/finales cuando
@@ -325,24 +353,44 @@ export class MasterScheduleEngine {
             groups.push(teams.slice(i, i + gs));
         }
 
-        console.log(`[Pairings] ${cat.category} | groupSize=${cat.groupSize} → gs=${gs} | equipos=${teams.length} | grupos=${groups.length} | knockout=${groups.length > 1}`);
-        // ── Fase de grupos: round-robin DENTRO de cada grupo ─────────────
+        const twoGamesGuaranteed = !!(cat.quickQualification && (cat.advanceCount ?? 2) === 2);
+        console.log(`[Pairings] ${cat.category} | groupSize=${cat.groupSize} → gs=${gs} | equipos=${teams.length} | grupos=${groups.length} | knockout=${groups.length > 1} | 2juegosGarantizados=${twoGamesGuaranteed}`);
+        // ── Fase de grupos: round-robin completo O 2 juegos garantizados por equipo ─────────────
         for (const group of groups) {
-            for (let i = 0; i < group.length; i++) {
-                for (let j = i + 1; j < group.length; j++) {
-                    result.push({
-                        team1: group[i],
-                        team2: group[j],
-                        roundName: 'Fase de Grupos',
-                        isKnockout: false,
-                        isFinal: false,
-                    });
+            if (twoGamesGuaranteed) {
+                // 2 juegos garantizados: cada equipo juega exactamente 2 partidos en la fase de grupos
+                if (group.length === 4) {
+                    result.push({ team1: group[0], team2: group[1], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                    result.push({ team1: group[0], team2: group[2], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                    result.push({ team1: group[1], team2: group[3], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                    result.push({ team1: group[2], team2: group[3], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                } else if (group.length >= 3) {
+                    result.push({ team1: group[0], team2: group[1], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                    result.push({ team1: group[0], team2: group[2], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                    result.push({ team1: group[1], team2: group[2], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                } else {
+                    result.push({ team1: group[0], team2: group[1], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                }
+            } else {
+                for (let i = 0; i < group.length; i++) {
+                    for (let j = i + 1; j < group.length; j++) {
+                        result.push({
+                            team1: group[i],
+                            team2: group[j],
+                            roundName: 'Fase de Grupos',
+                            isKnockout: false,
+                            isFinal: false,
+                        });
+                    }
                 }
             }
         }
 
         // ── Fase eliminatoria (solo si hay más de 1 grupo) ───────────────
         if (groups.length > 1) {
+            const advanceCount = cat.advanceCount ?? 2;
+            const gNames = groups.map((_, i) => String.fromCharCode(65 + i)); // A, B, C…
+
             // Genera un equipo TBD con etiqueta legible para la UI
             // teamLabel: "1° Grupo A", "2° Grupo B", "Ganador SF1"...
             const tbdTeam = (pos: string, groupLetter: string) => ({
@@ -358,18 +406,30 @@ export class MasterScheduleEngine {
                 teamLabel: `Ganador SF${sfNum}`,
             });
 
-            const gNames = groups.map((_, i) => String.fromCharCode(65 + i)); // A, B, C…
-
-            // Semifinales: 1°A vs 2°B  ·  1°B vs 2°A
-            for (let g = 0; g < groups.length; g += 2) {
-                const gA = gNames[g];
-                const gB = gNames[g + 1] ?? gNames[g];
-                result.push({ team1: tbdTeam('1°', gA), team2: tbdTeam('2°', gB), roundName: 'SEMIFINAL', isKnockout: true, isFinal: false });
-                result.push({ team1: tbdTeam('1°', gB), team2: tbdTeam('2°', gA), roundName: 'SEMIFINAL', isKnockout: true, isFinal: false });
+            if (advanceCount === 1) {
+                // Solo 1 por grupo pasan
+                if (groups.length === 2) {
+                    // Final directa: 1°A vs 1°B
+                    result.push({ team1: tbdTeam('1°', gNames[0]), team2: tbdTeam('1°', gNames[1]), roundName: 'FINAL', isKnockout: true, isFinal: true });
+                } else {
+                    // Semifinales: 1°A vs 1°B  ·  1°C vs 1°D...
+                    for (let g = 0; g < groups.length; g += 2) {
+                        const gA = gNames[g];
+                        const gB = gNames[g + 1] ?? gNames[g];
+                        result.push({ team1: tbdTeam('1°', gA), team2: tbdTeam('1°', gB), roundName: 'SEMIFINAL', isKnockout: true, isFinal: false });
+                    }
+                    result.push({ team1: tbdSFTeam(1), team2: tbdSFTeam(2), roundName: 'FINAL', isKnockout: true, isFinal: true });
+                }
+            } else {
+                // 2 por grupo pasan (Cruces tradicionales: 1°A vs 2°B, 1°B vs 2°A)
+                for (let g = 0; g < groups.length; g += 2) {
+                    const gA = gNames[g];
+                    const gB = gNames[g + 1] ?? gNames[g];
+                    result.push({ team1: tbdTeam('1°', gA), team2: tbdTeam('2°', gB), roundName: 'SEMIFINAL', isKnockout: true, isFinal: false });
+                    result.push({ team1: tbdTeam('1°', gB), team2: tbdTeam('2°', gA), roundName: 'SEMIFINAL', isKnockout: true, isFinal: false });
+                }
+                result.push({ team1: tbdSFTeam(1), team2: tbdSFTeam(2), roundName: 'FINAL', isKnockout: true, isFinal: true });
             }
-
-            // Final: ganadores de las semis
-            result.push({ team1: tbdSFTeam(1), team2: tbdSFTeam(2), roundName: 'FINAL', isKnockout: true, isFinal: true });
         }
 
         return result;
