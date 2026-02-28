@@ -182,7 +182,6 @@ export default function AdminSettingsPage() {
                     name: formData.name,
                     email: formData.email,
                     role: formData.role,
-                    uid: newUid,
                     createdAt: new Date().toISOString()
                 });
             }
