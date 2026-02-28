@@ -1692,58 +1692,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                             );
                                                         })()}
 
-                                                        {/* Dock de acciones: 4 botones (Control, Pizarra, Cámaras, Publicidad) — marco hasta aquí */}
-                                                        {canManageMatches && match.status !== MatchStatus.FINISHED && (
-                                                            <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t border-white/[0.08] shrink-0 rounded-b-[2rem]">
-                                                                {/* CONTROL */}
-                                                                <Link
-                                                                    href={`/tournaments/${id}/score/${match.id}`}
-                                                                    className={`flex flex-col items-center justify-center gap-1.5 py-3.5 transition-all active:scale-95
-                                                                        ${match.status === MatchStatus.LIVE
-                                                                            ? 'bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20'
-                                                                            : 'bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-[#ccff00]'
-                                                                        }`}
-                                                                >
-                                                                    <div className="relative">
-                                                                        <Gamepad2 className="w-4 h-4" />
-                                                                        {match.status === MatchStatus.LIVE && (
-                                                                            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#ccff00] shadow-[0_0_6px_#ccff00] animate-pulse" />
-                                                                        )}
-                                                                    </div>
-                                                                    <span className="text-[7px] font-black uppercase tracking-widest">Control</span>
-                                                                </Link>
-
-                                                                {/* PIZARRA */}
-                                                                <Link
-                                                                    href={`/tournaments/${id}/display/${match.id}`}
-                                                                    target="_blank"
-                                                                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-white transition-all active:scale-95"
-                                                                >
-                                                                    <Monitor className="w-4 h-4" />
-                                                                    <span className="text-[7px] font-black uppercase tracking-widest">Pizarra</span>
-                                                                </Link>
-
-                                                                {/* CÁMARAS */}
-                                                                <Link
-                                                                    href={`/tournaments/${id}/control/broadcasting`}
-                                                                    target="_blank"
-                                                                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-orange-400 transition-all active:scale-95"
-                                                                >
-                                                                    <Camera className="w-4 h-4" />
-                                                                    <span className="text-[7px] font-black uppercase tracking-widest">Cámaras</span>
-                                                                </Link>
-
-                                                                {/* PUBLICIDAD */}
-                                                                <Link
-                                                                    href={`/tournaments/${id}/control/broadcasting`}
-                                                                    target="_blank"
-                                                                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-yellow-400 transition-all active:scale-95"
-                                                                >
-                                                                    <Tv className="w-4 h-4" />
-                                                                    <span className="text-[7px] font-black uppercase tracking-widest">Publicidad</span>
-                                                                </Link>
-                                                            </div>
-                                                        )}
+                                                        {/* En esta pantalla las tarjetas son solo informativas: no se muestra menú inferior (Control, Pizarra, Cámaras, Publicidad). Esas acciones están en /tournaments/[id]/control */}
                                                     </div>
                                                 </motion.section>
                                             );
