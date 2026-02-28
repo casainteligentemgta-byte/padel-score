@@ -25,7 +25,7 @@ const NUM_CANCHAS = 6;
 
 export default function MarkerControlPage({ params }: { params: Promise<{ canchaId: string }> }) {
     const { canchaId } = use(params);
-    const { user, canMarkInCancha, markerCanchas } = useAuth();
+    const { user, profile, canMarkInCancha, markerCanchas } = useAuth();
     const router = useRouter();
     const [accessDenied, setAccessDenied] = useState(false);
 
