@@ -25,7 +25,7 @@ const NUM_CANCHAS = 6;
 
 export default function MarkerControlPage({ params }: { params: Promise<{ canchaId: string }> }) {
     const { canchaId } = use(params);
-    const { user, profile, canMarkInCancha, markerCanchas } = useAuth();
+    const { user, profile, loading: authLoading, canMarkInCancha, markerCanchas } = useAuth();
     const router = useRouter();
     const [accessDenied, setAccessDenied] = useState(false);
 
@@ -174,7 +174,7 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
     }
 
     // ── Loading ────────────────────────────────────────────────────────────
-    if (roleLoading || loadingCancha) {
+    if (authLoading || loadingCancha) {
         return (
             <div className="min-h-screen bg-black flex items-center justify-center">
                 <RefreshCw className="w-10 h-10 text-padel-primary animate-spin" />
