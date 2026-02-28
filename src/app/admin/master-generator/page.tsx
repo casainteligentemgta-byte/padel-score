@@ -22,7 +22,6 @@ import {
     Settings,
     X,
     UserPlus,
-    Share2,
     Edit3,
     Database
 } from 'lucide-react';
@@ -1579,10 +1578,6 @@ export default function MasterGeneratorPage() {
                                             </div>
                                         </div>
                                         <div className="flex gap-3">
-                                            <button type="button" className="min-h-[48px] flex items-center justify-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-sm font-bold transition-all active:scale-[0.98] shadow-lg shadow-black/40 group select-none touch-manipulation">
-                                                <Share2 className="w-5 h-5 text-padel-primary group-hover:scale-110 transition-transform" />
-                                                Compartir
-                                            </button>
                                             <span className="bg-padel-primary/10 text-padel-primary px-4 py-2 rounded-xl text-sm font-bold border border-padel-primary/20 leading-none flex items-center">
                                                 {generatedMatches.length} Partidos
                                             </span>
@@ -1590,21 +1585,21 @@ export default function MasterGeneratorPage() {
                                     </div>
 
                                     <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl overflow-hidden border-t-4 border-t-padel-primary shadow-2xl">
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left">
-                                                <thead className="bg-black/50 border-b border-zinc-800 uppercase text-[10px] tracking-widest font-black text-zinc-400">
+                                        <div className="overflow-hidden">
+                                            <table className="w-full text-left table-fixed">
+                                                <thead className="bg-black/50 border-b border-zinc-800 uppercase text-xs tracking-widest font-black text-zinc-400">
                                                     <tr>
-                                                        <th className="px-6 py-4">Detalle del Partido (Hora, Pista, Categoría y Encuentro)</th>
+                                                        <th className="px-4 py-3">Detalle del Partido (Hora, Pista, Categoría y Encuentro)</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-zinc-800">
                                                     {generatedMatches.map((m, idx) => (
                                                         <tr key={idx} className="hover:bg-zinc-800/30 transition-colors group">
-                                                            <td className="px-6 py-4">
-                                                                <div className="flex items-center h-full gap-6">
+                                                            <td className="px-4 py-3 min-w-0">
+                                                                <div className="flex flex-wrap items-center gap-3 md:gap-4">
                                                                     {/* Time column inside row */}
                                                                     <div
-                                                                        className={`flex flex-col min-w-[80px] ${(m.roundName.includes('FINAL') || m.roundName.includes('SEMIFINAL')) ? 'cursor-pointer' : ''}`}
+                                                                        className={`flex flex-col shrink-0 w-14 ${(m.roundName.includes('FINAL') || m.roundName.includes('SEMIFINAL')) ? 'cursor-pointer' : ''}`}
                                                                         onDoubleClick={() => {
                                                                             if (m.roundName.includes('FINAL') || m.roundName.includes('SEMIFINAL')) {
                                                                                 setEditingMatchIdx(idx);
@@ -1616,46 +1611,44 @@ export default function MasterGeneratorPage() {
                                                                         <span className="text-padel-primary font-black italic text-base leading-none">
                                                                             {new Date(m.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                                         </span>
-                                                                        <span className="text-[10px] text-zinc-500 font-bold uppercase mt-1">
+                                                                        <span className="text-xs text-zinc-500 font-bold uppercase mt-1">
                                                                             {new Date(m.scheduledTime).toLocaleDateString([], { weekday: 'short', day: 'numeric' })}
                                                                         </span>
                                                                         {(m.roundName.includes('FINAL') || m.roundName.includes('SEMIFINAL')) && (
-                                                                            <span className="text-[7px] text-padel-primary/40 font-black italic uppercase tracking-tighter leading-none mt-1">
+                                                                            <span className="text-[9px] text-padel-primary/40 font-black italic uppercase tracking-tighter leading-none mt-1">
                                                                                 Doble clic p/ editar
                                                                             </span>
                                                                         )}
                                                                     </div>
 
                                                                     {/* Court column inside row */}
-                                                                    <div className="min-w-[120px]">
-                                                                        <span className="text-[10px] font-black text-black px-2 py-0.5 bg-padel-primary rounded-md uppercase tracking-tighter">
+                                                                    <div className="shrink-0">
+                                                                        <span className="text-xs font-black text-black px-2 py-0.5 bg-padel-primary rounded uppercase tracking-tighter">
                                                                             {m.courtName}
                                                                         </span>
                                                                     </div>
 
                                                                     {/* Category & Round column inside row */}
-                                                                    <div className="flex items-center gap-3 min-w-[220px]">
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <div className="flex items-center gap-1.5">
-                                                                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter w-fit ${m.roundName.includes('FINAL') ? 'bg-padel-primary text-black' : 'bg-zinc-800 text-padel-primary border border-padel-primary/20'}`}>
+                                                                    <div className="flex items-center gap-2 shrink-0 max-w-[35%] min-w-0">
+                                                                        <div className="flex flex-col gap-0.5 min-w-0">
+                                                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter truncate ${m.roundName.includes('FINAL') ? 'bg-padel-primary text-black' : 'bg-zinc-800 text-padel-primary border border-padel-primary/20'}`} title={m.roundName}>
                                                                                     {m.roundName}
                                                                                 </span>
                                                                             </div>
-                                                                            <div className="flex flex-col">
-                                                                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">
-                                                                                    {m.categoryName.replace('MALE', 'MASCULINO').replace('FEMALE', 'FEMENINO').replace('MIXED', 'MIXTO')}
-                                                                                </span>
-                                                                            </div>
+                                                                            <span className="text-xs font-bold text-zinc-400 uppercase tracking-tighter truncate" title={m.categoryName}>
+                                                                                {m.categoryName.replace('MALE', 'MASCULINO').replace('FEMALE', 'FEMENINO').replace('MIXED', 'MIXTO')}
+                                                                            </span>
                                                                         </div>
                                                                     </div>
 
                                                                     {/* Matchup column simplified */}
-                                                                    <div className="flex-1 flex items-center gap-3">
-                                                                        <div className="flex-1 text-right text-xs font-bold text-white truncate max-w-[180px]">
+                                                                    <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap justify-center md:justify-start">
+                                                                        <div className="min-w-0 max-w-[45%] text-right text-[11px] font-bold text-white truncate">
                                                                             {m.team1.p1.name} + {m.team1.p2.name}
                                                                         </div>
-                                                                        <div className="px-2 py-0.5 bg-zinc-800 rounded font-black text-[9px] text-zinc-500 italic">VS</div>
-                                                                        <div className="flex-1 text-left text-xs font-bold text-white truncate max-w-[180px]">
+                                                                        <div className="px-1.5 py-0.5 bg-zinc-800 rounded font-black text-[8px] text-zinc-500 italic shrink-0">VS</div>
+                                                                        <div className="min-w-0 max-w-[45%] text-left text-[11px] font-bold text-white truncate">
                                                                             {m.team2.p1.name} + {m.team2.p2.name}
                                                                         </div>
                                                                     </div>

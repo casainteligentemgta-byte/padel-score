@@ -1253,7 +1253,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                             <TournamentPhaseManager
                                                 tournament={tournament}
                                                 matches={matches}
-                                                canManage={canManageTournament}
+                                                canManage={!!canManageTournament}
                                                 onSaveResult={handleSaveGroupResult}
                                                 onFinishGroupPhase={() => generateMainDraw()}
                                                 onResetElimination={async () => {
