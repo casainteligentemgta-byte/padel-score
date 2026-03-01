@@ -205,7 +205,58 @@ export const dataService = {
             ...data,
             updatedAt: serverTimestamp()
         }, { merge: true });
+    },
+
+    // ── Inscripciones y comprobantes de pago (OCR + validación) ─────────────────────────
+    async addInscription(data: InscriptionData, ownerId: string) {
+        return await addDoc(collection(db, 'inscriptions'), {
+            ...data,
+            ownerId,
+            paymentStatus: data.paymentStatus ?? 'pending',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        });
+    },
+
+    async getInscriptionsByTournament(tournamentId: string) {
+        const q = query(
+            collection(db, 'inscriptions'),
+            where('tournamentId', '==', tournamentId)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    },
+
+    async getInscriptionsWithAlerts() {
+        const q = query(
+            collection(db, 'inscriptions'),
+            where('paymentStatus', '==', 'alert')
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    },
+
+    async updateInscription(id: string, data: Partial<InscriptionData>) {
+        const docRef = doc(db, 'inscriptions', id);
+        await updateDoc(docRef, {
+            ...data,
+            updatedAt: serverTimestamp()
+        });
     }
+};
+
+export type InscriptionData = {
+    tournamentId: string;
+    tournamentName?: string;
+    categoryKey?: string;
+    categoryPrice: number;           // Precio de la categoría (regla de validación)
+    participantName?: string;
+    participantEmail?: string;
+    participantId?: string;
+    amountExtracted?: number | null; // Monto extraído por OCR
+    receiptUrl?: string | null;
+    paymentStatus: 'pending' | 'paid' | 'alert';
+    alertMessage?: string | null;
 };
 
 export type AdminSettings = {

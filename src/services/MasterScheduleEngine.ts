@@ -34,6 +34,8 @@ export interface MasterScheduleConfig {
     matchDurationMinutes: number;
     bufferMinutes: number;
     categories: CategoryConfig[];
+    /** URL del logo del patrocinante del evento (opcional) */
+    sponsorLogoUrl?: string;
 }
 
 export class MasterScheduleEngine {

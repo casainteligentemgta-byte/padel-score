@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { systemMonitor } from '@/lib/systemMonitor';
-import { Shield, Activity, RefreshCw, AlertTriangle, Info, Terminal, Calendar } from 'lucide-react';
+import { Shield, Activity, RefreshCw, AlertTriangle, Info, Terminal, Calendar, ChevronLeft } from 'lucide-react';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import Sidebar from '@/components/Sidebar';
 import { useRouter } from 'next/navigation';
@@ -57,6 +58,13 @@ export default function AdminLogsPage() {
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
             <Sidebar />
 
+            <Link
+                href="/"
+                className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-6 text-sm font-bold uppercase tracking-widest pl-24 md:pl-0"
+            >
+                <ChevronLeft className="w-5 h-5" />
+                Atrás
+            </Link>
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 flex-shrink-0 pl-16 md:pl-0">
                 <div>
                     <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">

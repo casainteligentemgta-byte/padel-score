@@ -18,7 +18,7 @@ import {
     Upload, CheckCircle2, AlertCircle, Radio, Link as LinkIcon,
     Play, Film, BookImage, X, Save, MessageSquare,
     Monitor, Maximize2, Zap,     Trophy, Check, Layout, Youtube, Settings,
-    ChevronRight, ExternalLink, MapPin, Search as SearchIcon,
+    ChevronRight, ChevronLeft, ExternalLink, MapPin, Search as SearchIcon,
     Timer, ImagePlus, Sparkles, Type
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
@@ -379,8 +379,15 @@ function Card({ title, icon: Icon, active, children }: {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function AdminCombinedAdsMonitorPage() {
-    const { isAdmin, loading: authLoading } = useAuth();
+    const { user, isAdmin, loading: authLoading } = useAuth();
     const router = useRouter();
+
+    useEffect(() => {
+        if (authLoading) return;
+        if (!user || !isAdmin) {
+            router.replace('/login');
+        }
+    }, [user, isAdmin, authLoading, router]);
 
     const [activeTab, setActiveTab] = useState<'ads' | 'monitor' | 'boards'>('ads');
     const [selectedComplex, setSelectedComplex] = useState(COMPLEXES[0]);
@@ -663,13 +670,25 @@ export default function AdminCombinedAdsMonitorPage() {
             <RefreshCw className="w-6 h-6 text-padel-primary animate-spin" />
         </div>
     );
-    if (!isAdmin) return null;
+    if (!user || !isAdmin) return (
+        <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4 text-gray-400">
+            <RefreshCw className="w-6 h-6 text-padel-primary animate-spin" />
+            <p className="text-sm font-medium">Redirigiendo...</p>
+        </div>
+    );
 
     return (
         <div className="ipad-screen-container bg-[#080808] text-white relative">
             <Sidebar />
 
             <div className="ipad-scroll-area p-8 md:p-12 pl-24 md:pl-32 font-outfit">
+                <Link
+                    href="/"
+                    className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-6 text-sm font-bold uppercase tracking-widest"
+                >
+                    <ChevronLeft className="w-5 h-5" />
+                    Atrás
+                </Link>
 
                 {/* ── HEADER ── */}
                 <header className="mb-8">
@@ -1093,6 +1112,14 @@ export default function AdminCombinedAdsMonitorPage() {
                                             exit={{ opacity: 0, scale: 0.9, y: 20 }}
                                             className="max-w-2xl w-full bg-[#0d0d0d] border-2 border-orange-400/20 rounded-[3rem] p-10 relative overflow-hidden"
                                         >
+                                            <button
+                                                type="button"
+                                                onClick={() => setChronicle(null)}
+                                                className="absolute top-6 right-6 p-2 text-gray-500 hover:text-white rounded-full hover:bg-white/10 transition-all z-10"
+                                                aria-label="Cerrar"
+                                            >
+                                                <X className="w-5 h-5" />
+                                            </button>
                                             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-orange-400 to-transparent opacity-50" />
                                             <div className="flex items-center gap-2 mb-6">
                                                 <Megaphone className="w-5 h-5 text-orange-400" />

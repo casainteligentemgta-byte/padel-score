@@ -14,7 +14,6 @@ import {
     AlertTriangle,
     ChevronRight,
     RefreshCw,
-    Plus,
     User,
     Link as LinkIcon,
     Share2,
@@ -28,8 +27,6 @@ import {
     Tv,
     Camera,
     Trash2,
-    Edit3,
-    Save,
     Download,
     Zap
 } from 'lucide-react';
@@ -38,12 +35,13 @@ import { MatchStatus, TournamentType, ScheduleConfig } from '@/types/tournament'
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import GroupPhaseView from '@/components/GroupPhaseView';
 import TournamentPhaseManager from '@/components/TournamentPhaseManager';
 import Sidebar from '@/components/Sidebar';
+import AutoShrinkName from '@/components/AutoShrinkName';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -52,6 +50,7 @@ import autoTable from 'jspdf-autotable';
 export default function TournamentDashboard({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { user, profile, isAdmin, markerCanchas, loading: authLoading } = useAuth();
     const [tournament, setTournament] = useState<any>(null);
     const [matches, setMatches] = useState<any[]>([]);
@@ -68,13 +67,23 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const [error, setError] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
-    const [isRulesEditOpen, setIsRulesEditOpen] = useState(false);
-    const [rulesDraft, setRulesDraft] = useState('');
     const [isSavingRules, setIsSavingRules] = useState(false);
 
     const isOwner = tournament?.ownerId === user?.uid;
     const canManageMatches = isOwner || isAdmin || (profile?.role === 'marker' && (markerCanchas?.length ?? 0) > 0);
     const canManageTournament = isOwner || isAdmin;
+
+    // Sincronizar pestaña con query ?tab= (desde marcador: atrás → En vivo o Por Comenzar)
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab === 'live') setActiveTab('En Vivo');
+        else if (tab === 'por-comenzar') setActiveTab('Por Comenzar');
+    }, [searchParams]);
+
+    // En Vivo oculto para no admin/propietario: si estaban en En Vivo, pasar a Por Comenzar
+    useEffect(() => {
+        if (!canManageTournament && activeTab === 'En Vivo') setActiveTab('Por Comenzar');
+    }, [canManageTournament, activeTab]);
 
     // We allow guests to view the dashboard
     useEffect(() => {
@@ -446,54 +455,145 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         }
     };
 
-    const generatePDF = () => {
-        if (!tournament || !matches.length) return;
-
-        const doc = new jsPDF();
+    /** Genera el PDF del cuadro del torneo y devuelve el documento para guardar o compartir. */
+    const buildCuadroPDF = (): jsPDF | null => {
+        if (!tournament) return null;
+        const pdf = new jsPDF();
         const tournamentName = tournament.name || 'Torneo de Padel';
         const complexName = tournament.complexName || 'Margarita Padel';
         const category = formatCat(tournament.category);
+        const gender = tournament.gender ? formatGender(tournament.gender) : '';
 
-        // Header
-        doc.setFontSize(20);
-        doc.text(tournamentName, 14, 22);
-        doc.setFontSize(10);
-        doc.setTextColor(100);
-        doc.text(`${complexName} | Categoría: ${category}`, 14, 30);
-        doc.text(`Fecha de exportación: ${new Date().toLocaleDateString('es-ES')}`, 14, 35);
+        pdf.setFontSize(20);
+        pdf.text(tournamentName, 14, 22);
+        pdf.setFontSize(10);
+        pdf.setTextColor(100);
+        pdf.text(`${complexName} | Categoría: ${category}${gender ? ` | ${gender}` : ''}`, 14, 30);
+        pdf.text(`Fecha de exportación: ${new Date().toLocaleDateString('es-ES')}`, 14, 35);
 
-        // Matches Table
-        const tableData = matches.sort((a, b) => {
-            const timeA = _toMsT(a.time || a.scheduledTime);
-            const timeB = _toMsT(b.time || b.scheduledTime);
-            return timeA - timeB;
-        }).map((m, idx) => {
-            const timeRaw = m.time || m.scheduledTime;
-            const d = timeRaw?.toDate ? timeRaw.toDate() : new Date(timeRaw);
-            const time = isNaN(d.getTime()) ? String(timeRaw) : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        const tableData = matches.length > 0
+            ? [...matches].sort((a, b) => {
+                const timeA = _toMsT(a.time || a.scheduledTime);
+                const timeB = _toMsT(b.time || b.scheduledTime);
+                return timeA - timeB;
+            }).map((m, idx) => {
+                const timeRaw = m.time || m.scheduledTime;
+                const d = timeRaw?.toDate ? timeRaw.toDate() : new Date(timeRaw);
+                const time = isNaN(d.getTime()) ? String(timeRaw) : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                return [
+                    idx + 1,
+                    time,
+                    m.court || m.courtIndex + 1 || '-',
+                    m.team1?.name || 'Por definir',
+                    m.status === MatchStatus.FINISHED ? (m.score || '-') : 'VS',
+                    m.team2?.name || 'Por definir',
+                    getStageLabel(m)
+                ];
+            })
+            : [];
 
-            return [
-                idx + 1,
-                time,
-                m.court || m.courtIndex + 1 || '-',
-                m.team1.name || 'Por definir',
-                m.status === MatchStatus.FINISHED ? (m.score || '-') : 'VS',
-                m.team2.name || 'Por definir',
-                getStageLabel(m)
-            ];
-        });
+        if (tableData.length > 0) {
+            autoTable(pdf, {
+                startY: 45,
+                head: [['#', 'Hora', 'Pista', 'Equipo 1', 'Resultado', 'Equipo 2', 'Etapa']],
+                body: tableData,
+                theme: 'striped',
+                headStyles: { fillColor: [204, 255, 0], textColor: [0, 0, 0], fontStyle: 'bold' },
+                alternateRowStyles: { fillColor: [245, 245, 245] },
+                margin: { top: 45 },
+            });
+        } else {
+            pdf.setFontSize(11);
+            pdf.setTextColor(80);
+            pdf.text('Aún no hay partidos en el cuadro.', 14, 45);
+        }
+        return pdf;
+    };
 
-        autoTable(doc, {
-            startY: 45,
-            head: [['#', 'Hora', 'Pista', 'Equipo 1', 'Resultado', 'Equipo 2', 'Etapa']],
-            body: tableData,
-            theme: 'striped',
-            headStyles: { fillColor: [204, 255, 0], textColor: [0, 0, 0], fontStyle: 'bold' },
-            alternateRowStyles: { fillColor: [245, 245, 245] },
-            margin: { top: 45 },
-        });
+    /** Fuerza la descarga del PDF usando un enlace temporal (más fiable que pdf.save en algunos navegadores). */
+    const downloadPDF = (pdf: jsPDF, fileName: string) => {
+        const blob = pdf.output('blob');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
 
-        doc.save(`Planilla_${tournamentName.replace(/\s+/g, '_')}.pdf`);
+    const generatePDF = () => {
+        const pdf = buildCuadroPDF();
+        if (!pdf || !tournament) return;
+        const name = (tournament.name || 'Torneo').replace(/\s+/g, '_');
+        const fileName = `Planilla_${name}.pdf`;
+        downloadPDF(pdf, fileName);
+    };
+
+    const pdfFileName = () => tournament ? `Cuadro_${(tournament.name || 'Torneo').replace(/\s+/g, '_')}.pdf` : 'Cuadro_torneo.pdf';
+
+    /** Comparte el cuadro del torneo como PDF (nativo si está disponible, si no descarga). */
+    const sharePDFCuadro = async () => {
+        const pdf = buildCuadroPDF();
+        if (!pdf || !tournament) return;
+        const tournamentName = tournament.name || 'Torneo de Padel';
+        const fileName = pdfFileName();
+
+        try {
+            const blob = pdf.output('blob');
+            const file = new File([blob], fileName, { type: 'application/pdf' });
+            if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare?.({ files: [file] })) {
+                await navigator.share({
+                    title: tournamentName,
+                    text: `Cuadro del torneo: ${tournamentName}`,
+                    files: [file],
+                });
+                setIsShareModalOpen(false);
+            } else {
+                downloadPDF(pdf, fileName);
+            }
+        } catch (e) {
+            downloadPDF(pdf, fileName);
+        }
+    };
+
+    /** Compartir PDF por WhatsApp: comparte el archivo si hay API nativa, si no descarga y abre wa.me. */
+    const sharePDFViaWhatsApp = async () => {
+        const pdf = buildCuadroPDF();
+        if (!pdf || !tournament) return;
+        const tournamentName = tournament.name || 'Torneo de Padel';
+        const fileName = pdfFileName();
+        const text = `🎾 Cuadro del torneo: ${tournamentName}. Te envío el PDF adjunto.`;
+        try {
+            const blob = pdf.output('blob');
+            const file = new File([blob], fileName, { type: 'application/pdf' });
+            if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare?.({ files: [file] })) {
+                await navigator.share({ title: tournamentName, text, files: [file] });
+                setIsShareModalOpen(false);
+            } else {
+                downloadPDF(pdf, fileName);
+                const url = encodeURIComponent(window.location.href);
+                window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ')}${url}`, '_blank');
+            }
+        } catch (e) {
+            downloadPDF(pdf, fileName);
+            window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ')}${encodeURIComponent(window.location.href)}`, '_blank');
+        }
+    };
+
+    /** Compartir por correo: descarga el PDF y abre el cliente de correo para que adjunten el archivo. */
+    const sharePDFViaEmail = () => {
+        const pdf = buildCuadroPDF();
+        if (!pdf || !tournament) return;
+        const tournamentName = tournament.name || 'Torneo de Padel';
+        const fileName = pdfFileName();
+        downloadPDF(pdf, fileName);
+        const subject = encodeURIComponent(`Cuadro del torneo: ${tournamentName}`);
+        const body = encodeURIComponent(
+            `¡Hola!\n\nTe envío el cuadro del torneo "${tournamentName}" en PDF.\n\nEl archivo ${fileName} se ha descargado en tu dispositivo; por favor adjúntalo a este correo.\n\nTambién puedes seguir los resultados en vivo aquí: ${window.location.href}`
+        );
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
     };
 
     const notifyMatch = (match: any, type: 'start' | 'result') => {
@@ -594,6 +694,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         CUARTA: '4ª Cat.', QUINTA: '5ª Cat.', SEXTA: '6ª Cat.', SEPTIMA: '7ª Cat.',
     };
     const formatCat = (cat?: string) => cat ? (CAT_LABEL[cat] ?? cat.replace(/_/g, ' ')) : '';
+    const formatGender = (g?: string) => !g ? '' : g === 'MALE' ? 'Masculino' : g === 'FEMALE' ? 'Femenino' : g === 'MIXED' ? 'Mixto' : g;
 
     // ── Tabs en el orden correcto ─────────────────────────────────────────
     const tabs: string[] = [];
@@ -611,9 +712,11 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     tabs.push('Por Comenzar');
     tabs.push('Finalizados');
     if (!isRoundRobin && !isCruzado) tabs.push('Ranking');
-    tabs.push('Reglas');
-    // Deduplicar por si acaso algún valor se repitió
-    const uniqueTabs = [...new Set(tabs)];
+    // Reglas solo en evento (event page), no por categoría
+    const deduped = [...new Set(tabs)];
+    const uniqueTabs = deduped;
+    // En Vivo solo visible para administradores y propietarios del torneo
+    const visibleTabs = canManageTournament ? uniqueTabs : uniqueTabs.filter(t => t !== 'En Vivo');
 
     // ── Pre-compute "Por Comenzar" data ONCE (fuera del .filter) ─────────────
     const _toMsT = (v: any): number => {
@@ -697,7 +800,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         if (activeTab === 'Por Comenzar') return _nextUpKeys.has(_mkKey(m));
 
         if (activeTab === 'Finalizados') return m.status === MatchStatus.FINISHED;
-        if (activeTab === 'Reglas' || activeTab === 'Grupos' || activeTab === 'Ranking') return false;
+        if (activeTab === 'Grupos' || activeTab === 'Ranking') return false;
         // Fase del cuadro
         if (activeTab === 'Fase de Grupo') return m.stage === 'GROUP_STAGE';
         return m.stage === 'MAIN_DRAW' && getStageLabel(m) === activeTab;
@@ -863,9 +966,9 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit">
             <Sidebar />
 
-            {/* Sticky Header */}
-            <header className="sticky top-0 z-[60] bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 pb-2">
-                <div className="max-w-4xl mx-auto px-6 pt-6 flex justify-between items-center mb-6">
+            {/* Pizarra: cabecera con título y acciones */}
+            <header className="sticky top-0 z-[60] bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5">
+                <div className="max-w-4xl mx-auto px-6 pt-6 pb-4 flex justify-between items-center">
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-3 ml-12 md:ml-0">
                             <Link href="/tournaments" className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors">
@@ -880,7 +983,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                         )
                                         : ''}
                                 </h1>
-                                <p className="text-xs text-padel-primary font-medium tracking-tight uppercase italic">{tournament?.complexName || 'Margarita Padel'} • {formatCat(tournament?.category)}</p>
+                                <p className="text-xs text-padel-primary font-medium tracking-tight uppercase italic">{tournament?.complexName || 'Margarita Padel'} • {formatCat(tournament?.category)}{tournament?.gender ? ` • ${formatGender(tournament.gender)}` : ''}</p>
                             </div>
                         </div>
                     </div>
@@ -895,171 +998,13 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                         </button>
                     </div>
                 </div>
-
-                <div className="max-w-4xl mx-auto px-2 overflow-x-auto hide-scrollbar flex justify-center">
-                    <nav className="flex flex-wrap justify-center gap-x-1 gap-y-1 p-1">
-                        {uniqueTabs.map((tab, tabIdx) => {
-                            const isLive = tab === 'En Vivo';
-                            const isPending = tab === 'Por Comenzar';
-                            return (
-                                <button
-                                    key={`tab-${tabIdx}-${tab}`}
-                                    onClick={() => setActiveTab(tab)}
-                                    className={`min-w-[80px] px-3 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap
-                                        ${activeTab === tab
-                                            ? isLive
-                                                ? 'border-red-500 text-red-400'
-                                                : 'border-padel-primary text-padel-primary'
-                                            : isLive
-                                                ? 'border-transparent text-red-600 hover:text-red-400'
-                                                : 'border-transparent text-gray-500 hover:text-gray-300'
-                                        }`}
-                                >
-                                    {isLive ? (
-                                        <span className="flex items-center justify-center gap-1">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-                                            {tab}
-                                        </span>
-                                    ) : tab}
-                                </button>
-                            );
-                        })}
-                    </nav>
-                </div>
             </header>
 
-            {/* Content Area */}
-            <div className={`ipad-scroll-area ${isLiveDashboard ? 'overflow-hidden !pr-0' : (activeTab === 'Por Comenzar' ? 'overflow-hidden' : '')}`}>
+            {/* Content Area (pizarra / cuadro / listados) */}
+            <div className={`ipad-scroll-area pb-20 ${isLiveDashboard ? 'overflow-hidden !pr-0' : (activeTab === 'Por Comenzar' ? 'overflow-hidden' : '')}`}>
                 <main className={`${isLiveDashboard ? 'max-w-none w-full h-full p-2' : activeTab === 'Por Comenzar' ? 'max-w-4xl mx-auto w-full px-4 py-6 h-full flex flex-col' : 'max-w-4xl mx-auto w-full px-4 py-10'} transition-all duration-500`}>
                     <AnimatePresence mode="wait">
-                        {activeTab === 'Reglas' ? (
-                            <motion.div
-                                key="reglas"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                className="space-y-6"
-                            >
-                                <div className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] p-10 relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 p-10 opacity-5">
-                                        <Trophy className="w-40 h-40 text-padel-primary" />
-                                    </div>
-                                    <div className="relative z-10 space-y-8">
-                                        <div className="flex items-center justify-between gap-4 border-b border-white/5 pb-8">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-14 h-14 bg-padel-primary/20 rounded-2xl flex items-center justify-center">
-                                                    <Trophy className="w-7 h-7 text-padel-primary" />
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-2xl font-black italic uppercase text-white tracking-tighter">Reglamento del Torneo</h3>
-                                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-none mt-1">Especificaciones Técnicas de Competición</p>
-                                                </div>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setRulesDraft(tournament?.rules?.content ?? '');
-                                                    setIsRulesEditOpen(true);
-                                                }}
-                                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-padel-primary/20 border border-padel-primary/40 text-padel-primary hover:bg-padel-primary/30 font-bold text-xs uppercase tracking-widest transition-all active:scale-[0.98]"
-                                            >
-                                                <Edit3 className="w-4 h-4" /> Modificar reglas
-                                            </button>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                                            <div className="space-y-6">
-                                                <div className="flex items-start gap-4">
-                                                    <div className="mt-1 w-2 h-2 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
-                                                    <div>
-                                                        <h5 className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Formato de Partido</h5>
-                                                        <p className="text-sm font-bold italic uppercase tracking-wider text-white">
-                                                            {tournament?.matchFormat === 'ONE_SET_6' && '1 Set Profesional (a 6 juegos)'}
-                                                            {tournament?.matchFormat === 'ONE_SET_9' && '1 Set Largo (a 9 juegos)'}
-                                                            {tournament?.matchFormat === 'TWO_SHORT_SETS' && '2 Sets Cortos (a 4) + MTB'}
-                                                            {tournament?.matchFormat === 'TWO_NORMAL_SETS' && '2 Sets Normales (a 6) + MTB'}
-                                                            {!tournament?.matchFormat && 'Formato Estándar'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-start gap-4">
-                                                    <div className="mt-1 w-2 h-2 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
-                                                    <div>
-                                                        <h5 className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Sistema de Puntuación</h5>
-                                                        <p className="text-sm font-bold italic uppercase tracking-wider text-white">
-                                                            {tournament?.scoringSystem === 'GOLDEN_POINT' ? 'SUDDEN DEATH (Punto de Oro)' : 'VENTAJA TRADICIONAL'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                {tournament?.type === TournamentType.ROUND_ROBIN && (
-                                                    <div className="flex items-start gap-4">
-                                                        <div className="mt-1 w-2 h-2 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
-                                                        <div>
-                                                            <h5 className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Tamaño de Grupos</h5>
-                                                            <p className="text-sm font-bold italic uppercase tracking-wider text-white">
-                                                                {tournament?.groupSize ? `Grupos de ${tournament.groupSize} parejas` : 'Variable'}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            <div className="space-y-6">
-                                                <div className="flex items-start gap-4">
-                                                    <div className="mt-1 w-2 h-2 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
-                                                    <div>
-                                                        <h5 className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Criterios de Desempate</h5>
-                                                        <div className="space-y-2 mt-2">
-                                                            {[
-                                                                '1. Partidos Ganados',
-                                                                '2. Diferencia de Sets',
-                                                                '3. Diferencia de Juegos',
-                                                                '4. Enfrentamiento Directo'
-                                                            ].map(item => (
-                                                                <p key={item} className="text-[10px] font-bold uppercase text-gray-400 italic">{item}</p>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-start gap-4">
-                                                <div className="mt-1 w-2 h-2 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
-                                                <div>
-                                                    <h5 className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Jugadores menores de edad</h5>
-                                                    <p className="text-[10px] font-bold text-gray-300 leading-relaxed mt-1">
-                                                        Los partidos en los que participe un jugador menor de edad se programarán en horarios posteriores al mediodía los días de semana, preferiblemente.
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Reglamento adicional: fuera del grid, ancho completo, botón siempre visible */}
-                                        <div className="mt-10 pt-8 border-t border-white/10">
-                                            <h5 className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-3">Reglamento adicional</h5>
-                                            {tournament?.rules?.content ? (
-                                                <div className="rounded-xl bg-black/30 border border-white/5 p-4">
-                                                    <pre className="text-xs text-gray-300 whitespace-pre-wrap font-sans">{tournament.rules.content}</pre>
-                                                </div>
-                                            ) : (
-                                                <p className="text-xs text-gray-500 italic mb-3">Aún no hay texto de reglamento adicional.</p>
-                                            )}
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setRulesDraft(tournament?.rules?.content ?? '');
-                                                    setIsRulesEditOpen(true);
-                                                }}
-                                                className="mt-4 flex items-center gap-2 px-5 py-3 rounded-xl bg-padel-primary/25 border-2 border-padel-primary/60 text-padel-primary hover:bg-padel-primary/35 font-bold text-sm uppercase tracking-widest transition-all active:scale-[0.98] shadow-[0_0_12px_rgba(204,255,0,0.15)]"
-                                            >
-                                                <Edit3 className="w-5 h-5" />
-                                                {tournament?.rules?.content ? 'Modificar o quitar reglas' : 'Añadir reglas'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        ) : activeTab === 'Grupos' ? (
+                        {activeTab === 'Grupos' ? (
                             <motion.div
                                 key="grupos"
                                 initial={{ opacity: 0, y: 20 }}
@@ -1554,7 +1499,8 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                     exit={{ opacity: 0, scale: 0.95 }}
                                                     className={`w-full ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full flex flex-col' : ''}`}
                                                 >
-                                                    <div className={`bg-[#111111] rounded-[2rem] overflow-hidden border border-white/[0.12] flex flex-col shadow-2xl hover:border-white/25 transition-all ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full' : ''}`}>
+                                                    <div className={`rounded-[2rem] shadow-[0_20px_60px_-8px_rgba(0,0,0,0.5),0_8px_24px_-4px_rgba(0,0,0,0.35),0_0_0_1px_rgba(0,0,0,0.2)] hover:shadow-[0_28px_70px_-10px_rgba(0,0,0,0.55),0_12px_28px_-4px_rgba(0,0,0,0.4),0_0_0_1px_rgba(0,0,0,0.25)] transition-all ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full' : ''}`}>
+                                                        <div className={`bg-[#111111] rounded-[2rem] overflow-hidden border border-white/[0.12] flex flex-col h-full hover:border-white/25 transition-all ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full' : ''}`}>
 
                                                         {/* ── Header: hora, pista y fases con más aire ─────────────────── */}
                                                         <div className="px-4 pt-3 pb-2.5 border-b border-white/[0.10] flex flex-col gap-2 bg-white/[0.07]">
@@ -1626,7 +1572,10 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                             )}
                                                         </div>
 
-                                                        {/* ── Body: Pizarra tipo marcador ─────────────────── */}
+                                                        {/* ── Contenido scrollable + nav fijo abajo (Control, Pizarra, Cámaras, ADS) ─────────────────── */}
+                                                        <div className="flex flex-col min-h-0 flex-1">
+                                                        <div className="flex-1 min-h-0 overflow-auto">
+                                                        {/* Body: Pizarra tipo marcador (nombres + P/G/S) */}
                                                         {(() => {
                                                             const isActive = match.status === MatchStatus.LIVE || match.status === MatchStatus.FINISHED;
                                                             const isSTB = match.matchFormat === 'SUPER_TIEBREAK' || match.superTiebreak;
@@ -1665,7 +1614,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                             );
 
                                                             return (
-                                                                <div className="flex flex-col flex-1 min-h-0">
+                                                                <div className="flex flex-col shrink-0">
                                                                     {/* Header columnas pizarra */}
                                                                     <div className="flex h-4 border-b border-white/[0.12] bg-white/[0.05] shrink-0">
                                                                         <div className="flex-1" />
@@ -1696,16 +1645,16 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                                     <div className="w-3 flex-shrink-0 flex items-center justify-center">
                                                                                         {isT1Serving && <ServingBall />}
                                                                                     </div>
-                                                                                    <div className="flex items-center gap-1 min-w-0 overflow-hidden flex-wrap">
-                                                                                        <span style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white' : 'text-white/65'}`}>
-                                                                                            {fmt(t1p1)}
-                                                                                        </span>
+                                                                                    <div className="flex items-center gap-1 min-w-0 overflow-hidden">
+                                                                                        <div className="min-w-0 flex-1">
+                                                                                            <AutoShrinkName name={fmt(t1p1)} style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white' : 'text-white/65'}`} />
+                                                                                        </div>
                                                                                         {t1p2 && (
                                                                                             <>
                                                                                                 <span className="text-white/20 text-xs flex-shrink-0">·</span>
-                                                                                                <span style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white/70' : 'text-white/40'}`}>
-                                                                                                    {fmt(t1p2)}
-                                                                                                </span>
+                                                                                                <div className="min-w-0 flex-1">
+                                                                                                    <AutoShrinkName name={fmt(t1p2)} style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white/70' : 'text-white/40'}`} />
+                                                                                                </div>
                                                                                             </>
                                                                                         )}
                                                                                     </div>
@@ -1750,16 +1699,16 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                                     <div className="w-3 flex-shrink-0 flex items-center justify-center">
                                                                                         {isT2Serving && <ServingBall />}
                                                                                     </div>
-                                                                                    <div className="flex items-center gap-1 min-w-0 overflow-hidden flex-wrap">
-                                                                                        <span style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white' : 'text-white/65'}`}>
-                                                                                            {fmt(t2p1)}
-                                                                                        </span>
+                                                                                    <div className="flex items-center gap-1 min-w-0 overflow-hidden">
+                                                                                        <div className="min-w-0 flex-1">
+                                                                                            <AutoShrinkName name={fmt(t2p1)} style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white' : 'text-white/65'}`} />
+                                                                                        </div>
                                                                                         {t2p2 && (
                                                                                             <>
                                                                                                 <span className="text-white/20 text-xs flex-shrink-0">·</span>
-                                                                                                <span style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white/70' : 'text-white/40'}`}>
-                                                                                                    {fmt(t2p2)}
-                                                                                                </span>
+                                                                                                <div className="min-w-0 flex-1">
+                                                                                                    <AutoShrinkName name={fmt(t2p2)} style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white/70' : 'text-white/40'}`} />
+                                                                                                </div>
                                                                                             </>
                                                                                         )}
                                                                                     </div>
@@ -1795,41 +1744,44 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                 </div>
                                                             );
                                                         })()}
+                                                        </div>
 
-                                                        {/* Menú justo debajo de la pizarra — solo en Por Comenzar y En Vivo */}
+                                                        {/* Nav bar fijo abajo: Control, Pizarra, Cámaras, ADS — Por Comenzar y En Vivo */}
                                                         {(activeTab === 'Por Comenzar' || activeTab === 'En Vivo') && (
-                                                            <nav className="shrink-0 grid grid-cols-4 border-t border-white/[0.08] bg-black/60 py-1 transition-all">
+                                                            <nav className="shrink-0 grid grid-cols-4 border-t border-white/[0.12] bg-black/70 py-2.5">
                                                                 <Link
-                                                                    href={`/tournaments/${id}/control`}
-                                                                    className="flex flex-col items-center justify-center gap-0.5 py-1 text-gray-500 hover:text-padel-primary hover:bg-white/[0.06] transition-all active:scale-95 border-r border-white/5"
+                                                                    href={match?.id ? `/tournaments/${id}/score/${match.id}` : `/tournaments/${id}/control`}
+                                                                    className="flex flex-col items-center justify-center gap-1 py-1.5 text-gray-400 hover:text-padel-primary hover:bg-white/[0.08] transition-all active:scale-95 border-r border-white/10"
                                                                 >
-                                                                    <Zap className="w-3 h-3" />
-                                                                    <span className="text-[5px] font-black uppercase tracking-widest">Control</span>
+                                                                    <Zap className="w-4 h-4" />
+                                                                    <span className="text-[8px] font-black uppercase tracking-widest">Control</span>
                                                                 </Link>
                                                                 <Link
-                                                                    href={id ? `/tournaments/${id}/monitor` : '#'}
+                                                                    href={id && match?.id ? `/tournaments/${id}/display/${match.id}` : id ? `/tournaments/${id}/monitor` : '#'}
                                                                     target={id ? '_blank' : undefined}
-                                                                    className="flex flex-col items-center justify-center gap-0.5 py-1 text-gray-500 hover:text-white hover:bg-white/[0.06] transition-all active:scale-95 border-r border-white/5"
+                                                                    className="flex flex-col items-center justify-center gap-1 py-1.5 text-gray-400 hover:text-white hover:bg-white/[0.08] transition-all active:scale-95 border-r border-white/10"
                                                                 >
-                                                                    <Monitor className="w-3 h-3" />
-                                                                    <span className="text-[5px] font-black uppercase tracking-widest">Pizarra</span>
+                                                                    <Monitor className="w-4 h-4" />
+                                                                    <span className="text-[8px] font-black uppercase tracking-widest">Pizarra</span>
                                                                 </Link>
                                                                 <Link
                                                                     href={id ? `/tournaments/${id}/control/broadcasting` : '#'}
-                                                                    className="flex flex-col items-center justify-center gap-0.5 py-1 text-gray-500 hover:text-orange-400 hover:bg-white/[0.06] transition-all active:scale-95 border-r border-white/5"
+                                                                    className="flex flex-col items-center justify-center gap-1 py-1.5 text-gray-400 hover:text-orange-400 hover:bg-white/[0.08] transition-all active:scale-95 border-r border-white/10"
                                                                 >
-                                                                    <Camera className="w-3 h-3" />
-                                                                    <span className="text-[5px] font-black uppercase tracking-widest">Canales</span>
+                                                                    <Camera className="w-4 h-4" />
+                                                                    <span className="text-[8px] font-black uppercase tracking-widest">Cámaras</span>
                                                                 </Link>
                                                                 <Link
                                                                     href={id ? `/tournaments/${id}/control/ads` : '#'}
-                                                                    className="flex flex-col items-center justify-center gap-0.5 py-1 text-gray-500 hover:text-yellow-400 hover:bg-white/[0.06] transition-all active:scale-95"
+                                                                    className="flex flex-col items-center justify-center gap-1 py-1.5 text-gray-400 hover:text-yellow-400 hover:bg-white/[0.08] transition-all active:scale-95"
                                                                 >
-                                                                    <Tv className="w-3 h-3" />
-                                                                    <span className="text-[5px] font-black uppercase tracking-widest">Publicidad</span>
+                                                                    <Tv className="w-4 h-4" />
+                                                                    <span className="text-[8px] font-black uppercase tracking-widest">ADS</span>
                                                                 </Link>
                                                             </nav>
                                                         )}
+                                                        </div>
+                                                        </div>
                                                     </div>
                                                 </motion.section>
                                             );
@@ -1840,7 +1792,40 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                         )}
                     </AnimatePresence>
                 </main>
-            </div >
+            </div>
+
+            {/* Navbar debajo de la pizarra: pestañas fijas al fondo */}
+            <nav className="fixed bottom-0 left-0 right-0 z-[50] bg-[#0a0a0a]/95 backdrop-blur-xl border-t border-white/10 safe-area-pb">
+                <div className="max-w-4xl mx-auto px-2 py-2 overflow-x-auto hide-scrollbar flex justify-center">
+                    <div className="flex flex-wrap justify-center gap-x-1 gap-y-1">
+                        {visibleTabs.map((tab, tabIdx) => {
+                            const isLive = tab === 'En Vivo';
+                            return (
+                                <button
+                                    key={`tab-${tabIdx}-${tab}`}
+                                    onClick={() => setActiveTab(tab)}
+                                    className={`min-w-[80px] px-3 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap
+                                        ${activeTab === tab
+                                            ? isLive
+                                                ? 'border-red-500 text-red-400'
+                                                : 'border-padel-primary text-padel-primary'
+                                            : isLive
+                                                ? 'border-transparent text-red-600 hover:text-red-400'
+                                                : 'border-transparent text-gray-500 hover:text-gray-300'
+                                        }`}
+                                >
+                                    {isLive ? (
+                                        <span className="flex items-center justify-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
+                                            {tab}
+                                        </span>
+                                    ) : tab}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            </nav>
 
             {/* Score Management Modal */}
             <AnimatePresence>
@@ -2020,19 +2005,27 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                     </div>
 
                                     <div className="p-6 space-y-4">
+                                        <button
+                                            onClick={sharePDFCuadro}
+                                            className="w-full flex items-center justify-center gap-3 p-4 rounded-2xl bg-padel-primary/20 border border-padel-primary/40 hover:bg-padel-primary/30 transition-all group"
+                                        >
+                                            <div className="w-10 h-10 rounded-full bg-padel-primary flex items-center justify-center text-black">
+                                                <Download className="w-5 h-5" />
+                                            </div>
+                                            <div className="text-left">
+                                                <span className="text-sm font-black uppercase tracking-tight text-padel-primary block">Compartir PDF del cuadro</span>
+                                                <span className="text-[10px] text-white/70 font-bold uppercase tracking-widest">Descarga o comparte el cuadro del torneo</span>
+                                            </div>
+                                        </button>
                                         <div className="grid grid-cols-2 gap-3">
                                             <button
-                                                onClick={() => {
-                                                    const text = encodeURIComponent(`🎾 ¡Sigue los resultados de ${tournament?.name} en vivo por Smart Padel!`);
-                                                    const url = encodeURIComponent(window.location.href);
-                                                    window.open(`https://wa.me/?text=${text}%20${url}`, '_blank');
-                                                }}
+                                                onClick={sharePDFViaWhatsApp}
                                                 className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-[#25D366]/10 border border-[#25D366]/20 hover:bg-[#25D366]/20 transition-all group"
                                             >
                                                 <div className="w-10 h-10 rounded-full bg-[#25D366] flex items-center justify-center text-white">
                                                     <MessageCircle className="w-5 h-5" />
                                                 </div>
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-[#25D366]">WhatsApp</span>
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-[#25D366]">WhatsApp (PDF)</span>
                                             </button>
 
                                             <button
@@ -2050,17 +2043,13 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                             </button>
 
                                             <button
-                                                onClick={() => {
-                                                    const subject = encodeURIComponent(`Torneo de Padel: ${tournament?.name}`);
-                                                    const body = encodeURIComponent(`¡Hola! Te invito a seguir los resultados del torneo ${tournament?.name} en vivo aquí:\n\n${window.location.href}`);
-                                                    window.location.href = `mailto:?subject=${subject}&body=${body}`;
-                                                }}
+                                                onClick={sharePDFViaEmail}
                                                 className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all group"
                                             >
                                                 <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white">
                                                     <Mail className="w-5 h-5" />
                                                 </div>
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Correo</span>
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Correo (PDF)</span>
                                             </button>
 
                                             <button
@@ -2074,7 +2063,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                 <div className="w-10 h-10 rounded-full bg-padel-primary flex items-center justify-center text-black">
                                                     {copied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
                                                 </div>
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-padel-primary">{copied ? 'Copiado' : 'Link'}</span>
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-padel-primary">{copied ? 'Copiado' : 'Copiar link'}</span>
                                             </button>
 
                                             <button
@@ -2147,86 +2136,6 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                     document.body
                 )
             }
-
-            {/* Modal Editar Reglas */}
-            <AnimatePresence>
-                {isRulesEditOpen && id && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-                    >
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-[#0f0f0f] w-full max-w-2xl rounded-[32px] border border-white/10 overflow-hidden shadow-2xl max-h-[90vh] flex flex-col"
-                        >
-                            <div className="p-6 flex flex-col flex-1 min-h-0">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-xl font-black italic uppercase tracking-tighter">Modificar reglas</h3>
-                                    <button
-                                        onClick={() => !isSavingRules && setIsRulesEditOpen(false)}
-                                        className="w-10 h-10 flex items-center justify-center bg-white/5 rounded-full hover:bg-white/10 transition-colors disabled:opacity-50"
-                                        disabled={isSavingRules}
-                                    >
-                                        <X className="w-5 h-5 text-gray-400" />
-                                    </button>
-                                </div>
-                                <div className="flex-1 min-h-0 flex flex-col">
-                                    {!canManageTournament && (
-                                        <p className="text-xs text-amber-400/90 mb-3 font-bold uppercase tracking-wider">Solo el organizador o un administrador pueden editar las reglas.</p>
-                                    )}
-                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 block">Reglamento adicional (texto libre)</label>
-                                    <textarea
-                                        value={rulesDraft}
-                                        onChange={(e) => setRulesDraft(e.target.value)}
-                                        placeholder="Añade aquí normas específicas del torneo, horarios, vestimenta, etc."
-                                        className="flex-1 min-h-[200px] w-full rounded-2xl bg-black/30 border border-white/10 p-4 text-sm text-white placeholder:text-gray-500 resize-y font-sans disabled:opacity-70"
-                                        disabled={isSavingRules || !canManageTournament}
-                                        readOnly={!canManageTournament}
-                                    />
-                                </div>
-                                <div className="flex gap-3 mt-4">
-                                    <button
-                                        type="button"
-                                        onClick={() => !isSavingRules && setIsRulesEditOpen(false)}
-                                        className={canManageTournament ? 'flex-1 py-3 px-4 rounded-2xl border border-white/10 text-gray-400 hover:bg-white/5 font-bold text-xs uppercase tracking-widest transition-all disabled:opacity-50' : 'w-full py-3 px-4 rounded-2xl bg-padel-primary/20 border border-padel-primary/40 text-padel-primary font-bold text-xs uppercase tracking-widest hover:bg-padel-primary/30 transition-all disabled:opacity-50'}
-                                        disabled={isSavingRules}
-                                    >
-                                        {canManageTournament ? 'Cancelar' : 'Cerrar'}
-                                    </button>
-                                    {canManageTournament && (
-                                        <button
-                                            type="button"
-                                            onClick={async () => {
-                                                if (!id || isSavingRules) return;
-                                                setIsSavingRules(true);
-                                                try {
-                                                    await updateDoc(doc(db, 'tournaments', id), {
-                                                        rules: { ...tournament?.rules, content: rulesDraft.trim() },
-                                                        updatedAt: new Date()
-                                                    });
-                                                    setIsRulesEditOpen(false);
-                                                } catch (e) {
-                                                    setError('No se pudieron guardar las reglas. Comprueba la conexión.');
-                                                } finally {
-                                                    setIsSavingRules(false);
-                                                }
-                                            }}
-                                            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-padel-primary text-black font-black text-xs uppercase tracking-widest hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50"
-                                            disabled={isSavingRules}
-                                        >
-                                            <Save className="w-4 h-4" /> {isSavingRules ? 'Guardando...' : 'Guardar'}
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
 
             <style jsx global>{`
                 .hide-scrollbar::-webkit-scrollbar { display: none; }

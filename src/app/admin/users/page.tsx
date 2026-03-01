@@ -6,8 +6,9 @@ import { dataService, ROLES } from '@/lib/dataService';
 import {
     Shield, User, Mail, RefreshCw, ChevronRight, Save,
     ShieldCheck, UserCircle, Target, Plus, Edit2, Key,
-    Eye, EyeOff, X, ShieldAlert
+    Eye, EyeOff, X, ShieldAlert, ChevronLeft
 } from 'lucide-react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { initializeApp, deleteApp } from 'firebase/app';
@@ -185,6 +186,13 @@ export default function AdminUsersPage() {
 
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white p-8">
+            <Link
+                href="/"
+                className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-6 text-sm font-bold uppercase tracking-widest"
+            >
+                <ChevronLeft className="w-5 h-5" />
+                Atrás
+            </Link>
             <div className="flex justify-between items-center mb-12">
                 <div>
                     <h1 className="text-4xl font-black italic uppercase tracking-tighter">

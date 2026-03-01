@@ -9,6 +9,7 @@ import {
     Youtube,
     Settings,
     ChevronRight,
+    ChevronLeft,
     Maximize2,
     ExternalLink,
     Play,
@@ -44,6 +45,13 @@ export default function BoardsModulePage() {
             <Sidebar />
 
             <div className="ipad-scroll-area p-8 md:p-12 pl-24 md:pl-32">
+                <Link
+                    href="/"
+                    className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-6 text-sm font-bold uppercase tracking-widest"
+                >
+                    <ChevronLeft className="w-5 h-5" />
+                    Atrás
+                </Link>
                 <header className="mb-12">
                     <div className="flex items-center gap-3 mb-4">
                         <div className="p-3 bg-padel-primary/20 rounded-2xl border border-padel-primary/30">

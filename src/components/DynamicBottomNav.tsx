@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutDashboard, Trophy, Users, Settings,
-    RadioTower, Megaphone, Sword, Home, User
+    RadioTower, Megaphone, Home, User
 } from 'lucide-react';
 
 interface NavItem {
@@ -48,14 +48,13 @@ export function DynamicBottomNav() {
         const myCanchaId = canchaAsignada ? canchaAsignada.replace('cancha_', '') : '1';
         navItems = [
             { href: `/marker/${myCanchaId}`, label: 'Mi Cancha', icon: RadioTower },
-            { href: '/live', label: 'En Vivo', icon: Sword },
+            { href: '/tournaments', label: 'Torneos', icon: Trophy },
         ];
     } else {
-        // Usuario estándar
+        // Usuario estándar: Live apagado (solo admin/propietario)
         navItems = [
             { href: '/', label: 'Inicio', icon: Home },
             { href: '/tournaments', label: 'Torneos', icon: Trophy },
-            { href: '/live', label: 'En Vivo', icon: Sword },
             { href: '/profile', label: 'Perfil', icon: User },
         ];
     }

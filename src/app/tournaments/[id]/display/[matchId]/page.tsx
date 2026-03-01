@@ -132,19 +132,21 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return () => clearInterval(id);
     }, [tournament?.broadcastingSettings?.sponsors]);
 
-    // Hora de inicio del partido (misma fuente que el marcador: startedAt/actualStartTime)
+    // Hora de inicio del partido (misma fuente que el marcador: startedAt/actualStartTime en BD)
     const getMatchStartTimeMs = (m: any): number | null => {
         const raw = m?.startedAt ?? m?.actualStartTime ?? m?.startTime ?? liveMarcador?.match_start_time;
         if (raw == null) return null;
         if (typeof raw?.toDate === 'function') return raw.toDate().getTime();
-        if (typeof raw?.seconds === 'number') return raw.seconds * 1000;
+        if (typeof raw?.seconds === 'number') return raw.seconds * 1000 + (raw.nanoseconds || 0) / 1e6;
+        if (typeof raw === 'string' || typeof raw === 'number') return new Date(raw).getTime();
         const d = new Date(raw);
         return isNaN(d.getTime()) ? null : d.getTime();
     };
 
-    // Match Duration Counter — mismo tiempo que el marcador, actualización cada segundo
+    // Match Duration Counter — duración transcurrida desde startedAt (actualización cada segundo)
     useEffect(() => {
-        if (match?.status !== MatchStatus.LIVE && match?.status !== 'live') {
+        const isLive = match?.status === MatchStatus.LIVE || match?.status === 'live' || match?.status === MatchStatus.PAUSED || match?.status === 'PAUSED';
+        if (!isLive) {
             setMatchDuration('');
             return;
         }
@@ -505,14 +507,19 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 </div>
                             </div>
 
-                            {/* Center: Hora del partido */}
+                            {/* Center: Tiempo del partido — duración en vivo (cronómetro) o hora programada */}
                             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center">
-                                {matchTimeDisplay && (
+                                {matchDuration ? (
+                                    <>
+                                        <span className="font-bold uppercase text-white/50 tracking-[0.35em] leading-none" style={{ fontSize: 'clamp(6px,0.7vw,11px)' }}>Tiempo de juego</span>
+                                        <span className="font-black italic tracking-tighter leading-none mt-0.5 tabular-nums" style={{ fontSize: 'clamp(24px,3.2vw,56px)', color: primaryColor }}>{matchDuration}</span>
+                                    </>
+                                ) : matchTimeDisplay ? (
                                     <>
                                         <span className="font-bold uppercase text-white/50 tracking-[0.35em] leading-none" style={{ fontSize: 'clamp(6px,0.7vw,11px)' }}>Partido</span>
                                         <span className="font-black italic tracking-tighter leading-none mt-0.5" style={{ fontSize: 'clamp(20px,2.8vw,48px)', color: primaryColor }}>{matchTimeDisplay}</span>
                                     </>
-                                )}
+                                ) : null}
                                 {tournament?.broadcastingSettings?.sponsors?.filter((s: any) => s.active).length > 0 && (
                                     <div className="flex items-center gap-2 mt-2 opacity-60">
                                         <span className="text-[7px] font-black italic text-gray-600 uppercase tracking-[0.3em]" style={{ writingMode: 'vertical-rl' }}>PATROCINA</span>

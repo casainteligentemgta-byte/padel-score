@@ -13,7 +13,8 @@ import {
     RefreshCw,
     Trash2,
     PieChart,
-    ChevronLeft
+    ChevronLeft,
+    X
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -216,9 +217,17 @@ export default function ExpensesPage() {
                         <motion.div
                             initial={{ scale: 0.9, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
-                            className="glass max-w-lg w-full p-10 border-white/10"
+                            className="glass max-w-lg w-full p-10 border-white/10 relative"
                         >
-                            <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-8">
+                            <button
+                                type="button"
+                                onClick={() => setIsAddModalOpen(false)}
+                                className="absolute top-6 right-6 p-2 text-gray-500 hover:text-white rounded-lg hover:bg-white/10 transition-all"
+                                aria-label="Cerrar"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                            <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-8 pr-10">
                                 Nuevo <span className="text-padel-primary">Gasto</span>
                             </h2>
 

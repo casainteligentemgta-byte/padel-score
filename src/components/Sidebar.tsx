@@ -14,7 +14,14 @@ import {
     Megaphone,
     Brain,
     DollarSign,
-    Crosshair
+    Crosshair,
+    Medal,
+    Radio,
+    User,
+    Wallet,
+    ShieldCheck,
+    FileText,
+    Receipt
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -28,16 +35,23 @@ export default function Sidebar() {
     const { appTitle, clubName } = useAppSettings();
     const router = useRouter();
 
-    // Jugador: Inicio + Torneos. Marcador: además enlaces a sus canchas asignadas.
-    const menuItems = [
+    // App: Inicio, Torneos, Ranking, Live (solo admin/propietario), Marcador (si aplica), Datos usuario, Mi wallet (desactivado), Política de Privacidad
+    const menuItems: { name: string; href: string | null; icon: typeof Home; disabled?: boolean }[] = [
         { name: 'Inicio', href: '/', icon: Home },
         { name: 'Torneos', href: '/tournaments', icon: Trophy },
-        ...(markerCanchas?.length > 0 ? markerCanchas.map((c) => ({ name: `Marcador ${getCanchaLabel(c)}`, href: `/marker/${c}`, icon: Crosshair })) : []),
+        { name: 'Ranking', href: '/ranking', icon: Medal },
+        ...(isAdmin ? [{ name: 'Live', href: '/live' as string, icon: Radio }] : []),
+        ...(markerCanchas?.length > 0 ? markerCanchas.map((c) => ({ name: `Marcador ${getCanchaLabel(c)}`, href: `/marker/${c}` as string, icon: Crosshair })) : []),
+        { name: 'Mis datos', href: '/mi-cuenta', icon: User },
+        { name: 'Mi wallet', href: null, icon: Wallet, disabled: true },
+        { name: 'Política de Privacidad', href: '/politica-privacidad', icon: ShieldCheck },
+        { name: 'Términos de Inscripción', href: '/terminos-inscripcion', icon: FileText },
     ];
 
     const adminItems = [
         { name: 'Generador Maestro', href: '/admin/master-generator', icon: Sparkles },
         { name: 'Control de Gastos', href: '/expenses', icon: DollarSign },
+        { name: 'Validación de pagos', href: '/admin/validacion-pagos', icon: Receipt },
         { name: 'Agentes AI', href: '/agents', icon: Brain },
         { name: 'Jugadores', href: '/players', icon: Users },
         { name: 'Publicidad', href: '/admin/publicidad', icon: Megaphone },
@@ -105,22 +119,34 @@ export default function Sidebar() {
                                 <div>
                                     <p className="text-[9px] font-black uppercase text-gray-600 tracking-[0.2em] mb-2 ml-4">App</p>
                                     <div className="space-y-1">
-                                        {menuItems.map((item) => (
-                                            <Link
-                                                key={item.name}
-                                                href={item.href}
-                                                onClick={() => setIsOpen(false)}
-                                            >
-                                                <motion.div
-                                                    whileHover={{ x: 5, backgroundColor: 'rgba(204,255,0,0.1)' }}
-                                                    whileTap={{ scale: 0.95 }}
-                                                    className="flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-400 hover:text-padel-primary transition-all group"
+                                        {menuItems.map((item) =>
+                                            item.disabled || item.href === null ? (
+                                                <div
+                                                    key={item.name}
+                                                    className="flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-600 cursor-not-allowed opacity-60"
+                                                    title="Próximamente"
                                                 >
-                                                    <item.icon className="w-4 h-4 transition-transform group-hover:scale-110" />
+                                                    <item.icon className="w-4 h-4" />
                                                     <span className="font-bold text-[12px] tracking-tight uppercase italic">{item.name}</span>
-                                                </motion.div>
-                                            </Link>
-                                        ))}
+                                                    <span className="ml-auto text-[9px] text-gray-500 uppercase">Próximamente</span>
+                                                </div>
+                                            ) : (
+                                                <Link
+                                                    key={item.name}
+                                                    href={item.href}
+                                                    onClick={() => setIsOpen(false)}
+                                                >
+                                                    <motion.div
+                                                        whileHover={{ x: 5, backgroundColor: 'rgba(204,255,0,0.1)' }}
+                                                        whileTap={{ scale: 0.95 }}
+                                                        className="flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-400 hover:text-padel-primary transition-all group"
+                                                    >
+                                                        <item.icon className="w-4 h-4 transition-transform group-hover:scale-110" />
+                                                        <span className="font-bold text-[12px] tracking-tight uppercase italic">{item.name}</span>
+                                                    </motion.div>
+                                                </Link>
+                                            )
+                                        )}
                                     </div>
                                 </div>
 

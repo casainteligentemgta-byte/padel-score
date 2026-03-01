@@ -23,7 +23,8 @@ import {
     X,
     UserPlus,
     Edit3,
-    Database
+    Database,
+    ImageIcon
 } from 'lucide-react';
 import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournament';
 import { MasterScheduleEngine, MasterScheduleConfig, CategoryConfig } from '@/services/MasterScheduleEngine';
@@ -129,9 +130,10 @@ const INITIAL_EVENT_DATA: MasterScheduleConfig = {
     dailyEndTime: '22:00',
     numCourts: 3,
     courtNames: Array.from({ length: 3 }, (_, i) => `Pista ${i + 1}`),
-    matchDurationMinutes: 70,
+    matchDurationMinutes: 60,
     bufferMinutes: 10,
-    categories: []
+    categories: [],
+    sponsorLogoUrl: ''
 };
 
 // ── Calcula el total de partidos de una categoría ────────────────────────────
@@ -559,6 +561,11 @@ export default function MasterGeneratorPage() {
                     advanceCount: (cat as any).advanceCount ?? 2,
                     pointsGoal: (cat as any).pointsGoal ?? 24,
                     status: 'Programado',
+                    ...(eventData.sponsorLogoUrl?.trim() && {
+                        broadcastingSettings: {
+                            sponsors: [{ name: 'Patrocinador del evento', logoUrl: eventData.sponsorLogoUrl.trim() }]
+                        }
+                    }),
                 };
 
                 const docRef = await dataService.createTournament(sanitizeForFirestore(tournamentToSave), currentUser.uid);
@@ -593,23 +600,104 @@ export default function MasterGeneratorPage() {
     const nextStep = () => setStep(s => Math.min(s + 1, 4));
     const prevStep = () => setStep(s => Math.max(s - 1, 1));
 
+    /**
+     * Calcula el día y hora de fin del torneo solo con la configuración.
+     * Debe coincidir con MasterScheduleEngine: un slot es válido si inicio + duración partido <= cierre.
+     */
+    const getEstimatedEndFromConfig = (): Date | null => {
+        const totalMatches = eventData.categories.reduce(
+            (acc, c) => acc + calcTotalMatchesForCategory(
+                c.numTeams,
+                c.groupSize,
+                (c as any).quickQualification,
+                (c as any).type === TournamentType.CUADRO_CONSOLACION
+            ),
+            0
+        );
+        if (totalMatches === 0) return null;
+
+        const [startH = 7, startM = 0] = (eventData.dailyStartTime || '07:00').split(':').map(Number);
+        const [endH = 22, endM = 0] = (eventData.dailyEndTime || '22:00').split(':').map(Number);
+        const dailyStartMins = startH * 60 + startM;
+        const dailyEndMins = endH * 60 + endM;
+        const dailyMinutes = Math.max(0, dailyEndMins - dailyStartMins);
+        const matchDuration = eventData.matchDurationMinutes || 60;
+        const buffer = eventData.bufferMinutes || 10;
+        const slotLength = matchDuration + buffer;
+
+        // Mismo criterio que MasterScheduleEngine: slot válido si slotStart + matchDuration <= limit
+        const slotsPerCourtPerDay = dailyMinutes < matchDuration
+            ? 0
+            : Math.floor((dailyMinutes - matchDuration) / slotLength) + 1;
+        const numCourts = Math.max(1, eventData.numCourts || 1);
+        const totalSlotsPerDay = numCourts * slotsPerCourtPerDay;
+        if (totalSlotsPerDay === 0) return null;
+
+        const lastMatchIndex = totalMatches - 1;
+        const lastDayIndex = Math.floor(lastMatchIndex / totalSlotsPerDay);
+        const slotOnDay = lastMatchIndex % totalSlotsPerDay;
+        // Orden del engine: por cada franja horaria (slot), recorre todas las canchas
+        const slotRow = Math.floor(slotOnDay / numCourts);
+        const lastMatchStartMins = dailyStartMins + slotRow * slotLength;
+        const lastMatchEndMins = lastMatchStartMins + matchDuration;
+
+        const startD = new Date(eventData.startDate + 'T00:00:00');
+        if (isNaN(startD.getTime())) return null;
+        const lastDay = new Date(startD);
+        lastDay.setDate(lastDay.getDate() + lastDayIndex);
+        lastDay.setHours(Math.floor(lastMatchEndMins / 60), lastMatchEndMins % 60, 0, 0);
+        return lastDay;
+    };
+
+    /** Fecha y hora estimadas de fin del torneo (cuando termina el último partido). */
     const getEstimatedEndDate = () => {
+        const startD = new Date(eventData.startDate + 'T00:00:00');
         let d: Date;
-        const startD = new Date(eventData.startDate + 'T12:00:00');
+
         if (generatedMatches.length > 0) {
-            const lastMatch = generatedMatches[generatedMatches.length - 1];
+            const byTime = [...generatedMatches].sort((a, b) =>
+                new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()
+            );
+            const lastMatch = byTime[byTime.length - 1];
             d = new Date(lastMatch.scheduledTime);
+            d.setMinutes(d.getMinutes() + (eventData.matchDurationMinutes || 60));
         } else {
-            d = new Date(eventData.endDate + 'T12:00:00');
-            if (isNaN(d.getTime())) d = new Date(eventData.startDate + 'T12:00:00');
+            const fromConfig = getEstimatedEndFromConfig();
+            if (fromConfig) {
+                d = fromConfig;
+            } else {
+                d = new Date(eventData.endDate + 'T' + (eventData.dailyEndTime || '22:00') + ':00');
+                if (isNaN(d.getTime())) d = new Date(eventData.startDate + 'T' + (eventData.dailyEndTime || '22:00') + ':00');
+            }
         }
-        // Nunca mostrar fin antes del inicio (ej. inicio 5 marzo, endDate aún 2 marzo)
         if (!isNaN(startD.getTime()) && d.getTime() < startD.getTime()) d = startD;
         const day = d.getDate();
         const month = d.toLocaleDateString('es-ES', { month: 'long' });
         const year = d.getFullYear();
-        return `${day} de ${month} de ${year}`;
+        const h = d.getHours();
+        const m = d.getMinutes();
+        const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        return `${day} de ${month} de ${year}, ${timeStr} h`;
     };
+
+    // Sincronizar eventData.endDate con el fin calculado para que el mismo dato aparezca en evento, categorías y fixture
+    useEffect(() => {
+        if (generatedMatches.length > 0) return;
+        const d = getEstimatedEndFromConfig();
+        if (!d) return;
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        setEventData(prev => (prev.endDate === dateStr ? prev : { ...prev, endDate: dateStr }));
+    }, [
+        eventData.startDate,
+        eventData.dailyStartTime,
+        eventData.dailyEndTime,
+        eventData.numCourts,
+        eventData.matchDurationMinutes,
+        eventData.bufferMinutes,
+        eventData.categories.length,
+        eventData.categories.map(c => calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION)).join(','),
+        generatedMatches.length,
+    ]);
 
     const getIntensityLabel = () => {
         const totalMatches = generatedMatches.length;
@@ -636,12 +724,14 @@ export default function MasterGeneratorPage() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-md p-4"
+                        onClick={() => setEditingMatchIdx(null)}
                     >
                         <motion.div
                             initial={{ scale: 0.95, y: 20, opacity: 0 }}
                             animate={{ scale: 1, y: 0, opacity: 1 }}
                             exit={{ scale: 0.95, y: 20, opacity: 0 }}
                             className="bg-[#111] border border-zinc-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-6"
+                            onClick={(e) => e.stopPropagation()}
                         >
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
@@ -1052,6 +1142,15 @@ export default function MasterGeneratorPage() {
 
                 {/* Header — compact: etapas centradas */}
                 <header className="flex items-center gap-4 mb-3 shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => router.back()}
+                        className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors shrink-0 p-2 -ml-2 rounded-xl hover:bg-white/5"
+                        aria-label="Atrás"
+                    >
+                        <ChevronLeft className="w-5 h-5" />
+                        <span className="text-xs font-bold uppercase tracking-widest hidden sm:inline">Atrás</span>
+                    </button>
                     <div className="flex items-center gap-2.5 flex-1">
                         <div className="w-8 h-8 bg-padel-primary/10 border border-padel-primary/20 rounded-xl flex items-center justify-center">
                             <Sparkles className="w-4 h-4 text-padel-primary" />
@@ -1088,10 +1187,10 @@ export default function MasterGeneratorPage() {
 
 
                 {/* content area — fills remaining height, scrolls inside */}
-                < div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-4" >
+                <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-4">
 
                     {/* Main Form — scrollable */}
-                    < main className="lg:col-span-8 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent" >
+                    <main className="lg:col-span-8 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
                         <AnimatePresence mode="wait">
                             {step === 1 && (
                                 <motion.section
@@ -1101,6 +1200,18 @@ export default function MasterGeneratorPage() {
                                     exit={{ opacity: 0, x: -20 }}
                                     className="space-y-3"
                                 >
+                                    {/* Resumen Global visible en las tres pantallas de creación */}
+                                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-xl">
+                                        <h3 className="text-sm font-bold italic uppercase border-b border-zinc-800 pb-2 mb-3">Resumen Global</h3>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-xs">
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Categorías</span><span className="font-bold text-padel-primary">{eventData.categories.length}</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Pistas</span><span className="font-bold text-white">{eventData.numCourts}</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Parejas</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + c.numTeams, 0)}</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Jugadores</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + c.numTeams, 0) * 2}</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Partidos</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION), 0)}</span></div>
+                                            <div className="col-span-2 sm:col-span-1 flex justify-between items-center sm:flex-col sm:items-start sm:gap-0.5"><span className="text-zinc-500">Fin estimado (día y hora)</span><span className="font-bold text-padel-primary text-[10px] sm:text-xs">{getEstimatedEndDate()}</span></div>
+                                        </div>
+                                    </div>
                                     <div className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-2xl p-4 space-y-4">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div className="space-y-1.5">
@@ -1133,6 +1244,32 @@ export default function MasterGeneratorPage() {
                                                         <option key={c.name} value={c.name}>{c.name} ({c.courts} Pistas)</option>
                                                     ))}
                                                 </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                                                <ImageIcon className="w-3.5 h-3.5 text-padel-primary" />
+                                                Logo del patrocinante (URL)
+                                            </label>
+                                            <div className="flex flex-col sm:flex-row gap-3 items-start">
+                                                <input
+                                                    type="url"
+                                                    value={eventData.sponsorLogoUrl ?? ''}
+                                                    onChange={(e) => setEventData({ ...eventData, sponsorLogoUrl: e.target.value })}
+                                                    placeholder="https://ejemplo.com/logo.png"
+                                                    className="flex-1 w-full min-w-0 bg-black/50 border border-zinc-700 rounded-xl p-3 text-sm font-medium focus:border-padel-primary outline-none transition-all placeholder:text-zinc-600"
+                                                />
+                                                {(eventData.sponsorLogoUrl ?? '').trim() && (
+                                                    <div className="flex-shrink-0 w-16 h-16 rounded-xl bg-black/50 border border-zinc-700 overflow-hidden flex items-center justify-center">
+                                                        <img
+                                                            src={eventData.sponsorLogoUrl!}
+                                                            alt="Logo patrocinante"
+                                                            className="w-full h-full object-contain"
+                                                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                        />
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
@@ -1196,7 +1333,7 @@ export default function MasterGeneratorPage() {
                                                     type="number"
                                                     min={30} max={180} step={5}
                                                     value={eventData.matchDurationMinutes}
-                                                    onChange={(e) => setEventData({ ...eventData, matchDurationMinutes: parseInt(e.target.value) || 70 })}
+                                                    onChange={(e) => setEventData({ ...eventData, matchDurationMinutes: parseInt(e.target.value) || 60 })}
                                                     className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary font-bold text-center text-base"
                                                 />
                                             </div>
@@ -1249,6 +1386,18 @@ export default function MasterGeneratorPage() {
                                     animate={{ opacity: 1, x: 0 }}
                                     className="space-y-3"
                                 >
+                                    {/* Resumen Global visible en las tres pantallas de creación */}
+                                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-xl">
+                                        <h3 className="text-sm font-bold italic uppercase border-b border-zinc-800 pb-2 mb-3">Resumen Global</h3>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-xs">
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Categorías</span><span className="font-bold text-padel-primary">{eventData.categories.length}</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Pistas</span><span className="font-bold text-white">{eventData.numCourts}</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Parejas</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + c.numTeams, 0)}</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Jugadores</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + c.numTeams, 0) * 2}</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Partidos</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION), 0)}</span></div>
+                                            <div className="col-span-2 sm:col-span-1 flex justify-between items-center sm:flex-col sm:items-start sm:gap-0.5"><span className="text-zinc-500">Fin estimado (día y hora)</span><span className="font-bold text-padel-primary text-[10px] sm:text-xs">{getEstimatedEndDate()}</span></div>
+                                        </div>
+                                    </div>
                                     <div className="flex items-center justify-between">
                                         <h2 className="text-2xl font-bold italic uppercase">Categorías del Evento</h2>
                                         {activeGender && (
@@ -1422,6 +1571,18 @@ export default function MasterGeneratorPage() {
                                     animate={{ opacity: 1, x: 0 }}
                                     className="space-y-3"
                                 >
+                                    {/* Resumen Global visible en las tres pantallas de creación */}
+                                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-xl">
+                                        <h3 className="text-sm font-bold italic uppercase border-b border-zinc-800 pb-2 mb-3">Resumen Global</h3>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-xs">
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Categorías</span><span className="font-bold text-padel-primary">{eventData.categories.length}</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Pistas</span><span className="font-bold text-white">{eventData.numCourts}</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Parejas</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + c.numTeams, 0)}</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Jugadores</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + c.numTeams, 0) * 2}</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-zinc-500">Partidos</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION), 0)}</span></div>
+                                            <div className="col-span-2 sm:col-span-1 flex justify-between items-center sm:flex-col sm:items-start sm:gap-0.5"><span className="text-zinc-500">Fin estimado (día y hora)</span><span className="font-bold text-padel-primary text-[10px] sm:text-xs">{getEstimatedEndDate()}</span></div>
+                                        </div>
+                                    </div>
                                     <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 space-y-4">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-b border-zinc-800 pb-4">
                                             <div className="space-y-4">
@@ -1431,7 +1592,7 @@ export default function MasterGeneratorPage() {
                                                 </div>
                                                 <select
                                                     value={eventData.matchDurationMinutes}
-                                                    onChange={(e) => setEventData({ ...eventData, matchDurationMinutes: Number(e.target.value) })}
+                                                    onChange={(e) => setEventData({ ...eventData, matchDurationMinutes: Number(e.target.value) || 60 })}
                                                     className="w-full bg-black/50 border border-zinc-800 rounded-2xl p-4 outline-none focus:border-padel-primary transition-all font-bold"
                                                 >
                                                     <option value={60}>60 Minutos / Partido</option>
@@ -1683,10 +1844,10 @@ export default function MasterGeneratorPage() {
                                 </motion.section>
                             )}
                         </AnimatePresence>
-                    </main >
+                    </main>
 
                     {/* Sidebar Actions */}
-                    < aside className="lg:col-span-4 overflow-y-auto space-y-3" >
+                    <aside className="lg:col-span-4 overflow-y-auto space-y-3">
                         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-2xl">
                             <h3 className="text-sm font-bold italic uppercase border-b border-zinc-800 pb-2 mb-3">Resumen Global</h3>
 
@@ -1712,7 +1873,7 @@ export default function MasterGeneratorPage() {
                                     <span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION), 0)}</span>
                                 </div>
                                 <div className="flex justify-between items-center text-xs">
-                                    <span className="text-zinc-500">Fin Estimado</span>
+                                    <span className="text-zinc-500">Fin estimado (día y hora)</span>
                                     <span className="font-bold text-padel-primary">{getEstimatedEndDate()}</span>
                                 </div>
                             </div>
@@ -1796,9 +1957,9 @@ export default function MasterGeneratorPage() {
                                 "El sistema garantiza que ningún jugador juegue dos partidos seguidos. Las finales se agenden automáticamente al último slot disponible."
                             </p>
                         </div>
-                    </aside >
-                </div >
-            </div >
-        </div >
+                    </aside>
+                </div>
+            </div>
+        </div>
     );
 }

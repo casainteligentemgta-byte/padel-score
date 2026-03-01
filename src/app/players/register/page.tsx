@@ -498,6 +498,14 @@ export default function PlayerRegistrationPage() {
                                 exit={{ y: 100 }}
                                 className="bg-[#1a1a1a] w-full max-w-md rounded-3xl p-8 border border-white/10 relative z-[120] space-y-6"
                             >
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPhotoOptions(false)}
+                                    className="absolute top-4 right-4 p-2 text-gray-500 hover:text-white rounded-full hover:bg-white/10 transition-all"
+                                    aria-label="Cerrar"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
                                 <h3 className="text-xl font-bold text-center tracking-tight">Elegir Foto</h3>
                                 <div className="grid grid-cols-2 gap-4">
                                     <button

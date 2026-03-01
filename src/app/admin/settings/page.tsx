@@ -7,8 +7,9 @@ import {
     Shield, User, Mail, RefreshCw, ChevronRight, Save,
     ShieldCheck, UserCircle, Target, Plus, Edit2, Key,
     Eye, EyeOff, X, ShieldAlert, Settings, Users,
-    Lock, Bell, Globe, Database
+    Lock, Bell, Globe, Database, ChevronLeft
 } from 'lucide-react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { CANCHA_IDS, getCanchaLabel } from '@/lib/markerCanchas';
@@ -205,6 +206,13 @@ export default function AdminSettingsPage() {
 
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white p-8 overflow-y-auto no-scrollbar">
+            <Link
+                href="/"
+                className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-6 text-sm font-bold uppercase tracking-widest"
+            >
+                <ChevronLeft className="w-5 h-5" />
+                Atrás
+            </Link>
             {/* Header section similar to Publicidad */}
             <div className="relative mb-12">
                 <div className="flex items-center gap-4 mb-4">

@@ -35,6 +35,8 @@ interface AuthContextType {
     markerCanchas: string[];
     /** true si el usuario puede marcar en esta cancha (admin o marcador con esa cancha asignada) */
     canMarkInCancha: (canchaId: string) => boolean;
+    /** Recarga el perfil desde Firestore (útil tras actualizar en Mi cuenta) */
+    refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -52,6 +54,7 @@ const AuthContext = createContext<AuthContextType>({
     isMarker: false,
     markerCanchas: [],
     canMarkInCancha: () => false,
+    refreshProfile: async () => { },
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -78,8 +81,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             // After signing in, we can still set the mock profile as admin for UI purposes
             setProfile({ role: ROLES.ADMIN, name: 'Luis Mata (Mock Admin)' });
             return;
-        } catch (e) {
-            console.error('AuthContext: Anonymous sign-in failed:', e);
+        } catch (e: any) {
+            const code = e?.code || e?.message || '';
+            if (code.includes('admin-restricted-operation') || code.includes('auth/admin-restricted-operation')) {
+                console.warn(
+                    'AuthContext: La autenticación anónima no está permitida en este proyecto. ' +
+                    'Para habilitarla: Firebase Console → Authentication → Sign-in method → Anonymous → Activar. ' +
+                    'Usando usuario mock para desarrollo.'
+                );
+            } else {
+                console.error('AuthContext: Anonymous sign-in failed:', e);
+            }
         }
 
         // Ultimate fallback: mock user only (Firestore will fail if rules require auth)
@@ -230,6 +242,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     /** Canchas asignadas al marcador por el admin (solo aplica si role === marker) */
     const markerCanchas: string[] = isMarker && Array.isArray(profile?.markerCanchas) ? profile.markerCanchas : [];
     const canMarkInCancha = (canchaId: string) => isAdmin || (isMarker && markerCanchas.includes(canchaId));
+    const refreshProfile = async () => { if (user?.uid) await fetchProfile(user.uid); };
 
     return (
         <AuthContext.Provider value={{
@@ -246,7 +259,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             isPlayer,
             isMarker,
             markerCanchas,
-            canMarkInCancha
+            canMarkInCancha,
+            refreshProfile,
         }}>
             {loading ? (
                 <div

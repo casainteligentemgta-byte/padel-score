@@ -15,7 +15,7 @@ import {
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 const toMs = (v: any): number => {
@@ -99,14 +99,21 @@ const formatCategory = (cat?: string): string => {
     return CAT_LABEL_MAP[cat] ?? cat.replace(/_/g, ' ');
 };
 
-// ── Status filter tabs ──────────────────────────────────────────────────────
+const formatGender = (g?: string): string => {
+    if (!g) return '';
+    if (g === 'MALE') return 'Masculino';
+    if (g === 'FEMALE') return 'Femenino';
+    if (g === 'MIXED') return 'Mixto';
+    return g;
+};
+
+// ── Status filter tabs (reglas generales van en el cuadro, no por categoría) ──
 const TABS = [
     { label: 'Todos', value: 'all' },
     { label: 'Por Comenzar', value: MatchStatus.PENDING },
     { label: 'En Vivo', value: MatchStatus.LIVE },
     { label: 'Finalizados', value: MatchStatus.FINISHED },
     { label: 'Grupos', value: 'groups' },
-    { label: 'Reglas', value: 'rules' },
 ] as const;
 
 // ── Standings helpers ────────────────────────────────────────────────────────
@@ -558,7 +565,7 @@ function PlaceholderMatchCard({ rank, mode = 'pending' }: { rank: number; mode?:
 }
 
 // ── "Por Comenzar" action card (top 3 only) ────────────────────────────────
-function NextMatchCard({ match, rank, compact = false }: { match: any; rank: number; compact?: boolean }) {
+function NextMatchCard({ match, rank, compact = false, gameNumber }: { match: any; rank: number; compact?: boolean; gameNumber?: number }) {
     const [t1p1, t1p2] = resolveTeamNames(match.team1, match.team1Name);
     const [t2p1, t2p2] = resolveTeamNames(match.team2, match.team2Name);
     const isLive = match.status === MatchStatus.LIVE;
@@ -609,47 +616,53 @@ function NextMatchCard({ match, rank, compact = false }: { match: any; rank: num
                 transition={{ delay: rank * 0.06 }}
                 className={`rounded-2xl border overflow-hidden flex flex-col ${rankBg[safeRank]}`}
             >
-                {/* Cabecera compacta */}
-                <div className="px-2 pt-2 pb-1.5 flex items-center justify-between gap-1 border-b border-white/[0.06]">
-                    <div className="flex items-center gap-1.5 min-w-0">
+                {/* Cabecera compacta — pista, categoría, género, número de juego */}
+                <div className="px-2 pt-2 pb-1.5 flex items-center justify-between gap-1 border-b-2 border-[#ccff00]/50 bg-[#ccff00]/10">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                         {isLive && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-                        <span className={`text-[8px] font-black uppercase tracking-widest truncate ${rankColors[safeRank]}`}>
+                        <span className="text-[8px] font-black uppercase tracking-widest text-[#ccff00]">
                             {isLive ? `PISTA ${match.court ?? '-'}` : rankLabel[safeRank]}
                         </span>
+                        {!isLive && (match._category || match._gender) && (
+                            <span className="text-[7px] font-bold text-[#ccff00]/90 uppercase tracking-tight">
+                                {[formatCategory(match._category), formatGender(match._gender)].filter(Boolean).join(' · ')}
+                            </span>
+                        )}
+                        {!isLive && gameNumber != null && (
+                            <span className="text-[7px] font-black text-[#ccff00]/90 italic">
+                                {gameNumber}º juego
+                            </span>
+                        )}
                     </div>
-                    <span className="text-[8px] font-bold text-gray-500 italic">
+                    <span className="text-[8px] font-bold text-[#ccff00]/90 italic flex-shrink-0">
                         {isLive ? `${match.score1 ?? 0} - ${match.score2 ?? 0}` : formatHHMM(match.scheduledTime)}
                     </span>
                 </div>
 
                 {/* Jugadores compactos */}
-                <div className="px-2 py-2 flex-1 flex flex-col gap-1">
+                <div className="px-2 py-2 flex-1 flex flex-col gap-1 bg-[#ccff00]/5 border-y-2 border-[#ccff00]/30">
                     <div className="text-center">
-                        <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate">{t1p1}</p>
+                        <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t1p1}</p>
                     </div>
-                    <div className="text-[8px] font-black text-gray-600 text-center italic leading-none">vs</div>
+                    <div className="text-[8px] font-black text-[#ccff00]/70 text-center italic leading-none">vs</div>
                     <div className="text-center">
-                        <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate">{t2p1}</p>
+                        <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t2p1}</p>
                     </div>
                 </div>
 
                 {/* Action Dock: 4 botones en fila */}
-                <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t border-white/[0.06]">
+                <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40">
                     <Link
                         href={controlHref}
-                        className={`flex flex-col items-center justify-center gap-1 py-2 transition-all active:scale-95
-                            ${isLive ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : rank === 0 ? 'bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20' : 'bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-[#ccff00]'}`}
+                        className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                     >
-                        <div className="relative">
-                            <Gamepad2 className="w-3.5 h-3.5" />
-                            {(isLive || rank === 0) && <span className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400' : 'bg-[#ccff00]'} shadow-[0_0_4px_currentColor] animate-pulse`} />}
-                        </div>
+                        <Gamepad2 className="w-3.5 h-3.5" />
                         <span className="text-[6px] font-black uppercase tracking-tight">Control</span>
                     </Link>
                     <Link
                         href={pizarraHref}
                         target="_blank"
-                        className="flex flex-col items-center justify-center gap-1 py-2 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-blue-400 transition-all active:scale-95"
+                        className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                     >
                         <Monitor className="w-3.5 h-3.5" />
                         <span className="text-[6px] font-black uppercase tracking-tight">Pizarra</span>
@@ -657,7 +670,7 @@ function NextMatchCard({ match, rank, compact = false }: { match: any; rank: num
                     <Link
                         href={camasHref}
                         target="_blank"
-                        className="flex flex-col items-center justify-center gap-1 py-2 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-orange-400 transition-all active:scale-95"
+                        className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                     >
                         <Camera className="w-3.5 h-3.5" />
                         <span className="text-[6px] font-black uppercase tracking-tight">Cámaras</span>
@@ -665,7 +678,7 @@ function NextMatchCard({ match, rank, compact = false }: { match: any; rank: num
                     <Link
                         href={adsHref}
                         target="_blank"
-                        className="flex flex-col items-center justify-center gap-1 py-2 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-yellow-400 transition-all active:scale-95"
+                        className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                     >
                         <Tv className="w-3.5 h-3.5" />
                         <span className="text-[6px] font-black uppercase tracking-tight">Ads</span>
@@ -684,57 +697,64 @@ function NextMatchCard({ match, rank, compact = false }: { match: any; rank: num
             transition={{ delay: rank * 0.07 }}
             className={`rounded-[1.75rem] border overflow-hidden ${rankBg[safeRank]}`}
         >
-            {/* ── Header row */}
-            <div className="px-4 pt-3 pb-2.5 flex items-center justify-between gap-2 border-b border-white/[0.06]">
-                <div className="flex items-center gap-2.5">
-                    <span className={`text-[9px] font-black uppercase tracking-[0.2em] ${rankColors[safeRank]}`}>
+            {/* ── Header row — pista, categoría, género, número de juego */}
+            <div className="px-4 pt-3 pb-2.5 flex items-center justify-between gap-2 border-b-2 border-[#ccff00]/50 bg-[#ccff00]/10 flex-wrap">
+                <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#ccff00]">
                         {rankLabelFull[safeRank] ?? `${rank + 1}° Pista`}
                     </span>
-                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 bg-[#ccff00]/40`} />
-                    <span className="label-cancha-meta italic">
-                        Pista {match.court ?? '-'} · {formatHHMM(match.scheduledTime)}
+                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-[#ccff00]/40" />
+                    <span className="label-cancha-meta italic text-[#ccff00]/90">
+                        Pista {match.court ?? '-'}
                     </span>
+                    {(match._category || match._gender) && (
+                        <>
+                            <span className="text-[#ccff00]/60">·</span>
+                            <span className="text-[9px] font-bold text-[#ccff00]/90 uppercase tracking-tight">
+                                {[formatCategory(match._category), formatGender(match._gender)].filter(Boolean).join(' · ')}
+                            </span>
+                        </>
+                    )}
+                    {gameNumber != null && (
+                        <>
+                            <span className="text-[#ccff00]/60">·</span>
+                            <span className="text-[9px] font-black text-[#ccff00]/90 italic">{gameNumber}º juego</span>
+                        </>
+                    )}
+                    <span className="text-[#ccff00]/60">·</span>
+                    <span className="label-cancha-meta italic text-[#ccff00]/90">{formatHHMM(match.scheduledTime)}</span>
                 </div>
-                <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${CAT_COLORS[match._gender] ?? 'bg-white/5 border-white/10 text-gray-500'}`}>
-                    {(match._category ?? '').replace(/_/g, ' ')}
+                <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border flex-shrink-0 ${CAT_COLORS[match._gender] ?? 'bg-white/5 border-white/10 text-gray-500'}`}>
+                    {formatCategory(match._category) || (match._category ?? '').replace(/_/g, ' ')}
                 </span>
             </div>
 
             {/* ── Players */}
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-4">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-4 bg-[#ccff00]/5 border-y-2 border-[#ccff00]/30">
                 <div className="text-right space-y-0.5">
-                    <p className="text-[13px] font-black uppercase tracking-tight leading-tight">{t1p1}</p>
-                    {t1p2 && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{t1p2}</p>}
+                    <p className="text-[13px] font-black uppercase tracking-tight leading-tight text-[#ccff00]">{t1p1}</p>
+                    {t1p2 && <p className="text-[10px] font-bold text-[#ccff00]/80 uppercase tracking-tight">{t1p2}</p>}
                 </div>
-                <span className="text-[11px] font-black text-gray-600 uppercase italic tracking-widest px-2">vs</span>
+                <span className="text-[11px] font-black text-[#ccff00]/70 uppercase italic tracking-widest px-2">vs</span>
                 <div className="text-left space-y-0.5">
-                    <p className="text-[13px] font-black uppercase tracking-tight leading-tight">{t2p1}</p>
-                    {t2p2 && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{t2p2}</p>}
+                    <p className="text-[13px] font-black uppercase tracking-tight leading-tight text-[#ccff00]">{t2p1}</p>
+                    {t2p2 && <p className="text-[10px] font-bold text-[#ccff00]/80 uppercase tracking-tight">{t2p2}</p>}
                 </div>
             </div>
 
             {/* ── Action dock: 4 botones */}
-            <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t border-white/[0.06]">
+            <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40">
                 <Link
                     href={controlHref}
-                    className={`flex flex-col items-center justify-center gap-1.5 py-3.5 transition-all active:scale-95
-                        ${rank === 0
-                            ? 'bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20'
-                            : 'bg-white/[0.02] text-gray-400 hover:bg-white/[0.06] hover:text-[#ccff00]'
-                        }`}
+                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                 >
-                    <div className="relative">
-                        <Gamepad2 className="w-4 h-4" />
-                        {rank === 0 && (
-                            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#ccff00] shadow-[0_0_6px_#ccff00] animate-pulse" />
-                        )}
-                    </div>
+                    <Gamepad2 className="w-4 h-4" />
                     <span className="text-[8px] font-black uppercase tracking-widest">Control</span>
                 </Link>
                 <Link
                     href={pizarraHref}
                     target="_blank"
-                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-white/[0.02] text-gray-400 hover:bg-white/[0.06] hover:text-white transition-all active:scale-95"
+                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                 >
                     <Monitor className="w-4 h-4" />
                     <span className="text-[8px] font-black uppercase tracking-widest">Pizarra</span>
@@ -742,7 +762,7 @@ function NextMatchCard({ match, rank, compact = false }: { match: any; rank: num
                 <Link
                     href={`/tournaments/${match._tournamentId}/control/broadcasting`}
                     target="_blank"
-                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-white/[0.02] text-gray-400 hover:bg-white/[0.06] hover:text-orange-400 transition-all active:scale-95"
+                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                 >
                     <Camera className="w-4 h-4" />
                     <span className="text-[8px] font-black uppercase tracking-widest">Cámaras</span>
@@ -750,7 +770,7 @@ function NextMatchCard({ match, rank, compact = false }: { match: any; rank: num
                 <Link
                     href={`/tournaments/${match._tournamentId}/control/broadcasting`}
                     target="_blank"
-                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-white/[0.02] text-gray-400 hover:bg-white/[0.06] hover:text-yellow-400 transition-all active:scale-95"
+                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                 >
                     <Tv className="w-4 h-4" />
                     <span className="text-[8px] font-black uppercase tracking-widest">Publicidad</span>
@@ -852,10 +872,10 @@ function MatchCard({ match, idx, isNextUp, isEffectivelyLive }: {
             </div>
 
             {/* Score area */}
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-3">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-3 bg-[#ccff00]/5 border-y-2 border-[#ccff00]/30">
                 <div className="text-right space-y-0.5">
-                    <p className="text-[12px] font-black uppercase tracking-tight leading-tight">{t1p1}</p>
-                    {t1p2 && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{t1p2}</p>}
+                    <p className="text-[12px] font-black uppercase tracking-tight leading-tight text-[#ccff00]">{t1p1}</p>
+                    {t1p2 && <p className="text-[10px] font-bold text-[#ccff00]/80 uppercase tracking-tight">{t1p2}</p>}
                 </div>
                 <div className="flex items-center gap-1.5">
                     {isLive || isDone ? (
@@ -865,12 +885,12 @@ function MatchCard({ match, idx, isNextUp, isEffectivelyLive }: {
                             <span className={`text-2xl font-black tabular-nums ${isLive ? 'text-[#ccff00]' : 'text-white'}`}>{match.score2 ?? 0}</span>
                         </>
                     ) : (
-                        <span className="text-[10px] font-black text-gray-600 uppercase italic tracking-widest">vs</span>
+                        <span className="text-[10px] font-black text-[#ccff00]/70 uppercase italic tracking-widest">vs</span>
                     )}
                 </div>
                 <div className="text-left space-y-0.5">
-                    <p className="text-[12px] font-black uppercase tracking-tight leading-tight">{t2p1}</p>
-                    {t2p2 && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{t2p2}</p>}
+                    <p className="text-[12px] font-black uppercase tracking-tight leading-tight text-[#ccff00]">{t2p1}</p>
+                    {t2p2 && <p className="text-[10px] font-bold text-[#ccff00]/80 uppercase tracking-tight">{t2p2}</p>}
                 </div>
             </div>
 
@@ -1144,15 +1164,26 @@ function EventView() {
     const idsParam = searchParams.get('ids') ?? '';
     const tournamentIds = idsParam ? idsParam.split(',').filter(Boolean) : [];
 
+    // Persistir ids del evento para que el botón Atrás en marcador/torneo vuelva aquí
+    useEffect(() => {
+        if (idsParam) {
+            try {
+                sessionStorage.setItem('padel_event_ids', idsParam);
+            } catch (_) {}
+        }
+    }, [idsParam]);
+
     const { user } = useAuth();
     const [tournaments, setTournaments] = useState<Record<string, any>>({});
     const canManageTournament = user && (Object.values(tournaments).some((t: any) => t.owners?.includes(user.email)) || user.email === 'admin@padelscore.pro');
     const [allMatches, setAllMatches] = useState<any[]>([]);
     const [activeTab, setActiveTab] = useState<string>('all');
     const isGroupsTab = activeTab === 'groups';
-    const isRulesTab = activeTab === 'rules';
     const [loading, setLoading] = useState(true);
     const [showShareModal, setShowShareModal] = useState(false);
+    const [isEventRulesEditOpen, setIsEventRulesEditOpen] = useState(false);
+    const [eventRulesDraft, setEventRulesDraft] = useState('');
+    const [savingEventRules, setSavingEventRules] = useState(false);
 
     const generateMatchesPDF = () => {
         const doc = new jsPDF() as any;
@@ -1182,7 +1213,7 @@ function EventView() {
             m.status === MatchStatus.FINISHED ? `${m.score1} - ${m.score2}` : (m.status === MatchStatus.LIVE ? 'En Vivo' : 'Pendiente')
         ]);
 
-        doc.autoTable({
+        autoTable(doc, {
             startY: 25,
             head: [['Hora', 'Pista', 'Categoría', 'Equipo 1', 'Equipo 2', 'Resultado']],
             body: tableData,
@@ -1366,8 +1397,9 @@ function EventView() {
     const toMinute = (v: any) => Math.floor(toMs(v) / 60000);
     const earliestMinute = allPending.length > 0 ? toMinute(allPending[0].scheduledTime) : null;
 
-    // "Next up" = Los próximos partidos limitados por la cantidad de canchas disponibles
-    const nextUpMatches = allPending.slice(0, numCanchas);
+    // Por comenzar: siempre hasta 3 slots; si solo quedan 2 o 1 pendientes, se muestran 2 o 1 (sin huecos vacíos)
+    const numSlotsPorComenzar = Math.min(3, allPending.length);
+    const nextUpMatches = allPending.slice(0, numSlotsPorComenzar);
 
     // ── Todos los partidos LIVE ──
     const effectiveLiveMatches = allMatches
@@ -1381,8 +1413,10 @@ function EventView() {
     const pendCnt = allMatches.filter(m => m.status === MatchStatus.PENDING).length;
     const finCnt = allMatches.filter(m => m.status === MatchStatus.FINISHED).length;
 
-    const eventName = Object.values(tournaments)[0]?.complexName ?? 'Evento';
-    const eventDate = Object.values(tournaments)[0]?.startDate;
+    const firstTournament = Object.values(tournaments)[0];
+    const eventName = firstTournament?.name ?? firstTournament?.complexName ?? 'Evento';
+    const eventPlace = firstTournament?.complexName ?? firstTournament?.location ?? '';
+    const eventDate = firstTournament?.startDate;
 
     if (loading) {
         return (
@@ -1403,12 +1437,11 @@ function EventView() {
     }
 
     return (
+        <>
         <div className="min-h-screen bg-[#0a0a0a] text-white font-outfit flex flex-col">
 
-
-
             {/* ── Header ──────────────────────────────────────────────── */}
-            <div className="flex-shrink-0 bg-[#0a0a0a] border-b border-white/[0.08] px-5 pt-5 pb-4">
+            <div className="flex-shrink-0 bg-[#0a0a0a] border-b border-white/[0.08] px-3 sm:px-4 pt-5 pb-4 w-full">
                 <div className="flex items-center gap-3 mb-4">
                     <Link href="/tournaments"
                         className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors flex-shrink-0">
@@ -1416,7 +1449,7 @@ function EventView() {
                     </Link>
 
                     {/* ── Patrocinador fijo ── */}
-                    <div className="flex-shrink-0 flex flex-col items-center gap-0.5" title="Patrocinador del evento">
+                    <div className="flex-shrink-0 flex flex-col items-center" title="Patrocinador del evento">
                         <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
                             <img
                                 src="/sponsor-example.png"
@@ -1424,18 +1457,33 @@ function EventView() {
                                 className="w-10 h-10 object-contain"
                             />
                         </div>
-                        <span className="text-[7px] font-black uppercase tracking-widest text-gray-600">Sponsor</span>
                     </div>
 
                     <div className="flex-1 min-w-0">
                         <h1 className="text-xl font-black uppercase italic tracking-tighter leading-none truncate">
                             <span className="text-[#ccff00]">{eventName}</span>
                         </h1>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mt-0.5">
-                            Vista completa del evento
-                        </p>
+                        {eventPlace ? (
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mt-0.5 truncate">
+                                {eventPlace}
+                            </p>
+                        ) : null}
                     </div>
 
+                    {canManageTournament && (
+                        <button
+                            onClick={() => {
+                                const first = Object.values(tournaments)[0];
+                                setEventRulesDraft(first?.rules?.content ?? '');
+                                setIsEventRulesEditOpen(true);
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/10 border border-[#ccff00]/30 text-[#ccff00] text-[10px] font-black uppercase tracking-widest hover:bg-[#ccff00]/10 transition-all flex-shrink-0"
+                            title="Reglas generales del evento"
+                        >
+                            <FileText className="w-4 h-4" />
+                            Agregar reglas
+                        </button>
+                    )}
                     <button
                         onClick={() => setShowShareModal(true)}
                         className="w-10 h-10 rounded-2xl bg-[#ccff00] text-black shadow-[0_4px_16px_rgba(204,255,0,0.3)] flex items-center justify-center transition-all hover:scale-105 active:scale-95 flex-shrink-0"
@@ -1493,14 +1541,14 @@ function EventView() {
             </div>
 
             {/* ── Filter tabs ─────────────────────────────────────────── */}
-            <div className="flex-shrink-0 px-5 py-3 flex gap-2 overflow-x-auto hide-scrollbar border-b border-white/[0.05]">
+            <div className="flex-shrink-0 px-2 sm:px-3 py-3 flex gap-2 overflow-x-auto hide-scrollbar border-b border-[#ccff00]/10 w-full">
                 {TABS.map(tab => (
                     <button
                         key={tab.value}
                         onClick={() => setActiveTab(tab.value)}
                         className={`flex-shrink-0 px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab.value
                             ? 'bg-[#ccff00] text-black'
-                            : 'bg-white/[0.06] text-gray-400 hover:text-white hover:bg-white/10'
+                            : 'bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20'
                             }`}
                     >
                         {tab.label}
@@ -1508,8 +1556,8 @@ function EventView() {
                 ))}
             </div>
 
-            {/* ── Match list ──────────────────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 pb-24 relative">
+            {/* ── Match list: mosaicos/botones informativos a todo el ancho ──────────────────────────────────────────── */}
+            <div className="flex-1 overflow-y-auto px-2 sm:px-3 py-4 pb-24 relative w-full">
                 <AnimatePresence mode="wait">
                     {/* ── Groups View ── */}
                     {isGroupsTab ? (
@@ -1522,18 +1570,7 @@ function EventView() {
                         >
                             <GroupsView tournaments={tournaments} />
                         </motion.div>
-                    ) : /* ── Rules View ── */
-                        isRulesTab ? (
-                            <motion.div
-                                key="rules-view"
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -10 }}
-                                transition={{ duration: 0.2 }}
-                            >
-                                <RulesView tournaments={tournaments} canManage={!!canManageTournament} />
-                            </motion.div>
-                        ) : /* ── Pending View ── */
+                    ) : /* ── Pending View ── */
                             activeTab === MatchStatus.PENDING ? (
                                 <motion.div
                                     key="pending-view"
@@ -1553,22 +1590,17 @@ function EventView() {
                                         </div>
                                         <div className="flex-1 h-px bg-[#ccff00]/10" />
                                         <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
-                                            {numCanchas} pista{numCanchas !== 1 ? 's' : ''} disponibles
+                                            {numSlotsPorComenzar > 0 ? `${numSlotsPorComenzar} próximo${numSlotsPorComenzar !== 1 ? 's' : ''}` : 'Sin partidos pendientes'}
                                         </span>
                                     </div>
 
                                     <div
                                         className="grid gap-2"
-                                        style={{ gridTemplateColumns: `repeat(${numCanchas}, minmax(0, 1fr))` }}
+                                        style={{ gridTemplateColumns: numSlotsPorComenzar > 0 ? `repeat(${numSlotsPorComenzar}, minmax(0, 1fr))` : '1fr' }}
                                     >
                                         {nextUpMatches.map((match, rank) => (
-                                            <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact />
+                                            <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact gameNumber={rank + 1} />
                                         ))}
-                                        {nextUpMatches.length < numCanchas && (
-                                            Array.from({ length: numCanchas - nextUpMatches.length }).map((_, i) => (
-                                                <PlaceholderMatchCard key={`pend-pad-${i}`} rank={nextUpMatches.length + i} mode="pending" />
-                                            ))
-                                        )}
                                     </div>
                                 </motion.div>
                             ) : /* ── Live View ── */
@@ -1608,7 +1640,7 @@ function EventView() {
                                         </div>
                                     </motion.div>
                                 ) : (
-                                    /* ── List/All other views ── */
+                                    /* ── List/All other views + Reglas del evento (cuadro general) ── */
                                     <motion.div
                                         key="list-view"
                                         initial={{ opacity: 0 }}
@@ -1636,6 +1668,50 @@ function EventView() {
                                                 />
                                             ))
                                         )}
+                                        {/* Reglas generales del torneo — visibles en el cuadro de todos los juegos */}
+                                        {(activeTab === 'all' || activeTab === MatchStatus.FINISHED) && (() => {
+                                            const firstT = Object.values(tournaments)[0];
+                                            const generalContent = firstT?.rules?.content ?? '';
+                                            return (
+                                                <div className="mt-8 pt-6 border-t border-white/10">
+                                                    <div className="flex items-center justify-between gap-2 mb-3">
+                                                        <h3 className="text-sm font-black uppercase tracking-widest text-[#ccff00]">Reglas del evento</h3>
+                                                        {canManageTournament && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setEventRulesDraft(firstT?.rules?.content ?? '');
+                                                                    setIsEventRulesEditOpen(true);
+                                                                }}
+                                                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#ccff00]/10 border border-[#ccff00]/30 text-[#ccff00] text-[10px] font-black uppercase tracking-widest hover:bg-[#ccff00]/20 transition-all"
+                                                            >
+                                                                <Plus className="w-3.5 h-3.5" />
+                                                                {generalContent ? 'Editar texto' : 'Agregar texto'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 min-h-[60px]">
+                                                        {generalContent ? (
+                                                            <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{generalContent}</p>
+                                                        ) : (
+                                                            <div className="flex flex-col items-center justify-center py-6 opacity-40">
+                                                                <FileText className="w-8 h-8 mb-2 text-gray-500" />
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Sin reglas definidas</p>
+                                                                {canManageTournament && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => { setEventRulesDraft(''); setIsEventRulesEditOpen(true); }}
+                                                                        className="mt-2 text-[#ccff00] text-[10px] font-black uppercase tracking-widest hover:underline"
+                                                                    >
+                                                                        Agregar texto
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </motion.div>
                                 )}
                 </AnimatePresence>
@@ -1712,7 +1788,76 @@ function EventView() {
                     </div>
                 )}
             </AnimatePresence>
+
+            {/* Modal Reglas generales del evento */}
+            <AnimatePresence>
+                {isEventRulesEditOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="w-full max-w-lg bg-[#1a1a1a] border border-white/10 rounded-3xl overflow-hidden shadow-2xl"
+                        >
+                            <div className="p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-lg font-black uppercase italic tracking-tight text-[#ccff00]">Reglas del evento</h2>
+                                    <button
+                                        type="button"
+                                        onClick={() => !savingEventRules && setIsEventRulesEditOpen(false)}
+                                        className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-3">Reglas generales para todas las categorías y géneros</p>
+                                <textarea
+                                    value={eventRulesDraft}
+                                    onChange={(e) => setEventRulesDraft(e.target.value)}
+                                    placeholder="Introduce las reglas (puntos de oro, duración, etc.)..."
+                                    className="w-full h-48 bg-black/40 border border-white/10 rounded-2xl p-4 text-sm text-gray-300 placeholder-gray-600 focus:border-[#ccff00] outline-none resize-none"
+                                />
+                                <div className="flex gap-3 mt-4">
+                                    <button
+                                        type="button"
+                                        disabled={savingEventRules}
+                                        onClick={async () => {
+                                            setSavingEventRules(true);
+                                            try {
+                                                const first = Object.values(tournaments)[0];
+                                                const manuals = first?.rules?.manuals ?? [];
+                                                await Promise.all(tournamentIds.map(tid =>
+                                                    updateDoc(doc(db, 'tournaments', tid), {
+                                                        'rules.content': eventRulesDraft,
+                                                        'rules.manuals': manuals
+                                                    })
+                                                ));
+                                                setIsEventRulesEditOpen(false);
+                                            } catch (e) {
+                                                console.error(e);
+                                            } finally {
+                                                setSavingEventRules(false);
+                                            }
+                                        }}
+                                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-[#ccff00] text-black font-black text-xs uppercase tracking-widest hover:bg-[#ccff00]/90 disabled:opacity-50"
+                                    >
+                                        <Save className="w-4 h-4" /> {savingEventRules ? 'Guardando...' : 'Guardar'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => !savingEventRules && setIsEventRulesEditOpen(false)}
+                                        className="px-6 py-3 rounded-2xl bg-white/5 text-gray-400 font-bold text-xs uppercase tracking-widest hover:bg-white/10"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
+        </>
     );
 }
 

@@ -54,6 +54,40 @@ const stripMatches = (matches: any[]) =>
 const STAGE_ORDER = ['GROUP_STAGE', 'MAIN_DRAW'];
 const ROUND_NAMES: Record<number, string> = { 1: '32vos', 2: '16vos', 3: '8vos', 4: '4tos', 5: 'Semis', 6: 'Final' };
 
+/** Género del torneo para la cabecera: Masculino / Femenino / Mixto (usa tournament.gender, no category) */
+function formatGender(gender: string | undefined): string {
+    if (!gender) return '';
+    const g = String(gender).toUpperCase();
+    if (g === 'MALE') return 'Masculino';
+    if (g === 'FEMALE') return 'Femenino';
+    if (g === 'MIXED') return 'Mixto';
+    return gender;
+}
+
+/** Nivel de categoría (1ª, 2ª, +45…) cuando no es un valor de género */
+const CAT_LEVEL_LABELS: Record<string, string> = {
+    PRIMERA: '1ª', SEGUNDA: '2ª', TERCERA: '3ª', CUARTA: '4ª', QUINTA: '5ª', SEXTA: '6ª', SEPTIMA: '7ª',
+    MAS_45: '+45', MAS_50: '+50',
+    SUMA_7: 'Suma 7', SUMA_8: 'Suma 8', SUMA_9: 'Suma 9', SUMA_10: 'Suma 10', SUMA_11: 'Suma 11',
+};
+function formatCategoryLevel(cat: string | undefined): string {
+    if (!cat) return '';
+    return CAT_LEVEL_LABELS[String(cat)] ?? String(cat).replace(/_/g, ' ');
+}
+
+/** Subtítulo del header: género (prioritario desde tournament.gender) + nivel de categoría + complejo */
+function getControlSubtitle(tournament: { gender?: string; category?: string; complexName?: string } | null): string {
+    if (!tournament) return '';
+    const parts: string[] = [];
+    const cat = tournament.category ? String(tournament.category).toUpperCase() : '';
+    const isGenderCat = ['MALE', 'FEMALE', 'MIXED'].includes(cat);
+    const genderLabel = formatGender(tournament.gender) || (isGenderCat ? formatGender(tournament.category) : '');
+    if (genderLabel) parts.push(genderLabel);
+    if (cat && !isGenderCat) parts.push(formatCategoryLevel(tournament.category!));
+    parts.push(tournament.complexName || 'Pista Central');
+    return parts.join(' · ');
+}
+
 function getPhaseLabel(match: EnrichedMatch): string {
     if (match.stage === 'GROUP_STAGE') return 'Fase de Grupo';
     if (match.stage === 'MAIN_DRAW') {
@@ -650,7 +684,7 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
                                 </span>
                             </div>
                             <p className="text-[9px] text-gray-600 font-bold uppercase tracking-[0.15em] mt-0.5">
-                                {tournament?.category} · {tournament?.complexName || 'Pista Central'}
+                                {getControlSubtitle(tournament)}
                             </p>
                         </div>
                     </div>
