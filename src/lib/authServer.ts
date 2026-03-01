@@ -19,14 +19,14 @@ function getAdminApp(): admin.app.App | null {
     if (!key) return null;
     try {
         const parsed = JSON.parse(key) as Record<string, unknown>;
-        const serviceAccount: admin.ServiceAccount = {
+        const serviceAccount = {
             projectId: parsed.project_id as string,
             clientEmail: parsed.client_email as string,
             privateKey: parsed.private_key as string
         };
         if (admin.apps.length === 0) {
             adminApp = admin.initializeApp({
-                credential: admin.credential.cert(serviceAccount),
+                credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
                 projectId: serviceAccount.projectId
             });
         } else {
