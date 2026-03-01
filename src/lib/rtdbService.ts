@@ -239,5 +239,10 @@ export async function setAnimacionMarcador(animId: string, data: { nombre: strin
 
 /** El marker dispara una animación en la pizarra (por cancha) */
 export async function dispararAnimacionMarcador(canchaId: string, animId: string | null) {
-    await update(ref(rtdb, `canchas/${canchaId}/animacion_actual`), animId ? { id: animId, ts: Date.now() } : null);
+    const pathRef = ref(rtdb, `canchas/${canchaId}/animacion_actual`);
+    if (animId) {
+        await update(pathRef, { id: animId, ts: Date.now() });
+    } else {
+        await set(pathRef, null);
+    }
 }

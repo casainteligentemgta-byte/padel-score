@@ -18,11 +18,16 @@ function getAdminApp(): admin.app.App | null {
     const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
     if (!key) return null;
     try {
-        const serviceAccount = JSON.parse(key) as { project_id: string; client_email: string; private_key: string };
+        const parsed = JSON.parse(key) as Record<string, unknown>;
+        const serviceAccount: admin.ServiceAccount = {
+            projectId: parsed.project_id as string,
+            clientEmail: parsed.client_email as string,
+            privateKey: parsed.private_key as string
+        };
         if (admin.apps.length === 0) {
             adminApp = admin.initializeApp({
                 credential: admin.credential.cert(serviceAccount),
-                projectId: serviceAccount.project_id
+                projectId: serviceAccount.projectId
             });
         } else {
             adminApp = admin.apps[0] as admin.app.App;
