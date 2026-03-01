@@ -126,7 +126,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (el) el.style.setProperty('display', 'none');
         (window as any).enableDevMode = enableDevMode;
 
-        // Safety timeout to prevent permanent hang (2s para que la página se vea antes en local)
+        // Safety timeout para que la página se vea en local aunque Firebase tarde
         const safetyTimeout = setTimeout(() => {
             setLoading((prev: boolean) => {
                 if (prev) {
@@ -135,7 +135,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 }
                 return prev;
             });
-        }, 2000);
+        }, 1200);
 
         const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
             console.log("AuthContext: onAuthStateChanged", firebaseUser?.email || "No user");

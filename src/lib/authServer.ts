@@ -6,8 +6,10 @@
  */
 
 import { NextResponse } from 'next/server';
-import type { Request } from 'next/server';
 import * as admin from 'firebase-admin';
+
+// Request es la Web API estándar (fetch), no se exporta desde next/server en Next 16
+type Request = globalThis.Request;
 
 let adminApp: admin.app.App | null = null;
 

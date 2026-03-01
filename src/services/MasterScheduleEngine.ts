@@ -354,12 +354,19 @@ export class MasterScheduleEngine {
         }
 
         const twoGamesGuaranteed = !!(cat.quickQualification && (cat.advanceCount ?? 2) === 2);
-        console.log(`[Pairings] ${cat.category} | groupSize=${cat.groupSize} → gs=${gs} | equipos=${teams.length} | grupos=${groups.length} | knockout=${groups.length > 1} | 2juegosGarantizados=${twoGamesGuaranteed}`);
-        // ── Fase de grupos: round-robin completo O 2 juegos garantizados por equipo ─────────────
+        // 2 grupos de 4 → 7 partidos totales (4 en grupos + 2 semis + 1 final)
+        const twoGroupsOfFour = groups.length === 2 && groups.every(g => g.length === 4);
+        const useSevenGames = twoGamesGuaranteed && twoGroupsOfFour;
+        console.log(`[Pairings] ${cat.category} | groupSize=${cat.groupSize} → gs=${gs} | equipos=${teams.length} | grupos=${groups.length} | knockout=${groups.length > 1} | 2juegosGarantizados=${twoGamesGuaranteed} | 7juegos=${useSevenGames}`);
+        // ── Fase de grupos: round-robin completo O 2 juegos garantizados (o 7 partidos si 2 grupos de 4) ─────────────
         for (const group of groups) {
             if (twoGamesGuaranteed) {
-                // 2 juegos garantizados: cada equipo juega exactamente 2 partidos en la fase de grupos
-                if (group.length === 4) {
+                if (useSevenGames) {
+                    // 2 grupos de 4, 1º y 2º pasan: solo 4 partidos de fase de grupos (2 por grupo) → 7 total con semis+final
+                    result.push({ team1: group[0], team2: group[1], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                    result.push({ team1: group[2], team2: group[3], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                } else if (group.length === 4) {
+                    // 2 juegos garantizados: cada equipo juega exactamente 2 partidos en la fase de grupos
                     result.push({ team1: group[0], team2: group[1], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
                     result.push({ team1: group[0], team2: group[2], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
                     result.push({ team1: group[1], team2: group[3], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });

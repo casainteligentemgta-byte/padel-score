@@ -141,7 +141,11 @@ function calcTotalMatchesForCategory(numTeams: number, groupSize?: number, quick
     if (isCuadroConsolacion) return numTeams <= 4 ? 6 : 10;
     const gs = (groupSize && groupSize >= 2) ? groupSize : 4;
     const numGroups = Math.max(1, Math.floor(numTeams / gs));
-    const groupMatches = quickQualification ? numGroups * gs : numGroups * (gs * (gs - 1)) / 2;
+    // 2 grupos de 4 con clasificación rápida (1º y 2º) → 7 partidos: 4 en grupos + 2 semis + 1 final
+    const twoGroupsOfFour = numGroups === 2 && gs === 4;
+    const groupMatches = quickQualification
+        ? (twoGroupsOfFour ? 4 : numGroups * gs)
+        : numGroups * (gs * (gs - 1)) / 2;
     let knockoutTeams = numGroups * 2;
     let knockoutMatches = 0;
     while (knockoutTeams > 1) {
@@ -435,13 +439,16 @@ export default function MasterGeneratorPage() {
                     return;
                 }
 
-                // Calcular fecha real de fin según días usados
+                // Calcular fecha real de fin según días usados (nunca antes del inicio)
                 if ((result as any).daysUsed > 0) {
-                    const calculatedEnd = new Date(eventData.startDate + 'T00:00:00');
+                    const startD = new Date(eventData.startDate + 'T00:00:00');
+                    const calculatedEnd = new Date(startD);
                     calculatedEnd.setDate(calculatedEnd.getDate() + (result as any).daysUsed - 1);
+                    const endStr = calculatedEnd.toISOString().split('T')[0];
+                    const startStr = eventData.startDate;
                     setEventData(prev => ({
                         ...prev,
-                        endDate: calculatedEnd.toISOString().split('T')[0]
+                        endDate: endStr >= startStr ? endStr : startStr
                     }));
                 }
 
@@ -588,6 +595,7 @@ export default function MasterGeneratorPage() {
 
     const getEstimatedEndDate = () => {
         let d: Date;
+        const startD = new Date(eventData.startDate + 'T12:00:00');
         if (generatedMatches.length > 0) {
             const lastMatch = generatedMatches[generatedMatches.length - 1];
             d = new Date(lastMatch.scheduledTime);
@@ -595,6 +603,8 @@ export default function MasterGeneratorPage() {
             d = new Date(eventData.endDate + 'T12:00:00');
             if (isNaN(d.getTime())) d = new Date(eventData.startDate + 'T12:00:00');
         }
+        // Nunca mostrar fin antes del inicio (ej. inicio 5 marzo, endDate aún 2 marzo)
+        if (!isNaN(startD.getTime()) && d.getTime() < startD.getTime()) d = startD;
         const day = d.getDate();
         const month = d.toLocaleDateString('es-ES', { month: 'long' });
         const year = d.getFullYear();
@@ -948,15 +958,18 @@ export default function MasterGeneratorPage() {
                                                 })}
                                             </div>
                                             {pendingTournamentType === 'ROUND_ROBIN' && pendingAdvanceCount === 2 && (
-                                                <label className="flex items-center gap-2.5 cursor-pointer group">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={pendingQuickQualification}
-                                                        onChange={(e) => setPendingQuickQualification(e.target.checked)}
-                                                        className="w-4 h-4 rounded border-2 border-zinc-600 bg-zinc-900 text-padel-primary focus:ring-padel-primary/50"
-                                                    />
-                                                    <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 group-hover:text-zinc-300">2 juegos garantizados</span>
-                                                </label>
+                                                <div className="space-y-1">
+                                                    <label className="flex items-center gap-2.5 cursor-pointer group">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={pendingQuickQualification}
+                                                            onChange={(e) => setPendingQuickQualification(e.target.checked)}
+                                                            className="w-4 h-4 rounded border-2 border-zinc-600 bg-zinc-900 text-padel-primary focus:ring-padel-primary/50"
+                                                        />
+                                                        <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 group-hover:text-zinc-300">2 juegos garantizados</span>
+                                                    </label>
+                                                    <p className="text-[9px] text-zinc-500 pl-6 leading-tight">Clasificación rápida: cada competidor juega 2 partidos en fase de grupos; clasifican 1º y 2º de cada grupo a semifinales.</p>
+                                                </div>
                                             )}
                                         </motion.div>
                                     )}
@@ -1037,9 +1050,9 @@ export default function MasterGeneratorPage() {
             {/* Main Container — fills remaining vertical space */}
             <div className="relative flex flex-col flex-1 min-h-0 max-w-7xl w-full mx-auto px-4 md:px-6 pb-4 pt-3">
 
-                {/* Header — compact */}
-                <header className="flex items-center justify-between gap-4 mb-3 shrink-0">
-                    <div className="flex items-center gap-2.5">
+                {/* Header — compact: etapas centradas */}
+                <header className="flex items-center gap-4 mb-3 shrink-0">
+                    <div className="flex items-center gap-2.5 flex-1">
                         <div className="w-8 h-8 bg-padel-primary/10 border border-padel-primary/20 rounded-xl flex items-center justify-center">
                             <Sparkles className="w-4 h-4 text-padel-primary" />
                         </div>
@@ -1051,7 +1064,7 @@ export default function MasterGeneratorPage() {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-1 bg-zinc-900/70 backdrop-blur-xl p-1.5 rounded-xl border border-zinc-800">
+                    <div className="flex items-center justify-center gap-1 bg-zinc-900/70 backdrop-blur-xl p-1.5 rounded-xl border border-zinc-800 shrink-0">
                         {[
                             { n: 1, label: 'Evento' },
                             { n: 2, label: 'Cats.' },
@@ -1069,6 +1082,8 @@ export default function MasterGeneratorPage() {
                             </div>
                         ))}
                     </div>
+
+                    <div className="flex-1" />
                 </header>
 
 
@@ -1129,7 +1144,12 @@ export default function MasterGeneratorPage() {
                                                     <input
                                                         type="date"
                                                         value={eventData.startDate}
-                                                        onChange={(e) => setEventData({ ...eventData, startDate: e.target.value })}
+                                                        onChange={(e) => {
+                                                            const newStart = e.target.value;
+                                                            const next = { ...eventData, startDate: newStart };
+                                                            if (newStart && eventData.endDate && eventData.endDate < newStart) next.endDate = newStart;
+                                                            setEventData(next);
+                                                        }}
                                                         className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-9 outline-none focus:border-padel-primary"
                                                     />
                                                 </div>
@@ -1242,7 +1262,7 @@ export default function MasterGeneratorPage() {
                                     </div>
 
                                     {!activeGender ? (
-                                        <div className="grid grid-cols-3 gap-3">
+                                        <div className="grid grid-cols-3 gap-3 max-w-md mx-auto">
                                             <button
                                                 onClick={() => setActiveGender('MALE')}
                                                 className="bg-blue-500/5 hover:bg-blue-500/10 border border-blue-500/20 hover:border-blue-500/40 rounded-2xl p-5 transition-all group text-center space-y-2"
@@ -1283,8 +1303,8 @@ export default function MasterGeneratorPage() {
                                             </button>
                                         </div>
                                     ) : (
-                                        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 space-y-4">
-                                            <div className="flex items-center gap-3 border-b border-zinc-800 pb-3">
+                                        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 space-y-4 max-w-2xl mx-auto">
+                                            <div className="flex items-center justify-center gap-3 border-b border-zinc-800 pb-3">
                                                 <div className={`p-2.5 rounded-xl ${activeGender === 'MALE' ? 'bg-blue-500/20 text-blue-400' :
                                                     activeGender === 'FEMALE' ? 'bg-pink-500/20 text-pink-400' :
                                                         'bg-purple-500/20 text-purple-400'
@@ -1596,7 +1616,7 @@ export default function MasterGeneratorPage() {
                                                     {generatedMatches.map((m, idx) => (
                                                         <tr key={idx} className="hover:bg-zinc-800/30 transition-colors group">
                                                             <td className="px-4 py-3 min-w-0">
-                                                                <div className="flex flex-wrap items-center gap-3 md:gap-4">
+                                                                <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 md:gap-x-4">
                                                                     {/* Time column inside row */}
                                                                     <div
                                                                         className={`flex flex-col shrink-0 w-14 ${(m.roundName.includes('FINAL') || m.roundName.includes('SEMIFINAL')) ? 'cursor-pointer' : ''}`}
@@ -1629,7 +1649,7 @@ export default function MasterGeneratorPage() {
                                                                     </div>
 
                                                                     {/* Category & Round column inside row */}
-                                                                    <div className="flex items-center gap-2 shrink-0 max-w-[35%] min-w-0">
+                                                                    <div className="flex items-center gap-2 min-w-0">
                                                                         <div className="flex flex-col gap-0.5 min-w-0">
                                                                             <div className="flex items-center gap-1.5 min-w-0">
                                                                                 <span className={`text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter truncate ${m.roundName.includes('FINAL') ? 'bg-padel-primary text-black' : 'bg-zinc-800 text-padel-primary border border-padel-primary/20'}`} title={m.roundName}>
@@ -1642,15 +1662,15 @@ export default function MasterGeneratorPage() {
                                                                         </div>
                                                                     </div>
 
-                                                                    {/* Matchup column simplified */}
-                                                                    <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap justify-center md:justify-start">
-                                                                        <div className="min-w-0 max-w-[45%] text-right text-[11px] font-bold text-white truncate">
-                                                                            {m.team1.p1.name} + {m.team1.p2.name}
-                                                                        </div>
-                                                                        <div className="px-1.5 py-0.5 bg-zinc-800 rounded font-black text-[8px] text-zinc-500 italic shrink-0">VS</div>
-                                                                        <div className="min-w-0 max-w-[45%] text-left text-[11px] font-bold text-white truncate">
-                                                                            {m.team2.p1.name} + {m.team2.p2.name}
-                                                                        </div>
+                                                                    {/* Team 1 — alineado a la derecha */}
+                                                                    <div className="min-w-0 text-right text-xs font-bold text-white truncate">
+                                                                        {m.team1.p1.name} + {m.team1.p2.name}
+                                                                    </div>
+                                                                    {/* VS — columna fija para alinear todos en vertical */}
+                                                                    <div className="px-2 py-0.5 bg-zinc-800 rounded font-black text-[10px] text-zinc-500 italic shrink-0 justify-self-center">VS</div>
+                                                                    {/* Team 2 — alineado a la izquierda */}
+                                                                    <div className="min-w-0 text-left text-xs font-bold text-white truncate">
+                                                                        {m.team2.p1.name} + {m.team2.p2.name}
                                                                     </div>
                                                                 </div>
                                                             </td>

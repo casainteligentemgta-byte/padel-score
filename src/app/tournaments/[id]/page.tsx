@@ -896,8 +896,8 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                     </div>
                 </div>
 
-                <div className="max-w-4xl mx-auto px-2 overflow-x-auto hide-scrollbar">
-                    <nav className="flex space-x-1 p-1">
+                <div className="max-w-4xl mx-auto px-2 overflow-x-auto hide-scrollbar flex justify-center">
+                    <nav className="flex flex-wrap justify-center gap-x-1 gap-y-1 p-1">
                         {uniqueTabs.map((tab, tabIdx) => {
                             const isLive = tab === 'En Vivo';
                             const isPending = tab === 'Por Comenzar';
@@ -905,7 +905,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                 <button
                                     key={`tab-${tabIdx}-${tab}`}
                                     onClick={() => setActiveTab(tab)}
-                                    className={`flex-1 min-w-[80px] py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap
+                                    className={`min-w-[80px] px-3 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap
                                         ${activeTab === tab
                                             ? isLive
                                                 ? 'border-red-500 text-red-400'
@@ -1556,55 +1556,54 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                 >
                                                     <div className={`bg-[#111111] rounded-[2rem] overflow-hidden border border-white/[0.12] flex flex-col shadow-2xl hover:border-white/25 transition-all ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full' : ''}`}>
 
-                                                        {/* ── Header: 2 líneas (compacto) ─────────────────── */}
-                                                        <div className="px-3 pt-1.5 pb-1 border-b border-white/[0.10] flex flex-col gap-0.5 bg-white/[0.07]">
-                                                            {/* Línea 1: Pista · Hora + estado/grupo */}
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${match.status === MatchStatus.LIVE ? 'bg-padel-primary animate-pulse shadow-[0_0_8px_#ccff00]' : match.status === MatchStatus.FINISHED ? 'bg-white/20' : 'bg-gray-600'}`} />
-                                                                    <span className={`text-[9px] font-black uppercase tracking-widest italic ${match.status === MatchStatus.LIVE ? 'text-padel-primary' : 'text-gray-500'}`}>
+                                                        {/* ── Header: hora, pista y fases con más aire ─────────────────── */}
+                                                        <div className="px-4 pt-3 pb-2.5 border-b border-white/[0.10] flex flex-col gap-2 bg-white/[0.07]">
+                                                            {/* Línea 1: Pista · Hora + estado/fase */}
+                                                            <div className="flex items-center justify-between gap-4">
+                                                                <div className="flex items-center gap-3 min-w-0">
+                                                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${match.status === MatchStatus.LIVE ? 'bg-padel-primary animate-pulse shadow-[0_0_8px_#ccff00]' : match.status === MatchStatus.FINISHED ? 'bg-white/20' : 'bg-gray-600'}`} />
+                                                                    <span className={`text-[11px] font-black uppercase tracking-widest italic flex-shrink-0 ${match.status === MatchStatus.LIVE ? 'text-padel-primary' : 'text-gray-500'}`}>
                                                                         Pista {match.court || '-'}
                                                                     </span>
                                                                     {(() => {
                                                                         const raw = match.time || match.scheduledTime;
                                                                         if (!raw) return null;
-                                                                        // Si hay demora, mostramos hora estimada en naranja; si no, hora programada normal
                                                                         if (delayInfo) {
                                                                             const estTime = new Date(delayInfo.estimatedStartMs);
                                                                             const hhmm = estTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
                                                                             return (
-                                                                                <span className="text-[10px] font-bold text-orange-400 tracking-wider">· ~{hhmm}</span>
+                                                                                <span className="text-[11px] font-bold text-orange-400 tracking-wider flex-shrink-0">· ~{hhmm}</span>
                                                                             );
                                                                         }
                                                                         const d = raw?.toDate ? raw.toDate() : new Date(raw);
                                                                         const hhmm = isNaN(d.getTime()) ? String(raw) : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
                                                                         return (
-                                                                            <span className="text-[9px] font-bold text-gray-500 tracking-wider">· {hhmm}</span>
+                                                                            <span className="text-[11px] font-bold text-gray-500 tracking-wider flex-shrink-0">· {hhmm}</span>
                                                                         );
                                                                     })()}
                                                                 </div>
-                                                                {/* Badge derecho: prioridad EN VIVO > Finalizado > DEMORADO > campo */}
+                                                                {/* Badge derecho: prioridad EN VIVO > Finalizado > DEMORADO > fase */}
                                                                 {match.status === MatchStatus.LIVE ? (
-                                                                    <span className="text-[8px] font-black text-red-500 uppercase italic tracking-widest animate-pulse border border-red-500/30 px-1.5 py-0.5 rounded-full bg-red-500/5">● En Vivo</span>
+                                                                    <span className="text-[9px] font-black text-red-500 uppercase italic tracking-widest animate-pulse border border-red-500/30 px-2 py-1 rounded-full bg-red-500/5 flex-shrink-0">● En Vivo</span>
                                                                 ) : match.status === MatchStatus.FINISHED ? (
-                                                                    <span className="text-[8px] font-black text-white/30 uppercase italic tracking-widest border border-white/10 px-1.5 py-0.5 rounded-full bg-white/5">Finalizado</span>
+                                                                    <span className="text-[9px] font-black text-white/30 uppercase italic tracking-widest border border-white/10 px-2 py-1 rounded-full bg-white/5 flex-shrink-0">Finalizado</span>
                                                                 ) : delayInfo ? (
-                                                                    <span className="text-[8px] font-black text-orange-400 bg-orange-500/10 border border-orange-500/30 px-1.5 py-0.5 rounded-full italic uppercase tracking-widest animate-pulse">
+                                                                    <span className="text-[9px] font-black text-orange-400 bg-orange-500/10 border border-orange-500/30 px-2 py-1 rounded-full italic uppercase tracking-widest animate-pulse flex-shrink-0">
                                                                         ⚠ ~{delayInfo.delayMins}m
                                                                     </span>
                                                                 ) : match.groupName && match.roundName === 'Fase de Grupos' ? (
-                                                                    <span className="text-[8px] font-black text-padel-primary/40 uppercase tracking-widest italic border border-padel-primary/10 px-1.5 py-0.5 rounded-full bg-padel-primary/5">
+                                                                    <span className="text-[9px] font-black text-padel-primary/40 uppercase tracking-widest italic border border-padel-primary/10 px-2 py-1 rounded-full bg-padel-primary/5 flex-shrink-0">
                                                                         Grupo {match.groupName}
                                                                     </span>
                                                                 ) : match.roundName ? (
-                                                                    <span className="text-[8px] font-black text-padel-primary/40 uppercase tracking-widest italic border border-padel-primary/10 px-1.5 py-0.5 rounded-full bg-padel-primary/5">
+                                                                    <span className="text-[9px] font-black text-padel-primary/40 uppercase tracking-widest italic border border-padel-primary/10 px-2 py-1 rounded-full bg-padel-primary/5 flex-shrink-0">
                                                                         {match.roundName}
                                                                     </span>
                                                                 ) : null}
                                                             </div>
                                                             {/* Línea 2: Chips categoría + género + badge de grupo si está activo */}
                                                             {(tournament?.category || tournament?.gender || match.groupName) && (
-                                                                <div className="flex items-center gap-1.5">
+                                                                <div className="flex items-center gap-2">
                                                                     {match.groupName && (
                                                                         <span className="text-[8px] font-black bg-padel-primary text-black px-2 py-0.5 rounded italic uppercase tracking-wider">
                                                                             Grupo {match.groupName}

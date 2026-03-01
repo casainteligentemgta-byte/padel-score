@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
 import { AppSettingsProvider } from "@/lib/AppSettingsContext";
+import HideRootLoading from "./HideRootLoading";
 
 export const metadata: Metadata = {
     title: "Smart Padel | Tournament Manager",
@@ -25,6 +26,7 @@ export default function RootLayout({
                     <span>Smart Padel</span>
                     <span style={{ fontSize: 14, color: "#888" }}>Si ves este texto, el servidor está respondiendo.</span>
                 </div>
+                <HideRootLoading />
                 <AuthProvider>
                     <AppSettingsProvider>
                         <main className="min-h-screen">
