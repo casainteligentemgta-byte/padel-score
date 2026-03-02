@@ -130,14 +130,23 @@ export default function PreMatchControl({ params }: { params: Promise<{ id: stri
         return () => unsub();
     }, [id, matchId, authLoading]);
 
+    const courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
+
     // ── Iniciar partido ────────────────────────────────────────────────────
     const startMatch = async () => {
         if (!tournament || !match) return;
+        const realId = match.id;
+        const c = courtNum(match);
+        const allMatches = tournament.matches || [];
+        const otherLiveOnCourt = allMatches.some((m: any) => m.id !== realId && m.status === MatchStatus.LIVE && courtNum(m) === c);
+        if (otherLiveOnCourt) {
+            alert(`No puede haber dos partidos en vivo en la misma pista. Ya hay un partido en vivo en la pista ${c}.`);
+            return;
+        }
         if (!confirm('¿Iniciar este partido ahora? Pasará a estado EN VIVO.')) return;
         setStarting(true);
         try {
-            const realId = match.id;
-            const updated = (tournament.matches || []).map((m: any) =>
+            const updated = allMatches.map((m: any) =>
                 m.id === realId
                     ? {
                         ...m,
@@ -156,7 +165,6 @@ export default function PreMatchControl({ params }: { params: Promise<{ id: stri
                 updatedAt: new Date(),
             });
             setStarted(true);
-            // Redirigir al marcador
             setTimeout(() => {
                 router.push(`/tournaments/${id}/score/${realId || matchId}`);
             }, 1200);

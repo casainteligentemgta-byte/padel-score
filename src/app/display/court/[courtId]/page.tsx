@@ -17,6 +17,7 @@ export default function CourtDisplayPage({ params }: { params: Promise<{ courtId
 
     // ── Escuchar estado de la cancha en RTDB ───────────────────────────────
     useEffect(() => {
+        if (!rtdb) return;
         const canchaRef = ref(rtdb, `canchas/${canchaId}`);
         const handler = (snap: any) => {
             setCanchaData(snap.val());

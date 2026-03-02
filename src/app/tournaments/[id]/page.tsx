@@ -354,6 +354,15 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     };
 
     const startMatch = async (matchId: string) => {
+        const match = matches.find(m => m.id === matchId);
+        if (!match) return;
+        const courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
+        const c = courtNum(match);
+        const otherLiveOnCourt = matches.some(m => m.id !== matchId && m.status === MatchStatus.LIVE && courtNum(m) === c);
+        if (otherLiveOnCourt) {
+            alert(`No puede haber dos partidos en vivo en la misma pista. Ya hay un partido en vivo en la pista ${c}.`);
+            return;
+        }
         setUpdatingId(matchId);
         try {
             const nowIso = new Date().toISOString();
@@ -420,6 +429,15 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     };
 
     const reactivateMatch = async (matchId: string) => {
+        const match = matches.find(m => m.id === matchId);
+        if (!match) return;
+        const courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
+        const c = courtNum(match);
+        const otherLiveOnCourt = matches.some(m => m.id !== matchId && m.status === MatchStatus.LIVE && courtNum(m) === c);
+        if (otherLiveOnCourt) {
+            alert(`No puede haber dos partidos en vivo en la misma pista. Ya hay un partido en vivo en la pista ${c}.`);
+            return;
+        }
         setUpdatingId(matchId);
         try {
             const updatedMatches = matches.map(m =>
@@ -785,7 +803,30 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         : _pending;
     // Clave compuesta estable aunque el ID sea undefined (matches se regeneran en cada render)
     const _mkKey = (p: any) => `${_toMin(p.scheduledTime)}_${p.court ?? p.courtIndex ?? ''}`;
-    const _nextUpKeys = new Set(_nextSlot.slice(0, _numCanchas).map(_mkKey));
+    const _courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
+
+    // Por Comenzar: un solo partido por pista (el más próximo en el tiempo para esa pista)
+    const _nextByCourt = new Map<number, any>();
+    for (const p of _pending) {
+        const c = _courtNum(p);
+        if (c < 1 || c > _numCanchas) continue;
+        const existing = _nextByCourt.get(c);
+        if (!existing || _toMsT(p.scheduledTime) < _toMsT(existing.scheduledTime)) _nextByCourt.set(c, p);
+    }
+    const _nextUpKeys = new Set([..._nextByCourt.values()].map(_mkKey));
+
+    // En Vivo: un solo partido por pista (no puede haber dos en vivo en la misma pista)
+    const _liveByCourt = new Map<number, any>();
+    for (const mx of matches) {
+        if (mx.status !== MatchStatus.LIVE) continue;
+        const c = _courtNum(mx);
+        if (c >= 1 && c <= _numCanchas && !_liveByCourt.has(c)) _liveByCourt.set(c, mx);
+    }
+    const _liveSorted = Array.from({ length: _numCanchas }, (_, i) => i + 1)
+        .map(c => _liveByCourt.get(c))
+        .filter(Boolean)
+        .sort((a, b) => _courtNum(a) - _courtNum(b));
+    const _allowedLiveIds = new Set(_liveSorted.map((mx: any) => mx.id));
 
     if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && !(window as any).__diagLogged2) {
         (window as any).__diagLogged2 = true;
@@ -796,7 +837,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
 
     const filteredMatches = matches.filter(m => {
         if (activeTab === 'Todos') return true;
-        if (activeTab === 'En Vivo') return m.status === MatchStatus.LIVE;
+        if (activeTab === 'En Vivo') return _allowedLiveIds.has(m.id);
         if (activeTab === 'Por Comenzar') return _nextUpKeys.has(_mkKey(m));
 
         if (activeTab === 'Finalizados') return m.status === MatchStatus.FINISHED;
@@ -806,7 +847,10 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         return m.stage === 'MAIN_DRAW' && getStageLabel(m) === activeTab;
     });
 
-    const isLiveDashboard = activeTab === 'En Vivo' && filteredMatches.length > 0 && filteredMatches.length <= 6;
+    // En "En Vivo" mostrar tarjetas ordenadas por pista (1, 2, 3…) para que la primera sea siempre Pista 1
+    const displayMatches = activeTab === 'En Vivo' ? _liveSorted : filteredMatches;
+
+    const isLiveDashboard = activeTab === 'En Vivo' && filteredMatches.length > 0 && filteredMatches.length <= _numCanchas;
 
     const getLiveConfig = (count: number) => {
         // Uniform config for rows of three as requested
@@ -976,18 +1020,24 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                             </Link>
                             <div>
                                 <h1 className="text-lg font-bold leading-tight">
-                                    {tournament?.name
-                                        ? Object.entries(CAT_LABEL).reduce(
-                                            (acc, [key, val]) => acc.replace(new RegExp(key, 'g'), val),
-                                            tournament.name
-                                        )
-                                        : ''}
+                                    {tournament?.name || ''}
                                 </h1>
-                                <p className="text-xs text-padel-primary font-medium tracking-tight uppercase italic">{tournament?.complexName || 'Margarita Padel'} • {formatCat(tournament?.category)}{tournament?.gender ? ` • ${formatGender(tournament.gender)}` : ''}</p>
                             </div>
                         </div>
                     </div>
                     <div className="flex items-center gap-1.5 md:gap-2">
+                        {activeTab === 'En Vivo' && (
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('Todos')}
+                                className="flex items-center gap-2 px-4 py-2 rounded-full bg-padel-primary/20 border border-padel-primary/40 text-padel-primary hover:bg-padel-primary/30 transition-colors text-xs font-bold uppercase tracking-widest"
+                                title="Ver cuadro de partidos"
+                            >
+                                Siguiente
+                                <ChevronRight className="w-4 h-4" />
+                                <span className="hidden sm:inline">Cuadro</span>
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsShareModalOpen(true); }}
@@ -1447,7 +1497,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                         ? 'flex-1 flex flex-col min-h-0'
                                         : 'space-y-8'}
                             >
-                                {filteredMatches.length === 0 ? (
+                                {displayMatches.length === 0 ? (
                                     <div className="py-32 text-center space-y-6">
                                         <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mx-auto opacity-20">
                                             <Calendar className="w-12 h-12 text-padel-primary" />
@@ -1461,15 +1511,14 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                     </div>
                                 ) : (
                                     <div className={(() => {
-                                        const count = filteredMatches.filter((m: any) => m && m.team1 && m.team2).length;
-                                        if (isLiveDashboard) return 'grid grid-cols-3 gap-4 h-full items-start';
-                                        if (activeTab === 'Por Comenzar') {
-                                            const rows = count <= 3 ? 1 : 2;
-                                            return `grid grid-cols-3 gap-3 flex-1 min-h-0 items-start`;
-                                        }
+                                        const count = displayMatches.filter((m: any) => m && m.team1 && m.team2).length;
+                                        const cols = _numCanchas <= 1 ? 1 : _numCanchas <= 2 ? 2 : 3;
+                                        const gridCols = cols === 1 ? 'grid-cols-1' : cols === 2 ? 'grid-cols-2' : 'grid-cols-3';
+                                        if (isLiveDashboard) return `grid ${gridCols} gap-4 h-full items-start`;
+                                        if (activeTab === 'Por Comenzar') return `grid ${gridCols} gap-3 flex-1 min-h-0 items-start`;
                                         return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start';
                                     })()}>
-                                        {filteredMatches.filter((match: any) => match && match.team1 && match.team2).map((match: any, idx: number) => {
+                                        {displayMatches.filter((match: any) => match && match.team1 && match.team2).map((match: any, idx: number) => {
 
                                             // ── Resolver nombres de jugadores ──────────────────────────────────
                                             // Prioridad: teamLabel (TBD/knockout) > p1Name > p1.name > team1Name > '?'
@@ -1490,6 +1539,16 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                             const [t1p1, t1p2] = resolveNames(match.team1, match.team1Name);
                                             const [t2p1, t2p2] = resolveNames(match.team2, match.team2Name);
                                             const delayInfo = getDelayInfo(match);
+                                            const isLive = match.status === MatchStatus.LIVE;
+                                            const isPorComenzar = _nextUpKeys.has(_mkKey(match));
+                                            const isEnCola = match.status === MatchStatus.PENDING && !isPorComenzar;
+                                            const cardBg = isLive
+                                                ? 'bg-[#39ff14]/20 border-[#39ff14]/50 shadow-[0_0_20px_rgba(57,255,20,0.15)]'
+                                                : isPorComenzar
+                                                    ? 'bg-[#ff9500]/20 border-[#ff9500]/50 shadow-[0_0_20px_rgba(255,149,0,0.15)]'
+                                                    : isEnCola
+                                                        ? 'bg-red-500/15 border-red-500/30 shadow-[0_0_12px_rgba(239,68,68,0.08)]'
+                                                        : 'bg-[#111111] border-white/[0.12]';
 
                                             return (
                                                 <motion.section
@@ -1500,33 +1559,44 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                     className={`w-full ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full flex flex-col' : ''}`}
                                                 >
                                                     <div className={`rounded-[2rem] shadow-[0_20px_60px_-8px_rgba(0,0,0,0.5),0_8px_24px_-4px_rgba(0,0,0,0.35),0_0_0_1px_rgba(0,0,0,0.2)] hover:shadow-[0_28px_70px_-10px_rgba(0,0,0,0.55),0_12px_28px_-4px_rgba(0,0,0,0.4),0_0_0_1px_rgba(0,0,0,0.25)] transition-all ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full' : ''}`}>
-                                                        <div className={`bg-[#111111] rounded-[2rem] overflow-hidden border border-white/[0.12] flex flex-col h-full hover:border-white/25 transition-all ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full' : ''}`}>
+                                                        <div className={`rounded-[2rem] overflow-hidden border flex flex-col h-full hover:border-white/25 transition-all ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full' : ''} ${cardBg}`}>
 
-                                                        {/* ── Header: hora, pista y fases con más aire ─────────────────── */}
-                                                        <div className="px-4 pt-3 pb-2.5 border-b border-white/[0.10] flex flex-col gap-2 bg-white/[0.07]">
-                                                            {/* Línea 1: Pista · Hora + estado/fase */}
-                                                            <div className="flex items-center justify-between gap-4">
-                                                                <div className="flex items-center gap-3 min-w-0">
-                                                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${match.status === MatchStatus.LIVE ? 'bg-padel-primary animate-pulse shadow-[0_0_8px_#ccff00]' : match.status === MatchStatus.FINISHED ? 'bg-white/20' : 'bg-gray-600'}`} />
-                                                                    <span className={`text-[11px] font-black uppercase tracking-widest italic flex-shrink-0 ${match.status === MatchStatus.LIVE ? 'text-padel-primary' : 'text-gray-500'}`}>
-                                                                        Pista {match.court || '-'}
-                                                                    </span>
+                                                        {/* ── Franja superior: Hora · Pista · Categoría · Género ─────────────────── */}
+                                                        <div className={`px-4 pt-3 pb-2.5 border-b border-white/[0.10] flex flex-col gap-2 ${isLive ? 'bg-[#39ff14]/15' : isPorComenzar ? 'bg-[#ff9500]/15' : isEnCola ? 'bg-red-500/10' : 'bg-white/[0.07]'}`}>
+                                                            <div className="flex items-center justify-between gap-4 flex-wrap">
+                                                                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                                                    {/* Hora */}
                                                                     {(() => {
                                                                         const raw = match.time || match.scheduledTime;
                                                                         if (!raw) return null;
                                                                         if (delayInfo) {
                                                                             const estTime = new Date(delayInfo.estimatedStartMs);
-                                                                            const hhmm = estTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
-                                                                            return (
-                                                                                <span className="text-[11px] font-bold text-orange-400 tracking-wider flex-shrink-0">· ~{hhmm}</span>
-                                                                            );
+                                                                            return <span className="text-[11px] font-bold text-orange-400 tracking-wider flex-shrink-0">{estTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>;
                                                                         }
                                                                         const d = raw?.toDate ? raw.toDate() : new Date(raw);
-                                                                        const hhmm = isNaN(d.getTime()) ? String(raw) : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
-                                                                        return (
-                                                                            <span className="text-[11px] font-bold text-gray-500 tracking-wider flex-shrink-0">· {hhmm}</span>
-                                                                        );
+                                                                        const hhmm = isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+                                                                        return <span className="text-[11px] font-bold text-gray-400 tracking-wider flex-shrink-0">{hhmm}</span>;
                                                                     })()}
+                                                                    <span className="text-white/30 flex-shrink-0">·</span>
+                                                                    <span className={`text-[11px] font-black uppercase tracking-widest italic flex-shrink-0 ${match.status === MatchStatus.LIVE ? 'text-padel-primary' : 'text-gray-500'}`}>
+                                                                        {match.courtName ?? (match.court != null ? `Pista ${match.court}` : (match.courtIndex != null ? `Pista ${match.courtIndex + 1}` : 'Pista –'))}
+                                                                    </span>
+                                                                    {tournament?.category && (
+                                                                        <>
+                                                                            <span className="text-white/30 flex-shrink-0">·</span>
+                                                                            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 bg-white/[0.10] border border-white/[0.15] px-1.5 py-0.5 rounded flex-shrink-0">
+                                                                                {formatCat(tournament.category)}
+                                                                            </span>
+                                                                        </>
+                                                                    )}
+                                                                    {tournament?.gender && (
+                                                                        <>
+                                                                            <span className="text-white/30 flex-shrink-0">·</span>
+                                                                            <span className={`text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border flex-shrink-0 ${tournament.gender === 'MALE' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' : tournament.gender === 'FEMALE' ? 'text-pink-400 bg-pink-500/10 border-pink-500/20' : 'text-purple-400 bg-purple-500/10 border-purple-500/20'}`}>
+                                                                                {tournament.gender === 'MALE' ? '♂ Masc' : tournament.gender === 'FEMALE' ? '♀ Fem' : '⚥ Mix'}
+                                                                            </span>
+                                                                        </>
+                                                                    )}
                                                                 </div>
                                                                 {/* Badge derecho: prioridad EN VIVO > Finalizado > DEMORADO > fase */}
                                                                 {match.status === MatchStatus.LIVE ? (
@@ -1547,27 +1617,11 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                     </span>
                                                                 ) : null}
                                                             </div>
-                                                            {/* Línea 2: Chips categoría + género + badge de grupo si está activo */}
-                                                            {(tournament?.category || tournament?.gender || match.groupName) && (
+                                                            {match.groupName && (
                                                                 <div className="flex items-center gap-2">
-                                                                    {match.groupName && (
-                                                                        <span className="text-[8px] font-black bg-padel-primary text-black px-2 py-0.5 rounded italic uppercase tracking-wider">
-                                                                            Grupo {match.groupName}
-                                                                        </span>
-                                                                    )}
-                                                                    {tournament?.category && (
-                                                                        <span className="text-[8px] font-black uppercase tracking-widest text-gray-400 bg-white/[0.10] border border-white/[0.15] px-1.5 py-0.5 rounded">
-                                                                            {formatCat(tournament.category)}
-                                                                        </span>
-                                                                    )}
-                                                                    {tournament?.gender && (
-                                                                        <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${tournament.gender === 'MALE' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' :
-                                                                            tournament.gender === 'FEMALE' ? 'text-pink-400 bg-pink-500/10 border-pink-500/20' :
-                                                                                'text-purple-400 bg-purple-500/10 border-purple-500/20'
-                                                                            }`}>
-                                                                            {tournament.gender === 'MALE' ? '♂ Masc' : tournament.gender === 'FEMALE' ? '♀ Fem' : '⚥ Mix'}
-                                                                        </span>
-                                                                    )}
+                                                                    <span className="text-[8px] font-black bg-padel-primary text-black px-2 py-0.5 rounded italic uppercase tracking-wider">
+                                                                        Grupo {match.groupName}
+                                                                    </span>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -1575,9 +1629,32 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                         {/* ── Contenido scrollable + nav fijo abajo (Control, Pizarra, Cámaras, ADS) ─────────────────── */}
                                                         <div className="flex flex-col min-h-0 flex-1">
                                                         <div className="flex-1 min-h-0 overflow-auto">
-                                                        {/* Body: Pizarra tipo marcador (nombres + P/G/S) */}
+                                                        {/* Body: Pizarra tipo marcador (nombres + P/G/S) o score por sets si finalizado */}
                                                         {(() => {
-                                                            const isActive = match.status === MatchStatus.LIVE || match.status === MatchStatus.FINISHED;
+                                                            // Partido finalizado: mostrar solo score del Set 1, Set 2 y STB (si hubo)
+                                                            if (match.status === MatchStatus.FINISHED) {
+                                                                const setScores = match.setScores || [];
+                                                                const stb = match.superTiebreakScore;
+                                                                const parts: string[] = [];
+                                                                if (setScores[0]) parts.push(`S1: ${setScores[0].t1}-${setScores[0].t2}`);
+                                                                if (setScores[1]) parts.push(`S2: ${setScores[1].t1}-${setScores[1].t2}`);
+                                                                if (stb && (stb.t1 > 0 || stb.t2 > 0)) parts.push(`STB: ${stb.t1}-${stb.t2}`);
+                                                                const scoreLine = parts.length > 0 ? parts.join(' · ') : `Sets ${match.sets?.t1 ?? 0}-${match.sets?.t2 ?? 0}${match.games?.t1 != null && match.games?.t2 != null ? ` (${match.games.t1}-${match.games.t2})` : ''}`;
+                                                                return (
+                                                                    <div className="flex flex-col shrink-0 py-2 px-3">
+                                                                        <div className="text-[11px] font-black uppercase tracking-wider text-white/70 border-b border-white/10 pb-2 mb-2">
+                                                                            {scoreLine}
+                                                                        </div>
+                                                                        <div className="flex justify-between items-center gap-2 text-white/90">
+                                                                            <span className="text-xs font-bold truncate min-w-0">{match.team1?.name || '–'}</span>
+                                                                            <span className="text-[10px] text-white/40 flex-shrink-0">vs</span>
+                                                                            <span className="text-xs font-bold truncate min-w-0 text-right">{match.team2?.name || '–'}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            }
+
+                                                            const isActive = match.status === MatchStatus.LIVE;
                                                             const isSTB = match.matchFormat === 'SUPER_TIEBREAK' || match.superTiebreak;
                                                             const isTB = !isSTB && (match.matchFormat === 'TIEBREAK' || match.tiebreak);
                                                             const showExtra = isSTB || isTB;
@@ -1593,7 +1670,6 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                             const isT1Serving = match.status === MatchStatus.LIVE && match.server?.team === 1;
                                                             const isT2Serving = match.status === MatchStatus.LIVE && match.server?.team === 2;
 
-                                                            // Nombre + inicial apellido
                                                             const fmt = (name: string) => {
                                                                 if (!name) return '';
                                                                 const parts = name.trim().split(' ');
@@ -1615,7 +1691,6 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
 
                                                             return (
                                                                 <div className="flex flex-col shrink-0">
-                                                                    {/* Header columnas pizarra */}
                                                                     <div className="flex h-4 border-b border-white/[0.12] bg-white/[0.05] shrink-0">
                                                                         <div className="flex-1" />
                                                                         <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center`}>

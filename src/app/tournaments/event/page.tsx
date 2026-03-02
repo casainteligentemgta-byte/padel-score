@@ -616,27 +616,35 @@ function NextMatchCard({ match, rank, compact = false, gameNumber }: { match: an
                 transition={{ delay: rank * 0.06 }}
                 className={`rounded-2xl border overflow-hidden flex flex-col ${rankBg[safeRank]}`}
             >
-                {/* Cabecera compacta — pista, categoría, género, número de juego */}
-                <div className="px-2 pt-2 pb-1.5 flex items-center justify-between gap-1 border-b-2 border-[#ccff00]/50 bg-[#ccff00]/10">
+                {/* Franja superior: Hora · Pista · Categoría · Género */}
+                <div className="px-2 pt-2 pb-1.5 flex items-center justify-between gap-1 border-b-2 border-[#ccff00]/50 bg-[#ccff00]/10 flex-wrap">
                     <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                        {isLive && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-                        <span className="text-[8px] font-black uppercase tracking-widest text-[#ccff00]">
-                            {isLive ? `PISTA ${match.court ?? '-'}` : rankLabel[safeRank]}
+                        <span className="text-[7px] font-bold text-[#ccff00]/90 italic flex-shrink-0">
+                            {isLive ? `${match.score1 ?? 0} - ${match.score2 ?? 0}` : formatHHMM(match.scheduledTime)}
                         </span>
-                        {!isLive && (match._category || match._gender) && (
-                            <span className="text-[7px] font-bold text-[#ccff00]/90 uppercase tracking-tight">
-                                {[formatCategory(match._category), formatGender(match._gender)].filter(Boolean).join(' · ')}
-                            </span>
+                        <span className="text-[#ccff00]/50 text-[6px]">·</span>
+                        <span className="text-[8px] font-black uppercase tracking-widest text-[#ccff00]">
+                            {isLive ? (match.courtName ?? (match.court != null ? `Pista ${match.court}` : 'Pista –')) : rankLabel[safeRank]}
+                        </span>
+                        {match._category && (
+                            <>
+                                <span className="text-[#ccff00]/50 text-[6px]">·</span>
+                                <span className="text-[7px] font-bold text-[#ccff00]/90 uppercase tracking-tight">
+                                    {formatCategory(match._category)}
+                                </span>
+                            </>
                         )}
+                        <span className="text-[#ccff00]/50 text-[6px]">·</span>
+                        <span className={`text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${CAT_COLORS[match._gender] ?? 'bg-white/10 border-white/20 text-[#ccff00]/90'}`}>
+                            {formatGender(match._gender) || '—'}
+                        </span>
                         {!isLive && gameNumber != null && (
-                            <span className="text-[7px] font-black text-[#ccff00]/90 italic">
-                                {gameNumber}º juego
-                            </span>
+                            <>
+                                <span className="text-[#ccff00]/50 text-[6px]">·</span>
+                                <span className="text-[7px] font-black text-[#ccff00]/90 italic">{gameNumber}º juego</span>
+                            </>
                         )}
                     </div>
-                    <span className="text-[8px] font-bold text-[#ccff00]/90 italic flex-shrink-0">
-                        {isLive ? `${match.score1 ?? 0} - ${match.score2 ?? 0}` : formatHHMM(match.scheduledTime)}
-                    </span>
                 </div>
 
                 {/* Jugadores compactos */}
@@ -697,36 +705,29 @@ function NextMatchCard({ match, rank, compact = false, gameNumber }: { match: an
             transition={{ delay: rank * 0.07 }}
             className={`rounded-[1.75rem] border overflow-hidden ${rankBg[safeRank]}`}
         >
-            {/* ── Header row — pista, categoría, género, número de juego */}
+            {/* Franja superior: Hora · Pista · Categoría · Género */}
             <div className="px-4 pt-3 pb-2.5 flex items-center justify-between gap-2 border-b-2 border-[#ccff00]/50 bg-[#ccff00]/10 flex-wrap">
-                <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <span className="text-[9px] font-bold text-[#ccff00]/90 italic">{formatHHMM(match.scheduledTime)}</span>
+                    <span className="text-[#ccff00]/50">·</span>
                     <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#ccff00]">
-                        {rankLabelFull[safeRank] ?? `${rank + 1}° Pista`}
+                        {rankLabelFull[safeRank] ?? (match.courtName ?? (match.court != null ? `Pista ${match.court}` : 'Pista –'))}
                     </span>
-                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-[#ccff00]/40" />
-                    <span className="label-cancha-meta italic text-[#ccff00]/90">
-                        Pista {match.court ?? '-'}
+                    <span className="text-[#ccff00]/50">·</span>
+                    <span className="text-[9px] font-bold text-[#ccff00]/90 uppercase tracking-tight">
+                        {formatCategory(match._category)}
                     </span>
-                    {(match._category || match._gender) && (
-                        <>
-                            <span className="text-[#ccff00]/60">·</span>
-                            <span className="text-[9px] font-bold text-[#ccff00]/90 uppercase tracking-tight">
-                                {[formatCategory(match._category), formatGender(match._gender)].filter(Boolean).join(' · ')}
-                            </span>
-                        </>
-                    )}
+                    <span className="text-[#ccff00]/50">·</span>
+                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${CAT_COLORS[match._gender] ?? 'bg-white/10 border-white/20 text-[#ccff00]/90'}`}>
+                        {formatGender(match._gender) || '—'}
+                    </span>
                     {gameNumber != null && (
                         <>
-                            <span className="text-[#ccff00]/60">·</span>
+                            <span className="text-[#ccff00]/50">·</span>
                             <span className="text-[9px] font-black text-[#ccff00]/90 italic">{gameNumber}º juego</span>
                         </>
                     )}
-                    <span className="text-[#ccff00]/60">·</span>
-                    <span className="label-cancha-meta italic text-[#ccff00]/90">{formatHHMM(match.scheduledTime)}</span>
                 </div>
-                <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border flex-shrink-0 ${CAT_COLORS[match._gender] ?? 'bg-white/5 border-white/10 text-gray-500'}`}>
-                    {formatCategory(match._category) || (match._category ?? '').replace(/_/g, ' ')}
-                </span>
             </div>
 
             {/* ── Players */}
@@ -842,27 +843,24 @@ function MatchCard({ match, idx, isNextUp, isEffectivelyLive }: {
                             : PENDING_LATER_COLORS
                 }`}
         >
-            {/* Card header */}
-            <div className="px-4 pt-2.5 pb-2 border-b border-white/[0.07] bg-white/[0.04] flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isEffectivelyLive ? 'bg-emerald-400 animate-pulse shadow-[0_0_6px_#34d399]'
-                        : isDone ? 'bg-white/15'
-                            : (isLive || isNextUp) ? 'bg-yellow-400 animate-pulse shadow-[0_0_6px_#facc15]'
-                                : 'bg-red-700/60'
-                        }`} />
-                    <span className={`text-[10px] font-black uppercase tracking-widest italic truncate ${isEffectivelyLive ? 'text-emerald-400'
-                        : isDone ? 'text-gray-600'
-                            : (isLive || isNextUp) ? 'text-yellow-300'
-                                : 'text-red-400/70'
-                        }`}>
-                        Pista {match.court ?? '-'}
-                        <span className="text-gray-600 font-bold"> · {formatHHMM(match.scheduledTime)}</span>
+            {/* Franja superior: Hora · Pista · Categoría · Género */}
+            <div className="px-4 pt-2.5 pb-2 border-b border-white/[0.07] bg-white/[0.04] flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <span className="text-[10px] font-bold text-gray-400 italic">{formatHHMM(match.scheduledTime)}</span>
+                    <span className="text-white/30">·</span>
+                    <span className={`text-[10px] font-black uppercase tracking-widest italic truncate ${isEffectivelyLive ? 'text-emerald-400' : isDone ? 'text-gray-600' : (isLive || isNextUp) ? 'text-yellow-300' : 'text-red-400/70'}`}>
+                        {match.courtName ?? (match.court != null ? `Pista ${match.court}` : 'Pista –')}
+                    </span>
+                    <span className="text-white/30">·</span>
+                    <span className="text-[9px] font-bold uppercase tracking-tight text-gray-400">
+                        {formatCategory(match._category)}
+                    </span>
+                    <span className="text-white/30">·</span>
+                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${CAT_COLORS[match._gender] ?? 'bg-white/5 border-white/10 text-gray-500'}`}>
+                        {match._gender === 'MALE' ? '♂ Masculino' : match._gender === 'FEMALE' ? '♀ Femenino' : match._gender === 'MIXED' ? '⚥ Mixto' : formatGender(match._gender) || '—'}
                     </span>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${CAT_COLORS[match._gender] ?? 'bg-white/5 border-white/10 text-gray-500'}`}>
-                        {formatCategory(match._category)}
-                    </span>
                     {isEffectivelyLive && <span className="text-[9px] font-black text-emerald-400 uppercase italic tracking-widest animate-pulse">● En Vivo</span>}
                     {isLive && !isEffectivelyLive && <span className="text-[9px] font-black text-yellow-400 uppercase italic tracking-widest">⏱ Próximo</span>}
                     {!isLive && isPending && isNextUp && <span className="text-[9px] font-black text-yellow-400 uppercase italic tracking-widest">⏱ Próximo</span>}
@@ -1309,12 +1307,13 @@ function EventView() {
                     return { ...obj, name: nameStr, p1Name: p1n || (idx != null ? `J${(idx - 1) * 2 + 1}` : '?'), p2Name: p2n };
                 };
 
+                const genderValue = t.gender || (['MALE', 'FEMALE', 'MIXED'].includes(String(t.category)) ? t.category : undefined);
                 flat.push({
                     ...m,
                     _tournamentId: t.id,
                     _tournamentName: t.name,
                     _category: t.category,
-                    _gender: t.gender,
+                    _gender: genderValue,
                     court: m.court ?? (m.courtIndex !== undefined ? m.courtIndex + 1 : '-'),
                     team1: buildTeam(team1Obj, m.team1Index, m.team1Name),
                     team2: buildTeam(team2Obj, m.team2Index, m.team2Name),
@@ -1397,19 +1396,20 @@ function EventView() {
     const toMinute = (v: any) => Math.floor(toMs(v) / 60000);
     const earliestMinute = allPending.length > 0 ? toMinute(allPending[0].scheduledTime) : null;
 
-    // Por comenzar: siempre hasta 3 slots; si solo quedan 2 o 1 pendientes, se muestran 2 o 1 (sin huecos vacíos)
-    const numSlotsPorComenzar = Math.min(3, allPending.length);
+    // Por comenzar: como máximo numCanchas (no más que canchas del complejo); si hay menos pendientes, se muestran menos
+    const numSlotsPorComenzar = Math.min(numCanchas, allPending.length);
     const nextUpMatches = allPending.slice(0, numSlotsPorComenzar);
 
-    // ── Todos los partidos LIVE ──
+    // ── En vivo: como máximo numCanchas partidos (no más que canchas del complejo), ordenados por pista
     const effectiveLiveMatches = allMatches
         .filter(m => m.status === MatchStatus.LIVE)
-        .sort((a, b) => Number(a.court ?? 99) - Number(b.court ?? 99));
+        .sort((a, b) => Number(a.court ?? 99) - Number(b.court ?? 99))
+        .slice(0, numCanchas);
 
     const effectiveLiveIds = new Set(effectiveLiveMatches.map(m => m.id));
 
-    // Summary counts
-    const liveCnt = allMatches.filter(m => m.status === MatchStatus.LIVE).length;
+    // Summary counts (en vivo mostrado no puede superar numCanchas del complejo)
+    const liveCnt = Math.min(numCanchas, allMatches.filter(m => m.status === MatchStatus.LIVE).length);
     const pendCnt = allMatches.filter(m => m.status === MatchStatus.PENDING).length;
     const finCnt = allMatches.filter(m => m.status === MatchStatus.FINISHED).length;
 

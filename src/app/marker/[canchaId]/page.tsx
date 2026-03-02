@@ -54,6 +54,7 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
 
     // ── Escuchar estado de la cancha en RTDB ───────────────────────────────
     useEffect(() => {
+        if (!rtdb) return;
         const canchaRef = ref(rtdb, `canchas/${canchaId}`);
         const handler = (snap: any) => {
             setCanchaData(snap.val());

@@ -144,6 +144,7 @@ export default function AdsManagement({ params }: { params: Promise<{ id: string
 
     // ── Cargar carrusel desde RTDB
     useEffect(() => {
+        if (!rtdb) return;
         const carouselRef = rtdbRef(rtdb, 'publicidad_master');
         const handler = (snap: any) => {
             const val = snap.val();

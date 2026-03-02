@@ -26,6 +26,10 @@ export function useRTDBRole(uid: string | undefined | null): RTDBUserRole {
             setState({ rol: null, canchaAsignada: null, nombre: null, loading: false });
             return;
         }
+        if (!rtdb) {
+            setState({ rol: null, canchaAsignada: null, nombre: null, loading: false });
+            return;
+        }
 
         const userRef = ref(rtdb, `usuarios_roles/${uid}`);
         const handleValue = (snap: any) => {

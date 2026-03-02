@@ -66,6 +66,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     }, []);
 
     useEffect(() => {
+        if (!rtdb) return;
         const animRef = ref(rtdb, 'publicidad_master/animaciones_marcador');
         const handler = (snap: any) => setAnimacionesMarcador(snap.val() || {});
         onValue(animRef, handler);
@@ -175,8 +176,14 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     const startMatch = async () => {
         if (!tournament || !match) return;
         const realId = match.id;
+        const courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
+        const c = courtNum(match);
+        const otherLiveOnCourt = tournament.matches.some((m: any) => m.id !== realId && m.status === MatchStatus.LIVE && courtNum(m) === c);
+        if (otherLiveOnCourt) {
+            alert(`No puede haber dos partidos en vivo en la misma pista. Ya hay un partido en vivo en la pista ${c}.`);
+            return;
+        }
         const nowIso = new Date().toISOString();
-        // Persistir startedAt y actualStartTime para que el crono se mantenga al cerrar/reabrir la página
         const updatedMatches = tournament.matches.map((m: any) =>
             m.id === realId ? { ...m, status: MatchStatus.LIVE, startedAt: nowIso, actualStartTime: nowIso } : m
         );
@@ -475,9 +482,16 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         let newSets = { t1: match.sets?.t1 || 0, t2: match.sets?.t2 || 0 };
         newSets[side]++;
 
-        // El partido termina a los 2 sets (2-0 o si hay empate 1-1 se decide según reglamento)
-        // Por ahora, implementamos que el primero a 2 gana. Si llega a 1-1, el siguiente set decidirá.
+        const isSuperTiebreakSet = (match.superTiebreak || match.matchFormat === 'SUPER_TIEBREAK') && (match.setScores?.length === 2 || ((match.sets?.t1 ?? 0) + (match.sets?.t2 ?? 0)) === 1);
+        // Guardar el score de este set para el cuadro (Set 1, Set 2). En STB no añadimos 1-0, guardamos superTiebreakScore aparte.
+        const newSetScores = isSuperTiebreakSet
+            ? (match.setScores || [])
+            : [...(match.setScores || []), { t1: finalGames.t1, t2: finalGames.t2 }];
+
         const isMatchFinished = newSets[side] >= 2;
+        const stbScore = isMatchFinished && isSuperTiebreakSet && match.points
+            ? { t1: parseInt(String(match.points.t1 || 0), 10), t2: parseInt(String(match.points.t2 || 0), 10) }
+            : (match.superTiebreakScore ?? undefined);
 
         const updatedMatches = tournament.matches.map((m: any) =>
             m.id === match.id ? {
@@ -485,12 +499,21 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                 games: isMatchFinished ? finalGames : { t1: 0, t2: 0 },
                 points: { t1: '0', t2: '0' },
                 sets: newSets,
+                setScores: newSetScores,
+                ...(stbScore != null ? { superTiebreakScore: stbScore } : {}),
                 isTiebreak: false,
                 status: isMatchFinished ? MatchStatus.FINISHED : m.status,
                 finishedAt: isMatchFinished ? new Date().toISOString() : m.finishedAt || null
             } : m
         );
         await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+        // Al terminar el partido, llevar a la pantalla de evento (Todos del torneo)
+        if (isMatchFinished && id) {
+            const eventIds = (tournament?.eventTournamentIds as string[] | undefined)?.filter(Boolean).length
+                ? (tournament.eventTournamentIds as string[]).join(',')
+                : id;
+            router.push(`/tournaments/event?ids=${eventIds}`);
+        }
     };
 
     // ── Lógica de selección de sacador ───────────────────────────────────
@@ -1240,6 +1263,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                             <div className="flex-1 overflow-y-auto p-8 space-y-4">
                                 {tournament?.matches?.filter((m: any) => m.status === MatchStatus.PENDING && m.id !== match?.id).map((m: any) => {
                                     const otherCourt = m.court ?? (m.courtIndex != null ? m.courtIndex + 1 : '-');
+                                    const courtLabel = m.courtName ?? (m.court != null ? `Pista ${m.court}` : (m.courtIndex != null ? `Pista ${m.courtIndex + 1}` : 'Pista –'));
                                     const isSwapping = swappingCourtWith === m.id;
                                     return (
                                         <button
@@ -1254,7 +1278,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                                         <span className="text-lg font-black italic">{otherCourt}</span>
                                                     </div>
                                                     <div>
-                                                        <span className="block text-[10px] font-black italic text-gray-500 uppercase tracking-widest">Pista {otherCourt} · Por comenzar</span>
+                                                        <span className="block text-[10px] font-black italic text-gray-500 uppercase tracking-widest">{courtLabel} · Por comenzar</span>
                                                         <span className="block text-sm font-bold uppercase truncate max-w-[300px]">
                                                             {tournament.teams?.[m.team1Index - 1]?.p1?.name || m.team1?.p1Name || 'Eq 1'} vs {tournament.teams?.[m.team2Index - 1]?.p1?.name || m.team2?.p1Name || 'Eq 2'}
                                                         </span>

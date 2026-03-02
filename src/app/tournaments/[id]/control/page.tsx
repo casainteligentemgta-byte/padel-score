@@ -522,8 +522,18 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
         return () => unsub();
     }, [id, authLoading]);
 
+    const courtNum = (m: EnrichedMatch) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
+
     // ── Actions ──────────────────────────────────────────────────────────
     const startMatch = async (matchId: string) => {
+        const match = matches.find(m => m.id === matchId);
+        if (!match) return;
+        const c = courtNum(match);
+        const otherLiveOnCourt = matches.some(m => m.id !== matchId && m.status === MatchStatus.LIVE && courtNum(m) === c);
+        if (otherLiveOnCourt) {
+            alert(`No puede haber dos partidos en vivo en la misma pista. Ya hay un partido en vivo en la pista ${c}.`);
+            return;
+        }
         setUpdatingId(matchId);
         try {
             const nowIso = new Date().toISOString();

@@ -59,6 +59,7 @@ export default function MonitorCanchas({ params }: { params: Promise<{ id: strin
             const data = { id: snap.id, ...snap.data() } as any;
             setTournament(data);
 
+            const numCanchas = Math.max(1, Number(data.totalCourts) || (data.courtNames?.length ?? 6));
             const matches: ActiveMatch[] = (data.matches || [])
                 .filter((m: any) => m.status === MatchStatus.LIVE)
                 .map((m: any, idx: number) => {
@@ -82,7 +83,7 @@ export default function MonitorCanchas({ params }: { params: Promise<{ id: strin
                     };
                 })
                 .sort((a: ActiveMatch, b: ActiveMatch) => Number(a.court) - Number(b.court))
-                .slice(0, 6); // máximo 6 (La Margarita)
+                .slice(0, numCanchas); // máximo = canchas del complejo
 
             setActiveMatches(matches);
             setLoading(false);

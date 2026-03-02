@@ -25,6 +25,7 @@ export function useAdBanner(): AdState {
 
     // ── 1. Sincronizar offset de reloj con el servidor ──────────────────────
     useEffect(() => {
+        if (!rtdb) return;
         const offsetRef = ref(rtdb, '.info/serverTimeOffset');
         const handler = (snap: any) => setServerTimeOffset(snap.val() || 0);
         onValue(offsetRef, handler);
@@ -33,6 +34,7 @@ export function useAdBanner(): AdState {
 
     // ── 2. Escuchar publicidad_master en tiempo real ─────────────────────────
     useEffect(() => {
+        if (!rtdb) return;
         const adRef = ref(rtdb, 'publicidad_master');
         const handler = (snap: any) => {
             const val = snap.val();
@@ -45,6 +47,7 @@ export function useAdBanner(): AdState {
 
     // ── 3. Carrusel: rotar imágenes ──────────────────────────────────────────
     useEffect(() => {
+        if (!rtdb) return;
         if (timerRef.current) clearInterval(timerRef.current);
         if (!adData || adData.modo !== 'carrusel' || !adData.carrusel_activo) return;
 

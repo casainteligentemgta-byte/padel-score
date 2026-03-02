@@ -44,18 +44,21 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const [animacionesMarcador, setAnimacionesMarcador] = useState<Record<string, { nombre: string; url: string }>>({});
 
     useEffect(() => {
+        if (!rtdb) return;
         const relojRef = ref(rtdb, 'publicidad_master/reloj_ocasion');
         const handler = (snap: any) => setRelojOcasion(snap.val() || 'default');
         onValue(relojRef, handler);
         return () => off(relojRef, 'value', handler);
     }, []);
     useEffect(() => {
+        if (!rtdb) return;
         const refCron = ref(rtdb, 'publicidad_master/cronometro_tipo');
         const h = (snap: any) => setCronometroTipo(snap.val() || 'default');
         onValue(refCron, h);
         return () => off(refCron, 'value', h);
     }, []);
     useEffect(() => {
+        if (!rtdb) return;
         const refAnim = ref(rtdb, 'publicidad_master/animaciones_marcador');
         const h = (snap: any) => setAnimacionesMarcador(snap.val() || {});
         onValue(refAnim, h);
@@ -63,6 +66,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     }, []);
 
     useEffect(() => {
+        if (!rtdb) return;
         const tickerRef = ref(rtdb, 'publicidad_master/ticker');
         const handler = (snap: any) => {
             const val = snap.val();
@@ -88,6 +92,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
 
     // ── Carrusel de imágenes (panel publicidad → imagenes) ─────────────────
     useEffect(() => {
+        if (!rtdb) return;
         const adRef = ref(rtdb, 'publicidad_master');
         const handler = (snap: any) => {
             const val = snap.val();
@@ -192,7 +197,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
 
     // ── Sincronizar marcador RTDB ───────────────────────────────────────
     useEffect(() => {
-        if (!match?.court) return;
+        if (!rtdb || !match?.court) return;
         const canchaId = `cancha_${match.court}`;
         const marcRef = ref(rtdb, `canchas/${canchaId}/marcador`);
         const handler = (snap: any) => setLiveMarcador(snap.val());
@@ -202,7 +207,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
 
     // Animación actual disparada por el marker (botones debajo de los puntos)
     useEffect(() => {
-        if (!match?.court) return;
+        if (!rtdb || !match?.court) return;
         const canchaId = `cancha_${match.court}`;
         const animRef = ref(rtdb, `canchas/${canchaId}/animacion_actual`);
         const handler = (snap: any) => setAnimacionActual(snap.val());
@@ -226,7 +231,17 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                 const tourneyData = { id: docSnap.id, ...docSnap.data() } as any;
                 setTournament(tourneyData);
                 if (tourneyData.matches) {
-                    const found = tourneyData.matches.find((m: any) => m.id === matchId);
+                    // Resolver partido: por id, por índice (match_N) o por pista (court_N) para que la pizarra coincida con el partido del control
+                    let found = tourneyData.matches.find((m: any) => m.id === matchId);
+                    if (!found && /^match_(\d+)$/.test(matchId)) {
+                        const idx = parseInt(matchId.replace('match_', ''), 10);
+                        if (idx >= 0 && idx < tourneyData.matches.length) found = tourneyData.matches[idx];
+                    }
+                    if (!found && matchId.startsWith('court_')) {
+                        const courtNum = parseInt(matchId.replace('court_', ''), 10);
+                        if (!isNaN(courtNum))
+                            found = tourneyData.matches.find((m: any) => (m.court ?? (m.courtIndex != null ? m.courtIndex + 1 : null)) === courtNum) ?? tourneyData.matches.find((m: any) => m.courtIndex === courtNum - 1);
+                    }
                     if (found) {
                         const team1 = found.team1Index > 0 ? tourneyData.teams?.[found.team1Index - 1] : null;
                         const team2 = found.team2Index > 0 ? tourneyData.teams?.[found.team2Index - 1] : null;
@@ -471,10 +486,10 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     </div>
                                 )}
                                 <div className="flex flex-col items-start justify-center" style={{ gap: 'clamp(1px,0.25vh,5px)' }}>
-                                    {/* Pista — grande (clamp para display TV) */}
+                                    {/* Pista — grande (clamp para display TV); siempre la del partido resuelto por matchId */}
                                     <span className="label-cancha leading-none"
                                         style={{ fontSize: 'clamp(16px,2.2vw,38px)' }}>
-                                        Pista {match.court ?? '-'}
+                                        {match.courtName ?? (match.court != null ? `Pista ${match.court}` : 'Pista –')}
                                     </span>
                                     {/* Fase / Ronda — mediana */}
                                     {(match.roundName || match.groupName) && (

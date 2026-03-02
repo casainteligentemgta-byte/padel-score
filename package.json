@@ -12,6 +12,7 @@
   "description": "",
   "dependencies": {
     "@prisma/client": "^6.19.2",
+    "@supabase/supabase-js": "^2.98.0",
     "clsx": "^2.1.1",
     "firebase": "^12.9.0",
     "firebase-admin": "^13.7.0",
@@ -23,7 +24,9 @@
     "qrcode.react": "^4.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-dropzone": "^15.0.0",
     "react-firebase-hooks": "^5.1.1",
+    "react-player": "^3.4.0",
     "tailwind-merge": "^3.5.0",
     "tesseract.js": "^7.0.0"
   },
