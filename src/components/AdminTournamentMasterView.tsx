@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { MatchStatus, TournamentType } from '@/types/tournament';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, onSnapshot, collection } from 'firebase/firestore';
 import Link from 'next/link';
 
 interface AdminTournamentMasterViewProps {

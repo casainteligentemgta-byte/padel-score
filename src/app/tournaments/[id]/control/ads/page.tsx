@@ -245,6 +245,10 @@ export default function AdsManagement({ params }: { params: Promise<{ id: string
     };
 
     const saveCarousel = async () => {
+        if (!rtdb) {
+            console.error("[Ads] RTDB not initialized");
+            return;
+        }
         setSavingCarousel(true);
         try {
             const imagesObj: Record<string, any> = {};

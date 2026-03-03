@@ -158,7 +158,7 @@ export default function AdminUsersPage() {
                 // Sincronizar RTDB
                 await rtdbService.setRTDBUserRole(
                     editingUser.uid,
-                    formData.role.toLowerCase(),
+                    formData.role.toLowerCase() as any,
                     formData.name,
                     formData.email,
                     (editingUser.markerCanchas && editingUser.markerCanchas.length > 0) ? editingUser.markerCanchas[0] : undefined
@@ -195,7 +195,7 @@ export default function AdminUsersPage() {
                     // Sincronizar RTDB
                     await rtdbService.setRTDBUserRole(
                         newUser.uid,
-                        formData.role.toLowerCase(),
+                        formData.role.toLowerCase() as any,
                         formData.name,
                         formData.email
                     );

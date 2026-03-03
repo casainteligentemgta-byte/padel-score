@@ -251,3 +251,29 @@ export async function dispararAnimacionMarcador(canchaId: string, animId: string
         await set(pathRef, null);
     }
 }
+export const rtdbService = {
+    activarCancha,
+    desactivarCancha,
+    actualizarMarcador,
+    setModoPuntos,
+    getCanchaOnce,
+    setModoPublicidad,
+    toggleCarrusel,
+    setImagenFija,
+    setProgramada,
+    setImagenCarrusel,
+    deleteImagenCarrusel,
+    setRTDBUserRole,
+    initPublicidadMaster,
+    setTickerConfig,
+    setCronometroTipo,
+    setRelojTipo,
+    setRelojModelo,
+    setRelojModeloActivo,
+    setLogoEvento,
+    setLogosPatrocinantes,
+    setVideoEsquina,
+    setTickerTipoYAnimaciones,
+    setAnimacionMarcador,
+    dispararAnimacionMarcador
+};

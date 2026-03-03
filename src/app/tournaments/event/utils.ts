@@ -14,6 +14,8 @@ export const formatHHMM = (v: any) => {
     return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
 };
 
+export const toMinute = (v: any): number => Math.floor(toMs(v) / 60000);
+
 /**
  * Resuelve los nombres de jugadores de un equipo.
  */
@@ -79,6 +81,23 @@ export const CAT_COLORS: Record<string, string> = {
     MALE: 'bg-blue-500/10 border-blue-500/20 text-blue-400',
     FEMALE: 'bg-pink-500/10 border-pink-500/20 text-pink-400',
     MIXED: 'bg-purple-500/10 border-purple-500/20 text-purple-400',
+};
+
+export const TABS = [
+    { label: 'Todos', value: 'all' },
+    { label: 'Grupos', value: 'groups' },
+    { label: 'Por Jugar', value: MatchStatus.PENDING },
+    { label: 'En Vivo', value: MatchStatus.LIVE },
+    { label: 'Finalizados', value: MatchStatus.FINISHED },
+    { label: 'Reglas', value: 'rules' },
+];
+
+export const KNOWN_COMPLEXES: Record<string, number> = {
+    'Casa Inteligente': 4,
+    'Casa Inteligente Padel Center': 4,
+    'Hotel Tibisay': 2,
+    'Tibisay Padel': 2,
+    'Padel 360': 6
 };
 
 export function calcGroupStanding(teamId: string, teamNum: number, matches: any[]) {

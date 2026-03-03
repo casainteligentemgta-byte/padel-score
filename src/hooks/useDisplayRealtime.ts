@@ -49,7 +49,7 @@ export const useDisplayRealtime = (pantallaId: string | null) => {
     const channel = supabase
       .channel(`display-${pantallaId}`)
       .on(
-        'postgres_changes',
+        'postgres_changes' as any,
         {
           event: '*',
           schema: 'public',

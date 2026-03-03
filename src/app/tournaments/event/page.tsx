@@ -333,18 +333,18 @@ function EventView() {
                 sponsorLogoUrl={firstT?.sponsorLogoUrl}
                 sponsorName={firstT?.sponsorName}
                 sponsorLink={firstT?.sponsorLink}
-                canManage={!!canManageTournament}
-                onOpenSponsorEdit={() => {
+                canManageTournament={!!canManageTournament}
+                onEditSponsor={() => {
                     setSponsorLogoDraft(firstT?.sponsorLogoUrl ?? '');
                     setSponsorNameDraft(firstT?.sponsorName ?? '');
                     setSponsorLinkDraft(firstT?.sponsorLink ?? '');
                     setIsSponsorEditOpen(true);
                 }}
-                onOpenRulesEdit={() => {
+                onEditRules={() => {
                     setEventRulesDraft(firstT?.rules?.content ?? '');
                     setIsEventRulesEditOpen(true);
                 }}
-                onOpenShare={() => setShowShareModal(true)}
+                onShare={() => setShowShareModal(true)}
             />
 
             <div className="flex-shrink-0 px-2 sm:px-3 py-3 flex gap-2 overflow-x-auto hide-scrollbar border-b border-[#ccff00]/10 w-full">

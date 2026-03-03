@@ -18,6 +18,7 @@ export interface RealtimeMatch extends Omit<Match, 'team1' | 'team2' | 'schedule
     team1: RealtimeTeam;
     team2: RealtimeTeam;
     scheduledTime: any; // Mantener como string/timestamp flexible para UI
+    court?: string | number;
 }
 
 export interface RealtimeTournament {

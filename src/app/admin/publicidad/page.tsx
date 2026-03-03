@@ -336,7 +336,7 @@ export default function AdminPublicidad() {
                           src={item.url}
                           className="object-cover w-full h-full"
                           muted
-                          preLoad="metadata"
+                          preload="metadata"
                         />
                       ) : (
                         <img
