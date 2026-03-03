@@ -44,13 +44,17 @@ export default function LoginPage() {
             await signInWithGoogle();
             router.push('/tournaments');
         } catch (err: any) {
-            console.error(err);
-            if (err.code === 'auth/operation-not-allowed') {
+            const code = err?.code ?? err?.error?.code;
+            const msg = err?.message ?? err?.error?.message ?? (typeof err === 'string' ? err : null) ?? (err?.toString?.()) ?? 'Error desconocido';
+            console.error('[Login Google]', { code, message: msg, err });
+            if (code === 'auth/operation-not-allowed') {
                 setError('El inicio de sesión con Google no está habilitado. En Firebase Console → Authentication → Sign-in method, activa "Google".');
-            } else if (err.code === 'auth/configuration-not-found' || err.code === 'auth/unauthorized-domain') {
-                setError('Google Sign-In requiere configuración de dominio o deploy. Prueba con Email/Contraseña o el Modo Simulación en local.');
+            } else if (code === 'auth/configuration-not-found' || code === 'auth/unauthorized-domain') {
+                setError('Este dominio no está autorizado. En Firebase Console → Authentication → Settings → Authorized domains, añade tu dominio (ej. tu-app.vercel.app).');
+            } else if (code === 'auth/invalid-api-key' || msg?.toLowerCase?.().includes('api key')) {
+                setError('Configuración de Firebase incorrecta. Revisa las variables NEXT_PUBLIC_FIREBASE_* en Vercel.');
             } else {
-                setError('Error al conectar con Google. Por favor intenta de nuevo.');
+                setError(`Error al conectar con Google: ${msg}. Añade tu dominio en Firebase → Authorized domains.`);
             }
         } finally {
             setLoading(false);
@@ -92,19 +96,27 @@ export default function LoginPage() {
             }
             router.push('/tournaments');
         } catch (err: any) {
-            console.error(err);
-            if (err.code === 'auth/operation-not-allowed') {
+            const code = err?.code ?? err?.error?.code;
+            const msg = err?.message ?? err?.error?.message ?? (typeof err === 'string' ? err : null) ?? (err?.toString?.()) ?? 'Error desconocido';
+            console.error('[Login]', { code, message: msg, err });
+            if (code === 'auth/operation-not-allowed') {
                 setError('El inicio de sesión con Email/Contraseña no está habilitado. En Firebase Console → Authentication → Sign-in method, activa "Correo electrónico/contraseña".');
-            } else if (err.code === 'auth/configuration-not-found') {
+            } else if (code === 'auth/configuration-not-found') {
                 setError('El servicio de Autenticación no está activado en tu proyecto de Firebase. Por favor, actívalo en la Consola de Firebase > Authentication > Sign-in method.');
-            } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+            } else if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
                 setError('Credenciales incorrectas (Email o Contraseña).');
-            } else if (err.code === 'auth/email-already-in-use') {
+            } else if (code === 'auth/email-already-in-use') {
                 setError('El email ya está registrado.');
-            } else if (err.code === 'auth/weak-password') {
+            } else if (code === 'auth/weak-password') {
                 setError('La contraseña debe tener al menos 6 caracteres.');
+            } else if (code === 'auth/unauthorized-domain') {
+                setError('Este dominio no está autorizado en Firebase. En Firebase Console → Authentication → Settings → Authorized domains, añade tu dominio (ej. tu-app.vercel.app).');
+            } else if (code === 'auth/invalid-api-key' || msg?.toLowerCase?.().includes('api key')) {
+                setError('Configuración de Firebase incorrecta en este entorno. Revisa las variables NEXT_PUBLIC_FIREBASE_* en Vercel (o .env.local en local).');
+            } else if (code === 'auth/network-request-failed' || msg?.toLowerCase?.().includes('network')) {
+                setError('Error de red. Comprueba tu conexión e intenta de nuevo.');
             } else {
-                setError(`Error en la autenticación (${err.code || 'sin-código'}). Revisa tu conexión o credenciales.`);
+                setError(`Error en la autenticación: ${msg}. Si usas producción, añade tu dominio en Firebase → Authentication → Authorized domains.`);
             }
         } finally {
             setLoading(false);
