@@ -1,7 +1,7 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider, type Auth } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 // Realtime Database logic
 const databaseUrl = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL?.trim();
@@ -26,25 +26,43 @@ export const firebaseConfig = {
   databaseURL,
 };
 
-// Validate essential config — no inicializar en build si faltan vars (evita auth/invalid-api-key en Vercel)
+// Validate essential config — en cliente avisamos si faltan, en servidor toleramos para no romper build
 const hasConfig = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
 if (!hasConfig && typeof window !== 'undefined') {
   console.error("CRITICAL: Firebase configuration is missing essential environment variables (API Key or Project ID).");
 }
 
-let app: ReturnType<typeof getApp> | null = null;
-if (hasConfig) {
-  try {
+let app: FirebaseApp | null = null;
+try {
+  if (hasConfig) {
     app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-  } catch (e) {
-    if (typeof window !== 'undefined') console.error("Firebase init failed:", e);
+  }
+} catch (e) {
+  // En build/SSR (por ejemplo Vercel prerender) ignoramos el fallo para no tumbar el build.
+  if (typeof window !== 'undefined') {
+    console.error("CRITICAL: Error inicializando Firebase en cliente:", e);
+    throw e;
+  } else {
+    console.error("WARN: Error inicializando Firebase en entorno servidor/build:", e);
+    app = null;
   }
 }
 
-const auth = app ? getAuth(app) : (null as any);
-const db = app ? getFirestore(app) : (null as any);
-const storage = app ? getStorage(app) : (null as any);
+let auth: Auth;
+let db: Firestore;
+let storage: FirebaseStorage;
 const googleProvider = new GoogleAuthProvider();
+
+if (app) {
+  auth = getAuth(app);
+  db = getFirestore(app);
+  storage = getStorage(app);
+} else {
+  // Stubs mínimos para evitar crashes en build/SSR; en runtime real no deberían usarse.
+  auth = undefined as unknown as Auth;
+  db = undefined as unknown as Firestore;
+  storage = undefined as unknown as FirebaseStorage;
+}
 
 export { app, auth, db, storage, googleProvider };
 
