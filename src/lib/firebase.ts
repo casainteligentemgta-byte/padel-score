@@ -26,18 +26,24 @@ export const firebaseConfig = {
   databaseURL,
 };
 
-// Validate essential config
-if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-  if (typeof window !== 'undefined') {
-    console.error("CRITICAL: Firebase configuration is missing essential environment variables (API Key or Project ID).");
+// Validate essential config — no inicializar en build si faltan vars (evita auth/invalid-api-key en Vercel)
+const hasConfig = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
+if (!hasConfig && typeof window !== 'undefined') {
+  console.error("CRITICAL: Firebase configuration is missing essential environment variables (API Key or Project ID).");
+}
+
+let app: ReturnType<typeof getApp> | null = null;
+if (hasConfig) {
+  try {
+    app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+  } catch (e) {
+    if (typeof window !== 'undefined') console.error("Firebase init failed:", e);
   }
 }
 
-// Initialize Firebase (singleton pattern)
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
+const auth = app ? getAuth(app) : (null as any);
+const db = app ? getFirestore(app) : (null as any);
+const storage = app ? getStorage(app) : (null as any);
 const googleProvider = new GoogleAuthProvider();
 
 export { app, auth, db, storage, googleProvider };

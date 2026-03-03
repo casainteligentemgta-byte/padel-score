@@ -109,6 +109,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     useEffect(() => {
+        if (!auth) {
+            setLoading(false);
+            return;
+        }
         const el = document.getElementById('root-loading');
         if (el) el.style.setProperty('display', 'none');
         (window as any).enableDevMode = enableDevMode;
