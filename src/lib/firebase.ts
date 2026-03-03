@@ -38,14 +38,9 @@ try {
     app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
   }
 } catch (e) {
-  // En build/SSR (por ejemplo Vercel prerender) ignoramos el fallo para no tumbar el build.
-  if (typeof window !== 'undefined') {
-    console.error("CRITICAL: Error inicializando Firebase en cliente:", e);
-    throw e;
-  } else {
-    console.error("WARN: Error inicializando Firebase en entorno servidor/build:", e);
-    app = null;
-  }
+  // No lanzar: así la app carga y el usuario ve login/errores en vez de pantalla en blanco.
+  console.error("Firebase init failed (app cargará sin auth):", e);
+  app = null;
 }
 
 let auth: Auth;

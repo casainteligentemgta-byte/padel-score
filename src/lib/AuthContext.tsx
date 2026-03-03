@@ -64,6 +64,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // MODO DESARROLLADOR: Simulación con sesión real
     const enableDevMode = async () => {
+        if (!auth) {
+            console.warn('AuthContext: enableDevMode ignorado (Firebase no inicializado).');
+            return;
+        }
         const devEmail = process.env.NEXT_PUBLIC_DEV_EMAIL?.trim();
         const devPassword = process.env.NEXT_PUBLIC_DEV_PASSWORD?.trim();
 
@@ -165,7 +169,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         };
     }, []);
 
+    const noAuth = () => {
+        throw new Error('Firebase no está configurado. Revisa .env.local (NEXT_PUBLIC_FIREBASE_API_KEY y NEXT_PUBLIC_FIREBASE_PROJECT_ID).');
+    };
+
     const signInWithGoogle = async () => {
+        if (!auth) noAuth();
         const res = await signInWithPopup(auth, googleProvider);
         if (res.user) {
             await fetchProfile(res.user.uid);
@@ -173,6 +182,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const signInWithEmail = async (email: string, pass: string) => {
+        if (!auth) noAuth();
         const res = await signInWithEmailAndPassword(auth, email, pass);
         if (res.user) {
             await fetchProfile(res.user.uid);
@@ -180,6 +190,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const signUpWithEmail = async (email: string, pass: string, name: string) => {
+        if (!auth) noAuth();
         const res = await createUserWithEmailAndPassword(auth, email, pass);
         if (res.user) {
             await updateProfile(res.user, { displayName: name });
@@ -195,10 +206,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const forgotPassword = async (email: string) => {
+        if (!auth) noAuth();
         await sendPasswordResetEmail(auth, email);
     };
 
     const logout = async () => {
+        if (!auth) return;
         await signOut(auth);
         setProfile(null);
     };

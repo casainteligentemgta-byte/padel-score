@@ -169,7 +169,9 @@ export default function PlayerRegistrationPage() {
                         >
                             <ArrowLeft className="w-5 h-5 text-gray-400" />
                         </button>
-                        <h1 className="text-lg font-black italic uppercase tracking-tighter">{fromMisDatos ? <span className="text-[#ccff00]">Mis datos</span> : <>Registro <span className="text-[#ccff00]">Jugador</span></>}</h1>
+                        <h1 className="text-lg font-black italic uppercase tracking-tighter">
+                            {fromMisDatos ? <span className="text-[#ccff00]">Mis datos</span> : <>Regístrate</>}
+                        </h1>
                         <div className="w-10"></div>
                     </div>
 
@@ -199,28 +201,18 @@ export default function PlayerRegistrationPage() {
                                 className="space-y-8"
                             >
                                 {/* Profile Picture */}
-                                <div className="flex flex-col items-center gap-4">
-                                    <div className="relative group">
-                                        <div className="w-32 h-32 rounded-full border-4 border-[#ccff00]/20 bg-white/5 flex items-center justify-center overflow-hidden">
-                                            {formData.photo ? (
-                                                <img src={formData.photo} alt="Profile" className="w-full h-full object-cover" />
-                                            ) : (
-                                                <User className="w-12 h-12 text-gray-700" />
-                                            )}
-                                        </div>
-                                        <button
-                                            onClick={() => setShowPhotoOptions(true)}
-                                            className="absolute bottom-0 right-0 w-10 h-10 bg-[#ccff00] rounded-full flex items-center justify-center shadow-lg border-2 border-[#0a0a0a] text-black hover:scale-110 transition-transform"
-                                        >
-                                            <Camera className="w-5 h-5" />
-                                        </button>
-                                    </div>
-                                </div>
+                                {/* Título simple de registro */}
+                                {!fromMisDatos && (
+                                    <p className="text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2">
+                                        REGÍSTRATE:
+                                    </p>
+                                )}
 
                                 <div className="space-y-4">
+                                    {/* Nombre y Apellido */}
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Nombre</label>
+                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Nombres</label>
                                             <input
                                                 type="text"
                                                 placeholder="Juan"
@@ -241,6 +233,30 @@ export default function PlayerRegistrationPage() {
                                         </div>
                                     </div>
 
+                                    {/* Fecha de nacimiento y Teléfono */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Fecha de Nacimiento</label>
+                                            <input
+                                                type="date"
+                                                className="w-full bg-white/10 border border-white/5 rounded-2xl px-4 py-4 text-sm font-bold focus:border-[#ccff00] outline-none transition-all h-[54px] [color-scheme:dark]"
+                                                value={formData.birthDate}
+                                                onChange={e => updateField('birthDate', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Teléfono</label>
+                                            <input
+                                                type="text"
+                                                placeholder="+58 412 0000000"
+                                                className="w-full bg-white/10 border border-white/5 rounded-2xl px-4 py-4 text-sm font-bold focus:border-[#ccff00] outline-none transition-all h-[54px]"
+                                                value={formData.phone}
+                                                onChange={e => updateField('phone', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* DNI y resto de campos del paso 1 */}
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Cédula / DNI</label>
@@ -253,13 +269,7 @@ export default function PlayerRegistrationPage() {
                                             />
                                         </div>
                                         <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Fecha de Nacimiento</label>
-                                            <input
-                                                type="date"
-                                                className="w-full bg-white/10 border border-white/5 rounded-2xl px-4 py-4 text-sm font-bold focus:border-[#ccff00] outline-none transition-all h-[54px] [color-scheme:dark]"
-                                                value={formData.birthDate}
-                                                onChange={e => updateField('birthDate', e.target.value)}
-                                            />
+                                            {/* Reservado para futuros campos si hace falta */}
                                         </div>
                                     </div>
 
