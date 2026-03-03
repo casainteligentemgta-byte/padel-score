@@ -2,7 +2,7 @@ import { getDatabase, type Database } from 'firebase/database';
 import { app, firebaseConfig } from '@/lib/firebase';
 
 let _rtdb: Database | null = null;
-if (firebaseConfig.databaseURL) {
+if (app && firebaseConfig.databaseURL) {
   try {
     _rtdb = getDatabase(app);
   } catch (e) {
