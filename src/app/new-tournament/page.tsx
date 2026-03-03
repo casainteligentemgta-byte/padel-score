@@ -66,7 +66,7 @@ export default function NewTournamentPage() {
             return;
         }
         // Solo admin puede crear torneos; jugador y marcador van a torneos
-        const isAdmin = profile?.role === 'admin' || user?.email === 'casainteligentemgta@gmail.com';
+        const isAdmin = profile?.role === 'admin';
         if (!isAdmin) router.replace('/tournaments');
     }, [user, profile, authLoading, router]);
     const [tournamentData, setTournamentData] = useState({ ...INITIAL_DATA, startDate: new Date().toISOString().split('T')[0] });
@@ -1334,8 +1334,8 @@ export default function NewTournamentPage() {
                                                     <button
                                                         onClick={() => setTournamentData(prev => ({ ...prev, isReduced: !prev.isReduced }))}
                                                         className={`w-full p-4 rounded-xl border flex flex-col gap-1 transition-all ${tournamentData.isReduced
-                                                                ? 'bg-orange-500 border-orange-500 text-black shadow-lg scale-[1.02]'
-                                                                : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'
+                                                            ? 'bg-orange-500 border-orange-500 text-black shadow-lg scale-[1.02]'
+                                                            : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'
                                                             }`}
                                                     >
                                                         <div className="flex items-center justify-between w-full">

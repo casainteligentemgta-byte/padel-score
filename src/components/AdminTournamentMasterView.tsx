@@ -81,47 +81,55 @@ export default function AdminTournamentMasterView({ tournamentId, isAdmin }: Adm
         if (!tournamentId) return;
 
         const docRef = doc(db, 'tournaments', tournamentId);
-        const unsubscribe = onSnapshot(docRef, (docSnap) => {
+
+        // 1. Suscripción al Torneo
+        const unsubTourney = onSnapshot(docRef, (docSnap) => {
             if (docSnap.exists()) {
                 const tourneyData = { id: docSnap.id, ...docSnap.data() } as any;
                 setTournament(tourneyData);
+            }
+        });
 
-                if (tourneyData.matches) {
-                    setMatches(tourneyData.matches.map((m: any) => {
-                        const t1 = (m.team1Index > 0 && tourneyData.teams) ? tourneyData.teams[m.team1Index - 1] : null;
-                        const t2 = (m.team2Index > 0 && tourneyData.teams) ? tourneyData.teams[m.team2Index - 1] : null;
+        // 2. Suscripción a Partidos
+        const matchesRef = collection(db, 'tournaments', tournamentId, 'matches');
+        const unsubMatches = onSnapshot(matchesRef, (snap) => {
+            if (tournament) { // Necesitamos los teams del torneo para enriquecer
+                const enriched = snap.docs.map(d => {
+                    const m = { id: d.id, ...d.data() } as any;
+                    const t1 = (m.team1Index > 0 && tournament.teams) ? tournament.teams[m.team1Index - 1] : null;
+                    const t2 = (m.team2Index > 0 && tournament.teams) ? tournament.teams[m.team2Index - 1] : null;
 
-                        return {
-                            ...m,
-                            court: m.court || (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined),
-                            playerNames: {
-                                team1: t1 ? `${t1.p1?.name || 'J1'} / ${t1.p2?.name || 'J2'}` : 'Por definir',
-                                team2: t2 ? `${t2.p1?.name || 'J1'} / ${t2.p2?.name || 'J2'}` : 'Por definir'
-                            }
-                        };
-                    }));
-                }
+                    return {
+                        ...m,
+                        court: m.court || (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined),
+                        playerNames: {
+                            team1: t1 ? `${t1.p1?.name || 'J1'} / ${t1.p2?.name || 'J2'}` : (m.team1?.teamLabel || 'Por definir'),
+                            team2: t2 ? `${t2.p1?.name || 'J1'} / ${t2.p2?.name || 'J2'}` : (m.team2?.teamLabel || 'Por definir')
+                        }
+                    };
+                });
+                setMatches(enriched);
+            } else {
+                // Si aún no tenemos el torneo, guardamos los datos brutos temporalmente
+                setMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             }
             setLoading(false);
         });
 
-        return () => unsubscribe();
-    }, [tournamentId]);
+        return () => {
+            unsubTourney();
+            unsubMatches();
+        };
+    }, [tournamentId, tournament?.teams]); // Re-ejecutar si los equipos cambian
 
     const toggleAds = async (matchId: string, currentStatus: boolean) => {
-        if (!tournament) return;
-        const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === matchId ? { ...m, forcedAds: !currentStatus } : m
-        );
-        await updateDoc(doc(db, 'tournaments', tournamentId), { matches: updatedMatches });
+        const matchRef = doc(db, 'tournaments', tournamentId, 'matches', matchId);
+        await updateDoc(matchRef, { forcedAds: !currentStatus });
     };
 
     const toggleRefereeCall = async (matchId: string, currentStatus: boolean) => {
-        if (!tournament) return;
-        const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === matchId ? { ...m, needsReferee: !currentStatus } : m
-        );
-        await updateDoc(doc(db, 'tournaments', tournamentId), { matches: updatedMatches });
+        const matchRef = doc(db, 'tournaments', tournamentId, 'matches', matchId);
+        await updateDoc(matchRef, { needsReferee: !currentStatus });
     };
 
     if (!isAdmin) {

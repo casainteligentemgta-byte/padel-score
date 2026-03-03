@@ -17,7 +17,11 @@ import {
     Activity,
     Users,
     ChevronRight,
-    RefreshCw
+    RefreshCw,
+    Shirt,
+    Footprints,
+    HeartPulse,
+    Stethoscope
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -153,10 +157,11 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                             </div>
                         </div>
 
-                        {/* Contact info grid */}
+                        {/* Fichas informativas: Contacto, Identificación, Tallas, Salud */}
                         <div className="mt-12 pt-12 border-t border-white/5 grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {/* Contacto */}
                             <div className="space-y-6">
-                                <h3 className="text-xs font-black uppercase text-gray-500 tracking-[0.3em] italic">Información Personal</h3>
+                                <h3 className="text-xs font-black uppercase text-gray-500 tracking-[0.3em] italic">Contacto</h3>
                                 <div className="space-y-4">
                                     <div className="flex items-center gap-4 group">
                                         <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-gray-400 group-hover:bg-padel-primary group-hover:text-black transition-all">
@@ -173,7 +178,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                                         </div>
                                         <div>
                                             <p className="text-[10px] font-black uppercase text-gray-600 tracking-widest">Correo</p>
-                                            <p className="text-sm font-bold tracking-tight">{player.email || player.email || 'N/A'}</p>
+                                            <p className="text-sm font-bold tracking-tight">{player.email || 'N/A'}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-4 group">
@@ -182,12 +187,15 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                                         </div>
                                         <div>
                                             <p className="text-[10px] font-black uppercase text-gray-600 tracking-widest">Instagram</p>
-                                            <p className="text-sm font-bold tracking-tight">{player.instagram ? `@${player.instagram.replace('@', '')}` : 'No vinculado'}</p>
+                                            <p className="text-sm font-bold tracking-tight">
+                                                {player.instagram ? `@${String(player.instagram).replace('@', '')}` : 'No vinculado'}
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
+                            {/* Identificación */}
                             <div className="space-y-6">
                                 <h3 className="text-xs font-black uppercase text-gray-500 tracking-[0.3em] italic">Identificación</h3>
                                 <div className="space-y-4">
@@ -199,6 +207,75 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                                         <p className="text-4xl font-black italic tracking-tighter text-white">
                                             {player.dni || 'SIN DNI'}
                                         </p>
+                                    </div>
+                                    <div className="bg-white/5 rounded-3xl p-4 border border-white/5">
+                                        <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest italic mb-1">Fecha de nacimiento</p>
+                                        <p className="text-sm font-bold">
+                                            {player.birthDate || 'No registrada'}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Tallas */}
+                            <div className="space-y-6">
+                                <h3 className="text-xs font-black uppercase text-gray-500 tracking-[0.3em] italic">Tallas</h3>
+                                <div className="space-y-4">
+                                    <div className="bg-white/5 rounded-3xl p-6 border border-white/5">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest italic flex items-center gap-2">
+                                                <Shirt className="w-4 h-4" /> Equipación
+                                            </p>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-3 text-xs">
+                                            <div>
+                                                <p className="text-[9px] uppercase text-gray-500 font-black tracking-widest">Franela</p>
+                                                <p className="text-lg font-black italic text-white">{player.suitSize || '—'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] uppercase text-gray-500 font-black tracking-widest">Short</p>
+                                                <p className="text-lg font-black italic text-white">{player.shortSize || '—'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] uppercase text-gray-500 font-black tracking-widest flex items-center gap-1">
+                                                    <Footprints className="w-3 h-3" /> Calzado
+                                                </p>
+                                                <p className="text-lg font-black italic text-white">{player.shoeSize || '—'}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Salud */}
+                            <div className="space-y-6">
+                                <h3 className="text-xs font-black uppercase text-gray-500 tracking-[0.3em] italic">Salud</h3>
+                                <div className="space-y-4">
+                                    <div className="bg-white/5 rounded-3xl p-6 border border-white/5">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest italic flex items-center gap-2">
+                                                <HeartPulse className="w-4 h-4" /> Información médica
+                                            </p>
+                                            <Stethoscope className="w-4 h-4 text-gray-600" />
+                                        </div>
+                                        <div className="space-y-2 text-xs">
+                                            <p>
+                                                <span className="font-black text-white">Tipo de sangre:</span>{' '}
+                                                {player.bloodType || 'No especificado'}
+                                            </p>
+                                            <p>
+                                                <span className="font-black text-white">Alergias:</span>{' '}
+                                                {player.allergies && String(player.allergies).trim()
+                                                    ? player.allergies
+                                                    : 'Ninguna reportada'}
+                                            </p>
+                                            <p>
+                                                <span className="font-black text-white">Condiciones médicas:</span>{' '}
+                                                {player.medicalConditions && String(player.medicalConditions).trim()
+                                                    ? player.medicalConditions
+                                                    : 'Ninguna reportada'}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

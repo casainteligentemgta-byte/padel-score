@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Tv,
@@ -40,6 +40,8 @@ import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
+import type { MediaContent } from '@/lib/supabase/publicidad';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Page
@@ -104,6 +106,20 @@ export default function AdsManagement({ params }: { params: Promise<{ id: string
     const [carouselInterval, setCarouselInterval] = useState(8);
     const [uploadingCarousel, setUploadingCarousel] = useState<string | null>(null);
     const [savingCarousel, setSavingCarousel] = useState(false);
+    const [libraryImages, setLibraryImages] = useState<MediaContent[]>([]);
+    const [selectedLibraryImageId, setSelectedLibraryImageId] = useState<string>('');
+
+    // ── Supabase client para reutilizar biblioteca de medios (imágenes) ───────
+    const supabase = useMemo(() => {
+        try {
+            if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+                return createClient();
+            }
+        } catch {
+            // env incompleto o cliente inválido: ignorar en entorno local
+        }
+        return null;
+    }, []);
 
     // ── Auth guard
     useEffect(() => {
@@ -141,6 +157,22 @@ export default function AdsManagement({ params }: { params: Promise<{ id: string
         });
         return () => unsubscribe();
     }, [id, authLoading, isAdmin]);
+
+    // ── Cargar imágenes de biblioteca de Supabase (media_content.tipo = 'imagen') ──
+    useEffect(() => {
+        const loadLibraryImages = async () => {
+            if (!supabase) return;
+            const { data, error } = await supabase
+                .from('media_content')
+                .select('*')
+                .eq('tipo', 'imagen')
+                .order('created_at', { ascending: false });
+            if (!error && data) {
+                setLibraryImages(data as MediaContent[]);
+            }
+        };
+        void loadLibraryImages();
+    }, [supabase]);
 
     // ── Cargar carrusel desde RTDB
     useEffect(() => {
@@ -229,6 +261,20 @@ export default function AdsManagement({ params }: { params: Promise<{ id: string
 
     const removeCarouselImage = (imgId: string) => {
         setCarouselImages(prev => prev.filter(img => img.id !== imgId));
+    };
+
+    const addCarouselFromLibrary = () => {
+        if (!selectedLibraryImageId) return;
+        const media = libraryImages.find(m => m.id === selectedLibraryImageId);
+        if (!media) return;
+        const newImg: CarouselImage = {
+            id: `lib_${media.id}_${Date.now()}`,
+            url: media.url,
+            orden: carouselImages.length,
+            activa: true,
+        };
+        setCarouselImages(prev => [...prev, newImg]);
+        setSelectedLibraryImageId('');
     };
 
     // ── Save
@@ -495,13 +541,38 @@ export default function AdsManagement({ params }: { params: Promise<{ id: string
                                                     className="w-24 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-padel-primary" />
                                                 <span className="text-padel-primary font-black italic text-sm w-8">{carouselInterval}s</span>
                                             </div>
-                                            {/* Subir nueva imagen */}
+                                            {/* Subir nueva imagen desde archivo */}
                                             <label className="flex items-center gap-2 px-4 py-2.5 bg-padel-primary text-black rounded-xl font-black italic uppercase tracking-widest text-xs cursor-pointer hover:scale-105 transition-all">
                                                 <Plus className="w-4 h-4" />
-                                                Agregar Imagen
+                                                Subir Imagen
                                                 <input type="file" className="hidden" accept="image/*"
                                                     onChange={e => e.target.files?.[0] && handleCarouselUpload(e.target.files[0])} />
                                             </label>
+                                            {/* Elegir desde biblioteca Supabase */}
+                                            {libraryImages.length > 0 && (
+                                                <div className="flex items-center gap-2 bg-white/[0.02] border border-white/10 rounded-xl px-3 py-2">
+                                                    <select
+                                                        className="bg-transparent text-xs font-bold uppercase tracking-widest text-gray-400 outline-none"
+                                                        value={selectedLibraryImageId}
+                                                        onChange={e => setSelectedLibraryImageId(e.target.value)}
+                                                    >
+                                                        <option value="">Biblioteca de imágenes</option>
+                                                        {libraryImages.map(img => (
+                                                            <option key={img.id} value={img.id}>
+                                                                {img.nombre_sponsor || img.nombre || img.url}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <button
+                                                        type="button"
+                                                        onClick={addCarouselFromLibrary}
+                                                        disabled={!selectedLibraryImageId}
+                                                        className="px-3 py-1.5 bg-white/10 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-white/20 disabled:opacity-40"
+                                                    >
+                                                        Añadir
+                                                    </button>
+                                                </div>
+                                            )}
                                             {/* Guardar carrusel */}
                                             <button onClick={saveCarousel} disabled={savingCarousel}
                                                 className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 text-white rounded-xl font-black italic uppercase tracking-widest text-xs hover:bg-white/10 transition-all disabled:opacity-50">

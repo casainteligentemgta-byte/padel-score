@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService, ROLES } from '@/lib/dataService';
+import { rtdbService } from '@/lib/rtdbService';
 import {
     Shield, User, Mail, RefreshCw, ChevronRight, Save,
     ShieldCheck, UserCircle, Target, Plus, Edit2, Key,
@@ -52,12 +53,27 @@ export default function AdminUsersPage() {
         if (isAdmin) loadUsers();
     }, [isAdmin]);
 
-    const handleRoleChange = async (uid: string, newRole: string) => {
+    const handleRoleChange = async (uid: string, newRole: any) => {
         setUpdating(uid);
         try {
             const update: any = { role: newRole };
             if (newRole !== ROLES.MARKER) update.markerCanchas = [];
+
+            // Actualizar Firestore
             await dataService.setUserProfile(uid, update);
+
+            // Sincronizar con RTDB
+            const user = users.find(u => u.uid === uid);
+            if (user) {
+                await rtdbService.setRTDBUserRole(
+                    uid,
+                    newRole.toLowerCase(),
+                    user.name || 'Sin nombre',
+                    user.email || '',
+                    (update.markerCanchas && update.markerCanchas.length > 0) ? update.markerCanchas[0] : undefined
+                );
+            }
+
             setUsers(users.map(u => u.uid === uid ? { ...u, ...update } : u));
         } catch (err) {
             console.error(err);
@@ -71,6 +87,19 @@ export default function AdminUsersPage() {
         setUpdating(uid);
         try {
             await dataService.setUserProfile(uid, { markerCanchas: canchas });
+
+            // Sincronizar con RTDB (usamos la primera cancha como principal para el marker)
+            const user = users.find(u => u.uid === uid);
+            if (user) {
+                await rtdbService.setRTDBUserRole(
+                    uid,
+                    (user.role || ROLES.PLAYER).toLowerCase(),
+                    user.name || 'Sin nombre',
+                    user.email || '',
+                    canchas.length > 0 ? canchas[0] : undefined
+                );
+            }
+
             setUsers(users.map(u => u.uid === uid ? { ...u, markerCanchas: canchas } : u));
         } catch (err) {
             console.error(err);
@@ -125,6 +154,16 @@ export default function AdminUsersPage() {
                 };
 
                 await dataService.setUserProfile(editingUser.uid, updateData);
+
+                // Sincronizar RTDB
+                await rtdbService.setRTDBUserRole(
+                    editingUser.uid,
+                    formData.role.toLowerCase(),
+                    formData.name,
+                    formData.email,
+                    (editingUser.markerCanchas && editingUser.markerCanchas.length > 0) ? editingUser.markerCanchas[0] : undefined
+                );
+
                 setUsers(users.map(u => u.uid === editingUser.uid ? { ...u, ...updateData } : u));
                 setIsModalOpen(false);
             } else {
@@ -152,6 +191,15 @@ export default function AdminUsersPage() {
                     };
 
                     await dataService.setUserProfile(newUser.uid, userProfile);
+
+                    // Sincronizar RTDB
+                    await rtdbService.setRTDBUserRole(
+                        newUser.uid,
+                        formData.role.toLowerCase(),
+                        formData.name,
+                        formData.email
+                    );
+
                     setUsers([...users, userProfile]);
 
                     // Cerrar sesión en la instancia secundaria y borrar la app
@@ -248,8 +296,8 @@ export default function AdminUsersPage() {
                                     onChange={(e) => handleRoleChange(u.uid, e.target.value)}
                                     disabled={updating === u.uid}
                                     className={`appearance-none bg-black border-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer transition-all ${u.role === ROLES.ADMIN ? 'border-padel-primary/30 text-padel-primary' :
-                                            u.role === ROLES.MARKER ? 'border-orange-500/30 text-orange-500' :
-                                                'border-gray-500/30 text-gray-500'
+                                        u.role === ROLES.MARKER ? 'border-orange-500/30 text-orange-500' :
+                                            'border-gray-500/30 text-gray-500'
                                         }`}
                                 >
                                     <option value={ROLES.ADMIN}>ADMIN</option>

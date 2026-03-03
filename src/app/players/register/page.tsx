@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     ArrowLeft,
@@ -25,6 +25,8 @@ import Sidebar from '@/components/Sidebar';
 
 export default function PlayerRegistrationPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const fromMisDatos = searchParams.get('mis-datos') === '1';
     const { user } = useAuth();
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
@@ -167,7 +169,7 @@ export default function PlayerRegistrationPage() {
                         >
                             <ArrowLeft className="w-5 h-5 text-gray-400" />
                         </button>
-                        <h1 className="text-lg font-black italic uppercase tracking-tighter">Registro <span className="text-[#ccff00]">Jugador</span></h1>
+                        <h1 className="text-lg font-black italic uppercase tracking-tighter">{fromMisDatos ? <span className="text-[#ccff00]">Mis datos</span> : <>Registro <span className="text-[#ccff00]">Jugador</span></>}</h1>
                         <div className="w-10"></div>
                     </div>
 

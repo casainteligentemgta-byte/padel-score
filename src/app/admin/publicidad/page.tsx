@@ -7,6 +7,8 @@ import { uploadToSupabase } from '@/lib/storage';
 import type { MediaContent, Pantalla, TiraInformativa } from '@/lib/supabase/publicidad';
 import Sidebar from '@/components/Sidebar';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/AuthContext';
 import {
   Plus,
   Trash2,
@@ -23,6 +25,14 @@ const isVideoFile = (f: File) => f.type.startsWith('video/');
 const isImageFile = (f: File) => f.type.startsWith('image/');
 
 export default function AdminPublicidad() {
+  const { isAdmin, loading: authLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!authLoading && !isAdmin) {
+      router.push('/');
+    }
+  }, [isAdmin, authLoading, router]);
   const [mediaList, setMediaList] = useState<MediaContent[]>([]);
   const [pantallas, setPantallas] = useState<Pantalla[]>([]);
   const [tiraList, setTiraList] = useState<TiraInformativa[]>([]);
@@ -222,6 +232,14 @@ export default function AdminPublicidad() {
     }
   };
 
+  if (authLoading || !isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
@@ -296,9 +314,8 @@ export default function AdminPublicidad() {
                 {/* Primera celda: dropzone "Arrastrar video o imagen" */}
                 <div
                   {...getRootProps()}
-                  className={`aspect-video rounded-lg flex flex-col items-center justify-center border-2 border-dashed transition cursor-pointer ${
-                    isDragActive ? 'border-emerald-400 bg-emerald-500/10' : 'border-slate-500 hover:border-emerald-400 bg-slate-700/50'
-                  } ${uploading ? 'opacity-60 pointer-events-none' : ''}`}
+                  className={`aspect-video rounded-lg flex flex-col items-center justify-center border-2 border-dashed transition cursor-pointer ${isDragActive ? 'border-emerald-400 bg-emerald-500/10' : 'border-slate-500 hover:border-emerald-400 bg-slate-700/50'
+                    } ${uploading ? 'opacity-60 pointer-events-none' : ''}`}
                 >
                   <input {...getInputProps()} />
                   {uploading ? (

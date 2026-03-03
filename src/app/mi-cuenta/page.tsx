@@ -2,7 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { User, Mail, Shield, RefreshCw, Edit3, Save, X } from 'lucide-react';
+import {
+    User,
+    Mail,
+    Shield,
+    RefreshCw,
+    Edit3,
+    Save,
+    X,
+    Phone,
+    Instagram,
+    Shirt,
+    Footprints,
+    HeartPulse
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { BouncingBall } from '@/components/BouncingBall';
@@ -18,10 +31,32 @@ export default function MiCuentaPage() {
     const [editName, setEditName] = useState('');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const [player, setPlayer] = useState<any | null>(null);
+    const [loadingPlayer, setLoadingPlayer] = useState(true);
 
     useEffect(() => {
         if (!authLoading && !user) router.replace('/login');
     }, [user, authLoading, router]);
+
+    // Cargar ficha de jugador asociada a este usuario (participants.ownerId = uid)
+    useEffect(() => {
+        const load = async () => {
+            if (!user?.uid) {
+                setPlayer(null);
+                setLoadingPlayer(false);
+                return;
+            }
+            try {
+                const mine = await dataService.getMyParticipants(user.uid);
+                setPlayer(mine[0] || null);
+            } catch {
+                setPlayer(null);
+            } finally {
+                setLoadingPlayer(false);
+            }
+        };
+        if (!authLoading && user) load();
+    }, [authLoading, user]);
 
     const roleLabel = profile?.role === 'admin' ? 'Administrador' : profile?.role === 'marker' ? 'Marcador' : 'Jugador';
 
@@ -78,12 +113,12 @@ export default function MiCuentaPage() {
                 <BouncingBall size={28} />
                 <div>
                     <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white">Mis datos</h1>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Datos que suministraste al registrarte</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Datos de tu cuenta y ficha de jugador</p>
                 </div>
             </div>
             <main className="ipad-scroll-area pl-20 md:pl-24 pr-4 pb-12">
-                <div className="max-w-2xl mx-auto">
-                    {/* Ficha del jugador con datos del registro */}
+                <div className="max-w-2xl mx-auto space-y-8">
+                    {/* Tarjeta de cuenta (correo, rol) */}
                     <div className="bg-[#111] border border-white/10 rounded-3xl overflow-hidden shadow-xl">
                         <div className="p-6 md:p-8 space-y-6">
                             <div className="flex items-center gap-4 p-4 rounded-2xl bg-padel-primary/10 border border-padel-primary/20">
@@ -122,6 +157,112 @@ export default function MiCuentaPage() {
                             </button>
                         </div>
                     </div>
+
+                    {/* Ficha de jugador (si existe en participants) */}
+                    {!loadingPlayer && player && (
+                        <div className="bg-[#111] border border-white/10 rounded-3xl overflow-hidden shadow-xl">
+                            <div className="p-6 md:p-8 space-y-6">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-14 h-14 rounded-2xl bg-white/5 overflow-hidden flex items-center justify-center flex-shrink-0 border border-white/10">
+                                            {player.photo ? (
+                                                <img src={player.photo} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <User className="w-7 h-7 text-gray-600" />
+                                            )}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-black uppercase tracking-wider text-white truncate">
+                                                {player.name} {player.lastName}
+                                            </p>
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                                                Ficha de jugador
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="hidden md:flex flex-col items-end gap-1">
+                                        <span className="px-2 py-1 rounded-full bg-padel-primary/10 text-padel-primary text-[10px] font-black uppercase tracking-widest">
+                                            Nivel {player.level ?? 4}
+                                        </span>
+                                        <span className="px-2 py-1 rounded-full bg-white/5 text-gray-300 text-[10px] font-black uppercase tracking-widest">
+                                            {player.position || 'Posición mixta'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-white/5 pt-4 mt-2">
+                                    {/* Tallas */}
+                                    <div className="space-y-3">
+                                        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
+                                            <Shirt className="w-4 h-4" /> Tallas
+                                        </p>
+                                        <div className="text-xs text-gray-300 space-y-1">
+                                            <p><span className="font-bold text-white">Franela:</span> {player.suitSize || '—'}</p>
+                                            <p><span className="font-bold text-white">Short:</span> {player.shortSize || '—'}</p>
+                                            <p className="flex items-center gap-1">
+                                                <Footprints className="w-3 h-3 text-gray-500" />
+                                                <span><span className="font-bold text-white">Calzado:</span> {player.shoeSize || '—'}</span>
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Salud */}
+                                    <div className="space-y-3">
+                                        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
+                                            <HeartPulse className="w-4 h-4" /> Salud
+                                        </p>
+                                        <div className="text-xs text-gray-300 space-y-1">
+                                            <p><span className="font-bold text-white">Tipo de sangre:</span> {player.bloodType || '—'}</p>
+                                            <p><span className="font-bold text-white">Alergias:</span> {player.allergies || 'Ninguna reportada'}</p>
+                                            <p><span className="font-bold text-white">Condiciones médicas:</span> {player.medicalConditions || 'Ninguna reportada'}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Contacto */}
+                                    <div className="space-y-3">
+                                        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
+                                            <Phone className="w-4 h-4" /> Contacto
+                                        </p>
+                                        <div className="text-xs text-gray-300 space-y-1">
+                                            <p><span className="font-bold text-white">Teléfono:</span> {player.phone || '—'}</p>
+                                            <p className="flex items-center gap-1">
+                                                <Instagram className="w-3 h-3 text-gray-500" />
+                                                <span><span className="font-bold text-white">Instagram:</span> {player.instagram ? `@${String(player.instagram).replace('@', '')}` : 'No vinculado'}</span>
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Identificación */}
+                                    <div className="space-y-3">
+                                        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
+                                            <Shield className="w-4 h-4" /> Identificación
+                                        </p>
+                                        <div className="text-xs text-gray-300 space-y-1">
+                                            <p><span className="font-bold text-white">DNI / Cédula:</span> {player.dni || '—'}</p>
+                                            <p><span className="font-bold text-white">Fecha de nacimiento:</span> {player.birthDate || '—'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Si no hay ficha aún, sugerir registro */}
+                    {!loadingPlayer && !player && (
+                        <div className="bg-[#111] border border-dashed border-white/15 rounded-3xl p-6 md:p-8 text-center space-y-3">
+                            <p className="text-sm font-bold text-gray-300">Aún no has creado tu ficha de jugador.</p>
+                            <p className="text-[11px] text-gray-500 max-w-md mx-auto">
+                                Completa tu perfil deportivo con tallas, tipo de sangre y datos de contacto para agilizar inscripciones y emergencias médicas.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => router.push('/players/register')}
+                                className="mt-2 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white text-black font-black text-[11px] uppercase tracking-widest hover:bg-gray-200 active:scale-[0.98] transition-all"
+                            >
+                                Crear ficha de jugador
+                            </button>
+                        </div>
+                    )}
                 </div>
             </main>
 

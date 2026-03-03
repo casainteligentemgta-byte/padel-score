@@ -319,11 +319,11 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
 
     // ── Valores del marcador: preferir RTDB si hay marcador en vivo ──────────
     const lm = liveMarcador;
-    const modoPuntos: 'normal' | 'tiebreak' | 'super_tiebreak' = lm?.modo_puntos || 'normal';
-    const isTiebreak = modoPuntos !== 'normal';
+    const modoPuntos: 'normal' | 'tiebreak' | 'super_tiebreak' = lm?.modo_puntos || (match?.matchFormat === 'SUPER_TIEBREAK' || match?.superTiebreak ? 'super_tiebreak' : (match?.matchFormat === 'TIEBREAK' || match?.tiebreak ? 'tiebreak' : 'normal'));
+    const isTiebreak = modoPuntos === 'tiebreak';
+    const isSTB = modoPuntos === 'super_tiebreak';
 
     // Convierte valor numérico a notación tenis: 0→0, 1→15, 2→30, 3→40, 4→AD
-    // También acepta strings como '0','15','30','40','AD' directamente
     const toTennis = (v: any): string => {
         if (v === null || v === undefined) return '0';
         const s = String(v).trim().toUpperCase();
@@ -332,11 +332,15 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return ['0', '15', '30', '40', 'AD'][Math.min(n, 4)] ?? s;
     };
 
-    // Puntos actuales
+    // Puntos actuales: en TB mostrar 1-7, en STB 1-11; en game normal 0/15/30/40/AD
     const ptsT1Raw = lm ? (lm.puntos?.local ?? '0') : (match.points?.t1 ?? '0');
     const ptsT2Raw = lm ? (lm.puntos?.visitante ?? '0') : (match.points?.t2 ?? '0');
-    const ptsT1 = toTennis(ptsT1Raw);
-    const ptsT2 = toTennis(ptsT2Raw);
+    const tbT1 = lm ? Number(lm.puntos?.local ?? 0) : (match.tiebreakScore?.t1 ?? (Number(ptsT1Raw) || 0));
+    const tbT2 = lm ? Number(lm.puntos?.visitante ?? 0) : (match.tiebreakScore?.t2 ?? (Number(ptsT2Raw) || 0));
+    const stbT1 = lm ? Number(lm.puntos?.local ?? 0) : (match.superTiebreakScore?.t1 ?? (Number(ptsT1Raw) || 0));
+    const stbT2 = lm ? Number(lm.puntos?.visitante ?? 0) : (match.superTiebreakScore?.t2 ?? (Number(ptsT2Raw) || 0));
+    const ptsT1 = isSTB ? String(stbT1) : isTiebreak ? String(tbT1) : toTennis(ptsT1Raw);
+    const ptsT2 = isSTB ? String(stbT2) : isTiebreak ? String(tbT2) : toTennis(ptsT2Raw);
 
     // Sets ganados
     const setsT1 = lm ? (lm.sets?.local ?? 0) : (match.sets?.t1 ?? 0);
@@ -349,17 +353,15 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     // Set actual (para columnas S1/S2/S3 — solo visible de Firestore)
     const currentSet = setsT1 + setsT2 + 1;
 
-    // Set boxes helper
+    // Set boxes helper (solo Set 1 y Set 2; STB se ve en el game actual)
     const SetBoxes = ({ team }: { team: 1 | 2 }) => (
         <div className="flex items-center gap-[1vw]">
-            {[1, 2, 3].map(setNum => {
+            {[1, 2].map(setNum => {
                 const isPast = setNum < currentSet;
                 const isCurrent = setNum === currentSet;
-                const val = isPast
-                    ? (match.games_sets?.[setNum - 1]?.[`t${team}`] ?? 0)
-                    : isCurrent
-                        ? (match.games?.[`t${team}`] ?? 0)
-                        : '-';
+                const pastVal = match.games_sets?.[setNum - 1]?.[`t${team}`] ?? match.setScores?.[setNum - 1]?.[`t${team}`];
+                const currentVal = match.games?.[`t${team}`] ?? '';
+                const val = isPast ? (pastVal ?? 0) : isCurrent ? currentVal : '-';
                 return (
                     <div
                         key={setNum}
@@ -376,9 +378,9 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                         }}
                     >
                         {isCurrent && <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />}
-                        <span className="font-black uppercase text-gray-500 tracking-widest" style={{ fontSize: 'clamp(5px,0.5vw,9px)', marginBottom: '2px' }}>SET {setNum}</span>
+                        <span className="font-black uppercase text-gray-500 tracking-widest" style={{ fontSize: 'clamp(5px,0.5vw,9px)', marginBottom: '2px' }}>{`SET ${setNum}`}</span>
                         <motion.span
-                            key={isCurrent ? match.games?.[`t${team}`] : match.games_sets?.[setNum - 1]?.[`t${team}`]}
+                            key={isCurrent ? match.games?.[`t${team}`] : (pastVal ?? setNum)}
                             initial={isCurrent ? { scale: 1.5, opacity: 0 } : {}}
                             animate={{ scale: 1, opacity: 1 }}
                             className={`font-black italic ${isCurrent ? 'text-white' : 'text-white/40'}`}
@@ -392,7 +394,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         </div>
     );
 
-    // ── Formateador de categorías (slug del enum + género del torneo)
+    // ── Formateador de categorías (solo categoría, sin género)
     const CATEGORY_BASE_LABELS: Record<string, string> = {
         // Categorias por nivel
         primera: '1ª',
@@ -416,16 +418,9 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         menores: 'Menores',
         open: 'Open',
     };
-    const GENDER_SUFFIX: Record<string, string> = {
-        MALE: 'Masc.',
-        FEMALE: 'Fem.',
-        MIXED: 'Mix.',
-    };
     const formatCategory = (slug: string) => {
         const key = slug.toLowerCase();
-        const base = CATEGORY_BASE_LABELS[key] ?? slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-        const suffix = tournament?.gender ? GENDER_SUFFIX[tournament.gender] : '';
-        return suffix ? `${base} ${suffix}` : base;
+        return CATEGORY_BASE_LABELS[key] ?? slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     };
 
     const matchTimeDisplay = (() => {
@@ -498,27 +493,13 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                             {match.roundName || match.groupName}
                                         </span>
                                     )}
-                                    {/* Categoría — bien visible */}
+                                    {/* Categoría — solo categoría (sin género ni formato debajo) */}
                                     {tournament?.category && (
                                         <span className="font-black italic uppercase tracking-wide leading-none"
                                             style={{ fontSize: 'clamp(10px,1.3vw,22px)', color: 'rgba(255,255,255,0.55)' }}>
                                             {formatCategory(tournament.category)}
                                         </span>
                                     )}
-                                    {/* Nombre del torneo debajo como sub-label */}
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-bold uppercase tracking-widest text-gray-600 leading-none" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>
-                                            {tournament?.name}
-                                        </span>
-                                        {venueName && (
-                                            <>
-                                                <div className="w-1 h-1 bg-gray-800 rounded-full" />
-                                                <span className="font-bold uppercase tracking-widest text-padel-primary/40 leading-none" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>
-                                                    {venueName}
-                                                </span>
-                                            </>
-                                        )}
-                                    </div>
                                 </div>
                             </div>
 
@@ -578,6 +559,20 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     </div>
                                 )}
 
+                                {/* Temperatura primero en el bloque derecho */}
+                                {temp !== null && (
+                                    <>
+                                        <div className="self-stretch w-px bg-white/[0.08]" />
+                                        <div className="flex items-center gap-[0.4vw] relative z-10"
+                                            style={{ padding: 'clamp(5px,0.9vh,12px) clamp(12px,1.6vw,24px)' }}>
+                                            <Thermometer style={{ width: 'clamp(9px,1vw,16px)', height: 'clamp(9px,1vw,16px)', color: primaryColor, flexShrink: 0 }} />
+                                            <span className="font-black italic tracking-tighter"
+                                                style={{ fontSize: 'clamp(14px,1.8vw,30px)', color: primaryColor }}>{temp}°C</span>
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* Luego hora y fecha */}
                                 <div className="flex flex-col items-center justify-center relative z-10"
                                     style={{ padding: 'clamp(5px,0.9vh,12px) clamp(14px,1.8vw,28px)', gap: 'clamp(1px,0.2vh,3px)' }}>
                                     <span className={`font-black italic tracking-tighter leading-none ${tournament?.broadcastingSettings?.clockStyle === 'broadcast' ? 'text-padel-primary' : 'text-white'}`}
@@ -600,17 +595,6 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                         )}
                                     </div>
                                 </div>
-                                {temp !== null && (
-                                    <>
-                                        <div className="self-stretch w-px bg-white/[0.08]" />
-                                        <div className="flex items-center gap-[0.4vw] relative z-10"
-                                            style={{ padding: 'clamp(5px,0.9vh,12px) clamp(12px,1.6vw,24px)' }}>
-                                            <Thermometer style={{ width: 'clamp(9px,1vw,16px)', height: 'clamp(9px,1vw,16px)', color: primaryColor, flexShrink: 0 }} />
-                                            <span className="font-black italic tracking-tighter"
-                                                style={{ fontSize: 'clamp(14px,1.8vw,30px)', color: primaryColor }}>{temp}°C</span>
-                                        </div>
-                                    </>
-                                )}
                             </div>
                         </div>
 
@@ -628,7 +612,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 className="border border-white/8 bg-white/[0.025] overflow-hidden flex flex-col"
                                 style={{ gridColumn: '1 / -1', borderRadius: 'clamp(12px,1.6vw,26px)' }}
                             >
-                                {/* Column headers — orden: PTS | G | S1 | S2 | S3 */}
+                                {/* Column headers — orden: PTS | G | S1 | S2 */}
                                 <div className="flex items-center border-b border-white/[0.05]">
                                     <div className="flex-1" />
                                     {/* Puntos del game */}
@@ -641,10 +625,10 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                         style={{ width: 'clamp(45px,6vw,95px)', padding: 'clamp(4px,0.6vh,8px) 0', backgroundColor: `${primaryColor}10`, marginRight: 'clamp(4px,0.5vw,10px)' }}>
                                         <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(7px,0.8vw,12px)', color: primaryColor }}>G</span>
                                     </div>
-                                    {/* Sets S1 S2 S3 */}
-                                    {[1, 2, 3].map(s => (
+                                    {/* Sets S1 S2 */}
+                                    {[1, 2].map(s => (
                                         <div key={s} className="flex items-center justify-center border-l border-white/[0.05]"
-                                            style={{ width: 'clamp(45px,6vw,95px)', padding: 'clamp(4px,0.6vh,8px) 0', marginRight: s < 3 ? 'clamp(4px,0.5vw,10px)' : '0' }}>
+                                            style={{ width: 'clamp(45px,6vw,95px)', padding: 'clamp(4px,0.6vh,8px) 0', marginRight: s < 2 ? 'clamp(4px,0.5vw,10px)' : '0' }}>
                                             <span className="font-black uppercase tracking-widest text-gray-600" style={{ fontSize: 'clamp(7px,0.8vw,12px)' }}>S{s}</span>
                                         </div>
                                     ))}
@@ -715,15 +699,15 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                             </motion.span>
                                         </AnimatePresence>
                                     </div>
-                                    {/* Sets pasados */}
-                                    {[1, 2, 3].map(s => {
+                                    {/* Set 1 y Set 2 */}
+                                    {[1, 2].map(s => {
                                         const isPast = s < currentSet; const isCur = s === currentSet;
-                                        const val = isPast ? (match.games_sets?.[s - 1]?.t1 ?? 0) : '';
+                                        const val = isPast ? (match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? 0) : isCur ? (match.games?.t1 ?? '') : '';
                                         return (
                                             <div key={s} className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
                                                 style={{ width: 'clamp(45px,6vw,95px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent', marginRight: s < 3 ? 'clamp(4px,0.5vw,10px)' : '0' }}>
                                                 <motion.span key={String(val)} initial={isCur ? { scale: 1.4, opacity: 0 } : {}} animate={{ scale: 1, opacity: 1 }}
-                                                    className={`font-black italic ${isPast ? 'text-white/80' : 'text-white/10'}`}
+                                                    className={`font-black italic ${isPast || isCur ? 'text-white/80' : 'text-white/10'}`}
                                                     style={{ fontSize: 'clamp(20px,3.5vw,64px)' }}>{val}</motion.span>
                                             </div>
                                         );
@@ -795,15 +779,15 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                             </motion.span>
                                         </AnimatePresence>
                                     </div>
-                                    {/* Sets pasados */}
-                                    {[1, 2, 3].map(s => {
+                                    {/* Set 1 y Set 2 */}
+                                    {[1, 2].map(s => {
                                         const isPast = s < currentSet; const isCur = s === currentSet;
-                                        const val = isPast ? (match.games_sets?.[s - 1]?.t2 ?? 0) : '';
+                                        const val = isPast ? (match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? 0) : isCur ? (match.games?.t2 ?? '') : '';
                                         return (
                                             <div key={s} className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
                                                 style={{ width: 'clamp(45px,6vw,95px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent', marginRight: s < 3 ? 'clamp(4px,0.5vw,10px)' : '0' }}>
                                                 <motion.span key={String(val)} initial={isCur ? { scale: 1.4, opacity: 0 } : {}} animate={{ scale: 1, opacity: 1 }}
-                                                    className={`font-black italic ${isPast ? 'text-white/80' : 'text-white/10'}`}
+                                                    className={`font-black italic ${isPast || isCur ? 'text-white/80' : 'text-white/10'}`}
                                                     style={{ fontSize: 'clamp(20px,3.5vw,64px)' }}>{val}</motion.span>
                                             </div>
                                         );

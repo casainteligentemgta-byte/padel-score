@@ -28,10 +28,11 @@ import { useAuth } from '@/lib/AuthContext';
 import { useAppSettings } from '@/lib/AppSettingsContext';
 import { useRouter } from 'next/navigation';
 import { getCanchaLabel } from '@/lib/markerCanchas';
+import { dataService } from '@/lib/dataService';
 
 export default function Sidebar() {
     const [isOpen, setIsOpen] = useState(false);
-    const { logout, isAdmin, markerCanchas } = useAuth();
+    const { logout, isAdmin, markerCanchas, user } = useAuth();
     const { appTitle, clubName } = useAppSettings();
     const router = useRouter();
 
@@ -56,6 +57,26 @@ export default function Sidebar() {
         { name: 'Jugadores', href: '/players', icon: Users },
         { name: 'Publicidad', href: '/admin/publicidad', icon: Megaphone },
     ];
+
+    const handleMisDatosClick = async () => {
+        setIsOpen(false);
+        if (!user?.uid) {
+            router.push('/login');
+            return;
+        }
+        try {
+            const mine = await dataService.getMyParticipants(user.uid);
+            const player = mine?.[0];
+            if (player?.id) {
+                router.push(`/players/${player.id}`);
+            } else {
+                router.push('/players/register?mis-datos=1');
+            }
+        } catch (e) {
+            console.error('Sidebar: error cargando ficha de jugador', e);
+            router.push('/mi-cuenta');
+        }
+    };
 
     return (
         <>
@@ -130,6 +151,22 @@ export default function Sidebar() {
                                                     <span className="font-bold text-[12px] tracking-tight uppercase italic">{item.name}</span>
                                                     <span className="ml-auto text-[9px] text-gray-500 uppercase">Próximamente</span>
                                                 </div>
+                                            ) : item.name === 'Mis datos' ? (
+                                                <button
+                                                    key={item.name}
+                                                    type="button"
+                                                    onClick={handleMisDatosClick}
+                                                    className="w-full text-left"
+                                                >
+                                                    <motion.div
+                                                        whileHover={{ x: 5, backgroundColor: 'rgba(204,255,0,0.1)' }}
+                                                        whileTap={{ scale: 0.95 }}
+                                                        className="flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-400 hover:text-padel-primary transition-all group"
+                                                    >
+                                                        <item.icon className="w-4 h-4 transition-transform group-hover:scale-110" />
+                                                        <span className="font-bold text-[12px] tracking-tight uppercase italic">{item.name}</span>
+                                                    </motion.div>
+                                                </button>
                                             ) : (
                                                 <Link
                                                     key={item.name}

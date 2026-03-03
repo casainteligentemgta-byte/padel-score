@@ -25,8 +25,9 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     const [loading, setLoading] = useState(true);
 
     const load = async () => {
+        const timeout = new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
         try {
-            const data = await dataService.getAdminSettings();
+            const data = await Promise.race([dataService.getAdminSettings(), timeout]);
             setSettings({
                 appTitle: data?.appTitle || DEFAULTS.appTitle,
                 clubName: data?.clubName ?? DEFAULTS.clubName,
@@ -41,6 +42,8 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
 
     useEffect(() => {
         load();
+        const fallback = setTimeout(() => setLoading(false), 6000);
+        return () => clearTimeout(fallback);
     }, []);
 
     const value: AppSettingsContextValue = {

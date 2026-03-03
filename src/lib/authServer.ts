@@ -75,17 +75,27 @@ export async function getAuthUserWithRole(req: Request): Promise<AuthUserWithRol
     }
 }
 
-/** Si la cuenta de servicio no está configurada, no bloqueamos (para poder configurarla después). */
+/** 
+ * Verifica si el entorno está configurado. 
+ * Si no está configurado, bloqueamos por seguridad (Fail-Closed).
+ */
 function isAuthEnabled(): boolean {
     return Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 }
 
 export async function requireAuth(req: Request): Promise<AuthUser | NextResponse> {
-    if (!isAuthEnabled()) return { uid: 'anonymous', email: undefined };
+    if (!isAuthEnabled()) {
+        return NextResponse.json(
+            { error: 'Error de configuración del servidor: Falta FIREBASE_SERVICE_ACCOUNT_KEY.' },
+            { status: 500 }
+        );
+    }
+
     const user = await getAuthUser(req);
     if (user) return user;
+
     return NextResponse.json(
-        { error: 'No autorizado. Inicia sesión e incluye el token en Authorization: Bearer <token>.' },
+        { error: 'No autorizado. Inicia sesión e incluye el token en el header Authorization.' },
         { status: 401 }
     );
 }
@@ -94,20 +104,28 @@ export async function requireRole(
     req: Request,
     allowedRoles: readonly string[]
 ): Promise<AuthUserWithRole | NextResponse> {
-    if (!isAuthEnabled()) return { uid: 'anonymous', email: undefined, role: 'admin' };
+    if (!isAuthEnabled()) {
+        return NextResponse.json(
+            { error: 'Error de configuración del servidor: Falta FIREBASE_SERVICE_ACCOUNT_KEY.' },
+            { status: 500 }
+        );
+    }
+
     const user = await getAuthUserWithRole(req);
     if (!user) {
         return NextResponse.json(
-            { error: 'No autorizado. Inicia sesión e incluye el token en Authorization: Bearer <token>.' },
+            { error: 'No autorizado. Debes iniciar sesión para realizar esta acción.' },
             { status: 401 }
         );
     }
+
     const role = user.role?.toLowerCase?.() ?? 'player';
     if (!allowedRoles.map(r => r.toLowerCase()).includes(role)) {
         return NextResponse.json(
-            { error: 'No tienes permiso para esta acción.' },
+            { error: `Acceso denegado. Se requiere uno de los siguientes roles: ${allowedRoles.join(', ')}.` },
             { status: 403 }
         );
     }
+
     return user;
 }

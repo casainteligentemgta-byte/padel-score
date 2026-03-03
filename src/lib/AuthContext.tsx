@@ -62,60 +62,36 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [profile, setProfile] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // MODO DESARROLLADOR: Simulación con sesión real para poder guardar torneos en Firestore
+    // MODO DESARROLLADOR: Simulación con sesión real
     const enableDevMode = async () => {
         const devEmail = process.env.NEXT_PUBLIC_DEV_EMAIL?.trim();
         const devPassword = process.env.NEXT_PUBLIC_DEV_PASSWORD?.trim();
+
         if (devEmail && devPassword) {
             try {
                 await signInWithEmailAndPassword(auth, devEmail, devPassword);
-                // onAuthStateChanged se disparará y cargará user + profile real; podrás guardar torneos
                 return;
             } catch (e) {
-                console.warn('AuthContext: Simulación con credenciales reales falló, usando usuario mock (no se podrá guardar):', e);
-            }
-        }
-        // Fallback: anonymous login to have a real Firebase session
-        try {
-            await signInAnonymously(auth);
-            // After signing in, we can still set the mock profile as admin for UI purposes
-            setProfile({ role: ROLES.ADMIN, name: 'Luis Mata (Mock Admin)' });
-            return;
-        } catch (e: any) {
-            const code = e?.code || e?.message || '';
-            if (code.includes('admin-restricted-operation') || code.includes('auth/admin-restricted-operation')) {
-                console.warn(
-                    'AuthContext: La autenticación anónima no está permitida en este proyecto. ' +
-                    'Para habilitarla: Firebase Console → Authentication → Sign-in method → Anonymous → Activar. ' +
-                    'Usando usuario mock para desarrollo.'
-                );
-            } else {
-                console.error('AuthContext: Anonymous sign-in failed:', e);
+                console.warn('AuthContext: Simulación falló:', e);
             }
         }
 
-        // Ultimate fallback: mock user only (Firestore will fail if rules require auth)
-        const mockUser = {
-            uid: 'CMWhNg0MYIgiczQGkGGLl1tKn6A2',
-            displayName: 'Luis Mata (Owner)',
-            email: 'casainteligentemgta@gmail.com',
-            photoURL: 'https://ui-avatars.com/api/?name=Luis+Mata&background=C1FF00&color=000'
-        } as User;
-        setUser(mockUser);
-        setProfile({ role: ROLES.ADMIN, name: 'Luis Mata' });
-        setLoading(false);
+        // Fallback: anonymous login to have a real Firebase session
+        try {
+            await signInAnonymously(auth);
+            return;
+        } catch (e: any) {
+            console.error('AuthContext: Anonymous sign-in failed:', e);
+        }
     };
 
     const fetchProfile = async (uid: string) => {
         try {
-            console.log("AuthContext: Fetching profile for", uid);
             const data = await dataService.getUserProfile(uid);
             if (data) {
                 setProfile(data);
                 return data;
             } else {
-                // Si no existe perfil, lo creamos por defecto como jugador
-                console.log("AuthContext: Profile not found, creating default");
                 const newProfile = {
                     role: ROLES.PLAYER,
                     email: auth.currentUser?.email || '',
@@ -128,7 +104,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             }
         } catch (error) {
             console.error("AuthContext: Error fetching user profile:", error);
-            // Non-blocking fallback
             setProfile((prev: any) => prev || { role: ROLES.PLAYER, name: 'Usuario (Offline)' });
         }
     };
@@ -138,47 +113,36 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (el) el.style.setProperty('display', 'none');
         (window as any).enableDevMode = enableDevMode;
 
-        // Safety timeout para que la página se vea en local aunque Firebase tarde
         const safetyTimeout = setTimeout(() => {
             setLoading((prev: boolean) => {
                 if (prev) {
-                    console.warn("AuthContext: Safety timeout reached. Forcing load (fallback).");
+                    console.warn("AuthContext: Safety timeout reached.");
                     return false;
                 }
                 return prev;
             });
-        }, 1200);
+        }, 3000); // Increased timeout for slower connections
 
         const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-            console.log("AuthContext: onAuthStateChanged", firebaseUser?.email || "No user");
             clearTimeout(safetyTimeout);
             setUser(firebaseUser);
-            // Non-blocking for initial load
             setLoading(false);
 
             if (firebaseUser) {
                 try {
-                    console.log("AuthContext: Fetching profile for", firebaseUser.uid);
                     const profileData = await dataService.getUserProfile(firebaseUser.uid);
-                    let currentProfile = profileData;
-
-                    if (!profileData) {
-                        currentProfile = {
+                    if (profileData) {
+                        setProfile(profileData);
+                    } else {
+                        const currentProfile = {
                             role: ROLES.PLAYER,
                             email: firebaseUser.email || '',
                             name: firebaseUser.displayName || 'Usuario',
                             createdAt: new Date().toISOString()
                         };
                         await dataService.setUserProfile(firebaseUser.uid, currentProfile);
+                        setProfile(currentProfile);
                     }
-
-                    // Check for hardcoded Admin
-                    if (firebaseUser.email === 'casainteligentemgta@gmail.com' && currentProfile && currentProfile.role !== ROLES.ADMIN) {
-                        currentProfile.role = ROLES.ADMIN;
-                        await dataService.setUserProfile(firebaseUser.uid, currentProfile);
-                    }
-
-                    setProfile(currentProfile);
                 } catch (error) {
                     console.error("AuthContext: Error fetching profile:", error);
                 }
@@ -215,9 +179,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const res = await createUserWithEmailAndPassword(auth, email, pass);
         if (res.user) {
             await updateProfile(res.user, { displayName: name });
-            const isAbsoluteAdmin = email === 'casainteligentemgta@gmail.com';
             const newProfile = {
-                role: isAbsoluteAdmin ? ROLES.ADMIN : ROLES.PLAYER,
+                role: ROLES.PLAYER,
                 email: email,
                 name: name,
                 createdAt: new Date().toISOString()
@@ -236,7 +199,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setProfile(null);
     };
 
-    const isAdmin = profile?.role === ROLES.ADMIN || user?.email === 'casainteligentemgta@gmail.com';
+    const isAdmin = profile?.role === ROLES.ADMIN;
     const isPlayer = profile?.role === ROLES.PLAYER;
     const isMarker = profile?.role === ROLES.MARKER;
     /** Canchas asignadas al marcador por el admin (solo aplica si role === marker) */

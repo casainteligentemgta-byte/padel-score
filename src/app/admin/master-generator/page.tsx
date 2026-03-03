@@ -24,7 +24,8 @@ import {
     UserPlus,
     Edit3,
     Database,
-    ImageIcon
+    ImageIcon,
+    Loader2
 } from 'lucide-react';
 import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournament';
 import { MasterScheduleEngine, MasterScheduleConfig, CategoryConfig } from '@/services/MasterScheduleEngine';
@@ -159,6 +160,15 @@ function calcTotalMatchesForCategory(numTeams: number, groupSize?: number, quick
 
 
 export default function MasterGeneratorPage() {
+    const { user, isAdmin, loading: authLoading } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (!authLoading && !isAdmin) {
+            router.push('/');
+        }
+    }, [isAdmin, authLoading, router]);
+
     const [step, setStep] = useState(1);
     const [eventData, setEventData] = useState<MasterScheduleConfig>({
         ...INITIAL_EVENT_DATA,
@@ -168,6 +178,8 @@ export default function MasterGeneratorPage() {
 
     const [generatedMatches, setGeneratedMatches] = useState<any[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
+
+
     const [isSaving, setIsSaving] = useState(false);
     const [hasGenerated, setHasGenerated] = useState(false);
     const [activeGender, setActiveGender] = useState<'MALE' | 'FEMALE' | 'MIXED' | null>(null);
@@ -199,9 +211,6 @@ export default function MasterGeneratorPage() {
     // Edición de tiempo de partidos (Semis/Finales)
     const [editingMatchIdx, setEditingMatchIdx] = useState<number | null>(null);
     const [newMatchTime, setNewMatchTime] = useState<string>('');
-
-    const router = useRouter();
-    const { user } = useAuth();
 
     // ── Reset al montar: siempre empieza en blanco ────────────────────────
     useEffect(() => {
@@ -555,7 +564,7 @@ export default function MasterGeneratorPage() {
                     courtNames: eventData.courtNames ?? [],
                     bufferMinutes: eventData.bufferMinutes ?? 10,
                     teams: cat.teams ?? [],
-                    matches: matchesWithIds,
+                    // Eliminado: matches: matchesWithIds de aquí
                     groupAssignments: Object.keys(groupAssignments).length > 0 ? groupAssignments : undefined,
                     groupSize: groupSize,
                     advanceCount: (cat as any).advanceCount ?? 2,
@@ -568,7 +577,15 @@ export default function MasterGeneratorPage() {
                     }),
                 };
 
+                // 1. Crear el torneo (metadatos)
                 const docRef = await dataService.createTournament(sanitizeForFirestore(tournamentToSave), currentUser.uid);
+
+                // 2. Crear los partidos en la sub-colección
+                const matchesPromises = matchesWithIds.map(m =>
+                    dataService.createMatch(docRef.id, sanitizeForFirestore(m))
+                );
+                await Promise.all(matchesPromises);
+
                 results.push({ id: docRef.id, name: tournamentToSave.name });
             }
 
@@ -649,7 +666,7 @@ export default function MasterGeneratorPage() {
         return lastDay;
     };
 
-    /** Fecha y hora estimadas de fin del torneo (cuando termina el último partido). */
+    /** Fecha y hora estimadas de fin del torneo (cuando termina el último partido). Devuelve fecha en una línea y hora debajo. */
     const getEstimatedEndDate = () => {
         const startD = new Date(eventData.startDate + 'T00:00:00');
         let d: Date;
@@ -676,8 +693,9 @@ export default function MasterGeneratorPage() {
         const year = d.getFullYear();
         const h = d.getHours();
         const m = d.getMinutes();
-        const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-        return `${day} de ${month} de ${year}, ${timeStr} h`;
+        const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} h`;
+        const dateStr = `${day} de ${month} de ${year}`;
+        return { dateStr, timeStr };
     };
 
     // Sincronizar eventData.endDate con el fin calculado para que el mismo dato aparezca en evento, categorías y fixture
@@ -712,6 +730,14 @@ export default function MasterGeneratorPage() {
         SUPER_TIE_BREAK: { label: 'Super Tie-Break', desc: '6-6 → Super TB a 10', icon: '⚡' },
         NO_TIE_BREAK: { label: 'Sin Tie-Break', desc: 'Hasta ganar por 2 games', icon: '🔁' },
     };
+
+    if (authLoading || !isAdmin) {
+        return (
+            <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+                <Loader2 className="w-10 h-10 text-[#ccff00] animate-spin" />
+            </div>
+        );
+    }
 
     return (
         <div className="h-dvh flex flex-col bg-[#0a0a0b] text-white selection:bg-padel-primary/30 overflow-hidden">
@@ -1209,7 +1235,7 @@ export default function MasterGeneratorPage() {
                                             <div className="flex justify-between items-center"><span className="text-zinc-500">Parejas</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + c.numTeams, 0)}</span></div>
                                             <div className="flex justify-between items-center"><span className="text-zinc-500">Jugadores</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + c.numTeams, 0) * 2}</span></div>
                                             <div className="flex justify-between items-center"><span className="text-zinc-500">Partidos</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION), 0)}</span></div>
-                                            <div className="col-span-2 sm:col-span-1 flex justify-between items-center sm:flex-col sm:items-start sm:gap-0.5"><span className="text-zinc-500">Fin estimado (día y hora)</span><span className="font-bold text-padel-primary text-[10px] sm:text-xs">{getEstimatedEndDate()}</span></div>
+                                            <div className="col-span-2 sm:col-span-1 flex justify-between items-center sm:flex-col sm:items-start sm:gap-0.5"><span className="text-zinc-500">Fin estimado</span><span className="font-bold text-padel-primary text-[10px] sm:text-xs text-right sm:text-left"><span className="block">{getEstimatedEndDate().dateStr}</span><span className="block">{getEstimatedEndDate().timeStr}</span></span></div>
                                         </div>
                                     </div>
                                     <div className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-2xl p-4 space-y-4">
@@ -1395,7 +1421,7 @@ export default function MasterGeneratorPage() {
                                             <div className="flex justify-between items-center"><span className="text-zinc-500">Parejas</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + c.numTeams, 0)}</span></div>
                                             <div className="flex justify-between items-center"><span className="text-zinc-500">Jugadores</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + c.numTeams, 0) * 2}</span></div>
                                             <div className="flex justify-between items-center"><span className="text-zinc-500">Partidos</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION), 0)}</span></div>
-                                            <div className="col-span-2 sm:col-span-1 flex justify-between items-center sm:flex-col sm:items-start sm:gap-0.5"><span className="text-zinc-500">Fin estimado (día y hora)</span><span className="font-bold text-padel-primary text-[10px] sm:text-xs">{getEstimatedEndDate()}</span></div>
+                                            <div className="col-span-2 sm:col-span-1 flex justify-between items-center sm:flex-col sm:items-start sm:gap-0.5"><span className="text-zinc-500">Fin estimado</span><span className="font-bold text-padel-primary text-[10px] sm:text-xs text-right sm:text-left"><span className="block">{getEstimatedEndDate().dateStr}</span><span className="block">{getEstimatedEndDate().timeStr}</span></span></div>
                                         </div>
                                     </div>
                                     <div className="flex items-center justify-between">
@@ -1580,7 +1606,7 @@ export default function MasterGeneratorPage() {
                                             <div className="flex justify-between items-center"><span className="text-zinc-500">Parejas</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + c.numTeams, 0)}</span></div>
                                             <div className="flex justify-between items-center"><span className="text-zinc-500">Jugadores</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + c.numTeams, 0) * 2}</span></div>
                                             <div className="flex justify-between items-center"><span className="text-zinc-500">Partidos</span><span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION), 0)}</span></div>
-                                            <div className="col-span-2 sm:col-span-1 flex justify-between items-center sm:flex-col sm:items-start sm:gap-0.5"><span className="text-zinc-500">Fin estimado (día y hora)</span><span className="font-bold text-padel-primary text-[10px] sm:text-xs">{getEstimatedEndDate()}</span></div>
+                                            <div className="col-span-2 sm:col-span-1 flex justify-between items-center sm:flex-col sm:items-start sm:gap-0.5"><span className="text-zinc-500">Fin estimado</span><span className="font-bold text-padel-primary text-[10px] sm:text-xs text-right sm:text-left"><span className="block">{getEstimatedEndDate().dateStr}</span><span className="block">{getEstimatedEndDate().timeStr}</span></span></div>
                                         </div>
                                     </div>
                                     <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 space-y-4">
@@ -1754,7 +1780,7 @@ export default function MasterGeneratorPage() {
                                                     </span>
                                                 </div>
                                                 <span className="text-[10px] font-bold text-zinc-500 uppercase italic">
-                                                    Finaliza el: <span className="text-white">{getEstimatedEndDate()}</span>
+                                                    Finaliza el: <span className="text-white block">{getEstimatedEndDate().dateStr}</span><span className="text-white block">{getEstimatedEndDate().timeStr}</span>
                                                 </span>
                                             </div>
                                         </div>
@@ -1873,8 +1899,8 @@ export default function MasterGeneratorPage() {
                                     <span className="font-bold text-white">{eventData.categories.reduce((acc, c) => acc + calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION), 0)}</span>
                                 </div>
                                 <div className="flex justify-between items-center text-xs">
-                                    <span className="text-zinc-500">Fin estimado (día y hora)</span>
-                                    <span className="font-bold text-padel-primary">{getEstimatedEndDate()}</span>
+                                    <span className="text-zinc-500">Fin estimado</span>
+                                    <span className="font-bold text-padel-primary text-right"><span className="block">{getEstimatedEndDate().dateStr}</span><span className="block">{getEstimatedEndDate().timeStr}</span></span>
                                 </div>
                             </div>
 

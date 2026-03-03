@@ -1,56 +1,23 @@
-'use client';
-
-/**
- * useMatchRealtime
- * ─────────────────────────────────────────────────────────────────────────────
- * Hook centralizado que encapsula la suscripción Firestore en tiempo real
- * a un partido específico dentro de un torneo.
- *
- * Uso:
- *   const { match, tournament, loading, error, updateMatch } = useMatchRealtime(tournamentId, matchId);
- */
-
 import { useState, useEffect, useCallback } from 'react';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, collection, QuerySnapshot, DocumentSnapshot, FirestoreError } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { MatchStatus } from '@/types/tournament';
+import { MatchStatus, Tournament, Match, Team } from '@/types/tournament';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 export interface RealtimeTeam {
     name: string;
     p1Name?: string;
     p2Name?: string;
-    p1?: { name?: string; photo?: string | null };
-    p2?: { name?: string; photo?: string | null };
     photo1?: string | null;
     photo2?: string | null;
     isTBD?: boolean;
     teamLabel?: string;
 }
 
-export interface RealtimeMatch {
-    id: string;
-    status: MatchStatus;
-    court?: number | string;
-    courtIndex?: number;
-    stage?: string;
-    groupName?: string;
-    scheduledTime?: any;
-    team1Index: number;
-    team2Index: number;
+export interface RealtimeMatch extends Omit<Match, 'team1' | 'team2' | 'scheduledTime'> {
     team1: RealtimeTeam;
     team2: RealtimeTeam;
-    sets?: { t1: number; t2: number };
-    games?: { t1: number; t2: number };
-    points?: { t1: any; t2: any };
-    server?: { team: 1 | 2; player: 1 | 2 };
-    isStreaming?: boolean;
-    forcedAds?: boolean;
-    current_ad_url?: string;
-    actualStartTime?: string;
-    actualEndTime?: string;
-    bracketPosition?: { round: number; position: number };
-    [key: string]: any;
+    scheduledTime: any; // Mantener como string/timestamp flexible para UI
 }
 
 export interface RealtimeTournament {
@@ -65,9 +32,6 @@ export interface RealtimeTournament {
         adMediaUrls?: string[];
         adImageUrls?: string[];
     };
-    teams?: any[];
-    matches?: any[];
-    [key: string]: any;
 }
 
 interface UseMatchRealtimeReturn {
@@ -76,21 +40,47 @@ interface UseMatchRealtimeReturn {
     allMatches: RealtimeMatch[];
     loading: boolean;
     error: string | null;
-    /** Actualiza campos del partido en Firestore (merge parcial) */
     updateMatch: (fields: Partial<RealtimeMatch>) => Promise<void>;
-    /** Actualiza el torneo completo (broadcastingSettings, etc.) */
-    updateTournament: (fields: Record<string, any>) => Promise<void>;
+    updateTournament: (fields: Partial<Tournament>) => Promise<void>;
 }
 
-// ── Helper: enriquecer match con datos de equipo ───────────────────────────
-function enrichMatch(m: any, idx: number, teams?: any[]): RealtimeMatch {
+// ── Sanitization & Mapping ───────────────────────────────────────────────
+
+/** 
+ * Extrae solo los campos necesarios del doc de Firestore para el Torneo.
+ * Protege contra fuga de campos sensibles de administración (dueños, configuraciones internas).
+ */
+function sanitizeTournament(id: string, data: any): RealtimeTournament {
+    return {
+        id,
+        name: data.name || 'Torneo',
+        category: typeof data.category === 'string' ? data.category : undefined,
+        gender: typeof data.gender === 'string' ? data.gender : undefined,
+        status: typeof data.status === 'string' ? data.status : undefined,
+        complexName: typeof data.complexName === 'string' ? data.complexName : undefined,
+        broadcastingSettings: data.broadcastingSettings ? {
+            primaryColor: data.broadcastingSettings.primaryColor,
+            adMediaUrls: Array.isArray(data.broadcastingSettings.adMediaUrls) ? data.broadcastingSettings.adMediaUrls : [],
+            adImageUrls: Array.isArray(data.broadcastingSettings.adImageUrls) ? data.broadcastingSettings.adImageUrls : [],
+        } : undefined,
+    };
+}
+
+/** 
+ * Enriquece un match con datos de equipo de forma segura.
+ */
+function sanitizeMatch(m: any, idx: number, teams?: any[]): RealtimeMatch {
     const matchId = m.id || `match_${idx}`;
 
     const resolveTeam = (mTeam: any, teamIdx: number): RealtimeTeam => {
-        // Formato nuevo: objeto embebido
+        // Si el partido ya tiene datos de equipo estáticos (ej: nombres editados manualmente)
         if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
             if (mTeam.isTBD || mTeam.teamLabel) {
-                return { name: mTeam.teamLabel || mTeam.p1?.name || '?', isTBD: true, teamLabel: mTeam.teamLabel };
+                return {
+                    name: mTeam.teamLabel || mTeam.p1?.name || '?',
+                    isTBD: true,
+                    teamLabel: mTeam.teamLabel
+                };
             }
             const p1n = (mTeam.p1Name || mTeam.p1?.name || '').trim();
             const p2n = (mTeam.p2Name || mTeam.p2?.name || '').trim();
@@ -102,9 +92,11 @@ function enrichMatch(m: any, idx: number, teams?: any[]): RealtimeMatch {
                 photo2: mTeam.p2?.photo || null,
             };
         }
-        // Formato legacy: índice → teams[]
-        const t = (teamIdx > 0 && teams) ? teams[teamIdx - 1] : null;
+
+        // Si no, resolver usando los equipos del torneo
+        const t = (teamIdx > 0 && Array.isArray(teams)) ? teams[teamIdx - 1] : null;
         if (!t) return { name: teamIdx > 0 ? `Pareja ${teamIdx}` : '?' };
+
         const p1n = t.p1?.name?.trim() || `J${(teamIdx * 2) - 1}`;
         const p2n = t.p2?.name?.trim() || `J${teamIdx * 2}`;
         return {
@@ -117,11 +109,24 @@ function enrichMatch(m: any, idx: number, teams?: any[]): RealtimeMatch {
     };
 
     return {
-        ...m,
         id: matchId,
+        tournamentId: m.tournamentId || '',
+        status: m.status || MatchStatus.PENDING,
         court: m.court || (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined),
+        courtIndex: m.courtIndex,
+        stage: m.stage,
+        groupName: m.groupName,
+        scheduledTime: m.scheduledTime,
+        team1Index: m.team1Index || 0,
+        team2Index: m.team2Index || 0,
         team1: resolveTeam(m.team1, m.team1Index),
         team2: resolveTeam(m.team2, m.team2Index),
+        sets: m.sets,
+        games: m.games,
+        points: m.points,
+        server: m.server,
+        actualStartTime: m.actualStartTime,
+        actualEndTime: m.actualEndTime,
     };
 }
 
@@ -142,73 +147,121 @@ export function useMatchRealtime(
             return;
         }
 
-        const unsub = onSnapshot(
+        let teamsRaw: any[] = [];
+        let isMounted = true;
+
+        // 1. Suscripción al Torneo (Metadatos y Equipos)
+        const unsubTournament = onSnapshot(
             doc(db, 'tournaments', tournamentId),
-            (snap) => {
+            (snap: DocumentSnapshot) => {
+                if (!isMounted) return;
+
                 if (!snap.exists()) {
-                    setError('Torneo no encontrado');
+                    setError('El torneo solicitado no existe.');
                     setLoading(false);
                     return;
                 }
+                const data = snap.data();
+                teamsRaw = data?.teams || [];
+                const sanitizedT = sanitizeTournament(snap.id, data);
 
-                const data = { id: snap.id, ...snap.data() } as any;
-                const t: RealtimeTournament = {
-                    id: snap.id,
-                    name: data.name || 'Torneo',
-                    category: data.category,
-                    gender: data.gender,
-                    status: data.status,
-                    complexName: data.complexName,
-                    broadcastingSettings: data.broadcastingSettings,
-                    teams: data.teams || [],
-                    matches: data.matches || [],
-                    ...data,
-                };
-                setTournament(t);
+                setTournament(prev => {
+                    if (!prev || JSON.stringify(prev) !== JSON.stringify(sanitizedT)) {
+                        return sanitizedT;
+                    }
+                    return prev;
+                });
+            },
+            (err: FirestoreError) => {
+                if (!isMounted) return;
+                console.error('[useMatchRealtime] Tournament Error:', err);
+                if (err.code === 'permission-denied') {
+                    setError('Error de permisos: No puedes acceder a este torneo.');
+                } else {
+                    setError('Error de red al conectar con el torneo.');
+                }
+            }
+        );
 
-                const enriched: RealtimeMatch[] = (data.matches || []).map(
-                    (m: any, idx: number) => enrichMatch(m, idx, data.teams)
+        // 2. Suscripción a la Sub-colección de Partidos
+        const unsubMatches = onSnapshot(
+            collection(db, 'tournaments', tournamentId, 'matches'),
+            (snap: QuerySnapshot) => {
+                if (!isMounted) return;
+
+                const enrichedMatches = snap.docs.map((d, idx) =>
+                    sanitizeMatch({ id: d.id, ...d.data() }, idx, teamsRaw)
                 );
-                setAllMatches(enriched);
+
+                setAllMatches(prev => {
+                    if (JSON.stringify(prev) !== JSON.stringify(enrichedMatches)) {
+                        return enrichedMatches;
+                    }
+                    return prev;
+                });
 
                 if (matchId) {
-                    const found = enriched.find(m => m.id === matchId) || null;
-                    setMatch(found);
+                    const found = enrichedMatches.find((m: RealtimeMatch) => m.id === matchId) || null;
+                    setMatch(prev => {
+                        if (JSON.stringify(prev) !== JSON.stringify(found)) {
+                            return found;
+                        }
+                        return prev;
+                    });
                 }
 
                 setLoading(false);
                 setError(null);
             },
-            (err) => {
-                console.error('[useMatchRealtime] Error:', err);
-                setError(err.message);
+            (err: FirestoreError) => {
+                if (!isMounted) return;
+                console.error('[useMatchRealtime] Matches Sub-collection Error:', err);
+                if (err.code === 'permission-denied') {
+                    setError('Sin permisos para ver los partidos de este torneo.');
+                } else {
+                    setError('Error al recibir actualizaciones de partidos en tiempo real.');
+                }
                 setLoading(false);
             }
         );
 
-        return () => unsub();
+        return () => {
+            isMounted = false;
+            unsubTournament();
+            unsubMatches();
+        };
     }, [tournamentId, matchId]);
 
-    // ── updateMatch: escribe campos en el match correcto del array ──────────
     const updateMatch = useCallback(async (fields: Partial<RealtimeMatch>) => {
         if (!tournamentId || !matchId) return;
-        const ref = doc(db, 'tournaments', tournamentId);
+        const matchRef = doc(db, 'tournaments', tournamentId, 'matches', matchId);
 
-        // Leer el último estado del array desde el state
-        setAllMatches(prev => {
-            const updated = prev.map(m => m.id === matchId ? { ...m, ...fields } : m);
-            // Escribir a Firestore en background (strip enriched team objects)
-            const raw = updated.map(({ team1, team2, ...rest }) => rest);
-            updateDoc(ref, { matches: raw, updatedAt: new Date() }).catch(console.error);
-            return updated;
-        });
+        try {
+            // Limpiar campos enriquecidos para no guardarlos accidentalmente en Firestore
+            const { team1, team2, id, ...rest } = fields as any;
+            await updateDoc(matchRef, {
+                ...rest,
+                updatedAt: new Date()
+            });
+        } catch (e) {
+            console.error('[useMatchRealtime] updateMatch failed:', e);
+            setError('Error al actualizar el marcador del partido.');
+        }
     }, [tournamentId, matchId]);
 
-    // ── updateTournament: escribe campos en el doc del torneo ───────────────
-    const updateTournament = useCallback(async (fields: Record<string, any>) => {
+    const updateTournament = useCallback(async (fields: Partial<Tournament>) => {
         if (!tournamentId) return;
-        await updateDoc(doc(db, 'tournaments', tournamentId), { ...fields, updatedAt: new Date() });
+        try {
+            await updateDoc(doc(db, 'tournaments', tournamentId), {
+                ...fields,
+                updatedAt: new Date()
+            });
+        } catch (e) {
+            console.error('[useMatchRealtime] updateTournament failed:', e);
+            setError('Error al actualizar la configuración del torneo.');
+        }
     }, [tournamentId]);
 
     return { match, tournament, allMatches, loading, error, updateMatch, updateTournament };
 }
+

@@ -54,7 +54,78 @@ export const dataService = {
     },
 
     async deleteTournament(id: string) {
+        // 1. Limpiar sub-colección de partidos primero
+        try {
+            const matchesRef = collection(db, 'tournaments', id, 'matches');
+            const matchesSnap = await getDocs(matchesRef);
+            const deletePromises = matchesSnap.docs.map(m => deleteDoc(doc(db, 'tournaments', id, 'matches', m.id)));
+            await Promise.all(deletePromises);
+        } catch (e) {
+            console.error('[DataService] Error deleting tournament matches:', e);
+        }
+
+        // 2. Eliminar el documento del torneo
         return await deleteDoc(doc(db, 'tournaments', id));
+    },
+
+    // Matches (Sub-colección para escalabilidad)
+    async getMatches(tournamentId: string) {
+        const q = query(collection(db, 'tournaments', tournamentId, 'matches'));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    },
+
+    async updateMatch(tournamentId: string, matchId: string, data: any) {
+        const docRef = doc(db, 'tournaments', tournamentId, 'matches', matchId);
+        return await updateDoc(docRef, {
+            ...data,
+            updatedAt: serverTimestamp()
+        });
+    },
+
+    async createMatch(tournamentId: string, data: any) {
+        const matchesRef = collection(db, 'tournaments', tournamentId, 'matches');
+        if (data.id) {
+            // Si ya tiene ID (ej. del generador), usar setDoc
+            const { id, ...rest } = data;
+            await setDoc(doc(matchesRef, id), {
+                ...rest,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            });
+            return { id };
+        }
+        return await addDoc(matchesRef, {
+            ...data,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        });
+    },
+
+    async migrateTournamentMatches(tournamentId: string, legacyMatches: any[]) {
+        console.log(`[Migration] Starting migration for tournament ${tournamentId} with ${legacyMatches.length} matches`);
+
+        const updates = legacyMatches.map(async (m) => {
+            const matchId = m.id || `migrated_${Math.random().toString(36).substr(2, 9)}`;
+            const { id, ...matchData } = m;
+
+            await setDoc(doc(db, 'tournaments', tournamentId, 'matches', matchId), {
+                ...matchData,
+                migrated: true,
+                updatedAt: serverTimestamp()
+            });
+        });
+
+        await Promise.all(updates);
+
+        const tourneyRef = doc(db, 'tournaments', tournamentId);
+        await updateDoc(tourneyRef, {
+            matches: deleteField(),
+            hasMigratedMatches: true,
+            updatedAt: serverTimestamp()
+        });
+
+        console.log(`[Migration] Finished migration for tournament ${tournamentId}`);
     },
 
     // Gastos (Nuevo módulo solicitado)

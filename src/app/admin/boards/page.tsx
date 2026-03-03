@@ -20,6 +20,10 @@ import {
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/AuthContext';
+import { useEffect } from 'react';
+import { Loader2 } from 'lucide-react';
 
 const COMPLEXES = [
     { name: 'Margarita Padel', courts: 6 },
@@ -33,8 +37,25 @@ const COMPLEXES = [
 ];
 
 export default function BoardsModulePage() {
+    const { isAdmin, loading: authLoading } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (!authLoading && !isAdmin) {
+            router.push('/');
+        }
+    }, [isAdmin, authLoading, router]);
+
     const [selectedComplex, setSelectedComplex] = useState(COMPLEXES[0]);
     const [searchQuery, setSearchQuery] = useState('');
+
+    if (authLoading || !isAdmin) {
+        return (
+            <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+                <Loader2 className="w-10 h-10 text-padel-primary animate-spin" />
+            </div>
+        );
+    }
 
     const filteredComplexes = COMPLEXES.filter(c =>
         c.name.toLowerCase().includes(searchQuery.toLowerCase())

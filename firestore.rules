@@ -2,10 +2,115 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // ==========================================
+    // HELPER FUNCTIONS
+    // ==========================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && getUserData().role == 'admin';
+    }
 
-    // Reglas para desarrollo local: permitir lectura y escritura en todas las colecciones
+    function isMarker() {
+      return isAuthenticated() && getUserData().role == 'marker';
+    }
+    
+    function isTournamentOwner(tournamentData) {
+      return isAuthenticated() && (
+        request.auth.uid == tournamentData.ownerId || 
+        request.auth.uid == tournamentData.createdBy ||
+        (tournamentData.owners != null && (
+          request.auth.uid in tournamentData.owners || 
+          request.auth.token.email in tournamentData.owners
+        ))
+      );
+    }
+
+    // ==========================================
+    // COLLECTIONS
+    // ==========================================
+
+    // User Profiles: Private by default
+    match /users/{userId} {
+      // Users can see their own profile, Admins and Markers can see others
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || isMarker());
+      allow create: if isAuthenticated() && request.auth.uid == userId && 
+        (!request.resource.data.keys().hasAny(['role', 'markerCanchas']) || isAdmin());
+      allow update: if isAdmin() || (
+        isAuthenticated() && 
+        request.auth.uid == userId && 
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'markerCanchas']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Tournaments: Public read, restricted write
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin() || isTournamentOwner(resource.data);
+
+      match /matches/{matchId} {
+        allow read: if true;
+        allow write: if isAdmin() || isTournamentOwner(get(/databases/$(database)/documents/tournaments/$(tournamentId)).data) || isMarker();
+      }
+    }
+
+    match /groups/{groupId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /participants/{participantId} {
+      allow read: if true; 
+      allow write: if isAdmin() || (isAuthenticated() && (resource.data == null || (resource.data.ownerId == request.auth.uid)));
+    }
+
+    // Inscriptions: Normal users can only create 'pending' and not modify paymentStatus
+    match /inscriptions/{inscriptionId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && (
+        isAdmin() || (
+          (!request.resource.data.keys().hasAny(['paymentStatus']) || request.resource.data.paymentStatus == 'pending')
+        )
+      );
+      allow update: if isAdmin() || (
+        isAuthenticated() && 
+        (resource.data.ownerId == request.auth.uid || resource.data.userId == request.auth.uid) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['paymentStatus', 'amountExtracted']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Financial Data: Strict access by ownerId
+    match /expenses/{expenseId} {
+      allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.ownerId);
+      allow write: if isAdmin() || (isAuthenticated() && (request.resource.data.ownerId == request.auth.uid || resource.data.ownerId == request.auth.uid));
+    }
+
+    // Public Assets
+    match /ads/{adId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // System Settings
+    match /admin/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Global Catch-all: Admins only
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if isAdmin();
     }
   }
 }

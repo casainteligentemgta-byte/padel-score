@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import {
@@ -22,7 +22,7 @@ import { formatDNI } from '@/lib/formatters';
 
 import Sidebar from '@/components/Sidebar';
 
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 function PlayersListContent() {
     const { user, loading: authLoading, isAdmin } = useAuth();
@@ -32,6 +32,10 @@ function PlayersListContent() {
     const [editingPlayer, setEditingPlayer] = useState<any>(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [isCameraOpen, setIsCameraOpen] = useState(false);
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+    const streamRef = useRef<MediaStream | null>(null);
+    const router = useRouter();
     const searchParams = useSearchParams();
     const editId = searchParams.get('edit');
 
@@ -81,20 +85,70 @@ function PlayersListContent() {
         setIsEditModalOpen(true);
     };
 
+    const closeCamera = () => {
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+        }
+        if (videoRef.current) {
+            videoRef.current.srcObject = null;
+        }
+        setIsCameraOpen(false);
+    };
+
     const handleUpdate = async () => {
         if (!editingPlayer) return;
         setSaving(true);
         try {
             await dataService.updateParticipant(editingPlayer.id, editingPlayer);
             setPlayers(players.map(p => p.id === editingPlayer.id ? editingPlayer : p));
+            closeCamera();
             setIsEditModalOpen(false);
             setEditingPlayer(null);
+            // limpiar query ?edit= para que no se reabra el modal
+            router.replace('/players');
         } catch (error) {
             console.error(error);
             alert('Error al actualizar el perfil');
         } finally {
             setSaving(false);
         }
+    };
+
+    const openCamera = async () => {
+        if (isCameraOpen) return;
+        try {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert('La cámara no es compatible en este navegador.');
+                return;
+            }
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                await videoRef.current.play();
+            }
+            streamRef.current = stream;
+            setIsCameraOpen(true);
+        } catch (error) {
+            console.error(error);
+            alert('No se pudo acceder a la cámara.');
+        }
+    };
+
+    const takePhoto = () => {
+        if (!videoRef.current || !editingPlayer) return;
+        const video = videoRef.current;
+        const canvas = document.createElement('canvas');
+        const width = video.videoWidth || 320;
+        const height = video.videoHeight || 320;
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(video, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg');
+        setEditingPlayer({ ...editingPlayer, photo: dataUrl });
+        closeCamera();
     };
 
     const filteredPlayers = players.filter(p =>
@@ -239,34 +293,97 @@ function PlayersListContent() {
                                     </div>
                                     <h2 className="text-xl font-black italic uppercase tracking-tighter">Editar Perfil</h2>
                                 </div>
-                                <button onClick={() => setIsEditModalOpen(false)} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
+                                <button
+                                    onClick={() => {
+                                        closeCamera();
+                                        setIsEditModalOpen(false);
+                                        setEditingPlayer(null);
+                                        router.replace('/players');
+                                    }}
+                                    className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
+                                >
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-                                {/* Foto Section */}
-                                <div className="flex justify-center">
-                                    <div className="relative group">
+                                {/* Foto */}
+                                <div className="flex flex-col items-center gap-3">
+                                    <label className="relative group cursor-pointer block">
                                         <div className="w-24 h-24 rounded-full bg-white/5 border-4 border-white/5 overflow-hidden">
                                             {editingPlayer.photo ? (
-                                                <img src={editingPlayer.photo} className="w-full h-full object-cover" />
+                                                <img src={editingPlayer.photo} className="w-full h-full object-cover" alt="" />
                                             ) : (
                                                 <Users className="w-10 h-10 text-gray-700 m-auto mt-6" />
                                             )}
                                         </div>
-                                        <button className="absolute bottom-0 right-0 w-8 h-8 bg-padel-primary rounded-full flex items-center justify-center text-black shadow-lg border-2 border-[#0f0f0f]">
+                                        <span className="absolute bottom-0 right-0 w-8 h-8 bg-padel-primary rounded-full flex items-center justify-center text-black shadow-lg border-2 border-[#0f0f0f]">
                                             <Camera className="w-4 h-4" />
+                                        </span>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={e => {
+                                                const file = e.target.files?.[0];
+                                                if (file) {
+                                                    const reader = new FileReader();
+                                                    reader.onloadend = () => setEditingPlayer({ ...editingPlayer, photo: reader.result as string });
+                                                    reader.readAsDataURL(file);
+                                                }
+                                            }}
+                                        />
+                                    </label>
+
+                                    {!isCameraOpen && (
+                                        <button
+                                            type="button"
+                                            onClick={openCamera}
+                                            className="px-4 py-2 rounded-2xl border border-padel-primary/40 bg-padel-primary/10 text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-padel-primary hover:text-black transition-colors"
+                                        >
+                                            <Camera className="w-4 h-4" />
+                                            Usar cámara
                                         </button>
-                                    </div>
+                                    )}
+
+                                    {isCameraOpen && (
+                                        <div className="w-full max-w-xs space-y-3">
+                                            <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black">
+                                                <video
+                                                    ref={videoRef}
+                                                    className="w-full h-48 object-cover"
+                                                    autoPlay
+                                                    muted
+                                                    playsInline
+                                                />
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={takePhoto}
+                                                    className="flex-1 px-4 py-2 rounded-2xl bg-padel-primary text-black text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-colors"
+                                                >
+                                                    Disparar foto
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={closeCamera}
+                                                    className="flex-1 px-4 py-2 rounded-2xl border border-white/20 bg-white/5 text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-colors"
+                                                >
+                                                    Cerrar cámara
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
+                                <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest border-b border-white/10 pb-2">Datos personales</p>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Nombre</label>
                                         <input
                                             type="text"
-                                            value={editingPlayer.name}
+                                            value={editingPlayer.name || ''}
                                             onChange={e => setEditingPlayer({ ...editingPlayer, name: e.target.value })}
                                             className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all"
                                         />
@@ -275,12 +392,12 @@ function PlayersListContent() {
                                         <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Apellido</label>
                                         <input
                                             type="text"
-                                            value={editingPlayer.lastName}
+                                            value={editingPlayer.lastName || ''}
                                             onChange={e => setEditingPlayer({ ...editingPlayer, lastName: e.target.value })}
                                             className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all"
                                         />
                                     </div>
-                                    <div className="space-y-1.5">
+                                    <div className="space-y-1.5 col-span-2">
                                         <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Cédula / DNI</label>
                                         <input
                                             type="text"
@@ -289,14 +406,20 @@ function PlayersListContent() {
                                             className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all"
                                         />
                                     </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Fecha de nacimiento</label>
+                                        <input
+                                            type="date"
+                                            value={editingPlayer.birthDate || ''}
+                                            onChange={e => setEditingPlayer({ ...editingPlayer, birthDate: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all [color-scheme:dark]"
+                                        />
+                                    </div>
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Nivel (1-7)</label>
                                         <select
-                                            value={editingPlayer.level || '4'}
-                                            onChange={e => setEditingPlayer({ ...editingPlayer, level: e.target.value })}
+                                            value={editingPlayer.level ?? 4}
+                                            onChange={e => setEditingPlayer({ ...editingPlayer, level: Number(e.target.value) })}
                                             className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all appearance-none"
                                         >
                                             {[1, 2, 3, 4, 5, 6, 7].map(l => <option key={l} value={l} className="bg-[#0f0f0f]">Nivel {l}</option>)}
@@ -314,31 +437,115 @@ function PlayersListContent() {
                                     </div>
                                 </div>
 
-                                <div className="space-y-1.5">
-                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Instagram (@usuario)</label>
-                                    <input
-                                        type="text"
-                                        placeholder="@pablomanuel"
-                                        value={editingPlayer.instagram || ''}
-                                        onChange={e => setEditingPlayer({ ...editingPlayer, instagram: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all"
-                                    />
+                                <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest border-b border-white/10 pb-2 pt-2">Contacto</p>
+                                <div className="space-y-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Email</label>
+                                        <input
+                                            type="email"
+                                            value={editingPlayer.email || ''}
+                                            onChange={e => setEditingPlayer({ ...editingPlayer, email: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Teléfono</label>
+                                        <input
+                                            type="text"
+                                            value={editingPlayer.phone || ''}
+                                            onChange={e => setEditingPlayer({ ...editingPlayer, phone: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Instagram (@usuario)</label>
+                                        <input
+                                            type="text"
+                                            placeholder="@usuario"
+                                            value={editingPlayer.instagram || ''}
+                                            onChange={e => setEditingPlayer({ ...editingPlayer, instagram: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all"
+                                        />
+                                    </div>
                                 </div>
 
-                                <div className="space-y-1.5">
-                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Teléfono</label>
-                                    <input
-                                        type="text"
-                                        value={editingPlayer.phone || ''}
-                                        onChange={e => setEditingPlayer({ ...editingPlayer, phone: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all"
-                                    />
+                                <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest border-b border-white/10 pb-2 pt-2">Tallas</p>
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Franela</label>
+                                        <select
+                                            value={editingPlayer.suitSize || 'M'}
+                                            onChange={e => setEditingPlayer({ ...editingPlayer, suitSize: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all appearance-none"
+                                        >
+                                            {['S', 'M', 'L', 'XL', 'XXL'].map(s => <option key={s} value={s} className="bg-[#0f0f0f]">{s}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Short</label>
+                                        <select
+                                            value={editingPlayer.shortSize || 'M'}
+                                            onChange={e => setEditingPlayer({ ...editingPlayer, shortSize: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all appearance-none"
+                                        >
+                                            {['S', 'M', 'L', 'XL', 'XXL'].map(s => <option key={s} value={s} className="bg-[#0f0f0f]">{s}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Calzado</label>
+                                        <input
+                                            type="text"
+                                            placeholder="40"
+                                            value={editingPlayer.shoeSize || ''}
+                                            onChange={e => setEditingPlayer({ ...editingPlayer, shoeSize: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all"
+                                        />
+                                    </div>
+                                </div>
+
+                                <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest border-b border-white/10 pb-2 pt-2">Salud</p>
+                                <div className="space-y-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Tipo de sangre</label>
+                                        <select
+                                            value={editingPlayer.bloodType || 'O+'}
+                                            onChange={e => setEditingPlayer({ ...editingPlayer, bloodType: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all appearance-none"
+                                        >
+                                            {['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map(b => <option key={b} value={b} className="bg-[#0f0f0f]">{b}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Alergias</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Ninguna o describir"
+                                            value={editingPlayer.allergies || ''}
+                                            onChange={e => setEditingPlayer({ ...editingPlayer, allergies: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Condiciones médicas</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Ninguna o describir"
+                                            value={editingPlayer.medicalConditions || ''}
+                                            onChange={e => setEditingPlayer({ ...editingPlayer, medicalConditions: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-padel-primary transition-all"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
                             <div className="p-6 bg-white/[0.02] border-t border-white/10 flex gap-4">
                                 <button
-                                    onClick={() => setIsEditModalOpen(false)}
+                                    onClick={() => {
+                                        closeCamera();
+                                        setIsEditModalOpen(false);
+                                        setEditingPlayer(null);
+                                        router.replace('/players');
+                                    }}
                                     className="flex-1 py-4 rounded-2xl border border-white/10 font-black uppercase text-[10px] tracking-widest hover:bg-white/5 transition-colors"
                                 >
                                     Cancelar
