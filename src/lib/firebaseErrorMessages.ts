@@ -3,10 +3,9 @@ const ERROR_MESSAGES: Record<string, string> = {
     'El método de inicio de sesión no está habilitado. Actívalo en Firebase → Authentication → Sign-in method.',
   'auth/configuration-not-found':
     'El servicio de Autenticación no está activado. Revísalo en Firebase Console → Authentication.',
-  'auth/user-not-found':
-  'auth/wrong-password':
-  'auth/invalid-credential':
-    'Credenciales incorrectas (Email o contraseña).',
+  'auth/user-not-found': 'Credenciales incorrectas (Email o contraseña).',
+  'auth/wrong-password': 'Credenciales incorrectas (Email o contraseña).',
+  'auth/invalid-credential': 'Credenciales incorrectas (Email o contraseña).',
   'auth/email-already-in-use': 'Este email ya está registrado.',
   'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
   'auth/unauthorized-domain':
