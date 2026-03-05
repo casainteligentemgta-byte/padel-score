@@ -2012,6 +2012,7 @@ export default function MasterGeneratorPage() {
                                     </button>
                                 )}
                             </div>
+                        </div>
                     </main>
                 </div>
             </div>
