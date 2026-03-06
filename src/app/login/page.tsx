@@ -11,7 +11,9 @@ import {
     CheckCircle2,
     RefreshCw,
     ChevronRight,
-    Zap
+    Zap,
+    Eye,
+    EyeOff
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { isValidEmail, isValidPassword } from '@/lib/authValidators';
@@ -26,6 +28,7 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
 
     const [formData, setFormData] = useState({
         email: '',
@@ -207,12 +210,21 @@ export default function LoginPage() {
                                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-padel-primary transition-colors" />
                                 <input
                                     required
-                                    type="password"
+                                    type={showPassword ? 'text' : 'password'}
                                     placeholder="CONTRASEÑA"
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-6 py-4 text-sm outline-none focus:border-padel-primary/40 transition-all font-bold text-white placeholder:text-gray-700 tracking-[0.3em]"
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-12 py-4 text-sm outline-none focus:border-padel-primary/40 transition-all font-bold text-white placeholder:text-gray-700 tracking-[0.3em]"
                                     value={formData.password}
                                     onChange={e => setFormData({ ...formData, password: e.target.value })}
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(p => !p)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-padel-primary transition-colors"
+                                    title={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                                    aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                                >
+                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
                             </div>
                         </div>
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { collection, getDocs } from 'firebase/firestore';
-import { requireAuth } from '@/lib/authServer';
+import { requireAuth } from '@/lib/authServerSupabase';
 
 export async function GET(req: Request) {
     const authResult = await requireAuth(req);

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { TournamentType, TournamentCategory } from '@/types/tournament';
-import { requireAuth } from '@/lib/authServer';
+import { requireAuth } from '@/lib/authServerSupabase';
 import { validateTournamentBody } from '@/lib/apiValidation';
 
 export async function POST(req: Request) {

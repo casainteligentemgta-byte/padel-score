@@ -209,7 +209,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setProfile(null);
     };
 
-    const isAdmin = profile?.role === ROLES.ADMIN || user?.email === 'casainteligentemgta@gmail.com' || process.env.NODE_ENV === 'development';
+    const isAdmin = profile?.role === ROLES.ADMIN;
     const isPlayer = profile?.role === ROLES.PLAYER;
     const isMarker = profile?.role === ROLES.MARKER;
     const markerCanchas: string[] = isMarker && Array.isArray(profile?.markerCanchas) ? profile.markerCanchas : [];

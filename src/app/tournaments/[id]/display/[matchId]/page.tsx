@@ -11,6 +11,77 @@ import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
 import { Trophy, Star, Megaphone, Thermometer, Clock } from 'lucide-react';
 
+// ── Reloj: actualización cada segundo solo en estos componentes (evita re-render de toda la pizarra) ──
+function DisplayClockTime({ className }: { className?: string }) {
+    const [time, setTime] = useState('');
+    useEffect(() => {
+        const update = () => setTime(new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }));
+        update();
+        const id = setInterval(update, 1000);
+        return () => clearInterval(id);
+    }, []);
+    return <span className={className}>{time}</span>;
+}
+function DisplayClockDate({ className }: { className?: string }) {
+    const [date, setDate] = useState('');
+    useEffect(() => {
+        const update = () => setDate(new Date().toLocaleDateString('es-VE', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase());
+        update();
+        const id = setInterval(update, 1000);
+        return () => clearInterval(id);
+    }, []);
+    return <span className={className}>{date}</span>;
+}
+
+// ── Cronómetro de partido: actualización cada segundo solo aquí (evita parpadeo de la pizarra) ──
+function MatchDurationCounter({
+    isLive,
+    startTimeMs,
+    primaryColor,
+    cronometroTipo,
+    showInPill,
+}: {
+    isLive: boolean;
+    startTimeMs: number | null;
+    primaryColor: string;
+    cronometroTipo: string;
+    showInPill?: boolean;
+}) {
+    const [duration, setDuration] = useState('');
+    useEffect(() => {
+        if (!isLive || startTimeMs == null) {
+            setDuration('');
+            return;
+        }
+        const update = () => {
+            const elapsedSec = Math.max(0, Math.floor((Date.now() - startTimeMs) / 1000));
+            const h = Math.floor(elapsedSec / 3600);
+            const m = Math.floor((elapsedSec % 3600) / 60);
+            const s = elapsedSec % 60;
+            setDuration(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+        };
+        update();
+        const id = setInterval(update, 1000);
+        return () => clearInterval(id);
+    }, [isLive, startTimeMs]);
+    if (!duration) return null;
+    if (showInPill)
+        return (
+            <span
+                className={cronometroTipo === 'minimal' ? 'text-white/90 text-[0.6em]' : cronometroTipo === 'broadcast' ? 'text-padel-primary drop-shadow-[0_0_8px_rgba(204,255,0,0.4)]' : cronometroTipo === 'digital' ? 'text-cyan-400 font-mono tabular-nums' : 'text-padel-primary'}
+                style={{ fontSize: 'clamp(6px,0.65vw,10px)' }}
+            >
+                {duration}
+            </span>
+        );
+    return (
+        <>
+            <span className="font-bold uppercase text-white/50 tracking-[0.35em] leading-none" style={{ fontSize: 'clamp(6px,0.7vw,11px)' }}>Tiempo de juego</span>
+            <span className="font-black italic tracking-tighter leading-none mt-0.5 tabular-nums" style={{ fontSize: 'clamp(24px,3.2vw,56px)', color: primaryColor }}>{duration}</span>
+        </>
+    );
+}
+
 export default function FullScreenDisplay({ params }: { params: Promise<{ id: string, matchId: string }> }) {
     const { id, matchId } = use(params);
     const [tournament, setTournament] = useState<any>(null);
@@ -20,7 +91,6 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const [mode, setMode] = useState<'score' | 'ad'>('score');
     const [currentAdIdx, setCurrentAdIdx] = useState(0);
     const [recentResults, setRecentResults] = useState<any[]>([]);
-    const [clock, setClock] = useState<{ date: string; time: string }>({ date: '', time: '' });
     const [temp, setTemp] = useState<number | null>(null);
     const prevScore = useRef<string>('');
     const adBanner = useAdBanner();
@@ -31,7 +101,6 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     // ── Marcador en vivo del RTDB (escrito por el marker en tiempo real) ─────
     const [liveMarcador, setLiveMarcador] = useState<any>(null);
     const [sponsorIdx, setSponsorIdx] = useState(0);
-    const [matchDuration, setMatchDuration] = useState<string>('');
 
     // Ticker desde RTDB (tiempo real, configurable desde panel publicidad)
     const [tickerTexto, setTickerTexto] = useState('');
@@ -115,19 +184,6 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return () => clearInterval(id);
     }, [carouselImages.length, carouselInterval]);
 
-    // Clock — updates every second
-    useEffect(() => {
-        const update = () => {
-            const now = new Date();
-            const date = now.toLocaleDateString('es-VE', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase();
-            const time = now.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
-            setClock({ date, time });
-        };
-        update();
-        const id = setInterval(update, 1000);
-        return () => clearInterval(id);
-    }, []);
-
     // Sponsors Cycle
     useEffect(() => {
         const sponsors = tournament?.broadcastingSettings?.sponsors?.filter((s: any) => s.active) || [];
@@ -148,30 +204,6 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         const d = new Date(raw);
         return isNaN(d.getTime()) ? null : d.getTime();
     };
-
-    // Match Duration Counter — duración transcurrida desde startedAt (actualización cada segundo)
-    useEffect(() => {
-        const isLive = match?.status === MatchStatus.LIVE || match?.status === 'live' || match?.status === MatchStatus.PAUSED || match?.status === 'PAUSED';
-        if (!isLive) {
-            setMatchDuration('');
-            return;
-        }
-        const startMs = getMatchStartTimeMs(match);
-        if (startMs == null) {
-            setMatchDuration('');
-            return;
-        }
-        const update = () => {
-            const elapsedSec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
-            const h = Math.floor(elapsedSec / 3600);
-            const m = Math.floor((elapsedSec % 3600) / 60);
-            const s = elapsedSec % 60;
-            setMatchDuration(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
-        };
-        update();
-        const id = setInterval(update, 1000);
-        return () => clearInterval(id);
-    }, [match?.status, match?.startedAt, match?.actualStartTime, match?.startTime, liveMarcador?.match_start_time]);
 
     // Temperature (Open-Meteo) — Isla de Margarita
 
@@ -380,9 +412,25 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return () => clearInterval(interval);
     }, [adFreq, adDur, adMedia.length]);
 
-    if (loading || !match) return (
+    if (loading) return (
         <div className="h-screen bg-black flex items-center justify-center">
             <div className="w-12 h-12 border-4 border-padel-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+    );
+
+    if (!match) return (
+        <div className="h-screen bg-[#050505] flex flex-col items-center justify-center p-8 text-center">
+            <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6">
+                <Trophy className="w-10 h-10 text-gray-600" />
+            </div>
+            <h1 className="text-2xl font-black italic uppercase text-white mb-2">Partido no encontrado</h1>
+            <p className="text-gray-400 max-w-md">No hemos podido encontrar la información de este partido. Por favor, verifica el enlace o vuelve al panel del torneo.</p>
+            <button
+                onClick={() => window.location.href = `/tournaments/${id}`}
+                className="mt-8 px-8 py-3 bg-white text-black rounded-xl font-black italic uppercase tracking-widest text-xs hover:scale-105 transition-all"
+            >
+                Volver al Torneo
+            </button>
         </div>
     );
 
@@ -500,6 +548,9 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
     })();
 
+    const isLiveForDuration = match?.status === MatchStatus.LIVE || match?.status === 'live' || match?.status === MatchStatus.PAUSED || match?.status === 'PAUSED';
+    const matchStartTimeMs = getMatchStartTimeMs(match);
+
     const relojTheme = relojOcasion || 'default';
 
     return (
@@ -574,11 +625,8 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
 
                             {/* Center: Tiempo del partido — duración en vivo (cronómetro) o hora programada */}
                             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center">
-                                {matchDuration ? (
-                                    <>
-                                        <span className="font-bold uppercase text-white/50 tracking-[0.35em] leading-none" style={{ fontSize: 'clamp(6px,0.7vw,11px)' }}>Tiempo de juego</span>
-                                        <span className="font-black italic tracking-tighter leading-none mt-0.5 tabular-nums" style={{ fontSize: 'clamp(24px,3.2vw,56px)', color: primaryColor }}>{matchDuration}</span>
-                                    </>
+                                {isLiveForDuration && matchStartTimeMs != null ? (
+                                    <MatchDurationCounter isLive={isLiveForDuration} startTimeMs={matchStartTimeMs} primaryColor={primaryColor} cronometroTipo={cronometroTipo} />
                                 ) : matchTimeDisplay ? (
                                     <>
                                         <span className="font-bold uppercase text-white/50 tracking-[0.35em] leading-none" style={{ fontSize: 'clamp(6px,0.7vw,11px)' }}>Partido</span>
@@ -644,21 +692,13 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 {/* Luego hora y fecha */}
                                 <div className="flex flex-col items-center justify-center relative z-10"
                                     style={{ padding: 'clamp(5px,0.9vh,12px) clamp(14px,1.8vw,28px)', gap: 'clamp(1px,0.2vh,3px)' }}>
-                                    <span className={`font-black italic tracking-tighter leading-none ${tournament?.broadcastingSettings?.clockStyle === 'broadcast' ? 'text-padel-primary' : 'text-white'}`}
-                                        style={{ fontSize: 'clamp(16px,2.2vw,36px)' }}>{clock.time}</span>
+                                    <DisplayClockTime className={`font-black italic tracking-tighter leading-none ${tournament?.broadcastingSettings?.clockStyle === 'broadcast' ? 'text-padel-primary' : 'text-white'}`} style={{ fontSize: 'clamp(16px,2.2vw,36px)' }} />
                                     <div className="flex items-center gap-2">
-                                        <span className="font-bold uppercase text-gray-500 tracking-widest leading-none"
-                                            style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>{clock.date}</span>
-                                        {matchDuration && (
+                                        <DisplayClockDate className="font-bold uppercase text-gray-500 tracking-widest leading-none" style={{ fontSize: 'clamp(5px,0.55vw,9px)' }} />
+                                        {isLiveForDuration && matchStartTimeMs != null && (
                                             <>
                                                 <div className="w-1 h-1 bg-gray-700 rounded-full" />
-                                                <span
-                                                    className={`font-black italic uppercase tracking-widest leading-none ${cronometroTipo === 'minimal' ? 'text-white/90 text-[0.6em]' :
-                                                        cronometroTipo === 'broadcast' ? 'text-padel-primary drop-shadow-[0_0_8px_rgba(204,255,0,0.4)]' :
-                                                            cronometroTipo === 'digital' ? 'text-cyan-400 font-mono tabular-nums' : 'text-padel-primary'
-                                                        }`}
-                                                    style={{ fontSize: 'clamp(6px,0.65vw,10px)' }}
-                                                >{matchDuration}</span>
+                                                <MatchDurationCounter isLive={isLiveForDuration} startTimeMs={matchStartTimeMs} primaryColor={primaryColor} cronometroTipo={cronometroTipo} showInPill />
                                             </>
                                         )}
                                     </div>

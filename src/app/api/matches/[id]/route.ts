@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { MatchStatus } from '@/types/tournament';
-import { requireRole } from '@/lib/authServer';
+import { requireRole } from '@/lib/authServerSupabase';
 import { validateMatchBody, validateMatchId } from '@/lib/apiValidation';
 
 export async function PATCH(

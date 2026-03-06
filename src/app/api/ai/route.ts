@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/authServer';
+import { requireAuth } from '@/lib/authServerSupabase';
 import { validateAiBody } from '@/lib/apiValidation';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { buildSystemPrompt } from '@/lib/padelKnowledge';
