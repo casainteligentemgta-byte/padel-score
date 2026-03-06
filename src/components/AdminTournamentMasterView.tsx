@@ -21,8 +21,7 @@ import {
     ShieldAlert
 } from 'lucide-react';
 import { MatchStatus, TournamentType } from '@/types/tournament';
-import { db } from '@/lib/firebase';
-import { doc, updateDoc, onSnapshot, collection } from 'firebase/firestore';
+import { dataService } from '@/lib/dataService';
 import Link from 'next/link';
 
 interface AdminTournamentMasterViewProps {
@@ -80,56 +79,63 @@ export default function AdminTournamentMasterView({ tournamentId, isAdmin }: Adm
     useEffect(() => {
         if (!tournamentId) return;
 
-        const docRef = doc(db, 'tournaments', tournamentId);
+        // Load initially
+        const loadInitial = async () => {
+            try {
+                const tourney = await dataService.getTournament(tournamentId);
+                if (tourney) setTournament(tourney);
+
+                const mList = await dataService.getMatches(tournamentId);
+                setMatches(mList);
+            } catch (err) {
+                console.error("Error loading tournament data in Admin Master View:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadInitial();
 
         // 1. Suscripción al Torneo
-        const unsubTourney = onSnapshot(docRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const tourneyData = { id: docSnap.id, ...docSnap.data() } as any;
-                setTournament(tourneyData);
-            }
+        const tourneyChannel = dataService.subscribeToTournament(tournamentId, (tourney) => {
+            setTournament(tourney);
         });
 
         // 2. Suscripción a Partidos
-        const matchesRef = collection(db, 'tournaments', tournamentId, 'matches');
-        const unsubMatches = onSnapshot(matchesRef, (snap) => {
-            if (tournament) { // Necesitamos los teams del torneo para enriquecer
-                const enriched = snap.docs.map(d => {
-                    const m = { id: d.id, ...d.data() } as any;
-                    const t1 = (m.team1Index > 0 && tournament.teams) ? tournament.teams[m.team1Index - 1] : null;
-                    const t2 = (m.team2Index > 0 && tournament.teams) ? tournament.teams[m.team2Index - 1] : null;
-
-                    return {
-                        ...m,
-                        court: m.court || (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined),
-                        playerNames: {
-                            team1: t1 ? `${t1.p1?.name || 'J1'} / ${t1.p2?.name || 'J2'}` : (m.team1?.teamLabel || 'Por definir'),
-                            team2: t2 ? `${t2.p1?.name || 'J1'} / ${t2.p2?.name || 'J2'}` : (m.team2?.teamLabel || 'Por definir')
-                        }
-                    };
-                });
-                setMatches(enriched);
-            } else {
-                // Si aún no tenemos el torneo, guardamos los datos brutos temporalmente
-                setMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-            }
-            setLoading(false);
+        const matchesChannel = dataService.subscribeToMatches(tournamentId, (mList) => {
+            // Need latest tournament teams for enrichment
+            // We use the local 'tournament' variable but it might be stale in this closure
+            // Better to handle enrichment in the render or a separate useEffect
+            setMatches(mList);
         });
 
         return () => {
-            unsubTourney();
-            unsubMatches();
+            tourneyChannel();
+            matchesChannel();
         };
-    }, [tournamentId, tournament?.teams]); // Re-ejecutar si los equipos cambian
+    }, [tournamentId]);
+
+    // Derived state: enriched matches
+    const enrichedMatches = matches.map(m => {
+        const t1 = (m.team1Index > 0 && tournament?.teams) ? tournament.teams[m.team1Index - 1] : null;
+        const t2 = (m.team2Index > 0 && tournament?.teams) ? tournament.teams[m.team2Index - 1] : null;
+
+        return {
+            ...m,
+            court: m.court || (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined),
+            playerNames: {
+                team1: t1 ? `${t1.p1?.name || 'J1'} / ${t1.p2?.name || 'J2'}` : (m.team1?.teamLabel || (m.team1Name || 'Por definir')),
+                team2: t2 ? `${t2.p1?.name || 'J1'} / ${t2.p2?.name || 'J2'}` : (m.team2?.teamLabel || (m.team2Name || 'Por definir'))
+            }
+        };
+    });
 
     const toggleAds = async (matchId: string, currentStatus: boolean) => {
-        const matchRef = doc(db, 'tournaments', tournamentId, 'matches', matchId);
-        await updateDoc(matchRef, { forcedAds: !currentStatus });
+        await dataService.updateMatch(tournamentId, matchId, { forcedAds: !currentStatus });
     };
 
     const toggleRefereeCall = async (matchId: string, currentStatus: boolean) => {
-        const matchRef = doc(db, 'tournaments', tournamentId, 'matches', matchId);
-        await updateDoc(matchRef, { needsReferee: !currentStatus });
+        await dataService.updateMatch(tournamentId, matchId, { needsReferee: !currentStatus });
     };
 
     if (!isAdmin) {
@@ -151,9 +157,9 @@ export default function AdminTournamentMasterView({ tournamentId, isAdmin }: Adm
     );
 
     // Stats calculations
-    const activeMatches = matches.filter(m => m.status === MatchStatus.LIVE);
-    const finishedMatches = matches.filter(m => m.status === MatchStatus.FINISHED);
-    const pendingMatches = matches.filter(m => m.status === MatchStatus.PENDING);
+    const activeMatches = enrichedMatches.filter(m => m.status === MatchStatus.LIVE);
+    const finishedMatches = enrichedMatches.filter(m => m.status === MatchStatus.FINISHED);
+    const pendingMatches = enrichedMatches.filter(m => m.status === MatchStatus.PENDING);
     const upcomingMatches = pendingMatches.slice(0, 5);
 
     return (

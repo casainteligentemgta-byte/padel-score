@@ -101,8 +101,8 @@ export interface Match {
     courtIndex?: number;
     team1Id?: string;
     team2Id?: string;
-    team1Index: number; // 1-based
-    team2Index: number; // 1-based
+    team1Index?: number; // 1-based, opcional si no se ha asignado parejai (knockout)
+    team2Index?: number; // 1-based
     scheduledTime: string | Date;
     actualStartTime?: Date;
     actualEndTime?: Date;

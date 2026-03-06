@@ -23,11 +23,10 @@ import {
     ZapOff
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { db } from '@/lib/firebase';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { ref, onValue, off } from 'firebase/database';
 import { rtdb } from '@/lib/rtdb';
 import { dispararAnimacionMarcador } from '@/lib/rtdbService';
+import { dataService } from '@/lib/dataService';
 import { MatchStatus } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
 import RefereeRemoteControl from '@/components/RefereeRemoteControl';
@@ -91,26 +90,18 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         }
 
         if (!tournament || !match) return;
-        const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === match.id ? {
-                ...m,
-                status: MatchStatus.FINISHED,
-                finishedAt: new Date().toISOString()
-            } : m
-        );
-        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+        await dataService.updateMatch(id, match.id, {
+            status: MatchStatus.FINISHED,
+            finishedAt: new Date().toISOString()
+        });
         router.push(`/tournaments/${id}?tab=live`);
     };
 
     const updateManualScore = async (side: 't1' | 't2', field: 'games' | 'sets' | 'points', value: any) => {
         if (!tournament || !match) return;
-        const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === match.id ? {
-                ...m,
-                [field]: { ...m[field], [side]: field === 'points' ? value : Math.max(0, value) }
-            } : m
-        );
-        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+        await dataService.updateMatch(id, match.id, {
+            [field]: { ...match[field], [side]: field === 'points' ? value : Math.max(0, value) }
+        });
     };
 
 
@@ -178,16 +169,21 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         const realId = match.id;
         const courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
         const c = courtNum(match);
-        const otherLiveOnCourt = tournament.matches.some((m: any) => m.id !== realId && m.status === MatchStatus.LIVE && courtNum(m) === c);
+
+        // Fetch current matches to check court availability
+        const currentMatches = await dataService.getMatches(id);
+        const otherLiveOnCourt = currentMatches.some((m: any) => m.id !== realId && m.status === MatchStatus.LIVE && courtNum(m) === c);
+
         if (otherLiveOnCourt) {
             alert(`No puede haber dos partidos en vivo en la misma pista. Ya hay un partido en vivo en la pista ${c}.`);
             return;
         }
         const nowIso = new Date().toISOString();
-        const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === realId ? { ...m, status: MatchStatus.LIVE, startedAt: nowIso, actualStartTime: nowIso } : m
-        );
-        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+        await dataService.updateMatch(id, realId, {
+            status: MatchStatus.LIVE,
+            startedAt: nowIso,
+            actualStartTime: nowIso
+        });
     };
 
     // Medical Timer logic — reinicia en loop hasta que el árbitro pulse Reanudar
@@ -217,109 +213,81 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     useEffect(() => {
         if (!id || authLoading) return;
 
-        const docRef = doc(db, 'tournaments', id);
-        const unsubscribe = onSnapshot(docRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const tourneyData = { id: docSnap.id, ...docSnap.data() } as any;
+        const unsubTournament = dataService.subscribeToTournament(id, (tourneyData) => {
+            if (tourneyData) {
                 setTournament(tourneyData);
+                if (tourneyData.scoringSystem) {
+                    setIsGoldenPoint(tourneyData.scoringSystem === 'GOLDEN_POINT');
+                }
+            }
+        });
 
-                if (tourneyData.matches) {
-                    // Buscar por id exacto primero
-                    let foundMatch = tourneyData.matches.find((m: any) => m.id === matchId);
+        const unsubMatches = dataService.subscribeToMatches(id, (matchesData) => {
+            if (matchesData) {
+                // Find match by id or fallback
+                let foundMatchRaw = matchesData.find((m: any) => m.id === matchId);
 
-                    // Fallback: si no se encontró por id, buscar por court o courtIndex
-                    // (cuando la URL viene como /score/court_1 o /score/1 o /score/match_0)
-                    if (!foundMatch) {
-                        const courtNum = matchId.startsWith('court_')
-                            ? parseInt(matchId.replace('court_', ''))
-                            : matchId.startsWith('match_')
-                                ? parseInt(matchId.replace('match_', '')) + 1 // Asumimos match_0 es el primero
-                                : parseInt(matchId);
+                if (!foundMatchRaw) {
+                    const courtNum = matchId.startsWith('court_')
+                        ? parseInt(matchId.replace('court_', ''))
+                        : matchId.startsWith('match_')
+                            ? parseInt(matchId.replace('match_', '')) + 1
+                            : parseInt(matchId);
 
-                        if (!isNaN(courtNum)) {
-                            foundMatch = tourneyData.matches.find((m: any) =>
-                                m.court === courtNum ||
-                                m.courtIndex === courtNum - 1
-                            ) ?? tourneyData.matches[courtNum - 1] ?? null;
-                        } else {
-                            foundMatch = tourneyData.matches.find((m: any) => m.id === matchId) || null;
-                        }
+                    if (!isNaN(courtNum)) {
+                        foundMatchRaw = matchesData.find((m: any) =>
+                            (m.court || (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined)) === courtNum
+                        ) ?? matchesData[courtNum - 1] ?? null;
+                    } else {
+                        foundMatchRaw = matchesData[0] ?? null;
                     }
+                }
 
-                    // Último fallback: primer partido disponible si sólo hay uno
-                    if (!foundMatch && tourneyData.matches.length === 1) {
-                        foundMatch = tourneyData.matches[0];
-                    }
-                    if (foundMatch) {
-                        // Formato legado: team por índice desde el array teams
-                        const legacyTeam1 = foundMatch.team1Index > 0 ? tourneyData.teams?.[foundMatch.team1Index - 1] : null;
-                        const legacyTeam2 = foundMatch.team2Index > 0 ? tourneyData.teams?.[foundMatch.team2Index - 1] : null;
+                if (foundMatchRaw) {
+                    const foundMatch = {
+                        ...foundMatchRaw,
+                        // Ensure ID is correctly mapped from Supabase if needed
+                        court: foundMatchRaw.court || (foundMatchRaw.courtIndex !== undefined ? foundMatchRaw.courtIndex + 1 : undefined),
+                    };
 
-                        // Formato nuevo: team embebido directamente en el match (p1Name/p2Name)
-                        const embeddedTeam1 = foundMatch.team1 && (foundMatch.team1.p1Name || foundMatch.team1.p1?.name) ? foundMatch.team1 : null;
-                        const embeddedTeam2 = foundMatch.team2 && (foundMatch.team2.p1Name || foundMatch.team2.p1?.name) ? foundMatch.team2 : null;
+                    // Team resolution logic
+                    const tourneyDataForTeams = tournament || {}; // Use current tournament state for legacy teams
+                    const legacyTeam1 = foundMatch.team1Index > 0 ? tourneyDataForTeams.teams?.[foundMatch.team1Index - 1] : null;
+                    const legacyTeam2 = foundMatch.team2Index > 0 ? tourneyDataForTeams.teams?.[foundMatch.team2Index - 1] : null;
 
-                        /**
-                         * Resuelve nombres de jugadores desde cualquier formato:
-                         *  - embeddedTeam: objeto del match con p1Name / p2Name (formato nuevo)
-                         *  - legacyTeam:   objeto del array teams con p1.name / p2.name (formato legacy)
-                         *  - matchItem:    el propio match puede tener team1Name / team2Name como string fallback
-                         */
-                        const resolveNames = (
-                            embeddedTeam: any,
-                            legacyTeam: any,
-                            idx: number,
-                            matchTeamName?: string
-                        ) => {
-                            // 1. Formato nuevo embebido
-                            const p1n =
-                                embeddedTeam?.p1Name?.trim() ||
-                                embeddedTeam?.p1?.name?.trim() ||
-                                legacyTeam?.p1Name?.trim() ||
-                                legacyTeam?.p1?.name?.trim() ||
-                                '';
-                            const p2n =
-                                embeddedTeam?.p2Name?.trim() ||
-                                embeddedTeam?.p2?.name?.trim() ||
-                                legacyTeam?.p2Name?.trim() ||
-                                legacyTeam?.p2?.name?.trim() ||
-                                '';
+                    const embeddedTeam1 = foundMatch.team1 && (foundMatch.team1.p1Name || foundMatch.team1.p1?.name) ? foundMatch.team1 : null;
+                    const embeddedTeam2 = foundMatch.team2 && (foundMatch.team2.p1Name || foundMatch.team2.p1?.name) ? foundMatch.team2 : null;
 
-                            // 2. Fallback: split del nombre compuesto "Jugador1 / Jugador2"
-                            const nameFallback = matchTeamName || embeddedTeam?.name || legacyTeam?.name || '';
-                            const parts = nameFallback.split('/').map((s: string) => s.trim());
+                    const resolveNames = (embeddedTeam: any, legacyTeam: any, idx: number, matchTeamName?: string) => {
+                        const p1n = embeddedTeam?.p1Name?.trim() || embeddedTeam?.p1?.name?.trim() || legacyTeam?.p1Name?.trim() || legacyTeam?.p1?.name?.trim() || '';
+                        const p2n = embeddedTeam?.p2Name?.trim() || embeddedTeam?.p2?.name?.trim() || legacyTeam?.p2Name?.trim() || legacyTeam?.p2?.name?.trim() || '';
+                        const nameFallback = matchTeamName || embeddedTeam?.name || legacyTeam?.name || '';
+                        const parts = nameFallback.split('/').map((s: string) => s.trim());
+                        const p1Final = p1n || parts[0] || (idx > 0 ? `Jugador ${(idx * 2) - 1}` : 'Jugador 1');
+                        const p2Final = p2n || parts[1] || (idx > 0 ? `Jugador ${idx * 2}` : 'Jugador 2');
+                        const p1Photo = embeddedTeam?.p1?.photo || legacyTeam?.p1?.photo || null;
+                        const p2Photo = embeddedTeam?.p2?.photo || legacyTeam?.p2?.photo || null;
+                        return { p1: p1Final, p2: p2Final, full: `${p1Final} / ${p2Final}`, p1Photo, p2Photo };
+                    };
 
-                            const p1Final = p1n || parts[0] || (idx > 0 ? `Jugador ${(idx * 2) - 1}` : 'Jugador 1');
-                            const p2Final = p2n || parts[1] || (idx > 0 ? `Jugador ${idx * 2}` : 'Jugador 2');
+                    const t1 = resolveNames(embeddedTeam1, legacyTeam1, foundMatch.team1Index ?? 0, foundMatch.team1Name);
+                    const t2 = resolveNames(embeddedTeam2, legacyTeam2, foundMatch.team2Index ?? 0, foundMatch.team2Name);
 
-                            // Fotos: solo disponibles en formato legacy
-                            const p1Photo = embeddedTeam?.p1?.photo || legacyTeam?.p1?.photo || null;
-                            const p2Photo = embeddedTeam?.p2?.photo || legacyTeam?.p2?.photo || null;
-
-                            return { p1: p1Final, p2: p2Final, full: `${p1Final} / ${p2Final}`, p1Photo, p2Photo };
-                        };
-
-                        const t1 = resolveNames(embeddedTeam1, legacyTeam1, foundMatch.team1Index ?? 0, foundMatch.team1Name);
-                        const t2 = resolveNames(embeddedTeam2, legacyTeam2, foundMatch.team2Index ?? 0, foundMatch.team2Name);
-
-                        setMatch({
-                            ...foundMatch,
-                            court: foundMatch.court || (foundMatch.courtIndex !== undefined ? foundMatch.courtIndex + 1 : undefined),
-                            team1: t1,
-                            team2: t2,
-                        });
-
-                        if (tourneyData.scoringSystem) {
-                            setIsGoldenPoint(tourneyData.scoringSystem === 'GOLDEN_POINT');
-                        }
-                    }
+                    setMatch({
+                        ...foundMatch,
+                        team1: t1,
+                        team2: t2,
+                    });
                 }
             }
             setLoading(false);
         });
 
-        return () => unsubscribe();
-    }, [id, matchId, authLoading]);
+        return () => {
+            unsubTournament();
+            unsubMatches();
+        };
+    }, [id, matchId, authLoading, tournament?.teams]);
 
     const saveHistory = () => {
         if (match) {
@@ -332,16 +300,13 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         const previousState = history[history.length - 1];
         setHistory(prev => prev.slice(0, -1));
 
-        const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === match.id ? {
-                ...m,
-                points: previousState.points,
-                games: previousState.games,
-                sets: previousState.sets,
-                server: previousState.server
-            } : m
-        );
-        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+        await dataService.updateMatch(id, match.id, {
+            points: previousState.points,
+            games: previousState.games,
+            sets: previousState.sets,
+            server: previousState.server,
+            isTiebreak: previousState.isTiebreak ?? false
+        });
     };
 
     const updateScore = async (side: 't1' | 't2', action: 'plus' | 'minus') => {
@@ -380,10 +345,8 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                 return;
             }
 
-            const updatedMatches = tournament.matches.map((m: any) =>
-                m.id === match.id ? { ...m, points: newPoints, server: nextServer } : m
-            );
-            await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+            const updatedData = { points: newPoints, server: nextServer };
+            await dataService.updateMatch(id, match.id, updatedData);
             return;
         }
 
@@ -414,10 +377,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             newPoints[side] = points[nextIdx];
         }
 
-        const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === match.id ? { ...m, points: newPoints } : m
-        );
-        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+        await dataService.updateMatch(id, match.id, { points: newPoints });
     };
 
     const winGame = async (side: 't1' | 't2') => {
@@ -454,27 +414,19 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             await winSet(side, newGames);
         } else if (g1 === 6 && g2 === 6) {
             // ENTRAR EN TIEBREAK
-            const updatedMatches = tournament.matches.map((m: any) =>
-                m.id === match.id ? {
-                    ...m,
-                    games: newGames,
-                    points: { t1: '0', t2: '0' },
-                    isTiebreak: true,
-                    server: nextServer
-                } : m
-            );
-            await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+            await dataService.updateMatch(id, match.id, {
+                games: newGames,
+                points: { t1: '0', t2: '0' },
+                isTiebreak: true,
+                server: nextServer
+            });
         } else {
             // Juego Normal
-            const updatedMatches = tournament.matches.map((m: any) =>
-                m.id === match.id ? {
-                    ...m,
-                    games: newGames,
-                    points: { t1: '0', t2: '0' },
-                    server: nextServer
-                } : m
-            );
-            await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+            await dataService.updateMatch(id, match.id, {
+                games: newGames,
+                points: { t1: '0', t2: '0' },
+                server: nextServer
+            });
         }
     };
 
@@ -493,20 +445,17 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             ? { t1: parseInt(String(match.points.t1 || 0), 10), t2: parseInt(String(match.points.t2 || 0), 10) }
             : (match.superTiebreakScore ?? undefined);
 
-        const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === match.id ? {
-                ...m,
-                games: isMatchFinished ? finalGames : { t1: 0, t2: 0 },
-                points: { t1: '0', t2: '0' },
-                sets: newSets,
-                setScores: newSetScores,
-                ...(stbScore != null ? { superTiebreakScore: stbScore } : {}),
-                isTiebreak: false,
-                status: isMatchFinished ? MatchStatus.FINISHED : m.status,
-                finishedAt: isMatchFinished ? new Date().toISOString() : m.finishedAt || null
-            } : m
-        );
-        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+        await dataService.updateMatch(id, match.id, {
+            games: isMatchFinished ? finalGames : { t1: 0, t2: 0 },
+            points: { t1: '0', t2: '0' },
+            sets: newSets,
+            setScores: newSetScores,
+            ...(stbScore != null ? { superTiebreakScore: stbScore } : {}),
+            isTiebreak: false,
+            status: isMatchFinished ? MatchStatus.FINISHED : match.status,
+            finishedAt: isMatchFinished ? new Date().toISOString() : match.finishedAt || null
+        });
+
         // Al terminar el partido, llevar a la pantalla de evento (Todos del torneo)
         if (isMatchFinished && id) {
             const eventIds = (tournament?.eventTournamentIds as string[] | undefined)?.filter(Boolean).length
@@ -523,10 +472,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
     const setSpecificServer = async (team: number, player: number) => {
         if (!tournament || !match) return;
-        const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === match.id ? { ...m, server: { team, player } } : m
-        );
-        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+        await dataService.updateMatch(id, match.id, { server: { team, player } });
     };
 
     /** Intercambia la cancha del partido actual con un partido pendiente (no iniciado). */
@@ -539,12 +485,12 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             const otherCourt = otherMatch.court ?? (otherMatch.courtIndex != null ? otherMatch.courtIndex + 1 : 1);
             const otherCourtIndex = typeof otherMatch.courtIndex === 'number' ? otherMatch.courtIndex : otherCourt - 1;
 
-            const updatedMatches = tournament.matches.map((m: any) => {
-                if (m.id === match.id) return { ...m, court: otherCourt, courtIndex: otherCourtIndex };
-                if (m.id === otherMatch.id) return { ...m, court: curCourt, courtIndex: curCourtIndex };
-                return m;
-            });
-            await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+            // Swap courts in parallel
+            await Promise.all([
+                dataService.updateMatch(id, match.id, { court: otherCourt, courtIndex: otherCourtIndex }),
+                dataService.updateMatch(id, otherMatch.id, { court: curCourt, courtIndex: curCourtIndex })
+            ]);
+
             setShowMatchSelector(false);
             router.push(`/tournaments/${id}/score/${otherMatch.id}`);
         } catch (e) {
@@ -576,20 +522,14 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         if (!match) return;
         saveHistory();
         const currentServer = match.server || { team: 1, player: 1 };
-        const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === match.id ? { ...m, server: { ...currentServer, player: currentServer.player === 1 ? 2 : 1 } } : m
-        );
-        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+        await dataService.updateMatch(id, match.id, { server: { ...currentServer, player: currentServer.player === 1 ? 2 : 1 } });
     };
 
     const toggleServingTeam = async () => {
         if (!match) return;
         saveHistory();
         const currentServer = match.server || { team: 1, player: 1 };
-        const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === match.id ? { ...m, server: { ...currentServer, team: currentServer.team === 1 ? 2 : 1 } } : m
-        );
-        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+        await dataService.updateMatch(id, match.id, { server: { ...currentServer, team: currentServer.team === 1 ? 2 : 1 } });
     };
 
     const handleMedicalTimeout = async () => {
@@ -602,10 +542,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
         setIsMedicalTimeout(!isMedicalTimeout);
 
-        const updatedMatches = tournament.matches.map((m: any) =>
-            m.id === match.id ? { ...m, status: newStatus } : m
-        );
-        await updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+        await dataService.updateMatch(id, match.id, { status: newStatus });
     };
 
     if (loading) return (
@@ -642,7 +579,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     const server = match.server || { team: 1, player: 1 };
 
     return (
-        <div className="fixed inset-0 bg-[#070707] text-white flex flex-col font-sans select-none overflow-hidden touch-none p-4 gap-4 premium-gradient">
+        <div className="fixed inset-0 bg-[#070707] text-white flex flex-col font-sans select-none overflow-hidden touch-none p-2 gap-2 premium-gradient">
             {/* Background Glows */}
             <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-padel-primary/5 blur-[120px] rounded-full pointer-events-none" />
             <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-padel-primary/5 blur-[120px] rounded-full pointer-events-none" />
@@ -656,7 +593,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             />
 
             {/* Rectangle 1: Header */}
-            <header className="h-28 px-10 flex items-center justify-between relative z-50 glass rounded-[2.5rem] shadow-2xl shrink-0">
+            <header className="h-24 px-8 flex items-center justify-between relative z-50 glass rounded-[2rem] shadow-2xl shrink-0">
                 {/* Side Change Alert */}
                 <AnimatePresence>
                     {showSideChange && (
@@ -700,7 +637,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         <h1 className="label-cancha-hero mb-2 text-center">
                             {match.courtName || (match.court ? `Pista ${match.court}` : 'Pista 1')}
                         </h1>
-                        <div className="flex flex-col items-center gap-1.5">
+                        <div className="flex flex-col items-center gap-1">
                             <span className="text-xl font-black italic uppercase text-white/80 leading-none tracking-tight text-center">
                                 {match.roundName || match.groupName || 'Fase de Grupos'}
                             </span>
@@ -741,7 +678,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                             </div>
                         </div>
                     ) : (
-                        <div className="flex flex-col items-center bg-white/[0.03] border-x border-b border-white/10 px-10 py-4 rounded-b-3xl backdrop-blur-xl shadow-2xl">
+                        <div className="flex flex-col items-center bg-white/[0.03] border-x border-b border-white/10 px-8 py-3 rounded-b-3xl backdrop-blur-xl shadow-2xl">
                             <span className="text-4xl font-black tracking-tighter tabular-nums italic text-white text-glow leading-none">
                                 {formatDuration(duration)}
                             </span>
@@ -812,13 +749,13 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             </header>
 
             {/* Rectangle 2 & 3: Middle Content */}
-            <main className="flex-1 flex flex-wrap gap-4 min-h-0 overflow-hidden content-start">
+            <main className="flex-1 flex flex-wrap gap-2 min-h-0 overflow-hidden content-start">
                 {/* Team 1 Card */}
-                <div className="flex-1 glass rounded-[3rem] p-8 flex flex-col items-center relative overflow-hidden group shadow-2xl">
+                <div className="flex-1 glass rounded-[2.5rem] p-5 flex flex-col items-center relative overflow-hidden group shadow-2xl">
                     <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/[0.04] to-transparent opacity-50" />
 
                     {/* Players Section — centrado: J1, J2 con mismo tamaño; servicio = solo borde amarillo */}
-                    <div className="flex justify-center items-start gap-8 mb-8 relative z-10 w-full">
+                    <div className="flex justify-center items-start gap-4 mb-4 relative z-10 w-full">
                         {[1, 2].map((pNum) => {
                             const isServer = server.team === 1 && server.player === pNum;
                             const playerName = pNum === 1 ? match.team1.p1 : match.team1.p2;
@@ -828,10 +765,10 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                 <div key={pNum} className="flex flex-col items-center gap-4 max-w-[140px] shrink-0">
                                     <div
                                         onClick={() => handlePlayerIconClick(1, pNum)}
-                                        className="relative w-24 h-24 rounded-[2rem] transition-all duration-500 cursor-pointer flex items-center justify-center opacity-90 hover:opacity-100"
+                                        className="relative w-20 h-20 rounded-[1.5rem] transition-all duration-500 cursor-pointer flex items-center justify-center opacity-90 hover:opacity-100"
                                     >
-                                        <div className={`w-full h-full rounded-[2rem] flex items-center justify-center border-4 transition-colors ${isServer ? 'border-padel-primary' : 'border-white/10'}`}>
-                                            <span className="text-2xl font-black italic text-white/90">{jLabel}</span>
+                                        <div className={`w-full h-full rounded-[1.5rem] flex items-center justify-center border-4 transition-colors ${isServer ? 'border-padel-primary' : 'border-white/10'}`}>
+                                            <span className="text-xl font-black italic text-white/90">{jLabel}</span>
                                         </div>
                                     </div>
                                     <AutoShrinkName
@@ -861,7 +798,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     </div>
 
                     {/* Central Points Control (marcador del game) — centrado */}
-                    <div className="flex items-center justify-center gap-4 p-2 bg-black/40 border border-white/10 rounded-[2rem] mb-8 relative z-10 shadow-inner w-full">
+                    <div className="flex items-center justify-center gap-3 p-1.5 bg-black/40 border border-white/10 rounded-[1.5rem] mb-4 relative z-10 shadow-inner w-full">
                         <motion.button
                             whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.08)' }}
                             whileTap={{ scale: 0.9 }}
@@ -896,14 +833,14 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         </motion.button>
                     </div>
                     {/* 6 performance pads equipo 1 — numerados 1 a 6 */}
-                    <div className="flex flex-col gap-3 w-full max-w-[220px] mx-auto">
+                    <div className="flex flex-col gap-2 w-full max-w-[200px] mx-auto">
                         <div className="grid grid-cols-3 gap-2.5">
                             {[1, 2, 3].map((i) => (
                                 <motion.button
                                     key={i}
                                     whileHover={{ scale: 1.02, boxShadow: '0 6px 20px -4px rgba(204,255,0,0.25)' }}
                                     whileTap={{ scale: 0.92, boxShadow: 'inset 0 3px 8px rgba(0,0,0,0.4)' }}
-                                    className="aspect-square min-h-[44px] rounded-2xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 text-[11px] font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors"
+                                    className="aspect-square min-h-[38px] rounded-xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 text-[10px] font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors"
                                 >
                                     {i}
                                 </motion.button>
@@ -915,7 +852,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                     key={i}
                                     whileHover={{ scale: 1.02, boxShadow: '0 6px 20px -4px rgba(204,255,0,0.25)' }}
                                     whileTap={{ scale: 0.92, boxShadow: 'inset 0 3px 8px rgba(0,0,0,0.4)' }}
-                                    className="aspect-square min-h-[44px] rounded-2xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 text-[11px] font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors"
+                                    className="aspect-square min-h-[38px] rounded-xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 text-[10px] font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors"
                                 >
                                     {i}
                                 </motion.button>
@@ -926,11 +863,11 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
 
                 {/* Team 2 Card */}
-                <div className="flex-1 glass rounded-[3rem] p-8 flex flex-col items-center relative overflow-hidden group shadow-2xl">
+                <div className="flex-1 glass rounded-[2.5rem] p-5 flex flex-col items-center relative overflow-hidden group shadow-2xl">
                     <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/[0.04] to-transparent opacity-50" />
 
                     {/* Players Section — centrado: J3, J4 con mismo tamaño; servicio = solo borde amarillo */}
-                    <div className="flex justify-center items-start gap-8 mb-8 relative z-10 w-full">
+                    <div className="flex justify-center items-start gap-4 mb-4 relative z-10 w-full">
                         {[1, 2].map((pNum) => {
                             const isServer = server.team === 2 && server.player === pNum;
                             const playerName = pNum === 1 ? match.team2.p1 : match.team2.p2;
@@ -940,10 +877,10 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                 <div key={pNum} className="flex flex-col items-center gap-4 max-w-[140px] shrink-0">
                                     <div
                                         onClick={() => handlePlayerIconClick(2, pNum)}
-                                        className="relative w-24 h-24 rounded-[2rem] transition-all duration-500 cursor-pointer flex items-center justify-center opacity-90 hover:opacity-100"
+                                        className="relative w-20 h-20 rounded-[1.5rem] transition-all duration-500 cursor-pointer flex items-center justify-center opacity-90 hover:opacity-100"
                                     >
-                                        <div className={`w-full h-full rounded-[2rem] flex items-center justify-center border-4 transition-colors ${isServer ? 'border-padel-primary' : 'border-white/10'}`}>
-                                            <span className="text-2xl font-black italic text-white/90">{jLabel}</span>
+                                        <div className={`w-full h-full rounded-[1.5rem] flex items-center justify-center border-4 transition-colors ${isServer ? 'border-padel-primary' : 'border-white/10'}`}>
+                                            <span className="text-xl font-black italic text-white/90">{jLabel}</span>
                                         </div>
                                     </div>
                                     <AutoShrinkName
@@ -973,7 +910,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     </div>
 
                     {/* Central Points Control (marcador del game) — centrado */}
-                    <div className="flex items-center justify-center gap-4 p-2 bg-black/40 border border-white/10 rounded-[2rem] mb-8 relative z-10 shadow-inner w-full">
+                    <div className="flex items-center justify-center gap-3 p-1.5 bg-black/40 border border-white/10 rounded-[1.5rem] mb-4 relative z-10 shadow-inner w-full">
                         <motion.button
                             whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.08)' }}
                             whileTap={{ scale: 0.9 }}
@@ -1008,14 +945,14 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                         </motion.button>
                     </div>
                     {/* 6 performance pads equipo 2 — numerados 7 a 12 */}
-                    <div className="flex flex-col gap-3 w-full max-w-[220px] mx-auto">
+                    <div className="flex flex-col gap-2 w-full max-w-[200px] mx-auto">
                         <div className="grid grid-cols-3 gap-2.5">
                             {[7, 8, 9].map((i) => (
                                 <motion.button
                                     key={i}
                                     whileHover={{ scale: 1.02, boxShadow: '0 6px 20px -4px rgba(204,255,0,0.25)' }}
                                     whileTap={{ scale: 0.92, boxShadow: 'inset 0 3px 8px rgba(0,0,0,0.4)' }}
-                                    className="aspect-square min-h-[44px] rounded-2xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 text-[11px] font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors"
+                                    className="aspect-square min-h-[38px] rounded-xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 text-[10px] font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors"
                                 >
                                     {i}
                                 </motion.button>
@@ -1027,7 +964,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                     key={i}
                                     whileHover={{ scale: 1.02, boxShadow: '0 6px 20px -4px rgba(204,255,0,0.25)' }}
                                     whileTap={{ scale: 0.92, boxShadow: 'inset 0 3px 8px rgba(0,0,0,0.4)' }}
-                                    className="aspect-square min-h-[44px] rounded-2xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 text-[11px] font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors"
+                                    className="aspect-square min-h-[38px] rounded-xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 text-[10px] font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors"
                                 >
                                     {i}
                                 </motion.button>
@@ -1038,7 +975,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
                 {/* Animaciones pizarra: botones debajo de los puntos del game (disparan en la pantalla de la pizarra) */}
                 {Object.keys(animacionesMarcador).length > 0 && (
-                    <div className="w-full flex-[1_1_100%] flex flex-col gap-2 p-3 bg-black/30 border border-white/10 rounded-2xl self-start">
+                    <div className="w-full flex-[1_1_100%] flex flex-col gap-1.5 p-2 bg-black/30 border border-white/10 rounded-2xl self-start">
                         <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Animaciones pizarra</span>
                         <div className="flex flex-wrap gap-2">
                             {Object.entries(animacionesMarcador).map(([animId, a]) => (
@@ -1059,7 +996,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             </main>
 
             {/* Rectangle 4: Footer */}
-            <footer className="h-16 px-8 flex items-center justify-between relative z-10 glass rounded-[2rem] shadow-2xl gap-8 shrink-0">
+            <footer className="h-14 px-8 flex items-center justify-between relative z-10 glass rounded-[1.5rem] shadow-2xl gap-8 shrink-0">
                 {/* Switch de Punto de Oro */}
                 <motion.div
                     whileHover={{ scale: 1.02 }}
@@ -1315,7 +1252,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                             className="bg-[#111] border border-white/10 rounded-[3rem] w-full max-w-xl overflow-hidden flex flex-col"
                             onClick={e => e.stopPropagation()}
                         >
-                            <div className="p-8 border-b border-white/5 flex items-center justify-between">
+                            <div className="p-6 border-b border-white/5 flex items-center justify-between">
                                 <div>
                                     <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white">Score Adjustment</h3>
                                     <p className="text-[10px] font-black italic text-gray-500 uppercase tracking-widest mt-1">Manual correction of games and sets</p>
@@ -1325,15 +1262,15 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                 </button>
                             </div>
 
-                            <div className="p-8 space-y-10">
+                            <div className="p-6 space-y-6">
                                 {/* Team 1 Adjust */}
-                                <div className="space-y-6">
+                                <div className="space-y-4">
                                     <div className="flex items-center gap-3">
                                         <div className="w-2 h-8 bg-padel-primary rounded-full" />
                                         <span className="text-lg font-black italic uppercase tracking-tighter text-white truncate">{match.team1.full}</span>
                                     </div>
                                     <div className="grid grid-cols-3 gap-3">
-                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3">
+                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-3 flex flex-col items-center gap-2">
                                             <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Puntos</span>
                                             <div className="flex items-center gap-4">
                                                 <select
@@ -1345,7 +1282,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                                 </select>
                                             </div>
                                         </div>
-                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3">
+                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-3 flex flex-col items-center gap-2">
                                             <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Juegos</span>
                                             <div className="flex items-center gap-4">
                                                 <button onClick={() => updateManualScore('t1', 'games', (match.games?.t1 || 0) - 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">-</button>
@@ -1353,7 +1290,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                                 <button onClick={() => updateManualScore('t1', 'games', (match.games?.t1 || 0) + 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">+</button>
                                             </div>
                                         </div>
-                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3">
+                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-3 flex flex-col items-center gap-2">
                                             <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Sets</span>
                                             <div className="flex items-center gap-4">
                                                 <button onClick={() => updateManualScore('t1', 'sets', (match.sets?.t1 || 0) - 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">-</button>
@@ -1365,13 +1302,13 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                 </div>
 
                                 {/* Team 2 Adjust */}
-                                <div className="space-y-6">
+                                <div className="space-y-4">
                                     <div className="flex items-center gap-3">
                                         <div className="w-2 h-8 bg-gray-600 rounded-full" />
                                         <span className="text-lg font-black italic uppercase tracking-tighter text-white truncate">{match.team2.full}</span>
                                     </div>
                                     <div className="grid grid-cols-3 gap-3">
-                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3">
+                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-3 flex flex-col items-center gap-2">
                                             <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Puntos</span>
                                             <div className="flex items-center gap-4">
                                                 <select
@@ -1383,7 +1320,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                                 </select>
                                             </div>
                                         </div>
-                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3">
+                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-3 flex flex-col items-center gap-2">
                                             <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Juegos</span>
                                             <div className="flex items-center gap-4">
                                                 <button onClick={() => updateManualScore('t2', 'games', (match.games?.t2 || 0) - 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">-</button>
@@ -1391,7 +1328,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                                 <button onClick={() => updateManualScore('t2', 'games', (match.games?.t2 || 0) + 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">+</button>
                                             </div>
                                         </div>
-                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3">
+                                        <div className="bg-white/5 border border-white/5 rounded-2xl p-3 flex flex-col items-center gap-2">
                                             <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Sets</span>
                                             <div className="flex items-center gap-4">
                                                 <button onClick={() => updateManualScore('t2', 'sets', (match.sets?.t2 || 0) - 1)} className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white active:scale-90">-</button>
@@ -1422,7 +1359,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                 </div>
                             </div>
 
-                            <div className="p-8 bg-white/[0.02] border-t border-white/5 flex gap-4">
+                            <div className="p-6 bg-white/[0.02] border-t border-white/5 flex gap-4">
                                 <button
                                     onClick={() => {
                                         if (confirm('¿Resetear marcador de este partido?')) {
@@ -1462,6 +1399,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                 body {
                     background-color: #0a0a0a;
                     overscroll-behavior: none;
+                    overflow: hidden;
                 }
                 @font-face {
                     font-family: 'Inter';

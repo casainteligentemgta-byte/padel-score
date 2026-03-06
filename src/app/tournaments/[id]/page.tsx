@@ -36,8 +36,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { db } from '@/lib/firebase';
-import { doc, updateDoc, onSnapshot, collection, query, serverTimestamp } from 'firebase/firestore';
+// Supabase is now used for data management.
 import GroupPhaseView from '@/components/GroupPhaseView';
 import TournamentPhaseManager from '@/components/TournamentPhaseManager';
 import Sidebar from '@/components/Sidebar';
@@ -101,133 +100,112 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         console.log(`[Dashboard] Setting up real-time listener for tournament ID: ${String(id)}`);
         setError(null);
 
-        const docRef = doc(db, 'tournaments', String(id));
+        // 1. Suscripción al Torneo
+        const unsubTournament = dataService.subscribeToTournament(String(id), (tourneyData) => {
+            if (tourneyData) {
+                setTournament(tourneyData);
 
-        const unsubscribe = onSnapshot(docRef, (docSnap) => {
-            try {
-                if (docSnap.exists()) {
-                    const tourneyData = { id: docSnap.id, ...docSnap.data() } as any;
-
-                    // AUTO-MIGRACIÓN: Si detectamos el array 'matches' antiguo
-                    if (Array.isArray(tourneyData.matches) && tourneyData.matches.length > 0 && !isMigrating) {
-                        const canModify = isAdmin || (user && user.uid === tourneyData.ownerId);
-                        if (canModify) {
-                            console.log("[Dashboard] Legacy matches detected. Triggering migration...");
-                            setIsMigrating(true);
-                            dataService.migrateTournamentMatches(docSnap.id, tourneyData.matches)
-                                .then(() => {
-                                    console.log("[Dashboard] Migration successful");
-                                    setIsMigrating(false);
-                                })
-                                .catch(err => {
-                                    console.error("[Dashboard] Migration failed:", err);
-                                    setIsMigrating(false);
-                                });
-                        }
+                // AUTO-MIGRACIÓN: Si detectamos el array 'matches' antiguo
+                if (Array.isArray(tourneyData.matches) && tourneyData.matches.length > 0 && !isMigrating) {
+                    const canModify = isAdmin || (user && user.uid === tourneyData.ownerId);
+                    if (canModify) {
+                        console.log("[Dashboard] Legacy matches detected. Triggering migration...");
+                        setIsMigrating(true);
+                        dataService.migrateTournamentMatches(String(id), tourneyData.matches)
+                            .then(() => {
+                                console.log("[Dashboard] Migration successful");
+                                setIsMigrating(false);
+                                // Opcional: limpiar el array en Supabase
+                                dataService.updateTournament(String(id), { ...tourneyData, matches: null });
+                            })
+                            .catch(err => {
+                                console.error("[Dashboard] Migration failed:", err);
+                                setIsMigrating(false);
+                            });
                     }
-
-                    setTournament(tourneyData);
-
-                    // Initialize active group if none selected
-                    if (tourneyData.type === TournamentType.ROUND_ROBIN && tourneyData.groupAssignments) {
-                        const groups = Object.keys(tourneyData.groupAssignments).sort();
-                        if (groups.length > 0 && !activeGroup) {
-                            setActiveGroup(groups[0]);
-                        }
-                    }
-                } else {
-                    setError('El torneo no existe o ha sido eliminado.');
-                    setTournament(null);
                 }
-            } catch (err) {
-                console.error("[Dashboard] Tournament processing error:", err);
-                setError('Error al procesar los datos del torneo.');
-            } finally {
-                if (!id) setLoading(false);
+
+                // Initialize active group if none selected
+                if (tourneyData.type === TournamentType.ROUND_ROBIN && tourneyData.groupAssignments) {
+                    const groups = Object.keys(tourneyData.groupAssignments).sort();
+                    if (groups.length > 0 && !activeGroup) {
+                        setActiveGroup(groups[0]);
+                    }
+                }
+            } else {
+                setError('El torneo no existe o ha sido eliminado.');
+                setTournament(null);
+                setLoading(false);
             }
-        }, (err) => {
-            console.error("[Dashboard] Tournament snapshot error:", err);
-            if (err.code === 'permission-denied') {
-                setError('No tienes permiso para ver este torneo.');
-            }
-            setLoading(false);
         });
 
-        // 2. Suscripción a la Sub-colección de Partidos
-        const matchesQuery = query(collection(db, 'tournaments', String(id), 'matches'));
-        const unsubMatches = onSnapshot(matchesQuery, (snap) => {
+        const getPlayerName = (p: any, teamIdx: number, slot: 1 | 2) => {
+            if (teamIdx <= 0) return 'Por definir';
+            const name = p?.name?.trim();
+            if (name && name !== '') return name;
+            const index = (teamIdx * 2) - (slot === 1 ? 1 : 0);
+            return `Jugador ${index}`;
+        };
+
+        const buildTeamDisplay = (m: any, side: 'team1' | 'team2', teamsRef: any[]) => {
+            const idx = side === 'team1' ? m.team1Index : m.team2Index;
+            const teamFromIdx = (typeof idx === 'number' && idx > 0 && teamsRef[idx - 1]) ? teamsRef[idx - 1] : null;
+            const rawTeam = m[side];
+            const rawName = side === 'team1' ? m.team1Name : m.team2Name;
+
+            if (rawTeam && (rawTeam.teamLabel || rawTeam.p1 || rawTeam.p2)) {
+                const name = rawName || rawTeam.teamLabel || (rawTeam.p1?.name && rawTeam.p2?.name ? `${rawTeam.p1.name} / ${rawTeam.p2.name}` : '?');
+                return {
+                    name: typeof name === 'string' ? name : '?',
+                    p1Name: rawTeam.p1?.name?.trim() || null,
+                    p2Name: rawTeam.p2?.name?.trim() || null,
+                    photo1: rawTeam.p1?.photo ?? null,
+                    photo2: rawTeam.p2?.photo ?? null,
+                    phone1: rawTeam.p1?.phone ?? null,
+                    phone2: rawTeam.p2?.phone ?? null
+                };
+            }
+            if (teamFromIdx) {
+                return {
+                    name: `${getPlayerName(teamFromIdx.p1, idx, 1)} / ${getPlayerName(teamFromIdx.p2, idx, 2)}`,
+                    p1Name: getPlayerName(teamFromIdx.p1, idx, 1),
+                    p2Name: getPlayerName(teamFromIdx.p2, idx, 2),
+                    photo1: teamFromIdx.p1?.photo ?? null,
+                    photo2: teamFromIdx.p2?.photo ?? null,
+                    phone1: teamFromIdx.p1?.phone ?? null,
+                    phone2: teamFromIdx.p2?.phone ?? null
+                };
+            }
+            return {
+                name: (typeof idx === 'number' && idx <= 0) ? 'Por definir' : (rawName || 'Por definir'),
+                p1Name: null, p2Name: null, photo1: null, photo2: null, phone1: null, phone2: null
+            };
+        };
+
+        // 2. Suscripción a Partidos
+        const unsubMatches = dataService.subscribeToMatches(String(id), (rawMatches) => {
             try {
-                const teamsArray = tournament?.teams || [];
-                // Nota: usamos teamsArray de tournament si ya cargó, si no usamos teams del primer snap local si lo guardamos abajo o esperamos re-render
-
-                const rawMatches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-                const getPlayerName = (p: any, teamIdx: number, slot: 1 | 2) => {
-                    if (teamIdx <= 0) return 'Por definir';
-                    const name = p?.name?.trim();
-                    if (name && name !== '') return name;
-                    const index = (teamIdx * 2) - (slot === 1 ? 1 : 0);
-                    return `Jugador ${index}`;
-                };
-
-                const buildTeamDisplay = (m: any, side: 'team1' | 'team2') => {
-                    const teamsRef = tournament?.teams || []; // Necesitamos teams del torneo actual
-                    const idx = side === 'team1' ? m.team1Index : m.team2Index;
-                    const teamFromIdx = (typeof idx === 'number' && idx > 0 && teamsRef[idx - 1]) ? teamsRef[idx - 1] : null;
-                    const rawTeam = m[side];
-                    const rawName = side === 'team1' ? m.team1Name : m.team2Name;
-
-                    if (rawTeam && (rawTeam.teamLabel || rawTeam.p1 || rawTeam.p2)) {
-                        const name = rawName || rawTeam.teamLabel || (rawTeam.p1?.name && rawTeam.p2?.name ? `${rawTeam.p1.name} / ${rawTeam.p2.name}` : '?');
-                        return {
-                            name: typeof name === 'string' ? name : '?',
-                            p1Name: rawTeam.p1?.name?.trim() || null,
-                            p2Name: rawTeam.p2?.name?.trim() || null,
-                            photo1: rawTeam.p1?.photo ?? null,
-                            photo2: rawTeam.p2?.photo ?? null,
-                            phone1: rawTeam.p1?.phone ?? null,
-                            phone2: rawTeam.p2?.phone ?? null
-                        };
-                    }
-                    if (teamFromIdx) {
-                        return {
-                            name: `${getPlayerName(teamFromIdx.p1, idx, 1)} / ${getPlayerName(teamFromIdx.p2, idx, 2)}`,
-                            p1Name: getPlayerName(teamFromIdx.p1, idx, 1),
-                            p2Name: getPlayerName(teamFromIdx.p2, idx, 2),
-                            photo1: teamFromIdx.p1?.photo ?? null,
-                            photo2: teamFromIdx.p2?.photo ?? null,
-                            phone1: teamFromIdx.p1?.phone ?? null,
-                            phone2: teamFromIdx.p2?.phone ?? null
-                        };
-                    }
-                    return {
-                        name: (typeof idx === 'number' && idx <= 0) ? 'Por definir' : (rawName || 'Por definir'),
-                        p1Name: null, p2Name: null, photo1: null, photo2: null, phone1: null, phone2: null
-                    };
-                };
-
+                const teamsRef = tournament?.teams || [];
                 const enriched = rawMatches.map((m: any) => ({
                     ...m,
                     court: m.court ?? (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined),
                     courtName: m.courtName ?? (m.court ? `Pista ${m.court}` : undefined),
-                    team1: buildTeamDisplay(m, 'team1'),
-                    team2: buildTeamDisplay(m, 'team2')
+                    team1: buildTeamDisplay(m, 'team1', teamsRef),
+                    team2: buildTeamDisplay(m, 'team2', teamsRef)
                 }));
                 setMatches(enriched);
                 setLoading(false);
             } catch (err) {
                 console.error("[Dashboard] Matches processing error:", err);
+                setLoading(false);
             }
-        }, (err) => {
-            console.error("[Dashboard] Matches snapshot error:", err);
-            setLoading(false);
         });
 
         return () => {
-            unsubscribe();
+            unsubTournament();
             unsubMatches();
         };
-    }, [id, authLoading, activeGroup, tournament?.teams]);
+    }, [id, authLoading, activeGroup, tournament?.teams, isAdmin, user, isMigrating]);
 
     const stripMatches = (matches: any[]) => matches.map(m => {
         const { team1, team2, ...rest } = m;
@@ -269,8 +247,9 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
             const creationPromises = bracketData.matches.map(m => dataService.createMatch(id, m));
             await Promise.all(creationPromises);
 
-            await updateDoc(doc(db, 'tournaments', id), {
-                updatedAt: serverTimestamp()
+            await dataService.updateTournament(id, {
+                ...tournament,
+                updatedAt: new Date().toISOString()
             });
 
             setActiveTab('Cuadro');
@@ -323,7 +302,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
 
             await dataService.updateMatch(id, matchId, {
                 status: MatchStatus.FINISHED,
-                actualEndTime: serverTimestamp(),
+                actualEndTime: new Date().toISOString(),
                 score: finalScore
             });
 
@@ -1177,23 +1156,14 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                         const match = matches.find(m => m.id === matchId);
                                         if (!match) return;
                                         const teamAWon = gamesT1 > gamesT2;
-                                        const updatedMatches = matches.map(m =>
-                                            m.id === matchId
-                                                ? {
-                                                    ...m,
-                                                    status: MatchStatus.FINISHED,
-                                                    games: { t1: gamesT1, t2: gamesT2 },
-                                                    sets: { t1: teamAWon ? 1 : 0, t2: teamAWon ? 0 : 1 },
-                                                    score: `${gamesT1}-${gamesT2}`,
-                                                    actualEndTime: new Date(),
-                                                }
-                                                : m
-                                        );
-                                        await updateDoc(doc(db, 'tournaments', id), {
-                                            matches: stripMatches(updatedMatches),
-                                            updatedAt: new Date(),
+
+                                        await dataService.updateMatch(id, matchId, {
+                                            status: MatchStatus.FINISHED,
+                                            games: { t1: gamesT1, t2: gamesT2 },
+                                            sets: { t1: teamAWon ? 1 : 0, t2: teamAWon ? 0 : 1 },
+                                            score: `${gamesT1}-${gamesT2}`,
+                                            actualEndTime: new Date().toISOString(),
                                         });
-                                        setMatches(updatedMatches);
                                     };
                                     return (
                                         <div className="space-y-4">
@@ -1241,16 +1211,18 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                 onSaveResult={handleSaveGroupResult}
                                                 onFinishGroupPhase={() => generateMainDraw()}
                                                 onResetElimination={async () => {
-                                                    // Eliminar partidos de llave y restaurar edición de grupos
-                                                    const groupOnly = matches.filter(m =>
-                                                        m.stage === 'GROUP_STAGE' || m.groupName != null
+                                                    // Eliminar partidos de llave de la tabla
+                                                    const eliminationMatches = matches.filter(m =>
+                                                        m.stage !== 'GROUP_STAGE' && m.groupName == null
                                                     );
-                                                    await updateDoc(doc(db, 'tournaments', id), {
-                                                        matches: stripMatches(groupOnly),
-                                                        mainDrawGenerated: false,
-                                                        updatedAt: new Date(),
+                                                    for (const m of eliminationMatches) {
+                                                        await dataService.deleteMatch(id, m.id);
+                                                    }
+
+                                                    await dataService.updateTournament(id, {
+                                                        ...tournament,
+                                                        mainDrawGenerated: false
                                                     });
-                                                    setMatches(groupOnly);
                                                 }}
                                             />
                                         </div>

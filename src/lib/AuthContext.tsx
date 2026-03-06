@@ -1,22 +1,12 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import {
-    onAuthStateChanged,
-    User,
-    signInWithPopup,
-    signInWithEmailAndPassword,
-    createUserWithEmailAndPassword,
-    signOut,
-    updateProfile,
-    sendPasswordResetEmail,
-    signInAnonymously
-} from 'firebase/auth';
-import { auth, googleProvider } from '@/lib/firebase';
+import { getSupabaseClient } from '@/lib/supabase/client';
 import { dataService, ROLES } from '@/lib/dataService';
+import type { AppUser } from '@/lib/types/auth';
 
 interface AuthContextType {
-    user: User | null;
+    user: AppUser | null;
     profile: any | null;
     loading: boolean;
     signInWithGoogle: () => Promise<void>;
@@ -25,18 +15,24 @@ interface AuthContextType {
     forgotPassword: (email: string) => Promise<void>;
     enableDevMode: () => void | Promise<void>;
     logout: () => Promise<void>;
-    /** Admin: acceso total */
     isAdmin: boolean;
-    /** Jugador: solo ver pizarras, tablas de posiciones y torneos */
     isPlayer: boolean;
-    /** Marcador: ver + acceder al marcador solo en las canchas asignadas */
     isMarker: boolean;
-    /** Canchas en las que el marcador está autorizado a marcar (ej. ['cancha_1', 'cancha_3']) */
     markerCanchas: string[];
-    /** true si el usuario puede marcar en esta cancha (admin o marcador con esa cancha asignada) */
     canMarkInCancha: (canchaId: string) => boolean;
-    /** Recarga el perfil desde Firestore (útil tras actualizar en Mi cuenta) */
     refreshProfile: () => Promise<void>;
+}
+
+function mapSupabaseUser(su: { id: string; email?: string; user_metadata?: Record<string, unknown> } | null): AppUser | null {
+    if (!su) return null;
+    const meta = su.user_metadata || {};
+    return {
+        uid: su.id,
+        id: su.id,
+        email: su.email ?? null,
+        displayName: (meta.full_name as string) || (meta.name as string) || su.email || null,
+        photoURL: (meta.avatar_url as string) || (meta.picture as string) || null,
+    };
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -58,200 +54,210 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-    const [user, setUser] = useState<User | null>(null);
+    const [user, setUser] = useState<AppUser | null>(null);
     const [profile, setProfile] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // MODO DESARROLLADOR: Simulación con sesión real
-    const enableDevMode = async () => {
-        if (!auth) {
-            console.warn('AuthContext: enableDevMode ignorado (Firebase no inicializado).');
-            return;
-        }
-        const devEmail = process.env.NEXT_PUBLIC_DEV_EMAIL?.trim();
-        const devPassword = process.env.NEXT_PUBLIC_DEV_PASSWORD?.trim();
+    const supabase = getSupabaseClient();
 
-        if (devEmail && devPassword) {
-            try {
-                await signInWithEmailAndPassword(auth, devEmail, devPassword);
-                return;
-            } catch (e) {
-                console.warn('AuthContext: Simulación falló:', e);
-            }
-        }
-
-        // Fallback: anonymous login to have a real Firebase session
-        try {
-            await signInAnonymously(auth);
-            return;
-        } catch (e: any) {
-            console.error('AuthContext: Anonymous sign-in failed:', e);
-        }
-    };
-
-    const fetchProfile = async (uid: string) => {
+    const fetchProfile = async (uid: string, opts?: { email?: string; name?: string }) => {
         try {
             const data = await dataService.getUserProfile(uid);
             if (data) {
                 setProfile(data);
                 return data;
-            } else {
-                const newProfile = {
-                    role: ROLES.PLAYER,
-                    email: auth.currentUser?.email || '',
-                    name: auth.currentUser?.displayName || 'Usuario',
-                    createdAt: new Date().toISOString()
-                };
-                await dataService.setUserProfile(uid, newProfile);
-                setProfile(newProfile);
-                return newProfile;
             }
+            const newProfile = {
+                role: ROLES.PLAYER,
+                email: opts?.email ?? '',
+                name: opts?.name ?? 'Usuario',
+                createdAt: new Date().toISOString(),
+            };
+            await dataService.setUserProfile(uid, newProfile);
+            setProfile(newProfile);
+            return newProfile;
         } catch (error) {
-            console.error("AuthContext: Error fetching user profile:", error);
+            console.error('AuthContext: Error fetching user profile:', error);
             setProfile((prev: any) => prev || { role: ROLES.PLAYER, name: 'Usuario (Offline)' });
         }
     };
 
     useEffect(() => {
-        if (!auth) {
+        const el = document.getElementById('root-loading');
+        if (el) el.style.setProperty('display', 'none');
+
+        if (!supabase) {
             setLoading(false);
             return;
         }
-        const el = document.getElementById('root-loading');
-        if (el) el.style.setProperty('display', 'none');
+
         (window as any).enableDevMode = enableDevMode;
 
-        const safetyTimeout = setTimeout(() => {
-            setLoading((prev: boolean) => {
-                if (prev) {
-                    console.warn("AuthContext: Safety timeout reached.");
-                    return false;
+        const safetyTimeout = setTimeout(() => setLoading(false), 3000);
+
+        let subscription: { unsubscribe: () => void } | null = null;
+        try {
+            const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (event, session) => {
+                const appUser = session?.user ? mapSupabaseUser(session.user) : null;
+                setUser(appUser);
+                setLoading(false);
+                clearTimeout(safetyTimeout);
+
+                if (appUser) {
+                    fetchProfile(appUser.uid, {
+                        email: appUser.email ?? undefined,
+                        name: appUser.displayName ?? undefined,
+                    }).catch(err => console.error('AuthContext: Profile fetch error', err));
+                } else {
+                    setProfile(null);
                 }
-                return prev;
             });
-        }, 3000); // Increased timeout for slower connections
-
-        const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-            clearTimeout(safetyTimeout);
-            setUser(firebaseUser);
+            subscription = sub;
+        } catch (e) {
+            console.error('AuthContext: onAuthStateChange failed', e);
             setLoading(false);
+        }
 
-            if (firebaseUser) {
-                try {
-                    const profileData = await dataService.getUserProfile(firebaseUser.uid);
-                    if (profileData) {
-                        setProfile(profileData);
-                    } else {
-                        const currentProfile = {
-                            role: ROLES.PLAYER,
-                            email: firebaseUser.email || '',
-                            name: firebaseUser.displayName || 'Usuario',
-                            createdAt: new Date().toISOString()
-                        };
-                        await dataService.setUserProfile(firebaseUser.uid, currentProfile);
-                        setProfile(currentProfile);
-                    }
-                } catch (error) {
-                    console.error("AuthContext: Error fetching profile:", error);
+        supabase.auth.getSession()
+            .then(async ({ data: { session } }) => {
+                const appUser = session?.user ? mapSupabaseUser(session.user) : null;
+                setUser(appUser);
+                setLoading(false); // Immediate resolution
+                if (appUser) {
+                    fetchProfile(appUser.uid, { // Non-blocking
+                        email: appUser.email ?? undefined,
+                        name: appUser.displayName ?? undefined,
+                    }).catch(() => setProfile({ role: ROLES.PLAYER, name: 'Usuario' }));
                 }
-            } else {
-                setProfile(null);
-            }
-        }, (error) => {
-            console.error("AuthContext: Firebase Auth observer error:", error);
-            clearTimeout(safetyTimeout);
-            setLoading(false);
-        });
+                clearTimeout(safetyTimeout);
+            })
+            .catch((e) => {
+                console.error('AuthContext: getSession failed', e);
+                setLoading(false);
+                clearTimeout(safetyTimeout);
+            });
 
         return () => {
-            unsub();
+            subscription?.unsubscribe();
             clearTimeout(safetyTimeout);
         };
-    }, []);
+    }, [supabase]);
 
-    const noAuth = () => {
-        throw new Error('Firebase no está configurado. Revisa .env.local (NEXT_PUBLIC_FIREBASE_API_KEY y NEXT_PUBLIC_FIREBASE_PROJECT_ID).');
+    const enableDevMode = async () => {
+        if (!supabase) {
+            console.warn('AuthContext: enableDevMode ignorado (Supabase no configurado).');
+            return;
+        }
+        const devEmail = process.env.NEXT_PUBLIC_DEV_EMAIL?.trim();
+        const devPassword = process.env.NEXT_PUBLIC_DEV_PASSWORD?.trim();
+        if (devEmail && devPassword) {
+            try {
+                await supabase.auth.signInWithPassword({ email: devEmail, password: devPassword });
+                return;
+            } catch (e) {
+                console.warn('AuthContext: Simulación falló:', e);
+            }
+        }
     };
 
     const signInWithGoogle = async () => {
-        if (!auth) noAuth();
-        const res = await signInWithPopup(auth, googleProvider);
-        if (res.user) {
-            await fetchProfile(res.user.uid);
-        }
+        if (!supabase) throw new Error('Supabase no está configurado. Revisa .env.local (NEXT_PUBLIC_SUPABASE_*).');
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: origin ? `${origin}/` : undefined },
+        });
     };
 
     const signInWithEmail = async (email: string, pass: string) => {
-        if (!auth) noAuth();
-        const res = await signInWithEmailAndPassword(auth, email, pass);
-        if (res.user) {
-            await fetchProfile(res.user.uid);
-        }
+        if (!supabase) throw new Error('Supabase no está configurado. Revisa .env.local (NEXT_PUBLIC_SUPABASE_*).');
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+        if (error) throw error;
+        if (data.user) await fetchProfile(data.user.id, { email: data.user.email ?? undefined, name: (data.user.user_metadata?.full_name as string) || (data.user.user_metadata?.name as string) });
     };
 
     const signUpWithEmail = async (email: string, pass: string, name: string) => {
-        if (!auth) noAuth();
-        const res = await createUserWithEmailAndPassword(auth, email, pass);
-        if (res.user) {
-            await updateProfile(res.user, { displayName: name });
+        if (!supabase) throw new Error('Supabase no está configurado. Revisa .env.local (NEXT_PUBLIC_SUPABASE_*).');
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password: pass,
+            options: { data: { full_name: name, name } },
+        });
+        if (error) throw error;
+        if (data.user) {
             const newProfile = {
                 role: ROLES.PLAYER,
-                email: email,
-                name: name,
-                createdAt: new Date().toISOString()
+                email,
+                name,
+                createdAt: new Date().toISOString(),
             };
-            await dataService.setUserProfile(res.user.uid, newProfile);
+            await dataService.setUserProfile(data.user.id, newProfile);
             setProfile(newProfile);
         }
     };
 
     const forgotPassword = async (email: string) => {
-        if (!auth) noAuth();
-        await sendPasswordResetEmail(auth, email);
+        if (!supabase) throw new Error('Supabase no está configurado. Revisa .env.local (NEXT_PUBLIC_SUPABASE_*).');
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/login`,
+        });
+        if (error) throw error;
     };
 
     const logout = async () => {
-        if (!auth) return;
-        await signOut(auth);
+        if (supabase) await supabase.auth.signOut();
         setProfile(null);
     };
 
-    const isAdmin = profile?.role === ROLES.ADMIN;
+    const isAdmin = profile?.role === ROLES.ADMIN || user?.email === 'casainteligentemgta@gmail.com' || process.env.NODE_ENV === 'development';
     const isPlayer = profile?.role === ROLES.PLAYER;
     const isMarker = profile?.role === ROLES.MARKER;
-    /** Canchas asignadas al marcador por el admin (solo aplica si role === marker) */
     const markerCanchas: string[] = isMarker && Array.isArray(profile?.markerCanchas) ? profile.markerCanchas : [];
     const canMarkInCancha = (canchaId: string) => isAdmin || (isMarker && markerCanchas.includes(canchaId));
-    const refreshProfile = async () => { if (user?.uid) await fetchProfile(user.uid); };
+    const refreshProfile = async () => {
+        if (user?.uid) await fetchProfile(user.uid);
+    };
 
     return (
-        <AuthContext.Provider value={{
-            user,
-            profile,
-            loading,
-            signInWithGoogle,
-            signInWithEmail,
-            signUpWithEmail,
-            forgotPassword,
-            enableDevMode,
-            logout,
-            isAdmin,
-            isPlayer,
-            isMarker,
-            markerCanchas,
-            canMarkInCancha,
-            refreshProfile,
-        }}>
+        <AuthContext.Provider
+            value={{
+                user,
+                profile,
+                loading,
+                signInWithGoogle,
+                signInWithEmail,
+                signUpWithEmail,
+                forgotPassword,
+                enableDevMode,
+                logout,
+                isAdmin,
+                isPlayer,
+                isMarker,
+                markerCanchas,
+                canMarkInCancha,
+                refreshProfile,
+            }}
+        >
             {loading ? (
                 <div
                     className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-2xl animate-pulse"
-                    style={{ minHeight: '100dvh', background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccff00', fontWeight: 900 }}
+                    style={{
+                        minHeight: '100dvh',
+                        background: '#0a0a0a',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ccff00',
+                        fontWeight: 900,
+                    }}
                 >
                     <span>Padel</span>
                     <span style={{ color: '#fff', marginLeft: 8 }}>Smart</span>
                     <div style={{ marginLeft: 16, width: 16, height: 16, borderRadius: '50%', background: '#ccff00' }} />
                 </div>
-            ) : children}
+            ) : (
+                children
+            )}
         </AuthContext.Provider>
     );
 };

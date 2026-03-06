@@ -2,10 +2,9 @@
 
 import { useState, useEffect, use, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { db } from '@/lib/firebase';
 import { rtdb } from '@/lib/rtdb';
+import { dataService } from '@/lib/dataService';
 import { ref, onValue, off } from 'firebase/database';
-import { doc, onSnapshot } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
 import { Trophy, Star, Megaphone, Thermometer, Clock } from 'lucide-react';
@@ -222,80 +221,121 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return () => clearTimeout(t);
     }, [animacionActual?.id, animacionActual?.ts]);
 
-    // Data Sync
+    // Data Sync (Supabase)
     useEffect(() => {
         if (!id) return;
-        const docRef = doc(db, 'tournaments', id);
-        const unsubscribe = onSnapshot(docRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const tourneyData = { id: docSnap.id, ...docSnap.data() } as any;
-                setTournament(tourneyData);
-                if (tourneyData.matches) {
-                    // Resolver partido: por id, por índice (match_N) o por pista (court_N) para que la pizarra coincida con el partido del control
-                    let found = tourneyData.matches.find((m: any) => m.id === matchId);
-                    if (!found && /^match_(\d+)$/.test(matchId)) {
-                        const idx = parseInt(matchId.replace('match_', ''), 10);
-                        if (idx >= 0 && idx < tourneyData.matches.length) found = tourneyData.matches[idx];
-                    }
-                    if (!found && matchId.startsWith('court_')) {
-                        const courtNum = parseInt(matchId.replace('court_', ''), 10);
-                        if (!isNaN(courtNum))
-                            found = tourneyData.matches.find((m: any) => (m.court ?? (m.courtIndex != null ? m.courtIndex + 1 : null)) === courtNum) ?? tourneyData.matches.find((m: any) => m.courtIndex === courtNum - 1);
-                    }
-                    if (found) {
-                        const team1 = found.team1Index > 0 ? tourneyData.teams?.[found.team1Index - 1] : null;
-                        const team2 = found.team2Index > 0 ? tourneyData.teams?.[found.team2Index - 1] : null;
-                        const matchData = {
-                            ...found,
-                            court: found.court || (found.courtIndex !== undefined ? found.courtIndex + 1 : undefined),
-                            t1p1: team1?.p1?.name || found.team1?.p1Name || found.team1?.p1?.name || 'Jugador 1',
-                            t1p2: team1?.p2?.name || found.team1?.p2Name || found.team1?.p2?.name || 'Jugador 2',
-                            t2p1: team2?.p1?.name || found.team2?.p1Name || found.team2?.p1?.name || 'Jugador 1',
-                            t2p2: team2?.p2?.name || found.team2?.p2Name || found.team2?.p2?.name || 'Jugador 2',
-                            t1p1Photo: team1?.p1?.photo || found.team1?.p1?.photo || null,
-                            t1p2Photo: team1?.p2?.photo || found.team1?.p2?.photo || null,
-                            t2p1Photo: team2?.p1?.photo || found.team2?.p1?.photo || null,
-                            t2p2Photo: team2?.p2?.photo || found.team2?.p2?.photo || null,
-                            t1Name: team1 ? `${team1.p1.name} / ${team1.p2.name}` : 'TBD',
-                            t2Name: team2 ? `${team2.p1.name} / ${team2.p2.name}` : 'TBD',
+        setLoading(true);
+
+        let currentTournament: any = null;
+        let currentMatches: any[] = [];
+
+        const updateAll = (t: any, ms: any[]) => {
+            if (!t || !ms) return;
+            setTournament(t);
+
+            // Resolver partido
+            let found = ms.find((m: any) => m.id === matchId);
+            if (!found && /^match_(\d+)$/.test(matchId)) {
+                const idx = parseInt(matchId.replace('match_', ''), 10);
+                if (idx >= 0 && idx < ms.length) found = ms[idx];
+            }
+            if (!found && matchId.startsWith('court_')) {
+                const courtNum = parseInt(matchId.replace('court_', ''), 10);
+                if (!isNaN(courtNum))
+                    found = ms.find((m: any) => (m.court ?? (m.courtIndex != null ? m.courtIndex + 1 : null)) === courtNum) ?? ms.find((m: any) => m.courtIndex === courtNum - 1);
+            }
+
+            if (found) {
+                const resolveTeam = (mTeam: any, teamIdx: number) => {
+                    // Support for embedded teams (new Master Generator)
+                    if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
+                        return {
+                            p1Name: mTeam.isTBD ? (mTeam.teamLabel || '?') : (mTeam.p1Name || mTeam.p1?.name || '?'),
+                            p2Name: mTeam.isTBD ? '' : (mTeam.p2Name || mTeam.p2?.name || '?'),
+                            p1Photo: mTeam.p1?.photo || null,
+                            p2Photo: mTeam.p2?.photo || null,
+                            name: mTeam.isTBD ? (mTeam.teamLabel || '?') : [mTeam.p1Name || mTeam.p1?.name, mTeam.p2Name || mTeam.p2?.name].filter(Boolean).join(' / ') || '?'
                         };
-                        setMatch(matchData);
-
-                        // Extract latest finished matches for ticker
-                        const finished = tourneyData.matches
-                            .filter((mx: any) => mx.status === MatchStatus.FINISHED)
-                            .sort((a: any, b: any) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0))
-                            .slice(0, 3)
-                            .map((mx: any) => {
-                                const t1 = mx.team1Index > 0 ? tourneyData.teams?.[mx.team1Index - 1] : null;
-                                const t2 = mx.team2Index > 0 ? tourneyData.teams?.[mx.team2Index - 1] : null;
-                                return {
-                                    ...mx,
-                                    t1Name: t1 ? `${t1.p1.name}/${t1.p2.name}` : (mx.team1Name || 'T1'),
-                                    t2Name: t2 ? `${t2.p1.name}/${t2.p2.name}` : (mx.team2Name || 'T2'),
-                                };
-                            });
-                        setRecentResults(finished);
-
-                        const next = tourneyData.matches
-                            .filter((m: any) => m.court === found.court && m.status === MatchStatus.PENDING)
-                            .sort((a: any, b: any) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime())[0];
-
-                        if (next) {
-                            const nt1 = next.team1Index > 0 ? tourneyData.teams?.[next.team1Index - 1] : null;
-                            const nt2 = next.team2Index > 0 ? tourneyData.teams?.[next.team2Index - 1] : null;
-                            setNextMatch({
-                                ...next,
-                                t1Name: nt1 ? `${nt1.p1.name} / ${nt1.p2.name}` : 'TBD',
-                                t2Name: nt2 ? `${nt2.p1.name} / ${nt2.p2.name}` : 'TBD',
-                            });
-                        }
                     }
+                    // Legacy support (using indices from t.teams)
+                    const teams = t?.teams || [];
+                    const team = teamIdx > 0 ? teams[teamIdx - 1] : null;
+                    if (!team) return { p1Name: '?', p2Name: '?', p1Photo: null, p2Photo: null, name: teamIdx > 0 ? `Pareja ${teamIdx}` : '?' };
+                    return {
+                        p1Name: team.p1?.name || '?',
+                        p2Name: team.p2?.name || '?',
+                        p1Photo: team.p1?.photo || null,
+                        p2Photo: team.p2?.photo || null,
+                        name: `${team.p1?.name || '?'} / ${team.p2?.name || '?'}`
+                    };
+                };
+
+                const t1 = resolveTeam(found.team1, found.team1Index);
+                const t2 = resolveTeam(found.team2, found.team2Index);
+
+                const matchData = {
+                    ...found,
+                    court: found.court || (found.courtIndex !== undefined ? found.courtIndex + 1 : undefined),
+                    t1p1: t1.p1Name,
+                    t1p2: t1.p2Name,
+                    t2p1: t2.p1Name,
+                    t2p2: t2.p2Name,
+                    t1p1Photo: t1.p1Photo,
+                    t1p2Photo: t1.p2Photo,
+                    t2p1Photo: t2.p1Photo,
+                    t2p2Photo: t2.p2Photo,
+                    t1Name: t1.name,
+                    t2Name: t2.name,
+                };
+                setMatch(matchData);
+
+                // Extract latest finished matches for ticker
+                const finished = ms
+                    .filter((mx: any) => mx.status === MatchStatus.FINISHED)
+                    .sort((a: any, b: any) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
+                    .slice(0, 3)
+                    .map((mx: any) => {
+                        const rt1 = resolveTeam(mx.team1, mx.team1Index);
+                        const rt2 = resolveTeam(mx.team2, mx.team2Index);
+                        return {
+                            ...mx,
+                            t1Name: rt1.name,
+                            t2Name: rt2.name,
+                        };
+                    });
+                setRecentResults(finished);
+
+                const next = ms
+                    .filter((m: any) => m.court === found.court && m.status === MatchStatus.PENDING)
+                    .sort((a: any, b: any) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime())[0];
+
+                if (next) {
+                    const rnt1 = resolveTeam(next.team1, next.team1Index);
+                    const rnt2 = resolveTeam(next.team2, next.team2Index);
+                    setNextMatch({
+                        ...next,
+                        t1Name: rnt1.name,
+                        t2Name: rnt2.name,
+                    });
                 }
             }
             setLoading(false);
+        };
+
+        const unsubT = dataService.subscribeToTournament(id, (t) => {
+            currentTournament = t;
+            if (currentMatches.length > 0) updateAll(currentTournament, currentMatches);
         });
-        return () => unsubscribe();
+
+        const unsubM = dataService.subscribeToMatches(id, (ms) => {
+            currentMatches = ms;
+            if (currentTournament) updateAll(currentTournament, currentMatches);
+        });
+
+        return () => {
+            unsubT();
+            unsubM();
+        };
     }, [id, matchId]);
 
     // Ad switching
@@ -584,11 +624,10 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                             <>
                                                 <div className="w-1 h-1 bg-gray-700 rounded-full" />
                                                 <span
-                                                    className={`font-black italic uppercase tracking-widest leading-none ${
-                                                        cronometroTipo === 'minimal' ? 'text-white/90 text-[0.6em]' :
+                                                    className={`font-black italic uppercase tracking-widest leading-none ${cronometroTipo === 'minimal' ? 'text-white/90 text-[0.6em]' :
                                                         cronometroTipo === 'broadcast' ? 'text-padel-primary drop-shadow-[0_0_8px_rgba(204,255,0,0.4)]' :
-                                                        cronometroTipo === 'digital' ? 'text-cyan-400 font-mono tabular-nums' : 'text-padel-primary'
-                                                    }`}
+                                                            cronometroTipo === 'digital' ? 'text-cyan-400 font-mono tabular-nums' : 'text-padel-primary'
+                                                        }`}
                                                     style={{ fontSize: 'clamp(6px,0.65vw,10px)' }}
                                                 >{matchDuration}</span>
                                             </>
