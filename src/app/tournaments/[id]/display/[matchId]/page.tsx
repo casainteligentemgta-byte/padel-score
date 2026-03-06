@@ -4,7 +4,9 @@ import { useState, useEffect, use, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { rtdb } from '@/lib/rtdb';
 import { dataService } from '@/lib/dataService';
+import { db } from '@/lib/firebase';
 import { ref, onValue, off } from 'firebase/database';
+import { doc, onSnapshot, collection } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
 import { Trophy, Star, Megaphone, Thermometer, Clock } from 'lucide-react';
@@ -221,7 +223,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return () => clearTimeout(t);
     }, [animacionActual?.id, animacionActual?.ts]);
 
-    // Data Sync (Supabase)
+    // Data Sync (Supabase & Firestore)
     useEffect(() => {
         if (!id) return;
         setLoading(true);
@@ -318,23 +320,50 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                         t2Name: rnt2.name,
                     });
                 }
+                setLoading(false);
             }
-            setLoading(false);
         };
 
+        // 1. Supabase Subscriptions
         const unsubT = dataService.subscribeToTournament(id, (t) => {
+            if (!t) return;
             currentTournament = t;
             if (currentMatches.length > 0) updateAll(currentTournament, currentMatches);
         });
 
         const unsubM = dataService.subscribeToMatches(id, (ms) => {
+            if (!ms || ms.length === 0) return;
             currentMatches = ms;
             if (currentTournament) updateAll(currentTournament, currentMatches);
         });
 
+        // 2. Firestore Subscriptions (Fallback / Event view support)
+        let unsubFT = () => { };
+        let unsubFM = () => { };
+
+        if (db) {
+            unsubFT = onSnapshot(doc(db, 'tournaments', id), (snap) => {
+                if (!snap.exists()) return;
+                currentTournament = { id: snap.id, ...snap.data() };
+                if (currentMatches.length > 0) updateAll(currentTournament, currentMatches);
+            });
+
+            unsubFM = onSnapshot(collection(db, 'tournaments', id, 'matches'), (snap) => {
+                if (snap.empty) return;
+                currentMatches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                if (currentTournament) updateAll(currentTournament, currentMatches);
+            });
+        }
+
+        // Safety timeout to stop spinner if no data found
+        const timeout = setTimeout(() => setLoading(false), 10000);
+
         return () => {
             unsubT();
             unsubM();
+            unsubFT();
+            unsubFM();
+            clearTimeout(timeout);
         };
     }, [id, matchId]);
 
