@@ -28,7 +28,7 @@ import { rtdb } from '@/lib/rtdb';
 import { dispararAnimacionMarcador } from '@/lib/rtdbService';
 import { dataService } from '@/lib/dataService';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, collection } from 'firebase/firestore';
+import { doc, onSnapshot, collection, updateDoc } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
 import RefereeRemoteControl from '@/components/RefereeRemoteControl';
@@ -617,7 +617,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     const server = match.server || { team: 1, player: 1 };
 
     return (
-        <div className="fixed inset-0 bg-[#070707] text-white flex flex-col font-sans select-none overflow-hidden touch-none p-2 gap-2 premium-gradient">
+        <div className="fixed inset-0 bg-[#070707] text-white flex flex-col font-sans select-none overflow-hidden touch-none p-1.5 gap-1.5 premium-gradient">
             {/* Background Glows */}
             <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-padel-primary/5 blur-[120px] rounded-full pointer-events-none" />
             <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-padel-primary/5 blur-[120px] rounded-full pointer-events-none" />
@@ -631,7 +631,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             />
 
             {/* Rectangle 1: Header */}
-            <header className="h-24 px-8 flex items-center justify-between relative z-50 glass rounded-[2rem] shadow-2xl shrink-0">
+            <header className="h-20 px-6 flex items-center justify-between relative z-50 glass rounded-[1.5rem] shadow-2xl shrink-0">
                 {/* Side Change Alert */}
                 <AnimatePresence>
                     {showSideChange && (
@@ -676,7 +676,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                             {match.courtName || (match.court ? `Pista ${match.court}` : 'Pista 1')}
                         </h1>
                         <div className="flex flex-col items-center gap-1">
-                            <span className="text-xl font-black italic uppercase text-white/80 leading-none tracking-tight text-center">
+                            <span className="text-lg font-black italic uppercase text-white/80 leading-none tracking-tight text-center">
                                 {match.roundName || match.groupName || 'Fase de Grupos'}
                             </span>
                             <span className="text-sm font-black italic uppercase text-white/60 leading-none tracking-tight text-center">
@@ -787,13 +787,13 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             </header>
 
             {/* Rectangle 2 & 3: Middle Content */}
-            <main className="flex-1 flex flex-wrap gap-2 min-h-0 overflow-hidden content-start">
+            <main className="flex-1 flex flex-wrap gap-1.5 min-h-0 overflow-hidden content-start">
                 {/* Team 1 Card */}
-                <div className="flex-1 glass rounded-[2.5rem] p-5 flex flex-col items-center relative overflow-hidden group shadow-2xl">
+                <div className="flex-1 glass rounded-[2rem] p-4 flex flex-col items-center relative overflow-hidden group shadow-2xl min-w-[280px]">
                     <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/[0.04] to-transparent opacity-50" />
 
                     {/* Players Section — centrado: J1, J2 con mismo tamaño; servicio = solo borde amarillo */}
-                    <div className="flex justify-center items-start gap-4 mb-4 relative z-10 w-full">
+                    <div className="flex justify-center items-start gap-4 mb-3 relative z-10 w-full">
                         {[1, 2].map((pNum) => {
                             const isServer = server.team === 1 && server.player === pNum;
                             const playerName = pNum === 1 ? match.team1.p1 : match.team1.p2;
@@ -803,10 +803,10 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                 <div key={pNum} className="flex flex-col items-center gap-4 max-w-[140px] shrink-0">
                                     <div
                                         onClick={() => handlePlayerIconClick(1, pNum)}
-                                        className="relative w-20 h-20 rounded-[1.5rem] transition-all duration-500 cursor-pointer flex items-center justify-center opacity-90 hover:opacity-100"
+                                        className="relative w-16 h-16 rounded-2xl transition-all duration-500 cursor-pointer flex items-center justify-center opacity-90 hover:opacity-100"
                                     >
-                                        <div className={`w-full h-full rounded-[1.5rem] flex items-center justify-center border-4 transition-colors ${isServer ? 'border-padel-primary' : 'border-white/10'}`}>
-                                            <span className="text-xl font-black italic text-white/90">{jLabel}</span>
+                                        <div className={`w-full h-full rounded-2xl flex items-center justify-center border-4 transition-colors ${isServer ? 'border-padel-primary' : 'border-white/10'}`}>
+                                            <span className="text-lg font-black italic text-white/90">{jLabel}</span>
                                         </div>
                                     </div>
                                     <AutoShrinkName
@@ -819,7 +819,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     </div>
 
                     {/* Vertical Stats (Games/Sets) on the inner edge */}
-                    <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col items-center gap-6 z-20 bg-black/20 backdrop-blur-md border border-white/5 py-6 px-3 rounded-3xl">
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 z-20 bg-black/20 backdrop-blur-md border border-white/5 py-4 px-2.5 rounded-2xl">
                         <div className="flex flex-col items-center">
                             <span className="text-[8px] font-black uppercase text-gray-500 tracking-[0.2em] mb-1">G</span>
                             <span className="text-4xl font-black italic tabular-nums text-padel-primary leading-none">
@@ -836,7 +836,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     </div>
 
                     {/* Central Points Control (marcador del game) — centrado */}
-                    <div className="flex items-center justify-center gap-3 p-1.5 bg-black/40 border border-white/10 rounded-[1.5rem] mb-4 relative z-10 shadow-inner w-full">
+                    <div className="flex items-center justify-center gap-2.5 p-1 bg-black/40 border border-white/10 rounded-2xl mb-3 relative z-10 shadow-inner w-full">
                         <motion.button
                             whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.08)' }}
                             whileTap={{ scale: 0.9 }}
@@ -901,7 +901,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
 
                 {/* Team 2 Card */}
-                <div className="flex-1 glass rounded-[2.5rem] p-5 flex flex-col items-center relative overflow-hidden group shadow-2xl">
+                <div className="flex-1 glass rounded-[2rem] p-4 flex flex-col items-center relative overflow-hidden group shadow-2xl min-w-[280px]">
                     <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/[0.04] to-transparent opacity-50" />
 
                     {/* Players Section — centrado: J3, J4 con mismo tamaño; servicio = solo borde amarillo */}
@@ -915,10 +915,10 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                                 <div key={pNum} className="flex flex-col items-center gap-4 max-w-[140px] shrink-0">
                                     <div
                                         onClick={() => handlePlayerIconClick(2, pNum)}
-                                        className="relative w-20 h-20 rounded-[1.5rem] transition-all duration-500 cursor-pointer flex items-center justify-center opacity-90 hover:opacity-100"
+                                        className="relative w-16 h-16 rounded-2xl transition-all duration-500 cursor-pointer flex items-center justify-center opacity-90 hover:opacity-100"
                                     >
-                                        <div className={`w-full h-full rounded-[1.5rem] flex items-center justify-center border-4 transition-colors ${isServer ? 'border-padel-primary' : 'border-white/10'}`}>
-                                            <span className="text-xl font-black italic text-white/90">{jLabel}</span>
+                                        <div className={`w-full h-full rounded-2xl flex items-center justify-center border-4 transition-colors ${isServer ? 'border-padel-primary' : 'border-white/10'}`}>
+                                            <span className="text-lg font-black italic text-white/90">{jLabel}</span>
                                         </div>
                                     </div>
                                     <AutoShrinkName
@@ -931,7 +931,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     </div>
 
                     {/* Vertical Stats (Games/Sets) on the inner edge */}
-                    <div className="absolute left-6 top-1/2 -translate-y-1/2 flex flex-col items-center gap-6 z-20 bg-black/20 backdrop-blur-md border border-white/5 py-6 px-3 rounded-3xl">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 z-20 bg-black/20 backdrop-blur-md border border-white/5 py-4 px-2.5 rounded-2xl">
                         <div className="flex flex-col items-center">
                             <span className="text-[8px] font-black uppercase text-gray-500 tracking-[0.2em] mb-1">G</span>
                             <span className="text-4xl font-black italic tabular-nums text-padel-primary leading-none">
@@ -948,7 +948,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     </div>
 
                     {/* Central Points Control (marcador del game) — centrado */}
-                    <div className="flex items-center justify-center gap-3 p-1.5 bg-black/40 border border-white/10 rounded-[1.5rem] mb-4 relative z-10 shadow-inner w-full">
+                    <div className="flex items-center justify-center gap-2.5 p-1 bg-black/40 border border-white/10 rounded-2xl mb-3 relative z-10 shadow-inner w-full">
                         <motion.button
                             whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.08)' }}
                             whileTap={{ scale: 0.9 }}
@@ -1013,9 +1013,9 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
                 {/* Animaciones pizarra: botones debajo de los puntos del game (disparan en la pantalla de la pizarra) */}
                 {Object.keys(animacionesMarcador).length > 0 && (
-                    <div className="w-full flex-[1_1_100%] flex flex-col gap-1.5 p-2 bg-black/30 border border-white/10 rounded-2xl self-start">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Animaciones pizarra</span>
-                        <div className="flex flex-wrap gap-2">
+                    <div className="w-full flex-[1_1_100%] flex flex-col gap-1 p-2 bg-black/30 border border-white/10 rounded-xl self-start">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-gray-500">Animaciones pizarra</span>
+                        <div className="flex flex-wrap gap-1.5">
                             {Object.entries(animacionesMarcador).map(([animId, a]) => (
                                 <motion.button
                                     key={animId}
@@ -1034,7 +1034,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             </main>
 
             {/* Rectangle 4: Footer */}
-            <footer className="h-14 px-8 flex items-center justify-between relative z-10 glass rounded-[1.5rem] shadow-2xl gap-8 shrink-0">
+            <footer className="h-12 px-6 flex items-center justify-between relative z-10 glass rounded-[1.2rem] shadow-2xl gap-6 shrink-0">
                 {/* Switch de Punto de Oro */}
                 <motion.div
                     whileHover={{ scale: 1.02 }}
