@@ -12,6 +12,8 @@ import {
 import { useAuth } from '@/lib/AuthContext';
 import { MatchStatus, TournamentType } from '@/types/tournament';
 import { dataService } from '@/lib/dataService';
+import { db } from '@/lib/firebase';
+import { doc, onSnapshot, collection } from 'firebase/firestore';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -377,62 +379,99 @@ export default function ControlPanel({ params }: { params: Promise<{ id: string 
 
     useEffect(() => {
         if (!id || authLoading) return;
+        if (!id || authLoading) return;
         setLoading(true);
 
-        const unsubTournament = dataService.subscribeToTournament(id, (t) => {
-            if (t) setTournament(t);
-        });
+        let currentTournament: any = null;
+        let currentMatches: any[] = [];
 
-        const unsubMatches = dataService.subscribeToMatches(id, (newMatches) => {
-            if (newMatches) {
-                const enriched = newMatches.map(m => {
-                    const matchId = m.id;
-                    const data = m.data || {};
-                    const resolveTeam = (mTeam: any, teamIdx: number, side: string) => {
-                        // Support for embedded teams (new Master Generator)
-                        if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
-                            if (mTeam.isTBD || mTeam.teamLabel) {
-                                return { name: mTeam.teamLabel || mTeam.p1?.name || (mTeam.p1Name ? mTeam.p1Name : '?'), photo1: null, photo2: null };
-                            }
-                            const p1n = (mTeam.p1Name || mTeam.p1?.name || '').trim();
-                            const p2n = (mTeam.p2Name || mTeam.p2?.name || '').trim();
-                            return {
-                                name: [p1n, p2n].filter(Boolean).join(' · ') || '?',
-                                photo1: mTeam.p1?.photo || null,
-                                photo2: mTeam.p2?.photo || null,
-                            };
+        const updateData = (t: any, ms: any[]) => {
+            if (!t || !ms) return;
+            setTournament(t);
+            const enriched = ms.map(m => {
+                const matchId = m.id;
+                const data = m.data || m; // Support both format (data wrapper or flat)
+                const resolveTeam = (mTeam: any, teamIdx: number, side: string) => {
+                    // Support for embedded teams (new Master Generator)
+                    if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
+                        if (mTeam.isTBD || mTeam.teamLabel) {
+                            return { name: mTeam.teamLabel || mTeam.p1?.name || (mTeam.p1Name ? mTeam.p1Name : '?'), photo1: null, photo2: null };
                         }
-                        // Legacy support (using indices from data.teams)
-                        const teams = tournament?.teams || [];
-                        const t = teamIdx > 0 ? teams[teamIdx - 1] : null;
-                        if (!t) return { name: teamIdx > 0 ? `Pareja ${teamIdx}` : '?', photo1: null, photo2: null };
-                        const p1n = t.p1?.name || 'Jugador 1';
-                        const p2n = t.p2?.name || 'Jugador 2';
+                        const p1n = (mTeam.p1Name || mTeam.p1?.name || '').trim();
+                        const p2n = (mTeam.p2Name || mTeam.p2?.name || '').trim();
                         return {
-                            name: `${p1n} · ${p2n}`,
-                            photo1: t.p1?.photo || null,
-                            photo2: t.p2?.photo || null,
+                            name: [p1n, p2n].filter(Boolean).join(' · ') || '?',
+                            photo1: mTeam.p1?.photo || null,
+                            photo2: mTeam.p2?.photo || null,
                         };
-                    };
-
+                    }
+                    // Legacy support (using indices from external teams array)
+                    const teams = t?.teams || [];
+                    const foundTeam = teamIdx > 0 ? teams[teamIdx - 1] : null;
+                    if (!foundTeam) return { name: teamIdx > 0 ? `Pareja ${teamIdx}` : '?', photo1: null, photo2: null };
+                    const p1n = foundTeam.p1?.name || 'Jugador 1';
+                    const p2n = foundTeam.p2?.name || 'Jugador 2';
                     return {
-                        ...data,
-                        id: matchId,
-                        tournament_id: m.tournament_id,
-                        court: data.court || (data.courtIndex !== undefined ? data.courtIndex + 1 : undefined),
-                        team1: resolveTeam(data.team1, data.team1Index, 'team1'),
-                        team2: resolveTeam(data.team2, data.team2Index, 'team2'),
-                        stage: data.stage || 'OPEN',
-                    } as EnrichedMatch;
-                });
-                setMatches(enriched);
-            }
+                        name: `${p1n} · ${p2n}`,
+                        photo1: foundTeam.p1?.photo || null,
+                        photo2: foundTeam.p2?.photo || null,
+                    };
+                };
+
+                return {
+                    ...data,
+                    id: matchId,
+                    tournament_id: m.tournament_id || id,
+                    court: data.court || (data.courtIndex !== undefined ? data.courtIndex + 1 : undefined),
+                    team1: resolveTeam(data.team1, data.team1Index, 'team1'),
+                    team2: resolveTeam(data.team2, data.team2Index, 'team2'),
+                    stage: data.stage || 'OPEN',
+                } as EnrichedMatch;
+            });
+            setMatches(enriched);
             setLoading(false);
+        };
+
+        // 1. Supabase Subscriptions
+        const unsubT = dataService.subscribeToTournament(id, (t) => {
+            if (!t) return;
+            currentTournament = t;
+            if (currentMatches.length > 0) updateData(currentTournament, currentMatches);
         });
+
+        const unsubM = dataService.subscribeToMatches(id, (newMatches) => {
+            if (!newMatches || newMatches.length === 0) return;
+            currentMatches = newMatches;
+            if (currentTournament) updateData(currentTournament, currentMatches);
+        });
+
+        // 2. Firestore Subscriptions (Fallback / Event view support)
+        let unsubFT = () => { };
+        let unsubFM = () => { };
+
+        if (db) {
+            unsubFT = onSnapshot(doc(db, 'tournaments', id), (snap) => {
+                if (!snap.exists()) return;
+                currentTournament = { id: snap.id, ...snap.data() };
+                if (currentMatches.length > 0) updateData(currentTournament, currentMatches);
+            });
+
+            unsubFM = onSnapshot(collection(db, 'tournaments', id, 'matches'), (snap) => {
+                if (snap.empty) return;
+                currentMatches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                if (currentTournament) updateData(currentTournament, currentMatches);
+            });
+        }
+
+        // Safety timeout
+        const timeout = setTimeout(() => setLoading(false), 10000);
 
         return () => {
-            unsubTournament();
-            unsubMatches();
+            if (typeof unsubT === 'function') unsubT();
+            if (typeof unsubM === 'function') unsubM();
+            unsubFT();
+            unsubFM();
+            clearTimeout(timeout);
         };
     }, [id, authLoading, tournament?.teams]);
 

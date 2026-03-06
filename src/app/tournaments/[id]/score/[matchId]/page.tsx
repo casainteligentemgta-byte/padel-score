@@ -27,6 +27,8 @@ import { ref, onValue, off } from 'firebase/database';
 import { rtdb } from '@/lib/rtdb';
 import { dispararAnimacionMarcador } from '@/lib/rtdbService';
 import { dataService } from '@/lib/dataService';
+import { db } from '@/lib/firebase';
+import { doc, onSnapshot, collection } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
 import RefereeRemoteControl from '@/components/RefereeRemoteControl';
@@ -212,80 +214,116 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
     useEffect(() => {
         if (!id || authLoading) return;
+        setLoading(true);
 
-        const unsubTournament = dataService.subscribeToTournament(id, (tourneyData) => {
-            if (tourneyData) {
-                setTournament(tourneyData);
-                if (tourneyData.scoringSystem) {
-                    setIsGoldenPoint(tourneyData.scoringSystem === 'GOLDEN_POINT');
+        let currentTournament: any = null;
+        let currentMatches: any[] = [];
+
+        const updateAll = (t: any, ms: any[]) => {
+            if (!t || !ms) return;
+            setTournament(t);
+            if (t.scoringSystem) {
+                setIsGoldenPoint(t.scoringSystem === 'GOLDEN_POINT');
+            }
+
+            // Resolver partido
+            let foundMatchRaw = ms.find((m: any) => m.id === matchId);
+
+            if (!foundMatchRaw) {
+                const courtNum = matchId.startsWith('court_')
+                    ? parseInt(matchId.replace('court_', ''))
+                    : matchId.startsWith('match_')
+                        ? parseInt(matchId.replace('match_', '')) + 1
+                        : parseInt(matchId);
+
+                if (!isNaN(courtNum)) {
+                    foundMatchRaw = ms.find((m: any) =>
+                        (m.court || (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined)) === courtNum
+                    ) ?? ms[courtNum - 1] ?? null;
+                } else {
+                    foundMatchRaw = ms[0] ?? null;
                 }
             }
+
+            if (foundMatchRaw) {
+                const foundMatch = {
+                    ...foundMatchRaw,
+                    court: foundMatchRaw.court || (foundMatchRaw.courtIndex !== undefined ? foundMatchRaw.courtIndex + 1 : undefined),
+                };
+
+                // Team resolution logic
+                const resolveNames = (embeddedTeam: any, teamIdx: number, matchTeamName?: string) => {
+                    // Support for embedded teams (new Master Generator)
+                    if (embeddedTeam && (embeddedTeam.p1 || embeddedTeam.p1Name || embeddedTeam.isTBD || embeddedTeam.teamLabel)) {
+                        const p1n = (embeddedTeam.p1Name || embeddedTeam.p1?.name || '').trim();
+                        const p2n = (embeddedTeam.p2Name || embeddedTeam.p2?.name || '').trim();
+                        const p1Final = embeddedTeam.isTBD ? (embeddedTeam.teamLabel || 'TBD') : (p1n || `Jugador ${(teamIdx * 2) - 1}`);
+                        const p2Final = embeddedTeam.isTBD ? '' : (p2n || `Jugador ${teamIdx * 2}`);
+                        const p1Photo = embeddedTeam.p1?.photo || null;
+                        const p2Photo = embeddedTeam.p2?.photo || null;
+                        return { p1: p1Final, p2: p2Final, full: [p1Final, p2Final].filter(Boolean).join(' / '), p1Photo, p2Photo };
+                    }
+                    // Legacy support
+                    const teams = t?.teams || [];
+                    const legacyTeam = teamIdx > 0 ? teams[teamIdx - 1] : null;
+                    if (!legacyTeam) return { p1: '?', p2: '?', full: matchTeamName || '?', p1Photo: null, p2Photo: null };
+                    const p1n = legacyTeam.p1?.name || 'Jugador 1';
+                    const p2n = legacyTeam.p2?.name || 'Jugador 2';
+                    return { p1: p1n, p2: p2n, full: `${p1n} / ${p2n}`, p1Photo: legacyTeam.p1?.photo || null, p2Photo: legacyTeam.p2?.photo || null };
+                };
+
+                const t1 = resolveNames(foundMatch.team1, foundMatch.team1Index ?? 0, foundMatch.team1Name);
+                const t2 = resolveNames(foundMatch.team2, foundMatch.team2Index ?? 0, foundMatch.team2Name);
+
+                setMatch({
+                    ...foundMatch,
+                    team1: t1,
+                    team2: t2,
+                });
+            }
+            setLoading(false);
+        };
+
+        // 1. Supabase Subscriptions
+        const unsubT = dataService.subscribeToTournament(id, (tourneyData) => {
+            if (!tourneyData) return;
+            currentTournament = tourneyData;
+            if (currentMatches.length > 0) updateAll(currentTournament, currentMatches);
         });
 
         const unsubMatches = dataService.subscribeToMatches(id, (matchesData) => {
-            if (matchesData) {
-                // Find match by id or fallback
-                let foundMatchRaw = matchesData.find((m: any) => m.id === matchId);
-
-                if (!foundMatchRaw) {
-                    const courtNum = matchId.startsWith('court_')
-                        ? parseInt(matchId.replace('court_', ''))
-                        : matchId.startsWith('match_')
-                            ? parseInt(matchId.replace('match_', '')) + 1
-                            : parseInt(matchId);
-
-                    if (!isNaN(courtNum)) {
-                        foundMatchRaw = matchesData.find((m: any) =>
-                            (m.court || (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined)) === courtNum
-                        ) ?? matchesData[courtNum - 1] ?? null;
-                    } else {
-                        foundMatchRaw = matchesData[0] ?? null;
-                    }
-                }
-
-                if (foundMatchRaw) {
-                    const foundMatch = {
-                        ...foundMatchRaw,
-                        // Ensure ID is correctly mapped from Supabase if needed
-                        court: foundMatchRaw.court || (foundMatchRaw.courtIndex !== undefined ? foundMatchRaw.courtIndex + 1 : undefined),
-                    };
-
-                    // Team resolution logic
-                    const tourneyDataForTeams = tournament || {}; // Use current tournament state for legacy teams
-                    const legacyTeam1 = foundMatch.team1Index > 0 ? tourneyDataForTeams.teams?.[foundMatch.team1Index - 1] : null;
-                    const legacyTeam2 = foundMatch.team2Index > 0 ? tourneyDataForTeams.teams?.[foundMatch.team2Index - 1] : null;
-
-                    const embeddedTeam1 = foundMatch.team1 && (foundMatch.team1.p1Name || foundMatch.team1.p1?.name) ? foundMatch.team1 : null;
-                    const embeddedTeam2 = foundMatch.team2 && (foundMatch.team2.p1Name || foundMatch.team2.p1?.name) ? foundMatch.team2 : null;
-
-                    const resolveNames = (embeddedTeam: any, legacyTeam: any, idx: number, matchTeamName?: string) => {
-                        const p1n = embeddedTeam?.p1Name?.trim() || embeddedTeam?.p1?.name?.trim() || legacyTeam?.p1Name?.trim() || legacyTeam?.p1?.name?.trim() || '';
-                        const p2n = embeddedTeam?.p2Name?.trim() || embeddedTeam?.p2?.name?.trim() || legacyTeam?.p2Name?.trim() || legacyTeam?.p2?.name?.trim() || '';
-                        const nameFallback = matchTeamName || embeddedTeam?.name || legacyTeam?.name || '';
-                        const parts = nameFallback.split('/').map((s: string) => s.trim());
-                        const p1Final = p1n || parts[0] || (idx > 0 ? `Jugador ${(idx * 2) - 1}` : 'Jugador 1');
-                        const p2Final = p2n || parts[1] || (idx > 0 ? `Jugador ${idx * 2}` : 'Jugador 2');
-                        const p1Photo = embeddedTeam?.p1?.photo || legacyTeam?.p1?.photo || null;
-                        const p2Photo = embeddedTeam?.p2?.photo || legacyTeam?.p2?.photo || null;
-                        return { p1: p1Final, p2: p2Final, full: `${p1Final} / ${p2Final}`, p1Photo, p2Photo };
-                    };
-
-                    const t1 = resolveNames(embeddedTeam1, legacyTeam1, foundMatch.team1Index ?? 0, foundMatch.team1Name);
-                    const t2 = resolveNames(embeddedTeam2, legacyTeam2, foundMatch.team2Index ?? 0, foundMatch.team2Name);
-
-                    setMatch({
-                        ...foundMatch,
-                        team1: t1,
-                        team2: t2,
-                    });
-                }
-            }
-            setLoading(false);
+            if (!matchesData || matchesData.length === 0) return;
+            currentMatches = matchesData;
+            if (currentTournament) updateAll(currentTournament, currentMatches);
         });
 
+        // 2. Firestore Subscriptions
+        let unsubFT = () => { };
+        let unsubFM = () => { };
+
+        if (db) {
+            unsubFT = onSnapshot(doc(db, 'tournaments', id), (snap) => {
+                if (!snap.exists()) return;
+                currentTournament = { id: snap.id, ...snap.data() };
+                if (currentMatches.length > 0) updateAll(currentTournament, currentMatches);
+            });
+
+            unsubFM = onSnapshot(collection(db, 'tournaments', id, 'matches'), (snap) => {
+                if (snap.empty) return;
+                currentMatches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                if (currentTournament) updateAll(currentTournament, currentMatches);
+            });
+        }
+
+        // Safety timeout
+        const timeout = setTimeout(() => setLoading(false), 10000);
+
         return () => {
-            unsubTournament();
-            unsubMatches();
+            if (typeof unsubT === 'function') unsubT();
+            if (typeof unsubMatches === 'function') unsubMatches();
+            unsubFT();
+            unsubFM();
+            clearTimeout(timeout);
         };
     }, [id, matchId, authLoading, tournament?.teams]);
 
