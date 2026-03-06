@@ -40,6 +40,7 @@ export interface MasterScheduleConfig {
     sponsorName?: string;
 }
 
+
 export class MasterScheduleEngine {
 
     static generateMasterSchedule(config: MasterScheduleConfig) {
