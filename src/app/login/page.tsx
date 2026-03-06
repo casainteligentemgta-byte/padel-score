@@ -3,34 +3,29 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    LogIn,
     Mail,
     Lock,
     Chrome,
-    ArrowRight,
     User,
     AlertCircle,
     CheckCircle2,
     RefreshCw,
-    ShieldCheck
+    ChevronRight,
+    Zap
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { isValidEmail, isValidPassword } from '@/lib/authValidators';
-import { getFirebaseErrorMessage } from '@/lib/firebaseErrorMessages';
+import { getAuthErrorMessage } from '@/lib/authErrorMessages';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function LoginPage() {
-    const [success, setSuccess] = useState<string | null>(null);
     const { user, loading: authLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
     const router = useRouter();
-
-    useEffect(() => {
-        if (!authLoading && user) router.replace('/tournaments');
-    }, [authLoading, user, router]);
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
 
     const [formData, setFormData] = useState({
         email: '',
@@ -38,16 +33,19 @@ export default function LoginPage() {
         name: ''
     });
 
+    useEffect(() => {
+        if (!authLoading && user) router.replace('/tournaments');
+    }, [authLoading, user, router]);
+
     const handleGoogleSignIn = async () => {
         setLoading(true);
         setError(null);
         setSuccess(null);
         try {
             await signInWithGoogle();
-            router.push('/tournaments');
         } catch (err: any) {
             console.error('[Login Google]', err);
-            setError(getFirebaseErrorMessage(err));
+            setError(getAuthErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -55,22 +53,16 @@ export default function LoginPage() {
 
     const handleForgotPassword = async () => {
         if (!formData.email) {
-            setError('Por favor, ingresa tu email primero para restablecer la contraseña.');
+            setError('Ingresa tu email para restablecer la contraseña.');
             return;
         }
         setLoading(true);
         setError(null);
-        setSuccess(null);
         try {
             await forgotPassword(formData.email);
-            setSuccess('Se ha enviado un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.');
+            setSuccess('Email de recuperación enviado. Revisa tu bandeja de entrada.');
         } catch (err: any) {
-            console.error(err);
-            if (err.code === 'auth/user-not-found') {
-                setError('No existe una cuenta con este correo.');
-            } else {
-                setError('Error al enviar el correo de recuperación. Revisa tu conexión.');
-            }
+            setError('Error al enviar el correo de recuperación.');
         } finally {
             setLoading(false);
         }
@@ -78,17 +70,18 @@ export default function LoginPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Validaciones cliente antes de llamar a Firebase
+        setError(null);
+
         if (!isValidEmail(formData.email)) {
-            setError('Ingresa un correo electrónico válido.');
+            setError('Correo electrónico no válido.');
             return;
         }
         if (!isValidPassword(formData.password)) {
-            setError('La contraseña debe tener al menos 6 caracteres.');
+            setError('Mínimo 6 caracteres en la contraseña.');
             return;
         }
+
         setLoading(true);
-        setError(null);
         try {
             if (isLogin) {
                 await signInWithEmail(formData.email, formData.password);
@@ -97,8 +90,7 @@ export default function LoginPage() {
             }
             router.push('/tournaments');
         } catch (err: any) {
-            console.error('[Login]', err);
-            setError(getFirebaseErrorMessage(err));
+            setError(getAuthErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -106,91 +98,88 @@ export default function LoginPage() {
 
     if (authLoading) {
         return (
-            <div className="min-h-screen bg-black flex items-center justify-center">
+            <div className="h-dvh bg-[#0a0a0a] flex items-center justify-center">
                 <RefreshCw className="w-8 h-8 text-padel-primary animate-spin" />
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-black flex items-center justify-center p-6 font-outfit relative overflow-hidden">
-            {/* Background Decor */}
-            <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
-                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-padel-primary/20 blur-[120px] rounded-full animate-pulse" />
-                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[120px] rounded-full" />
+        <div className="h-dvh bg-[#050505] text-white flex flex-col items-center justify-center relative overflow-hidden px-5 font-outfit">
+
+            {/* Ultra-Premium Background */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-padel-primary/10 blur-[130px] rounded-full animate-pulse" style={{ animationDuration: '5s' }} />
+                <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-blue-500/5 blur-[130px] rounded-full animate-pulse" style={{ animationDuration: '8s', animationDelay: '2s' }} />
             </div>
 
             <motion.div
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="w-full max-w-md"
+                className="relative z-10 w-full max-w-sm flex flex-col items-center gap-6"
             >
-                <div className="text-center mb-10">
-                    <Link href="/" className="inline-block mb-6">
-                        <div className="flex items-center justify-center gap-3">
-                            <motion.div
-                                animate={{
-                                    y: [0, -15, 0],
-                                    scaleY: [1, 0.8, 1],
-                                    scaleX: [1, 1.1, 1]
-                                }}
-                                transition={{
-                                    duration: 0.8,
-                                    repeat: Infinity,
-                                    ease: "easeInOut"
-                                }}
-                                className="w-8 h-8 bg-padel-primary rounded-full shadow-[0_5px_15px_rgba(204,255,0,0.4)] relative overflow-hidden flex-shrink-0"
-                            >
-                                <div className="absolute inset-0 border-2 border-black/10 rounded-full scale-110 -translate-x-1" />
-                                <div className="absolute inset-0 border-2 border-black/10 rounded-full scale-110 translate-x-2 translate-y-2" />
-                            </motion.div>
-                            <span className="text-4xl font-black italic uppercase tracking-tighter text-white">
-                                SMART <span className="text-padel-primary">PADEL</span>
-                            </span>
-                        </div>
+                {/* Logo Section */}
+                <div className="flex flex-col items-center gap-4 mb-2">
+                    <Link href="/" className="flex flex-col items-center">
+                        <motion.div
+                            animate={{
+                                y: [0, -25, 0],
+                                scaleY: [1, 0.8, 1],
+                                scaleX: [1, 1.1, 1]
+                            }}
+                            transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                            className="w-12 h-12 bg-padel-primary rounded-full relative overflow-hidden flex items-center justify-center shadow-[0_0_40px_rgba(204,255,0,0.3)]"
+                        >
+                            <div className="absolute inset-0 rounded-full border-[2px] border-black/10 scale-110 -translate-x-1" />
+                            <div className="absolute inset-0 rounded-full border-[2px] border-black/10 scale-110 translate-x-2 translate-y-2" />
+                        </motion.div>
+                        <h1 className="text-4xl font-black italic tracking-tighter uppercase mt-4">
+                            SMART <span className="text-padel-primary">PADEL</span>
+                        </h1>
                     </Link>
-                    <h1 className="text-lg font-bold text-gray-500 uppercase tracking-widest mt-2">
-                        {isLogin ? 'Bienvenido de Nuevo' : 'Únete a la Élite'}
-                    </h1>
-                    <p className="text-gray-500 font-medium mt-2">
-                        {isLogin ? 'Accede a tu panel de gestión deportiva.' : 'Comienza a organizar tus torneos hoy mismo.'}
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.4em] opacity-50">
+                        {isLogin ? 'Acceso a la plataforma' : 'Regístrate en el sistema'}
                     </p>
                 </div>
 
-                <div className="glass rounded-[2.5rem] p-8 md:p-10 border-white/10 shadow-2xl relative">
-                    {/* Toggle */}
-                    <div className="flex bg-white/5 p-1 rounded-2xl mb-8 border border-white/5">
+                {/* Main Auth Card */}
+                <div className="w-full glass rounded-[2.5rem] p-8 border border-white/10 shadow-3xl backdrop-blur-3xl bg-white/[0.02]">
+
+                    {/* Form Type Switcher */}
+                    <div className="flex bg-black/40 p-1 rounded-2xl mb-8 border border-white/5 relative">
+                        <div
+                            className={`absolute h-[calc(100%-8px)] w-[calc(50%-4px)] bg-padel-primary rounded-xl transition-all duration-500 ease-[0.16, 1, 0.3, 1] ${isLogin ? 'left-[4px]' : 'left-[calc(50%)]'}`}
+                        />
                         <button
-                            onClick={() => setIsLogin(true)}
-                            className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${isLogin ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}
+                            onClick={() => { setIsLogin(true); setError(null); }}
+                            className={`flex-1 py-3.5 relative z-10 font-black uppercase text-[10px] tracking-widest transition-colors duration-300 ${isLogin ? 'text-black' : 'text-gray-500 hover:text-white'}`}
                         >
-                            Iniciar Sesión
+                            Login
                         </button>
                         <button
-                            onClick={() => setIsLogin(false)}
-                            className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${!isLogin ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}
+                            onClick={() => { setIsLogin(false); setError(null); }}
+                            className={`flex-1 py-3.5 relative z-10 font-black uppercase text-[10px] tracking-widest transition-colors duration-300 ${!isLogin ? 'text-black' : 'text-gray-500 hover:text-white'}`}
                         >
-                            Crear Cuenta
+                            Registro
                         </button>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-5">
-                        <AnimatePresence mode='wait'>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <AnimatePresence mode="wait">
                             {!isLogin && (
                                 <motion.div
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
-                                    className="space-y-2 overflow-hidden"
+                                    className="space-y-2"
                                 >
-                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-4">Nombre</label>
-                                    <div className="relative">
-                                        <User className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                                    <div className="relative group">
+                                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-padel-primary transition-colors" />
                                         <input
                                             required={!isLogin}
                                             type="text"
-                                            placeholder="Tu nombre completo"
-                                            className="w-full bg-white/5 border border-white/10 rounded-2xl pl-14 pr-6 py-4 outline-none focus:border-padel-primary/50 transition-colors font-bold text-white"
+                                            placeholder="NOMBRE COMPLETO"
+                                            className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-6 py-4 text-sm outline-none focus:border-padel-primary/40 transition-all font-bold text-white placeholder:text-gray-700 uppercase italic tracking-tight"
                                             value={formData.name}
                                             onChange={e => setFormData({ ...formData, name: e.target.value })}
                                         />
@@ -200,14 +189,13 @@ export default function LoginPage() {
                         </AnimatePresence>
 
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-4">Email</label>
-                            <div className="relative">
-                                <Mail className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                            <div className="relative group">
+                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-padel-primary transition-colors" />
                                 <input
                                     required
                                     type="email"
-                                    placeholder="ejemplo@correo.com"
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl pl-14 pr-6 py-4 outline-none focus:border-padel-primary/50 transition-colors font-bold text-white"
+                                    placeholder="EMAIL@SISTEMA.COM"
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-6 py-4 text-sm outline-none focus:border-padel-primary/40 transition-all font-bold text-white placeholder:text-gray-700 uppercase tracking-tight"
                                     value={formData.email}
                                     onChange={e => setFormData({ ...formData, email: e.target.value })}
                                 />
@@ -215,25 +203,13 @@ export default function LoginPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <div className="flex justify-between items-end mr-4">
-                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-4">Contraseña</label>
-                                {isLogin && (
-                                    <button
-                                        type="button"
-                                        onClick={handleForgotPassword}
-                                        className="text-[9px] font-black text-gray-600 hover:text-padel-primary uppercase tracking-widest"
-                                    >
-                                        ¿Olvidaste tu contraseña?
-                                    </button>
-                                )}
-                            </div>
-                            <div className="relative">
-                                <Lock className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                            <div className="relative group">
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-padel-primary transition-colors" />
                                 <input
                                     required
                                     type="password"
-                                    placeholder="••••••••"
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl pl-14 pr-6 py-4 outline-none focus:border-padel-primary/50 transition-colors font-bold text-white"
+                                    placeholder="CONTRASEÑA"
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-6 py-4 text-sm outline-none focus:border-padel-primary/40 transition-all font-bold text-white placeholder:text-gray-700 tracking-[0.3em]"
                                     value={formData.password}
                                     onChange={e => setFormData({ ...formData, password: e.target.value })}
                                 />
@@ -242,71 +218,87 @@ export default function LoginPage() {
 
                         {error && (
                             <motion.div
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3"
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl"
                             >
-                                <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                                <p className="text-xs text-red-200/80 font-medium leading-relaxed">{error}</p>
+                                <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                                <p className="text-[10px] text-red-200 font-bold uppercase tracking-tight">{error}</p>
                             </motion.div>
                         )}
 
                         {success && (
                             <motion.div
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className="p-4 bg-padel-primary/10 border border-padel-primary/20 rounded-2xl flex items-start gap-3"
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                className="flex items-start gap-3 p-4 bg-padel-primary/10 border border-padel-primary/20 rounded-2xl"
                             >
-                                <CheckCircle2 className="w-5 h-5 text-padel-primary shrink-0 mt-0.5" />
-                                <p className="text-xs text-padel-primary font-medium leading-relaxed">{success}</p>
+                                <CheckCircle2 className="w-4 h-4 text-padel-primary shrink-0 mt-0.5" />
+                                <p className="text-[10px] text-padel-primary font-bold uppercase tracking-tight">{success}</p>
                             </motion.div>
                         )}
 
                         <button
                             disabled={loading}
                             type="submit"
-                            className="w-full bg-padel-primary text-black py-4 rounded-2xl font-black uppercase italic text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-padel-primary/20 flex items-center justify-center gap-3 disabled:opacity-50"
+                            className="w-full bg-padel-primary text-black py-4 mt-4 rounded-2xl font-black uppercase italic text-sm hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_15px_30px_rgba(204,255,0,0.2)] flex items-center justify-center gap-3 disabled:opacity-50 group"
                         >
-                            {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-                            {isLogin ? 'Entrar Ahora' : 'Crear mi Cuenta'}
+                            {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : (
+                                <>
+                                    <span>{isLogin ? 'Entrar Ahora' : 'Crear Perfil'}</span>
+                                    <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                                </>
+                            )}
                         </button>
                     </form>
 
                     <div className="relative my-8">
-                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
-                        <div className="relative flex justify-center text-[10px] font-black uppercase tracking-[0.2em] text-gray-700">
-                            <span className="bg-[#111] px-4">O continúa con</span>
+                        <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-white/5" />
+                        </div>
+                        <div className="relative flex justify-center">
+                            <span className="bg-[#0c0c0c] px-4 text-[9px] font-black uppercase tracking-[0.3em] text-gray-800">Redes Sociales</span>
                         </div>
                     </div>
 
                     <button
                         onClick={handleGoogleSignIn}
-                        className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-2xl font-black uppercase italic text-sm hover:bg-white/10 transition-all flex items-center justify-center gap-3 relative group"
+                        className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-2xl font-black uppercase italic text-xs hover:bg-white/10 transition-all flex items-center justify-center gap-3 relative group"
                     >
                         <Chrome className="w-5 h-5 absolute left-6 group-hover:scale-110 transition-transform" />
-                        Ingresar con Google
+                        Google Auth
                     </button>
                 </div>
 
-                <div className="mt-12 text-center space-y-4">
-                    <p className="text-xs text-gray-700 font-bold uppercase tracking-widest">
-                        ¿Problemas persistentes?
-                        <button
-                            onClick={() => {
-                                console.log("Manual trigger: enableDevMode");
-                                enableDevMode();
-                                router.push('/tournaments');
-                            }}
-                            className="text-padel-primary hover:underline ml-2"
-                        >
-                            Entrar en Modo Simulación
-                        </button>
-                    </p>
-                    <p className="text-[10px] text-gray-800 font-medium max-w-xs mx-auto">
-                        Al continuar, aceptas nuestros términos de servicio y política de privacidad de datos deportivos.
-                    </p>
+                {isLogin && (
+                    <button
+                        onClick={handleForgotPassword}
+                        className="text-[10px] font-black text-gray-600 hover:text-padel-primary uppercase tracking-widest transition-colors"
+                    >
+                        ¿Olvidaste tu contraseña?
+                    </button>
+                )}
+
+                <div className="mt-4 flex flex-col items-center gap-4">
+                    <button
+                        onClick={() => {
+                            enableDevMode();
+                            router.push('/tournaments');
+                        }}
+                        className="flex items-center gap-2 text-[10px] font-black text-padel-primary/50 hover:text-padel-primary uppercase tracking-[0.2em] transition-all"
+                    >
+                        <Zap className="w-3 h-3" /> Sandbox Mode
+                    </button>
                 </div>
             </motion.div>
+
+            <style jsx global>{`
+                .glass { 
+                    background: rgba(255, 255, 255, 0.02); 
+                    backdrop-filter: blur(28px); 
+                    -webkit-backdrop-filter: blur(28px); 
+                }
+            `}</style>
         </div>
     );
 }

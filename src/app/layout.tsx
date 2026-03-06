@@ -3,6 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
 import { AppSettingsProvider } from "@/lib/AppSettingsContext";
 import HideRootLoading from "./HideRootLoading";
+import RootErrorBoundary from "./RootErrorBoundary";
 
 export const metadata: Metadata = {
     title: "Smart Padel | Tournament Manager",
@@ -22,18 +23,15 @@ export default function RootLayout({
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
             </head>
             <body suppressHydrationWarning style={{ margin: 0, backgroundColor: "#0a0a0a", color: "#fff", fontFamily: "system-ui, sans-serif", minHeight: "100vh" }}>
-                <div id="root-loading" style={{ position: "fixed", inset: 0, background: "#0a0a0a", color: "#ccff00", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, fontSize: 22, fontWeight: 700, zIndex: 99999 }}>
-                    <span>Smart Padel</span>
-                    <span style={{ fontSize: 14, color: "#888" }}>Si ves este texto, el servidor está respondiendo.</span>
-                </div>
-                <HideRootLoading />
-                <AuthProvider>
-                    <AppSettingsProvider>
-                        <main className="min-h-screen">
-                            {children}
-                        </main>
-                    </AppSettingsProvider>
-                </AuthProvider>
+                <RootErrorBoundary>
+                    <AuthProvider>
+                        <AppSettingsProvider>
+                            <main className="min-h-screen">
+                                {children}
+                            </main>
+                        </AppSettingsProvider>
+                    </AuthProvider>
+                </RootErrorBoundary>
             </body>
         </html>
     );

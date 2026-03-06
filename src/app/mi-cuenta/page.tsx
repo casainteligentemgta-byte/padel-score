@@ -21,8 +21,7 @@ import Sidebar from '@/components/Sidebar';
 import { BouncingBall } from '@/components/BouncingBall';
 import LoginButton from '@/components/LoginButton';
 import { dataService } from '@/lib/dataService';
-import { updateProfile } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
 export default function MiCuentaPage() {
     const { user, profile, loading: authLoading, refreshProfile } = useAuth();
@@ -77,7 +76,8 @@ export default function MiCuentaPage() {
         setError('');
         try {
             await dataService.setUserProfile(user.uid, { name });
-            if (auth.currentUser) await updateProfile(auth.currentUser, { displayName: name });
+            const supabase = getSupabaseClient();
+            if (supabase) await supabase.auth.updateUser({ data: { full_name: name, name } });
             await refreshProfile();
             setEditOpen(false);
         } catch (e: any) {

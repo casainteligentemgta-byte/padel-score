@@ -1,333 +1,17 @@
-import { db } from './firebase';
-import {
-    collection,
-    addDoc,
-    getDoc,
-    getDocs,
-    query,
-    where,
-    updateDoc,
-    deleteDoc,
-    doc,
-    setDoc,
-    serverTimestamp,
-    deleteField
-} from 'firebase/firestore';
-import { storage } from './firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getSupabaseClient } from './supabase/client';
 
-export const dataService = {
-    // Torneos
-    async createTournament(data: any, ownerId: string) {
-        console.log(`[DataService] Creating tournament for owner: ${ownerId}`);
-        console.log(`[DataService] Payload size info: ${data.teams?.length || 0} teams`);
-        try {
-            const result = await addDoc(collection(db, 'tournaments'), {
-                ...data,
-                ownerId,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp()
-            });
-            console.log(`[DataService] Tournament created successfully with ID: ${result.id}`);
-            return result;
-        } catch (error) {
-            console.error('[DataService] Error in createTournament:', error);
-            throw error;
-        }
-    },
-
-    async getMyTournaments(ownerId: string) {
-        const q = query(collection(db, 'tournaments'), where('ownerId', '==', ownerId));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    },
-
-    async listAllTournaments() {
-        const snapshot = await getDocs(collection(db, 'tournaments'));
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    },
-
-    async getTournament(id: string) {
-        const docRef = doc(db, 'tournaments', id);
-        const snap = await getDoc(docRef);
-        return snap.exists() ? { id: snap.id, ...snap.data() } : null;
-    },
-
-    async deleteTournament(id: string) {
-        // 1. Limpiar sub-colección de partidos primero
-        try {
-            const matchesRef = collection(db, 'tournaments', id, 'matches');
-            const matchesSnap = await getDocs(matchesRef);
-            const deletePromises = matchesSnap.docs.map(m => deleteDoc(doc(db, 'tournaments', id, 'matches', m.id)));
-            await Promise.all(deletePromises);
-        } catch (e) {
-            console.error('[DataService] Error deleting tournament matches:', e);
-        }
-
-        // 2. Eliminar el documento del torneo
-        return await deleteDoc(doc(db, 'tournaments', id));
-    },
-
-    // Matches (Sub-colección para escalabilidad)
-    async getMatches(tournamentId: string) {
-        const q = query(collection(db, 'tournaments', tournamentId, 'matches'));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    },
-
-    async updateMatch(tournamentId: string, matchId: string, data: any) {
-        const docRef = doc(db, 'tournaments', tournamentId, 'matches', matchId);
-        return await updateDoc(docRef, {
-            ...data,
-            updatedAt: serverTimestamp()
-        });
-    },
-
-    async createMatch(tournamentId: string, data: any) {
-        const matchesRef = collection(db, 'tournaments', tournamentId, 'matches');
-        if (data.id) {
-            // Si ya tiene ID (ej. del generador), usar setDoc
-            const { id, ...rest } = data;
-            await setDoc(doc(matchesRef, id), {
-                ...rest,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp()
-            });
-            return { id };
-        }
-        return await addDoc(matchesRef, {
-            ...data,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
-    },
-
-    async migrateTournamentMatches(tournamentId: string, legacyMatches: any[]) {
-        console.log(`[Migration] Starting migration for tournament ${tournamentId} with ${legacyMatches.length} matches`);
-
-        const updates = legacyMatches.map(async (m) => {
-            const matchId = m.id || `migrated_${Math.random().toString(36).substr(2, 9)}`;
-            const { id, ...matchData } = m;
-
-            await setDoc(doc(db, 'tournaments', tournamentId, 'matches', matchId), {
-                ...matchData,
-                migrated: true,
-                updatedAt: serverTimestamp()
-            });
-        });
-
-        await Promise.all(updates);
-
-        const tourneyRef = doc(db, 'tournaments', tournamentId);
-        await updateDoc(tourneyRef, {
-            matches: deleteField(),
-            hasMigratedMatches: true,
-            updatedAt: serverTimestamp()
-        });
-
-        console.log(`[Migration] Finished migration for tournament ${tournamentId}`);
-    },
-
-    // Gastos (Nuevo módulo solicitado)
-    async addExpense(data: any, ownerId: string) {
-        return await addDoc(collection(db, 'expenses'), {
-            ...data,
-            ownerId,
-            createdAt: serverTimestamp()
-        });
-    },
-
-    async getMyExpenses(ownerId: string) {
-        const q = query(collection(db, 'expenses'), where('ownerId', '==', ownerId));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    },
-
-    // Participantes / Grupos
-    async addParticipant(data: any, ownerId: string) {
-        return await addDoc(collection(db, 'participants'), {
-            ...data,
-            ownerId,
-            createdAt: serverTimestamp()
-        });
-    },
-
-    async getMyParticipants(ownerId: string) {
-        const q = query(collection(db, 'participants'), where('ownerId', '==', ownerId));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    },
-
-    async getAllParticipants() {
-        const q = query(collection(db, 'participants'));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    },
-
-    async updateParticipant(id: string, data: any) {
-        const { id: _, ...rest } = data;
-        const docRef = doc(db, 'participants', id);
-        return await updateDoc(docRef, {
-            ...rest,
-            updatedAt: serverTimestamp()
-        });
-    },
-
-    async getParticipant(id: string) {
-        const docRef = doc(db, 'participants', id);
-        const snap = await getDoc(docRef);
-        return snap.exists() ? { id: snap.id, ...snap.data() } : null;
-    },
-
-    async deleteParticipant(id: string) {
-        return await deleteDoc(doc(db, 'participants', id));
-    },
-
-    // Grupos
-    async addGroup(data: any, ownerId: string) {
-        return await addDoc(collection(db, 'groups'), {
-            ...data,
-            ownerId,
-            createdAt: serverTimestamp()
-        });
-    },
-
-    async getMyGroups(ownerId: string) {
-        const q = query(collection(db, 'groups'), where('ownerId', '==', ownerId));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    },
-
-    async deleteGroup(id: string) {
-        return await deleteDoc(doc(db, 'groups', id));
-    },
-
-    // Usuarios y Roles
-    async getUserProfile(uid: string) {
-        const docRef = doc(db, 'users', uid);
-        const snap = await getDoc(docRef);
-        return snap.exists() ? snap.data() : null;
-    },
-
-    async setUserProfile(uid: string, data: any) {
-        const docRef = doc(db, 'users', uid);
-        return await setDoc(docRef, {
-            ...data,
-            updatedAt: serverTimestamp()
-        }, { merge: true });
-    },
-
-    async listAllUsersProfile() {
-        const q = query(collection(db, 'users'));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
-    },
-
-    /** Elimina el campo password de todos los perfiles en Firestore (seguridad, una sola vez). */
-    async removePasswordsFromAllUsers(): Promise<number> {
-        const snapshot = await getDocs(collection(db, 'users'));
-        let count = 0;
-        for (const d of snapshot.docs) {
-            const data = d.data();
-            if (data && 'password' in data) {
-                await updateDoc(doc(db, 'users', d.id), { password: deleteField() });
-                count++;
-            }
-        }
-        return count;
-    },
-
-    // Publicidad / Ads
-    async createAd(data: any, ownerId: string) {
-        return await addDoc(collection(db, 'ads'), {
-            ...data,
-            ownerId,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
-    },
-
-    async getAds() {
-        const q = query(collection(db, 'ads'));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    },
-
-    async deleteAd(id: string) {
-        return await deleteDoc(doc(db, 'ads', id));
-    },
-
-    async uploadFile(file: File, path: string) {
-        const fileRef = ref(storage, path);
-        await uploadBytes(fileRef, file);
-        return await getDownloadURL(fileRef);
-    },
-
-    /** Configuración global del club (admin). Firestore: admin/settings */
-    async getAdminSettings(): Promise<AdminSettings | null> {
-        const docRef = doc(db, 'admin', 'settings');
-        const snap = await getDoc(docRef);
-        return snap.exists() ? (snap.data() as AdminSettings) : null;
-    },
-
-    async setAdminSettings(data: Partial<AdminSettings>): Promise<void> {
-        const docRef = doc(db, 'admin', 'settings');
-        await setDoc(docRef, {
-            ...data,
-            updatedAt: serverTimestamp()
-        }, { merge: true });
-    },
-
-    // ── Inscripciones y comprobantes de pago (OCR + validación) ─────────────────────────
-    async addInscription(data: InscriptionData, ownerId: string) {
-        return await addDoc(collection(db, 'inscriptions'), {
-            ...data,
-            ownerId,
-            paymentStatus: data.paymentStatus ?? 'pending',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
-    },
-
-    async getInscriptionsByTournament(tournamentId: string) {
-        const q = query(
-            collection(db, 'inscriptions'),
-            where('tournamentId', '==', tournamentId)
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    },
-
-    async getInscriptionsWithAlerts() {
-        const q = query(
-            collection(db, 'inscriptions'),
-            where('paymentStatus', '==', 'alert')
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    },
-
-    async updateInscription(id: string, data: Partial<InscriptionData>) {
-        const docRef = doc(db, 'inscriptions', id);
-        await updateDoc(docRef, {
-            ...data,
-            updatedAt: serverTimestamp()
-        });
-    }
+const supabase = () => {
+    const c = getSupabaseClient();
+    if (!c) throw new Error('Supabase no configurado. Añade NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en .env.local');
+    return c;
 };
 
-export type InscriptionData = {
-    tournamentId: string;
-    tournamentName?: string;
-    categoryKey?: string;
-    categoryPrice: number;           // Precio de la categoría (regla de validación)
-    participantName?: string;
-    participantEmail?: string;
-    participantId?: string;
-    amountExtracted?: number | null; // Monto extraído por OCR
-    receiptUrl?: string | null;
-    paymentStatus: 'pending' | 'paid' | 'alert';
-    alertMessage?: string | null;
+const now = () => new Date().toISOString();
+
+export const ROLES = {
+    ADMIN: 'admin',
+    PLAYER: 'player',
+    MARKER: 'marker',
 };
 
 export type AdminSettings = {
@@ -337,8 +21,491 @@ export type AdminSettings = {
     updatedAt?: any;
 };
 
-export const ROLES = {
-    ADMIN: 'admin',
-    PLAYER: 'player',
-    MARKER: 'marker'
+export type InscriptionData = {
+    tournamentId: string;
+    tournamentName?: string;
+    categoryKey?: string;
+    categoryPrice: number;
+    participantName?: string;
+    participantEmail?: string;
+    participantId?: string;
+    amountExtracted?: number | null;
+    receiptUrl?: string | null;
+    paymentStatus: 'pending' | 'paid' | 'alert';
+    alertMessage?: string | null;
+};
+
+export const dataService = {
+    async createTournament(data: any, ownerId: string) {
+        const { id, ...rest } = data;
+        const { data: row, error } = await supabase()
+            .from('tournaments')
+            .insert({
+                owner_id: ownerId,
+                data: rest,
+                created_at: now(),
+                updated_at: now(),
+            })
+            .select('id')
+            .single();
+        if (error) throw error;
+        return { id: row.id };
+    },
+
+    async updateTournament(id: string, data: any) {
+        const { id: _, ownerId: __, createdAt: ___, updatedAt: ____, ...rest } = data;
+        const { error } = await supabase()
+            .from('tournaments')
+            .update({
+                data: rest,
+                updated_at: now(),
+            })
+            .eq('id', id);
+        if (error) throw error;
+    },
+
+    async getMyTournaments(ownerId: string) {
+        const { data, error } = await supabase()
+            .from('tournaments')
+            .select('*')
+            .eq('owner_id', ownerId)
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+    },
+
+    async listAllTournaments() {
+        const { data, error } = await supabase().from('tournaments').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+    },
+
+    async getTournament(id: string) {
+        const { data, error } = await supabase().from('tournaments').select('*').eq('id', id).single();
+        if (error || !data) return null;
+        return { id: data.id, ownerId: data.owner_id, ...data.data, createdAt: data.created_at, updatedAt: data.updated_at };
+    },
+
+    async deleteTournament(id: string) {
+        const db = supabase();
+        await db.from('tournament_matches').delete().eq('tournament_id', id);
+        const { error } = await db.from('tournaments').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    async getMatches(tournamentId: string) {
+        const { data, error } = await supabase()
+            .from('tournament_matches')
+            .select('*')
+            .eq('tournament_id', tournamentId);
+        if (error) throw error;
+        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+    },
+
+    async updateMatch(tournamentId: string, matchId: string, data: any) {
+        const { data: row } = await supabase()
+            .from('tournament_matches')
+            .select('data')
+            .eq('tournament_id', tournamentId)
+            .eq('id', matchId)
+            .single();
+        const merged = { ...(row?.data || {}), ...data };
+        const { error } = await supabase()
+            .from('tournament_matches')
+            .update({ data: merged, updated_at: now() })
+            .eq('tournament_id', tournamentId)
+            .eq('id', matchId);
+        if (error) throw error;
+    },
+
+    async deleteMatch(tournamentId: string, matchId: string) {
+        const { error } = await supabase()
+            .from('tournament_matches')
+            .delete()
+            .eq('tournament_id', tournamentId)
+            .eq('id', matchId);
+        if (error) throw error;
+    },
+
+    async deleteTournamentMatches(tournamentId: string, filter?: any) {
+        let query = supabase().from('tournament_matches').delete().eq('tournament_id', tournamentId);
+        if (filter) {
+            // Simplistic filter application
+            Object.entries(filter).forEach(([key, val]) => {
+                query = query.eq(`data->>${key}`, val);
+            });
+        }
+        const { error } = await query;
+        if (error) throw error;
+    },
+
+    async createMatch(tournamentId: string, data: any) {
+        const id = data.id || crypto.randomUUID?.() || `m_${Date.now()}`;
+        const { id: _id, ...rest } = data;
+        const { error } = await supabase()
+            .from('tournament_matches')
+            .insert({
+                id,
+                tournament_id: tournamentId,
+                data: rest,
+                created_at: now(),
+                updated_at: now(),
+            });
+        if (error) throw error;
+        return { id };
+    },
+
+    async migrateTournamentMatches(tournamentId: string, legacyMatches: any[]) {
+        const db = supabase();
+        for (const m of legacyMatches) {
+            const matchId = m.id || `migrated_${Math.random().toString(36).slice(2, 11)}`;
+            const { id: _id, ...matchData } = m;
+            await db.from('tournament_matches').upsert({
+                id: matchId,
+                tournament_id: tournamentId,
+                data: { ...matchData, migrated: true },
+                updated_at: now(),
+            }, { onConflict: 'tournament_id,id' });
+        }
+    },
+
+    async addExpense(data: any, ownerId: string) {
+        const { data: row, error } = await supabase()
+            .from('expenses')
+            .insert({ owner_id: ownerId, data, created_at: now(), updated_at: now() })
+            .select('id')
+            .single();
+        if (error) throw error;
+        return { id: row.id };
+    },
+
+    async getMyExpenses(ownerId: string) {
+        const { data, error } = await supabase()
+            .from('expenses')
+            .select('*')
+            .eq('owner_id', ownerId)
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+    },
+
+    async addParticipant(data: any, ownerId: string) {
+        const { data: row, error } = await supabase()
+            .from('participants')
+            .insert({ owner_id: ownerId, data, created_at: now(), updated_at: now() })
+            .select('id')
+            .single();
+        if (error) throw error;
+        return { id: row.id };
+    },
+
+    async getMyParticipants(ownerId: string) {
+        const { data, error } = await supabase()
+            .from('participants')
+            .select('*')
+            .eq('owner_id', ownerId)
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+    },
+
+    async getAllParticipants() {
+        const { data, error } = await supabase().from('participants').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+    },
+
+    async updateParticipant(id: string, data: any) {
+        const { id: _id, ...rest } = data;
+        const { data: row } = await supabase().from('participants').select('data').eq('id', id).single();
+        const merged = { ...(row?.data || {}), ...rest };
+        const { error } = await supabase()
+            .from('participants')
+            .update({ data: merged, updated_at: now() })
+            .eq('id', id);
+        if (error) throw error;
+    },
+
+    async getParticipant(id: string) {
+        const { data, error } = await supabase().from('participants').select('*').eq('id', id).single();
+        if (error || !data) return null;
+        return { id: data.id, ...data.data, createdAt: data.created_at, updatedAt: data.updated_at };
+    },
+
+    async deleteParticipant(id: string) {
+        const { error } = await supabase().from('participants').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    async addGroup(data: any, ownerId: string) {
+        const { data: row, error } = await supabase()
+            .from('groups')
+            .insert({ owner_id: ownerId, data, created_at: now(), updated_at: now() })
+            .select('id')
+            .single();
+        if (error) throw error;
+        return { id: row.id };
+    },
+
+    async getMyGroups(ownerId: string) {
+        const { data, error } = await supabase()
+            .from('groups')
+            .select('*')
+            .eq('owner_id', ownerId)
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+    },
+
+    async deleteGroup(id: string) {
+        const { error } = await supabase().from('groups').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    async getUserProfile(uid: string) {
+        const { data, error } = await supabase().from('profiles').select('*').eq('id', uid).single();
+        if (error || !data) return null;
+        return {
+            role: data.role,
+            name: data.name,
+            email: data.email || null,
+            markerCanchas: data.marker_canchas || [],
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+        };
+    },
+
+    async setUserProfile(uid: string, data: any) {
+        const { role, name, email, markerCanchas } = data;
+        const payload: any = {
+            id: uid,
+            role: role ?? 'player',
+            name: name ?? '',
+            marker_canchas: Array.isArray(markerCanchas) ? markerCanchas : [],
+            updated_at: now(),
+        };
+
+        // Solo incluimos email si existe en la tabla. 
+        // Nota: Si el usuario no ha añadido la columna 'email' en Supabase, esto fallará.
+        if (email !== undefined) {
+            payload.email = email;
+        }
+
+        const { error } = await supabase()
+            .from('profiles')
+            .upsert(payload, { onConflict: 'id' });
+        if (error) {
+            // Si el error es por columna inexistente, reintentamos sin email para no romper el sistema
+            if (error.code === '42703') {
+                console.warn('[dataService] La tabla profiles no tiene columna email. Reintentando sin email.');
+                delete payload.email;
+                const { error: retryError } = await supabase()
+                    .from('profiles')
+                    .upsert(payload, { onConflict: 'id' });
+                if (retryError) throw retryError;
+            } else {
+                throw error;
+            }
+        }
+    },
+
+    async listAllUsersProfile() {
+        const { data, error } = await supabase().from('profiles').select('id, role, name, email, marker_canchas, created_at, updated_at');
+        if (error) {
+            // Si falla por la columna email, reintentamos sin ella
+            if (error.code === '42703') {
+                const { data: retryData, error: retryError } = await supabase().from('profiles').select('id, role, name, marker_canchas, created_at, updated_at');
+                if (retryError) throw retryError;
+                return (retryData || []).map((r: any) => ({
+                    uid: r.id,
+                    role: r.role,
+                    name: r.name,
+                    email: null,
+                    markerCanchas: r.marker_canchas,
+                    createdAt: r.created_at,
+                    updatedAt: r.updated_at,
+                }));
+            }
+            throw error;
+        }
+        return (data || []).map((r: any) => ({
+            uid: r.id,
+            role: r.role,
+            name: r.name,
+            email: r.email,
+            markerCanchas: r.marker_canchas,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+        }));
+    },
+
+    async removePasswordsFromAllUsers(): Promise<number> {
+        return 0;
+    },
+
+    async createAd(data: any, ownerId: string) {
+        const { data: row, error } = await supabase()
+            .from('ads')
+            .insert({ owner_id: ownerId, data, created_at: now(), updated_at: now() })
+            .select('id')
+            .single();
+        if (error) throw error;
+        return { id: row.id };
+    },
+
+    async getAds() {
+        const { data, error } = await supabase().from('ads').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+    },
+
+    async deleteAd(id: string) {
+        const { error } = await supabase().from('ads').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    async uploadFile(file: File, path: string) {
+        const { data, error } = await supabase().storage.from('public').upload(path, file, { upsert: true });
+        if (error) throw error;
+        const { data: urlData } = supabase().storage.from('public').getPublicUrl(data.path);
+        return urlData.publicUrl;
+    },
+
+    async getAdminSettings(): Promise<AdminSettings | null> {
+        const c = getSupabaseClient();
+        if (!c) return null;
+        const { data, error } = await c.from('admin_settings').select('*').eq('id', 1).single();
+        if (error || !data) return null;
+        return {
+            appTitle: data.app_title,
+            clubName: data.club_name,
+            timezone: data.timezone,
+            updatedAt: data.updated_at,
+        };
+    },
+
+    async setAdminSettings(data: Partial<AdminSettings>): Promise<void> {
+        const c = getSupabaseClient();
+        if (!c) return;
+        await c.from('admin_settings').update({
+            app_title: data.appTitle,
+            club_name: data.clubName,
+            timezone: data.timezone,
+            updated_at: now(),
+        }).eq('id', 1);
+    },
+
+    async addInscription(data: InscriptionData, ownerId: string) {
+        const { data: row, error } = await supabase()
+            .from('inscriptions')
+            .insert({
+                owner_id: ownerId,
+                tournament_id: data.tournamentId || null,
+                tournament_name: data.tournamentName,
+                category_key: data.categoryKey,
+                category_price: data.categoryPrice,
+                participant_name: data.participantName,
+                participant_email: data.participantEmail,
+                participant_id: data.participantId,
+                amount_extracted: data.amountExtracted,
+                receipt_url: data.receiptUrl,
+                payment_status: data.paymentStatus ?? 'pending',
+                alert_message: data.alertMessage,
+                data: {},
+                created_at: now(),
+                updated_at: now(),
+            })
+            .select('id')
+            .single();
+        if (error) throw error;
+        return { id: row.id };
+    },
+
+    async getInscriptionsByTournament(tournamentId: string) {
+        const { data, error } = await supabase()
+            .from('inscriptions')
+            .select('*')
+            .eq('tournament_id', tournamentId);
+        if (error) throw error;
+        return (data || []).map((r: any) => ({
+            id: r.id,
+            tournamentId: r.tournament_id,
+            tournamentName: r.tournament_name,
+            categoryKey: r.category_key,
+            categoryPrice: r.category_price,
+            participantName: r.participant_name,
+            participantEmail: r.participant_email,
+            participantId: r.participant_id,
+            amountExtracted: r.amount_extracted,
+            receiptUrl: r.receipt_url,
+            paymentStatus: r.payment_status,
+            alertMessage: r.alert_message,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+        }));
+    },
+
+    async getInscriptionsWithAlerts() {
+        const { data, error } = await supabase()
+            .from('inscriptions')
+            .select('*')
+            .eq('payment_status', 'alert');
+        if (error) throw error;
+        return (data || []).map((r: any) => ({
+            id: r.id,
+            tournamentId: r.tournament_id,
+            paymentStatus: r.payment_status,
+            alertMessage: r.alert_message,
+            ...r,
+        }));
+    },
+
+    async updateInscription(id: string, data: Partial<InscriptionData>) {
+        const upd: any = { updated_at: now() };
+        if (data.paymentStatus != null) upd.payment_status = data.paymentStatus;
+        if (data.alertMessage != null) upd.alert_message = data.alertMessage;
+        if (data.receiptUrl != null) upd.receipt_url = data.receiptUrl;
+        const { error } = await supabase().from('inscriptions').update(upd).eq('id', id);
+        if (error) throw error;
+    },
+
+    subscribeToTournament(id: string, callback: (t: any) => void) {
+        const db = supabase();
+
+        // Initial fetch
+        this.getTournament(id).then(callback);
+
+        const channel = db
+            .channel(`tournament_${id}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments', filter: `id=eq.${id}` }, (payload) => {
+                const r = payload.new as any;
+                if (!r) return;
+                callback({ id: r.id, ownerId: r.owner_id, ...r.data, createdAt: r.created_at, updatedAt: r.updated_at });
+            })
+            .subscribe();
+
+        return () => {
+            channel.unsubscribe();
+        };
+    },
+
+    subscribeToMatches(tournamentId: string, callback: (matches: any[]) => void) {
+        const db = supabase();
+
+        // Initial load
+        this.getMatches(tournamentId).then(callback);
+
+        const channel = db
+            .channel(`matches_${tournamentId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tournament_matches', filter: `tournament_id=eq.${tournamentId}` }, async () => {
+                // On update, reload all matches for simplicity and to ensure order/enrichment
+                const matches = await this.getMatches(tournamentId);
+                callback(matches);
+            })
+            .subscribe();
+
+        return () => {
+            channel.unsubscribe();
+        };
+    },
 };

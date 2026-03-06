@@ -190,7 +190,7 @@ export default function PlayerRegistrationPage() {
                     </div>
                 </header>
 
-                <main className="max-w-md mx-auto px-4 py-8 space-y-10">
+                <main className="max-w-md mx-auto px-4 py-8 space-y-10 pb-40">
                     <AnimatePresence mode="wait">
                         {step === 1 && (
                             <motion.section

@@ -36,7 +36,10 @@ export interface MasterScheduleConfig {
     categories: CategoryConfig[];
     /** URL del logo del patrocinante del evento (opcional) */
     sponsorLogoUrl?: string;
+    /** Nombre del patrocinante del evento (opcional) */
+    sponsorName?: string;
 }
+
 
 export class MasterScheduleEngine {
 
@@ -96,6 +99,8 @@ export class MasterScheduleEngine {
                     team2: pair.team2,
                     team1Name: resolveTeamName(pair.team1),
                     team2Name: resolveTeamName(pair.team2),
+                    team1Index: pair.team1Index,
+                    team2Index: pair.team2Index,
                     roundName: pair.roundName,
                     playerIds: pair.isKnockout ? [] : this.getTeamPlayerIds(pair.team1, pair.team2),
                     isFinal: pair.isFinal,
@@ -149,31 +154,42 @@ export class MasterScheduleEngine {
 
         let globalSlotIdx = 0;
         let dayOffset = 0;
+        let slotIdxInDay = 0; // Puntero al slot actual dentro del día siendo procesado
         const maxDays = 30;
 
         for (const phase of phases) {
-            // Agenda todos los partidos de esta fase antes de pasar a la siguiente
             const pending = [...phase.queue];
 
             while (pending.length > 0 && dayOffset < maxDays) {
                 const dayDate = new Date(startDate + 'T00:00:00');
                 dayDate.setDate(dayDate.getDate() + dayOffset);
-
                 const daySlots = this.generateTimeSlots(dayDate, dailyStartTime, dailyEndTime, matchDurationMinutes, bufferMinutes);
 
                 if (daySlots.length === 0) {
-                    console.warn(`[Engine] Sin franjas horarias para ${dayDate.toDateString()}. Verifica horario.`);
                     dayOffset++;
+                    slotIdxInDay = 0;
                     continue;
                 }
 
-                for (const slotStart of daySlots) {
-                    if (pending.length === 0) break;
+                // Empezamos a llenar desde el slotIdxInDay para permitir continuidad de fases en el mismo día
+                let phaseFinishedInThisWhileIteration = false;
+                for (let sIdx = slotIdxInDay; sIdx < daySlots.length; sIdx++) {
+                    const slotStart = daySlots[sIdx];
+                    if (pending.length === 0) {
+                        // Fase completada: movemos el puntero al SIGUIENTE slot para la siguiente fase
+                        slotIdxInDay = sIdx + 1;
+                        if (slotIdxInDay >= daySlots.length) {
+                            dayOffset++;
+                            slotIdxInDay = 0;
+                        }
+                        phaseFinishedInThisWhileIteration = true;
+                        break;
+                    }
 
                     for (let c = 0; c < numCourts; c++) {
                         if (pending.length === 0) break;
 
-                        // Buscar partido elegible SIN salirse de la fase actual
+                        // Buscar partido elegible
                         let foundIdx = -1;
                         for (let i = 0; i < pending.length; i++) {
                             if (this.canPlay(pending[i].playerIds, globalSlotIdx, playerLastSlot)) {
@@ -181,8 +197,6 @@ export class MasterScheduleEngine {
                                 break;
                             }
                         }
-                        // Si nadie cumple descanso, usar el primero de la misma fase
-                        // (nunca se salta a la siguiente fase)
                         if (foundIdx === -1) foundIdx = 0;
 
                         const m = pending.splice(foundIdx, 1)[0];
@@ -202,18 +216,24 @@ export class MasterScheduleEngine {
                             playerLastSlot[pid] = globalSlotIdx;
                         });
                     }
-
                     globalSlotIdx++;
                 }
 
-                dayOffset++;
+                if (phaseFinishedInThisWhileIteration) {
+                    break; // Salimos del while (pending.length > 0) para ir a la siguiente fase
+                }
+
+                // Si al terminar los slots del día aún hay partidos, pasamos al siguiente día
+                if (pending.length > 0) {
+                    dayOffset++;
+                    slotIdxInDay = 0;
+                }
             }
 
             if (pending.length > 0) {
                 console.warn(`[Engine] ${pending.length} partidos de "${phase.name}" no se pudieron agendar.`);
             }
-
-            console.log(`[Engine] ✅ Fase "${phase.name}" completada → próxima fase empieza día ${dayOffset}`);
+            console.log(`[Engine] ✅ Fase "${phase.name}" procesada. Próximo slot: Día ${dayOffset}, Slot ${slotIdxInDay}`);
         }
 
         console.log(`[Engine] ✅ ${scheduledMatches.length} partidos agendados en ${dayOffset} día(s)`);
@@ -267,8 +287,9 @@ export class MasterScheduleEngine {
         isFinal: boolean;
         advancementLogic?: string;
     }> {
-        const result: Array<{ team1: any; team2: any; roundName: string; isKnockout: boolean; isFinal: boolean; advancementLogic?: string }> = [];
+        const result: Array<{ team1: any; team2: any; roundName: string; isKnockout: boolean; isFinal: boolean; advancementLogic?: string; team1Index?: number; team2Index?: number }> = [];
         const teams = [...cat.teams];
+        const teamToIndex = new Map(cat.teams.map((t, idx) => [t.id, idx + 1]));
         const n = teams.length;
         if (n < 2) return result;
 
@@ -282,25 +303,25 @@ export class MasterScheduleEngine {
         if (n <= 4) {
             // Bracket de 4: P1, P2 (R1), Principal SF, Principal FINAL; Consolación: 1 partido (2 perdedores R1)
             const [t0, t1, t2, t3] = teams;
-            result.push({ team1: t0, team2: t3, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1' });
-            result.push({ team1: t1, team2: t2, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1' });
-            result.push({ team1: tbd('Gan. P1', 'p1'), team2: tbd('Gan. P2', 'p2'), roundName: 'Principal SF', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Principal FINAL' });
-            result.push({ team1: tbd('Gan. SF', 'sf'), team2: tbd('Finalista', 'sf2'), roundName: 'Principal FINAL', isKnockout: true, isFinal: true });
-            result.push({ team1: tbd('Perd. P1', 'c1'), team2: tbd('Perd. P2', 'c2'), roundName: 'Consolación R1', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Consolación FINAL' });
-            result.push({ team1: tbd('Gan. C1', 'c1w'), team2: tbd('Gan. C2', 'c2w'), roundName: 'Consolación FINAL', isKnockout: true, isFinal: true });
+            result.push({ team1: t0, team2: t3, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1', team1Index: teamToIndex.get(t0.id), team2Index: teamToIndex.get(t3.id) } as any);
+            result.push({ team1: t1, team2: t2, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1', team1Index: teamToIndex.get(t1.id), team2Index: teamToIndex.get(t2.id) } as any);
+            result.push({ team1: tbd('Gan. P1', 'p1'), team2: tbd('Gan. P2', 'p2'), roundName: 'Principal SF', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Principal FINAL' } as any);
+            result.push({ team1: tbd('Gan. SF', 'sf'), team2: tbd('Finalista', 'sf2'), roundName: 'Principal FINAL', isKnockout: true, isFinal: true } as any);
+            result.push({ team1: tbd('Perd. P1', 'c1'), team2: tbd('Perd. P2', 'c2'), roundName: 'Consolación R1', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Consolación FINAL' } as any);
+            result.push({ team1: tbd('Gan. C1', 'c1w'), team2: tbd('Gan. C2', 'c2w'), roundName: 'Consolación FINAL', isKnockout: true, isFinal: true } as any);
         } else {
             // Bracket de 8: 4 R1, 2 SF, 1 FINAL principal; 2 Consolación R1, 1 Consolación FINAL
             const [t0, t1, t2, t3, t4, t5, t6, t7] = teams.slice(0, 8);
-            result.push({ team1: t0, team2: t7, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1' });
-            result.push({ team1: t1, team2: t6, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1' });
-            result.push({ team1: t2, team2: t5, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1' });
-            result.push({ team1: t3, team2: t4, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1' });
-            result.push({ team1: tbd('Gan. P1', 'p1'), team2: tbd('Gan. P4', 'p4'), roundName: 'Principal SF', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Principal FINAL' });
-            result.push({ team1: tbd('Gan. P2', 'p2'), team2: tbd('Gan. P3', 'p3'), roundName: 'Principal SF', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Principal FINAL' });
-            result.push({ team1: tbd('Gan. SF1', 'sf1'), team2: tbd('Gan. SF2', 'sf2'), roundName: 'Principal FINAL', isKnockout: true, isFinal: true });
-            result.push({ team1: tbd('Perd. P1', 'c1'), team2: tbd('Perd. P2', 'c2'), roundName: 'Consolación R1', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Consolación FINAL' });
-            result.push({ team1: tbd('Perd. P3', 'c3'), team2: tbd('Perd. P4', 'c4'), roundName: 'Consolación R1', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Consolación FINAL' });
-            result.push({ team1: tbd('Gan. C1', 'c1w'), team2: tbd('Gan. C2', 'c2w'), roundName: 'Consolación FINAL', isKnockout: true, isFinal: true });
+            result.push({ team1: t0, team2: t7, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1', team1Index: teamToIndex.get(t0.id), team2Index: teamToIndex.get(t7.id) } as any);
+            result.push({ team1: t1, team2: t6, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1', team1Index: teamToIndex.get(t1.id), team2Index: teamToIndex.get(t6.id) } as any);
+            result.push({ team1: t2, team2: t5, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1', team1Index: teamToIndex.get(t2.id), team2Index: teamToIndex.get(t5.id) } as any);
+            result.push({ team1: t3, team2: t4, roundName: 'Principal R1', isKnockout: false, isFinal: false, advancementLogic: 'Ganador → Principal SF; Perdedor → Consolación R1', team1Index: teamToIndex.get(t3.id), team2Index: teamToIndex.get(t4.id) } as any);
+            result.push({ team1: tbd('Gan. P1', 'p1'), team2: tbd('Gan. P4', 'p4'), roundName: 'Principal SF', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Principal FINAL' } as any);
+            result.push({ team1: tbd('Gan. P2', 'p2'), team2: tbd('Gan. P3', 'p3'), roundName: 'Principal SF', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Principal FINAL' } as any);
+            result.push({ team1: tbd('Gan. SF1', 'sf1'), team2: tbd('Gan. SF2', 'sf2'), roundName: 'Principal FINAL', isKnockout: true, isFinal: true } as any);
+            result.push({ team1: tbd('Perd. P1', 'c1'), team2: tbd('Perd. P2', 'c2'), roundName: 'Consolación R1', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Consolación FINAL' } as any);
+            result.push({ team1: tbd('Perd. P3', 'c3'), team2: tbd('Perd. P4', 'c4'), roundName: 'Consolación R1', isKnockout: true, isFinal: false, advancementLogic: 'Ganador → Consolación FINAL' } as any);
+            result.push({ team1: tbd('Gan. C1', 'c1w'), team2: tbd('Gan. C2', 'c2w'), roundName: 'Consolación FINAL', isKnockout: true, isFinal: true } as any);
         }
         return result;
     }
@@ -320,6 +341,7 @@ export class MasterScheduleEngine {
             team1: any; team2: any;
             roundName: 'Fase de Grupos' | 'SEMIFINAL' | 'FINAL';
             isKnockout: boolean; isFinal: boolean;
+            team1Index?: number; team2Index?: number;
         }> = [];
 
         const teams = [...cat.teams];
@@ -361,24 +383,26 @@ export class MasterScheduleEngine {
         const useSevenGames = twoGamesGuaranteed && twoGroupsOfFour;
         console.log(`[Pairings] ${cat.category} | groupSize=${cat.groupSize} → gs=${gs} | equipos=${teams.length} | grupos=${groups.length} | knockout=${groups.length > 1} | 2juegosGarantizados=${twoGamesGuaranteed} | 7juegos=${useSevenGames}`);
         // ── Fase de grupos: round-robin completo O 2 juegos garantizados (o 7 partidos si 2 grupos de 4) ─────────────
+        const teamToIndex = new Map(cat.teams.map((t, idx) => [t.id, idx + 1]));
+
         for (const group of groups) {
             if (twoGamesGuaranteed) {
                 if (useSevenGames) {
                     // 2 grupos de 4, 1º y 2º pasan: solo 4 partidos de fase de grupos (2 por grupo) → 7 total con semis+final
-                    result.push({ team1: group[0], team2: group[1], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
-                    result.push({ team1: group[2], team2: group[3], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                    result.push({ team1: group[0], team2: group[1], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false, team1Index: teamToIndex.get(group[0].id), team2Index: teamToIndex.get(group[1].id) } as any);
+                    result.push({ team1: group[2], team2: group[3], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false, team1Index: teamToIndex.get(group[2].id), team2Index: teamToIndex.get(group[3].id) } as any);
                 } else if (group.length === 4) {
                     // 2 juegos garantizados: cada equipo juega exactamente 2 partidos en la fase de grupos
-                    result.push({ team1: group[0], team2: group[1], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
-                    result.push({ team1: group[0], team2: group[2], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
-                    result.push({ team1: group[1], team2: group[3], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
-                    result.push({ team1: group[2], team2: group[3], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                    result.push({ team1: group[0], team2: group[1], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false, team1Index: teamToIndex.get(group[0].id), team2Index: teamToIndex.get(group[1].id) } as any);
+                    result.push({ team1: group[0], team2: group[2], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false, team1Index: teamToIndex.get(group[0].id), team2Index: teamToIndex.get(group[2].id) } as any);
+                    result.push({ team1: group[1], team2: group[3], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false, team1Index: teamToIndex.get(group[1].id), team2Index: teamToIndex.get(group[3].id) } as any);
+                    result.push({ team1: group[2], team2: group[3], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false, team1Index: teamToIndex.get(group[2].id), team2Index: teamToIndex.get(group[3].id) } as any);
                 } else if (group.length >= 3) {
-                    result.push({ team1: group[0], team2: group[1], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
-                    result.push({ team1: group[0], team2: group[2], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
-                    result.push({ team1: group[1], team2: group[2], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                    result.push({ team1: group[0], team2: group[1], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false, team1Index: teamToIndex.get(group[0].id), team2Index: teamToIndex.get(group[1].id) } as any);
+                    result.push({ team1: group[0], team2: group[2], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false, team1Index: teamToIndex.get(group[0].id), team2Index: teamToIndex.get(group[2].id) } as any);
+                    result.push({ team1: group[1], team2: group[2], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false, team1Index: teamToIndex.get(group[1].id), team2Index: teamToIndex.get(group[2].id) } as any);
                 } else {
-                    result.push({ team1: group[0], team2: group[1], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false });
+                    result.push({ team1: group[0], team2: group[1], roundName: 'Fase de Grupos', isKnockout: false, isFinal: false, team1Index: teamToIndex.get(group[0].id), team2Index: teamToIndex.get(group[1].id) } as any);
                 }
             } else {
                 for (let i = 0; i < group.length; i++) {
@@ -386,6 +410,8 @@ export class MasterScheduleEngine {
                         result.push({
                             team1: group[i],
                             team2: group[j],
+                            team1Index: teamToIndex.get(group[i].id),
+                            team2Index: teamToIndex.get(group[j].id),
                             roundName: 'Fase de Grupos',
                             isKnockout: false,
                             isFinal: false,

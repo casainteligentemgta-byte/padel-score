@@ -539,6 +539,7 @@ export default function MasterGeneratorPage() {
             const results: { id: string; name: string }[] = [];
             // Usar el mismo orden de equipos con el que se generó el fixture (sorteo aleatorio o no)
             const categoriesToSave = lastGeneratedConfig?.categories ?? eventData.categories;
+
             for (const cat of categoriesToSave) {
                 const categoryMatches = generatedMatches.filter(m => m.categoryId === cat.id);
                 if (categoryMatches.length === 0) continue;
@@ -557,64 +558,68 @@ export default function MasterGeneratorPage() {
                 }
 
                 const teamIdToIndex = new Map<string, number>();
-                teams.forEach((t: any, idx: number) => { if (t?.id) teamIdToIndex.set(String(t.id), idx + 1); });
+                teamsFromCat.forEach((t: any, idx: number) => { if (t?.id) teamIdToIndex.set(String(t.id), idx + 1); });
 
-                // Cada partido: id, stage para grupos, team1Index/team2Index para la vista de grupos
-                const matchesWithIds = categoryMatches.map((m: any, i: number) => {
-                    const t1Id = m.team1?.id || m.team1?.p1?.id;
-                    const t2Id = m.team2?.id || m.team2?.p1?.id;
-                    const team1Index = m.team1Index ?? (t1Id ? teamIdToIndex.get(String(t1Id)) : undefined);
-                    const team2Index = m.team2Index ?? (t2Id ? teamIdToIndex.get(String(t2Id)) : undefined);
+                try {
+                    // Cada partido: id, stage para grupos, team1Index/team2Index para la vista de grupos
+                    const matchesWithIds = categoryMatches.map((m: any, i: number) => {
+                        const t1Id = m.team1?.id || m.team1?.p1?.id;
+                        const t2Id = m.team2?.id || m.team2?.p1?.id;
+                        const team1Index = m.team1Index ?? (t1Id ? teamIdToIndex.get(String(t1Id)) : undefined);
+                        const team2Index = m.team2Index ?? (t2Id ? teamIdToIndex.get(String(t2Id)) : undefined);
 
-                    const isGroupStage = m.roundName === 'Fase de Grupos';
-                    return {
-                        ...m,
-                        id: m.id || `m-${cat.id}-${i}-${Date.now().toString(36)}`,
-                        scheduledTime: typeof m.scheduledTime === 'string' ? m.scheduledTime : (m.scheduledTime instanceof Date ? m.scheduledTime.toISOString() : new Date().toISOString()),
-                        status: m.status ?? MatchStatus.PENDING,
-                        stage: isGroupStage ? 'GROUP_STAGE' : (m.roundName?.includes('Consolación') ? 'CONSOLATION' : 'MAIN_DRAW'),
-                        ...(team1Index != null && { team1Index }),
-                        ...(team2Index != null && { team2Index }),
+                        const isGroupStage = m.roundName === 'Fase de Grupos';
+                        return {
+                            ...m,
+                            id: m.id || `m-${cat.id}-${i}-${Date.now().toString(36)}`,
+                            scheduledTime: typeof m.scheduledTime === 'string' ? m.scheduledTime : (m.scheduledTime instanceof Date ? m.scheduledTime.toISOString() : new Date().toISOString()),
+                            status: m.status ?? MatchStatus.PENDING,
+                            stage: isGroupStage ? 'GROUP_STAGE' : (m.roundName?.includes('Consolación') ? 'CONSOLATION' : 'MAIN_DRAW'),
+                            ...(team1Index != null && { team1Index }),
+                            ...(team2Index != null && { team2Index }),
+                        };
+                    });
+
+                    const tournamentToSave = {
+                        name: `${eventData.tournamentName} - ${cat.category} ${catLabels[cat.gender]}`,
+                        type: cat.type ?? TournamentType.ROUND_ROBIN,
+                        category: cat.category,
+                        gender: cat.gender,
+                        startDate: eventData.startDate,
+                        endDate: eventData.endDate,
+                        startTime: eventData.dailyStartTime,
+                        endTime: eventData.dailyEndTime,
+                        complexName: eventData.complexName ?? '',
+                        totalCourts: eventData.numCourts ?? 3,
+                        courtNames: eventData.courtNames ?? [],
+                        bufferMinutes: eventData.bufferMinutes ?? 10,
+                        teams: teamsFromCat,
+                        groupAssignments: Object.keys(groupAssignments).length > 0 ? groupAssignments : undefined,
+                        groupSize: cat.groupSize,
+                        advanceCount: (cat as any).advanceCount ?? 2,
+                        pointsGoal: (cat as any).pointsGoal ?? 24,
+                        status: 'Programado',
+                        ...(eventData.sponsorLogoUrl?.trim() && {
+                            broadcastingSettings: {
+                                sponsors: [{ name: 'Patrocinador del evento', logoUrl: eventData.sponsorLogoUrl.trim() }]
+                            }
+                        }),
                     };
-                });
 
-                const tournamentToSave = {
-                    name: `${eventData.tournamentName} - ${cat.category} ${catLabels[cat.gender]}`,
-                    type: cat.type ?? TournamentType.ROUND_ROBIN,
-                    category: cat.category,
-                    gender: cat.gender,
-                    startDate: eventData.startDate,
-                    endDate: eventData.endDate,
-                    startTime: eventData.dailyStartTime,
-                    endTime: eventData.dailyEndTime,
-                    complexName: eventData.complexName ?? '',
-                    totalCourts: eventData.numCourts ?? 3,
-                    courtNames: eventData.courtNames ?? [],
-                    bufferMinutes: eventData.bufferMinutes ?? 10,
-                    teams: cat.teams ?? [],
-                    // Eliminado: matches: matchesWithIds de aquí
-                    groupAssignments: Object.keys(groupAssignments).length > 0 ? groupAssignments : undefined,
-                    groupSize: groupSize,
-                    advanceCount: (cat as any).advanceCount ?? 2,
-                    pointsGoal: (cat as any).pointsGoal ?? 24,
-                    status: 'Programado',
-                    ...(eventData.sponsorLogoUrl?.trim() && {
-                        broadcastingSettings: {
-                            sponsors: [{ name: 'Patrocinador del evento', logoUrl: eventData.sponsorLogoUrl.trim() }]
-                        }
-                    }),
-                };
+                    // 1. Crear el torneo (metadatos)
+                    const docRef = await dataService.createTournament(sanitizeForDatabase(tournamentToSave), user.uid);
 
-                // 1. Crear el torneo (metadatos)
-                const docRef = await dataService.createTournament(sanitizeForDatabase(tournamentToSave), user.uid);
+                    // 2. Crear los partidos en el nuevo sistema (Supabase)
+                    const matchesPromises = matchesWithIds.map(m =>
+                        dataService.createMatch(docRef.id, sanitizeForDatabase(m))
+                    );
+                    await Promise.all(matchesPromises);
 
-                // 2. Crear los partidos en la sub-colección
-                const matchesPromises = matchesWithIds.map(m =>
-                    dataService.createMatch(docRef.id, sanitizeForDatabase(m))
-                );
-                await Promise.all(matchesPromises);
-
-                results.push({ id: docRef.id, name: tournamentToSave.name });
+                    results.push({ id: docRef.id, name: tournamentToSave.name });
+                } catch (catErr: any) {
+                    console.error(`Error saving category ${cat.category}:`, catErr);
+                    throw new Error(`Cat ${cat.category}: ${catErr.message || catErr}`);
+                }
             }
 
             if (results.length === 0) {
