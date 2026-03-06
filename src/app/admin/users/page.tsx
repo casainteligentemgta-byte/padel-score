@@ -8,7 +8,7 @@ import {
     Shield, User, Mail, RefreshCw, ChevronRight, Save,
     ShieldCheck, UserCircle, Target, Plus, Edit2, Key,
     X, ShieldAlert, ChevronLeft, Search,
-    Filter, Layout, LogOut, CheckCircle2
+    Filter, Layout, LogOut, CheckCircle2, Users, Settings
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -291,8 +291,8 @@ export default function AdminUsersPage() {
                                     {/* Identity */}
                                     <div className="lg:col-span-5 flex items-center gap-5">
                                         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border transition-all ${u.role === ROLES.ADMIN ? 'bg-padel-primary/10 border-padel-primary/30 text-padel-primary' :
-                                                u.role === ROLES.MARKER ? 'bg-orange-500/10 border-orange-500/30 text-orange-500' :
-                                                    'bg-white/5 border-white/10 text-gray-500'
+                                            u.role === ROLES.MARKER ? 'bg-orange-500/10 border-orange-500/30 text-orange-500' :
+                                                'bg-white/5 border-white/10 text-gray-500'
                                             }`}>
                                             {u.role === ROLES.ADMIN ? <ShieldCheck size={28} /> :
                                                 u.role === ROLES.MARKER ? <Target size={28} /> : <User size={28} />}
@@ -315,8 +315,8 @@ export default function AdminUsersPage() {
                                                 onChange={(e) => handleRoleChange(u.uid, e.target.value)}
                                                 disabled={updating === u.uid}
                                                 className={`w-full bg-black/40 border-2 rounded-xl px-4 py-2.5 text-[9px] font-black uppercase tracking-widest outline-none transition-all cursor-pointer appearance-none ${u.role === ROLES.ADMIN ? 'border-padel-primary/30 text-padel-primary' :
-                                                        u.role === ROLES.MARKER ? 'border-orange-500/30 text-orange-500' :
-                                                            'border-white/10 text-gray-500'
+                                                    u.role === ROLES.MARKER ? 'border-orange-500/30 text-orange-500' :
+                                                        'border-white/10 text-gray-500'
                                                     }`}
                                             >
                                                 <option value={ROLES.PLAYER}>Jugador</option>
@@ -335,8 +335,8 @@ export default function AdminUsersPage() {
                                                         key={cId}
                                                         onClick={() => toggleCanchaForUser(u.uid, cId)}
                                                         className={`w-8 h-8 rounded-lg text-[9px] font-black transition-all ${(u.markerCanchas || []).includes(cId)
-                                                                ? 'bg-padel-primary text-black'
-                                                                : 'bg-white/5 text-gray-600 hover:text-white'
+                                                            ? 'bg-padel-primary text-black'
+                                                            : 'bg-white/5 text-gray-600 hover:text-white'
                                                             }`}
                                                     >
                                                         {cId.split('_')[1]}
@@ -420,8 +420,8 @@ export default function AdminUsersPage() {
                                             key={r}
                                             onClick={() => setFormData({ ...formData, role: r })}
                                             className={`py-6 rounded-2xl border flex flex-col items-center gap-3 transition-all ${formData.role === r
-                                                    ? 'bg-padel-primary/10 border-padel-primary text-padel-primary shadow-xl shadow-padel-primary/5'
-                                                    : 'bg-white/5 border-white/5 text-gray-600 grayscale opacity-40'
+                                                ? 'bg-padel-primary/10 border-padel-primary text-padel-primary shadow-xl shadow-padel-primary/5'
+                                                : 'bg-white/5 border-white/5 text-gray-600 grayscale opacity-40'
                                                 }`}
                                         >
                                             {r === ROLES.ADMIN ? <ShieldCheck size={24} /> : r === ROLES.MARKER ? <Target size={24} /> : <User size={24} />}
