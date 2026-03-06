@@ -211,8 +211,10 @@ export default function LoginPage() {
                                 <input
                                     required
                                     type={showPassword ? 'text' : 'password'}
-                                    placeholder="CONTRASEÑA"
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-12 py-4 text-sm outline-none focus:border-padel-primary/40 transition-all font-bold text-white placeholder:text-gray-700 tracking-[0.3em]"
+                                    placeholder="Contraseña (distingue mayúsculas y minúsculas)"
+                                    autoCapitalize="off"
+                                    autoComplete="current-password"
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-12 py-4 text-sm outline-none focus:border-padel-primary/40 transition-all font-bold text-white placeholder:text-gray-600"
                                     value={formData.password}
                                     onChange={e => setFormData({ ...formData, password: e.target.value })}
                                 />

@@ -200,7 +200,9 @@ export const dataService = {
     },
 
     async getMyParticipants(ownerId: string) {
-        const { data, error } = await supabase()
+        const c = getSupabaseClient();
+        if (!c) return [];
+        const { data, error } = await c
             .from('participants')
             .select('*')
             .eq('owner_id', ownerId)

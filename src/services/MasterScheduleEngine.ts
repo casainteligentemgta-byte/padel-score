@@ -480,6 +480,10 @@ export class MasterScheduleEngine {
     }
 
     /** Retorna true si todos los jugadores han descansado al menos 1 slot */
+    /**
+     * Evita que un jugador tenga dos partidos en el mismo slot (o consecutivos sin margen).
+     * Así, si un jugador está inscrito en varias categorías, no se le solapan horarios.
+     */
     private static canPlay(playerIds: string[], currentSlotIdx: number, playerLastSlot: { [pid: string]: number }): boolean {
         for (const pid of playerIds) {
             if (playerLastSlot[pid] === undefined) continue;

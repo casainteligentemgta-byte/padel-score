@@ -56,9 +56,8 @@ const AuthContext = createContext<AuthContextType>({
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [user, setUser] = useState<AppUser | null>(null);
     const [profile, setProfile] = useState<any | null>(null);
-    const [loading, setLoading] = useState(true);
-
     const supabase = getSupabaseClient();
+    const [loading, setLoading] = useState(() => (typeof window !== 'undefined' && !supabase ? false : true));
 
     const fetchProfile = async (uid: string, opts?: { email?: string; name?: string }) => {
         try {

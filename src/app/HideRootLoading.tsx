@@ -2,17 +2,20 @@
 
 import { useEffect } from 'react';
 
+function hideOverlay() {
+    try {
+        const el = document.getElementById('root-loading');
+        if (el) el.style.setProperty('display', 'none');
+    } catch (_) {}
+}
+
 /**
- * Oculta el overlay #root-loading cuando la app está lista.
- * Retraso mínimo 1.2s para que se vea "Smart Padel" y React tenga tiempo de pintar.
+ * Oculta el overlay #root-loading en cuanto React monta en el cliente.
  */
 export default function HideRootLoading() {
     useEffect(() => {
-        const hide = () => {
-            const el = document.getElementById('root-loading');
-            if (el) el.style.setProperty('display', 'none');
-        };
-        const tid = setTimeout(hide, 1200);
+        hideOverlay();
+        const tid = setTimeout(hideOverlay, 400);
         return () => clearTimeout(tid);
     }, []);
     return null;

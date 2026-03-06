@@ -51,7 +51,9 @@ const INITIAL_DATA = {
         id: number;
         p1: { id: string; name: string; lastName: string; age: string; photo: string; phone: string };
         p2: { id: string; name: string; lastName: string; age: string; photo: string; phone: string };
-    }[]
+    }[],
+    /** Categorías para que los jugadores se inscriban desde la app (varias categorías, evita choques de horario) */
+    inscriptionCategories: [] as { key: string; name: string; price: number; gender?: 'MALE' | 'FEMALE' | 'MIXED' }[],
 };
 
 export default function NewTournamentPage() {
@@ -490,6 +492,15 @@ export default function NewTournamentPage() {
                 return;
             }
 
+            const defaultInscriptionCategories = (tournamentData.inscriptionCategories?.length ?? 0) > 0
+                ? tournamentData.inscriptionCategories
+                : [{
+                    key: tournamentData.category || 'PRIMERA',
+                    name: `${tournamentData.category || 'Primera'}${tournamentData.gender ? ' ' + (tournamentData.gender === 'MALE' ? 'Masculino' : tournamentData.gender === 'FEMALE' ? 'Femenino' : 'Mixto') : ''}`,
+                    price: 0,
+                    gender: tournamentData.gender || undefined,
+                }];
+
             const tournamentToSave = {
                 name: tournamentData.name,
                 type: tournamentData.type,
@@ -513,7 +524,8 @@ export default function NewTournamentPage() {
                 advancementRule: tournamentData.type === TournamentType.ROUND_ROBIN
                     ? { teamsPerGroup: tournamentData.groupSize, advanceCount: tournamentData.advanceCount, nextRound: Object.keys(groupAssignments).length === 2 ? 'QF' : 'SF' }
                     : null,
-                status: 'En Curso'
+                status: 'En Curso',
+                inscriptionCategories: defaultInscriptionCategories,
             };
 
             console.log('[NewTournament] Saving to Firestore...');
@@ -791,6 +803,74 @@ export default function NewTournamentPage() {
                                                 </div>
                                             </motion.button>
                                         ))}
+                                    </div>
+
+                                    <div className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] p-6 space-y-4">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1 flex items-center gap-2">
+                                            <User className="w-3.5 h-3.5 text-padel-primary" /> Categorías de inscripción
+                                        </label>
+                                        <p className="text-xs text-gray-500">
+                                            Los jugadores podrán inscribirse desde la app en una o varias categorías. El horario se generará evitando que un mismo jugador tenga partidos a la misma hora en distintas categorías.
+                                        </p>
+                                        {(tournamentData.inscriptionCategories?.length ?? 0) > 0 && (
+                                            <ul className="space-y-2">
+                                                {tournamentData.inscriptionCategories.map((cat, idx) => (
+                                                    <li key={cat.key + idx} className="flex items-center gap-3 p-3 rounded-xl bg-black/30 border border-white/5">
+                                                        <input
+                                                            type="text"
+                                                            value={cat.name}
+                                                            onChange={(e) => {
+                                                                const next = [...(tournamentData.inscriptionCategories || [])];
+                                                                next[idx] = { ...next[idx], name: e.target.value };
+                                                                setTournamentData({ ...tournamentData, inscriptionCategories: next });
+                                                            }}
+                                                            placeholder="Nombre (ej. Primera Masculino)"
+                                                            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm font-bold text-white"
+                                                        />
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            value={cat.price}
+                                                            onChange={(e) => {
+                                                                const next = [...(tournamentData.inscriptionCategories || [])];
+                                                                next[idx] = { ...next[idx], price: parseFloat(e.target.value) || 0 };
+                                                                setTournamentData({ ...tournamentData, inscriptionCategories: next });
+                                                            }}
+                                                            placeholder="0"
+                                                            className="w-20 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-sm font-bold text-white"
+                                                        />
+                                                        <span className="text-[10px] text-gray-500">$</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const next = (tournamentData.inscriptionCategories || []).filter((_, i) => i !== idx);
+                                                                setTournamentData({ ...tournamentData, inscriptionCategories: next });
+                                                            }}
+                                                            className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 text-xs font-bold"
+                                                        >
+                                                            Quitar
+                                                        </button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const key = `CAT_${(tournamentData.inscriptionCategories?.length ?? 0) + 1}`;
+                                                const name = tournamentData.gender === 'MALE' ? 'Masculino' : tournamentData.gender === 'FEMALE' ? 'Femenino' : 'Mixto';
+                                                setTournamentData({
+                                                    ...tournamentData,
+                                                    inscriptionCategories: [...(tournamentData.inscriptionCategories || []), { key, name: `Categoría ${name}`, price: 0, gender: tournamentData.gender || undefined }],
+                                                });
+                                            }}
+                                            className="text-sm font-bold uppercase tracking-widest text-padel-primary hover:underline"
+                                        >
+                                            + Añadir categoría de inscripción
+                                        </button>
+                                        {(!tournamentData.inscriptionCategories || tournamentData.inscriptionCategories.length === 0) && (
+                                            <p className="text-[10px] text-gray-600">Si no añades ninguna, se creará una por defecto con el género del torneo.</p>
+                                        )}
                                     </div>
                                 </div>
 

@@ -40,6 +40,7 @@
     "node_modules",
     "prisma",
     "supabase",
+    "smart-padel",
     "src/app/_api",
     "src/app/api"
   ]

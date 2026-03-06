@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
 import { AppSettingsProvider } from "@/lib/AppSettingsContext";
-import HideRootLoading from "./HideRootLoading";
 import RootErrorBoundary from "./RootErrorBoundary";
 
 export const metadata: Metadata = {
@@ -23,13 +22,7 @@ export default function RootLayout({
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
             </head>
             <body suppressHydrationWarning style={{ margin: 0, backgroundColor: "#0a0a0a", color: "#fff", fontFamily: "system-ui, sans-serif", minHeight: "100vh" }}>
-                {/* Fallback visible siempre hasta que React oculte el overlay */}
-                <div id="root-loading" style={{ position: "fixed", inset: 0, background: "#0a0a0a", color: "#ccff00", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, fontSize: 22, fontWeight: 700, zIndex: 99999 }}>
-                    <span>Smart Padel</span>
-                    <span style={{ fontSize: 14, color: "#888" }}>Cargando…</span>
-                </div>
-                <script dangerouslySetInnerHTML={{ __html: "setTimeout(function(){var e=document.getElementById('root-loading');if(e)e.style.display='none';},4000);" }} />
-                <HideRootLoading />
+                <div style={{ padding: 8, background: "#1a1a1a", color: "#ccff00", fontSize: 12 }}>Layout OK</div>
                 <RootErrorBoundary>
                     <AuthProvider>
                         <AppSettingsProvider>

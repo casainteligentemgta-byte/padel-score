@@ -29,10 +29,18 @@ export default function PlayerRegistrationPage() {
     const fromMisDatos = searchParams.get('mis-datos') === '1';
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
+    const [showPhotoOptions, setShowPhotoOptions] = useState(false);
+    const [isCameraActive, setIsCameraActive] = useState(false);
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const scrollAreaRef = useRef<HTMLDivElement>(null);
+    const [showNextButton, setShowNextButton] = useState(false);
 
     const [formData, setFormData] = useState({
         name: '',
         lastName: '',
+        gender: 'MALE' as 'MALE' | 'FEMALE',
         level: 4,
         position: 'Drive',
         birthDate: '',
@@ -190,7 +198,7 @@ export default function PlayerRegistrationPage() {
                         <div className="space-y-8">
                             {!fromMisDatos && (
                                 <p className="text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2">
-                                    DATOS PERSONALES Y TÉCNICOS:
+                                    DATOS PERSONALES Y TÉCNICOS (nombre, apellido, sexo, nivel, posición…):
                                 </p>
                             )}
 
@@ -286,6 +294,32 @@ export default function PlayerRegistrationPage() {
                                                     {lvl}
                                                 </button>
                                             ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1 text-center block">Sexo</label>
+                                        <div className="grid grid-cols-2 gap-2 bg-white/5 p-1 rounded-2xl border border-white/5">
+                                            <button
+                                                type="button"
+                                                onClick={() => updateField('gender', 'MALE')}
+                                                className={`h-11 rounded-xl flex items-center justify-center text-xs font-black uppercase tracking-widest transition-all ${formData.gender === 'MALE'
+                                                    ? 'bg-[#ccff00] text-black'
+                                                    : 'text-gray-500 hover:text-white'
+                                                    }`}
+                                            >
+                                                Masculino
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => updateField('gender', 'FEMALE')}
+                                                className={`h-11 rounded-xl flex items-center justify-center text-xs font-black uppercase tracking-widest transition-all ${formData.gender === 'FEMALE'
+                                                    ? 'bg-[#ccff00] text-black'
+                                                    : 'text-gray-500 hover:text-white'
+                                                    }`}
+                                            >
+                                                Femenino
+                                            </button>
                                         </div>
                                     </div>
 

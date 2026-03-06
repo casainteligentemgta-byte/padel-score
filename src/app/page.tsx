@@ -10,10 +10,17 @@ import { useRouter } from 'next/navigation';
 export default function LandingPage() {
     const { user, logout, loading: authLoading, signInWithEmail, signUpWithEmail, enableDevMode } = useAuth();
     const router = useRouter();
+    const [showFormAnyway, setShowFormAnyway] = useState(false);
 
     useEffect(() => {
         if (!authLoading && user) router.replace('/tournaments');
     }, [authLoading, user, router]);
+
+    // Si la carga de auth tarda mucho (ej. Sin Supabase en local), mostrar el formulario igual
+    useEffect(() => {
+        const t = setTimeout(() => setShowFormAnyway(true), 4000);
+        return () => clearTimeout(t);
+    }, []);
 
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
@@ -39,7 +46,7 @@ export default function LandingPage() {
         }
     };
 
-    if (authLoading) {
+    if (authLoading && !showFormAnyway) {
         return (
             <div className="h-dvh bg-[#050505] flex items-center justify-center">
                 <div className="w-12 h-12 border-4 border-padel-primary/20 border-t-padel-primary rounded-full animate-spin" />
@@ -156,8 +163,10 @@ export default function LandingPage() {
                                 <input
                                     required
                                     type={showPassword ? 'text' : 'password'}
-                                    placeholder="CONTRASEÑA"
-                                    className="w-full bg-white/[0.05] border border-white/10 rounded-2xl pl-12 pr-12 py-4 text-xs font-bold uppercase tracking-[0.3em] outline-none focus:border-padel-primary/30 text-white placeholder:text-gray-700 transition-all"
+                                    placeholder="Contraseña (distingue mayúsculas y minúsculas)"
+                                    autoCapitalize="off"
+                                    autoComplete="current-password"
+                                    className="w-full bg-white/[0.05] border border-white/10 rounded-2xl pl-12 pr-12 py-4 text-xs font-bold outline-none focus:border-padel-primary/30 text-white placeholder:text-gray-600 transition-all"
                                     value={formData.password}
                                     onChange={e => setFormData({ ...formData, password: e.target.value })}
                                 />

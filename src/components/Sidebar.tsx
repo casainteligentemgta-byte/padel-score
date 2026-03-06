@@ -72,8 +72,9 @@ export default function Sidebar() {
             } else {
                 router.push('/players/register?mis-datos=1');
             }
-        } catch (e) {
-            console.error('Sidebar: error cargando ficha de jugador', e);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            console.error('Sidebar: error cargando ficha de jugador', msg || e);
             router.push('/mi-cuenta');
         }
     };
