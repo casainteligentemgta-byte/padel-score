@@ -270,7 +270,7 @@ export default function AdminPublicidad() {
       if (newMode) {
         // Al activar, sincronizar todo a los masters actuales
         setSyncing(true);
-        const updates = [];
+        const updates: { pantalla_id: string; media_content_id: string }[] = [];
         if (masterMediaId) {
           pantallas.forEach(p => updates.push({ pantalla_id: `${p.id}_video`, media_content_id: masterMediaId }));
         }

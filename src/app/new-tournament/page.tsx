@@ -122,7 +122,7 @@ export default function NewTournamentPage() {
 
     const getDaysInMonth = (year: number, month: number) => {
         const date = new Date(year, month, 1);
-        const days = [];
+        const days: (Date | null)[] = [];
         const firstDay = (date.getDay() + 6) % 7; // Adjust to start on Monday
 
         for (let i = 0; i < firstDay; i++) {
