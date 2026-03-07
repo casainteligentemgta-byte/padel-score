@@ -386,16 +386,21 @@ export const dataService = {
     },
 
     async getAdminSettings(): Promise<AdminSettings | null> {
-        const c = getSupabaseClient();
-        if (!c) return null;
-        const { data, error } = await c.from('admin_settings').select('*').eq('id', 1).single();
-        if (error || !data) return null;
-        return {
-            appTitle: data.app_title,
-            clubName: data.club_name,
-            timezone: data.timezone,
-            updatedAt: data.updated_at,
-        };
+        try {
+            const c = getSupabaseClient();
+            if (!c) return null;
+            const { data, error } = await c.from('admin_settings').select('*').eq('id', 1).maybeSingle();
+            if (error || !data) return null;
+            return {
+                appTitle: data.app_title,
+                clubName: data.club_name,
+                timezone: data.timezone,
+                updatedAt: data.updated_at,
+            };
+        } catch (e) {
+            console.warn('[dataService] Error al obtener admin_settings (posiblemente la tabla no existe):', e);
+            return null;
+        }
     },
 
     async setAdminSettings(data: Partial<AdminSettings>): Promise<void> {
@@ -532,14 +537,70 @@ export const dataService = {
     },
 
     async getSponsorsByTournament(tournamentId: string) {
-        const { data, error } = await supabase()
-            .from('sponsor_carousel')
-            .select('*')
-            .eq('tournament_id', tournamentId)
-            .eq('is_active', true)
-            .order('display_order', { ascending: true });
+        try {
+            const { data, error } = await supabase()
+                .from('sponsor_carousel')
+                .select('*')
+                .eq('tournament_id', tournamentId)
+                .eq('is_active', true)
+                .order('display_order', { ascending: true });
 
-        if (error) throw error;
-        return data || [];
+            if (error) {
+                if (error.code === 'PGRST116' || error.code === '42P01') return [];
+                throw error;
+            }
+            return data || [];
+        } catch (e) {
+            console.warn('[dataService] Error al obtener sponsors (posiblemente la tabla no existe):', e);
+            return [];
+        }
+    },
+
+    async getLiveMatches() {
+        try {
+            const { data: tournaments, error: tError } = await supabase().from('tournaments').select('*');
+            if (tError) throw tError;
+
+            let allLiveMatches: any[] = [];
+
+            for (const t of (tournaments || [])) {
+                const { data: matches, error: mError } = await supabase()
+                    .from('tournament_matches')
+                    .select('*')
+                    .eq('tournament_id', t.id);
+
+                if (mError) continue;
+
+                const live = (matches || []).filter((m: any) => {
+                    const status = m.data?.status;
+                    return status === 'LIVE' || status === 'IN_PROGRESS' || status === 'STARTED';
+                }).map((m: any) => {
+                    const tournament = { id: t.id, ...t.data };
+                    const matchData = m.data || {};
+                    const t1Idx = matchData.team1Index;
+                    const t2Idx = matchData.team2Index;
+                    const team1 = t1Idx > 0 ? tournament.teams?.[t1Idx - 1] : matchData.team1;
+                    const team2 = t2Idx > 0 ? tournament.teams?.[t2Idx - 1] : matchData.team2;
+
+                    return {
+                        ...matchData,
+                        id: m.id,
+                        tournamentId: t.id,
+                        tournamentName: tournament.name,
+                        category: tournament.category,
+                        t1Name: team1 ? (team1.p1?.name ? `${team1.p1.name} / ${team1.p2.name}` : team1.name) : 'TBD',
+                        t2Name: team2 ? (team2.p1?.name ? `${team2.p1.name} / ${team2.p2.name}` : team2.name) : 'TBD',
+                        primaryColor: tournament.broadcastingSettings?.primaryColor || '#ccff00',
+                        bannerText: tournament.broadcastingSettings?.bannerText || 'SMART PADEL PRO TV'
+                    };
+                });
+
+                allLiveMatches = [...allLiveMatches, ...live];
+            }
+            return allLiveMatches;
+        } catch (e) {
+            console.error('[dataService] getLiveMatches failed:', e);
+            return [];
+        }
     }
 };

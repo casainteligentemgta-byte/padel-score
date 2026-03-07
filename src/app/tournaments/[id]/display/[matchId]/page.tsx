@@ -424,10 +424,18 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
             setTournament(t);
 
             // Resolver partido
-            let found = ms.find((m: any) => m.id === matchId);
+            let found = ms.find((m: any) => String(m.id) === String(matchId));
             if (!found && /^match_(\d+)$/.test(matchId)) {
                 const idx = parseInt(matchId.replace('match_', ''), 10);
                 if (idx >= 0 && idx < ms.length) found = ms[idx];
+            }
+            if (!found && /^m_(\d+)$/.test(matchId)) {
+                const ts = parseInt(matchId.replace('m_', ''), 10);
+                found = ms.find((m: any) => {
+                    const mTs = getMatchStartTimeMs(m);
+                    // Margen de 2 segundos para evitar desajustes de precisión
+                    return mTs && Math.abs(mTs - ts) < 2000;
+                });
             }
             if (!found && matchId.startsWith('court_')) {
                 const courtNum = parseInt(matchId.replace('court_', ''), 10);
@@ -870,16 +878,14 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                             {/* Team 1 row */}
                             <div className="flex-1 flex items-center relative border-b border-white/[0.05] overflow-hidden">
                                 <div className="flex-1 flex items-center h-full px-6 gap-4">
-                                    <div className="flex items-center justify-center" style={{ width: 'clamp(14px,2vw,32px)' }}>
-                                        <AnimatePresence>
-                                            {(lm?.saque?.equipo === 1 || match.server?.team === 1) && (
-                                                <motion.span initial={{ opacity: 0, scale: 0.5, x: -10 }} animate={{ opacity: 1, scale: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
-                                                    style={{ fontSize: 'clamp(12px,1.6vw,28px)' }}>🎾</motion.span>
-                                            )}
-                                        </AnimatePresence>
-                                    </div>
                                     <div className="flex flex-col flex-1 min-w-0" style={{ gap: '0.2vh' }}>
                                         <div className="flex items-center gap-3">
+                                            <AnimatePresence>
+                                                {(lm?.saque?.equipo === 1 || match.server?.team === 1) && (
+                                                    <motion.span initial={{ opacity: 0, scale: 0.5, x: -10 }} animate={{ opacity: 1, scale: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+                                                        style={{ fontSize: '1.5vh', marginRight: '-0.5vw' }}>🎾</motion.span>
+                                                )}
+                                            </AnimatePresence>
                                             <img src={match.t1p1Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t1p1)}&background=222&color=fff`}
                                                 className="rounded-full flex-shrink-0 object-cover border border-white/10"
                                                 style={{ width: '4.5vh', height: '4.5vh' }} />
@@ -913,16 +919,14 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                             {/* Team 2 row */}
                             <div className="flex-1 flex items-center relative overflow-hidden">
                                 <div className="flex-1 flex items-center h-full px-6 gap-4">
-                                    <div className="flex items-center justify-center" style={{ width: 'clamp(14px,2vw,32px)' }}>
-                                        <AnimatePresence>
-                                            {(lm?.saque?.equipo === 2 || match.server?.team === 2) && (
-                                                <motion.span initial={{ opacity: 0, scale: 0.5, x: -10 }} animate={{ opacity: 1, scale: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
-                                                    style={{ fontSize: 'clamp(12px,1.6vw,28px)' }}>🎾</motion.span>
-                                            )}
-                                        </AnimatePresence>
-                                    </div>
                                     <div className="flex flex-col flex-1 min-w-0" style={{ gap: '0.2vh' }}>
                                         <div className="flex items-center gap-3">
+                                            <AnimatePresence>
+                                                {(lm?.saque?.equipo === 2 || match.server?.team === 2) && (
+                                                    <motion.span initial={{ opacity: 0, scale: 0.5, x: -10 }} animate={{ opacity: 1, scale: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+                                                        style={{ fontSize: '1.5vh', marginRight: '-0.5vw' }}>🎾</motion.span>
+                                                )}
+                                            </AnimatePresence>
                                             <img src={match.t2p1Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t2p1)}&background=222&color=fff`}
                                                 className="rounded-full flex-shrink-0 object-cover border border-white/10"
                                                 style={{ width: '4.5vh', height: '4.5vh' }} />

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { dataService } from '@/lib/dataService';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc } from 'firebase/firestore';
 import { Trophy, Zap, Radio, Clock, Thermometer } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MatchStatus } from '@/types/tournament';
@@ -27,46 +27,72 @@ export default function TVKioskPage() {
             .catch(() => { });
     }, []);
 
-    // Escuchar partidos en vivo globalmente
+    // Escuchar partidos en vivo globalmente de ambas fuentes
     useEffect(() => {
+        let firebaseMatch: any = null;
+        let supabaseMatches: any[] = [];
+
+        // 1. Firebase Source
         const q = query(collection(db, 'tournaments'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        const unsubscribeFirebase = onSnapshot(q, (snapshot) => {
             let foundMatch: any = null;
-
             snapshot.docs.forEach(docSnap => {
-                if (foundMatch) return; // Ya encontramos uno principal
+                if (foundMatch) return;
                 const tournament = docSnap.data();
-
                 if (tournament.matches) {
                     const active = tournament.matches.find((m: any) =>
                         m.status === MatchStatus.LIVE ||
                         m.status === 'LIVE' ||
-                        m.status === 'IN_PROGRESS'
+                        m.status === 'IN_PROGRESS' ||
+                        m.status === 'STARTED'
                     );
-
                     if (active) {
-                        const team1 = active.team1Index > 0 ? tournament.teams?.[active.team1Index - 1] : null;
-                        const team2 = active.team2Index > 0 ? tournament.teams?.[active.team2Index - 1] : null;
+                        const team1 = active.team1Index > 0 ? tournament.teams?.[active.team1Index - 1] : active.team1;
+                        const team2 = active.team2Index > 0 ? tournament.teams?.[active.team2Index - 1] : active.team2;
 
                         foundMatch = {
                             ...active,
                             tournamentName: tournament.name,
                             tournamentId: docSnap.id,
                             category: tournament.category,
-                            t1Name: team1 ? `${team1.p1.name} / ${team1.p2.name}` : 'TBD',
-                            t2Name: team2 ? `${team2.p1.name} / ${team2.p2.name}` : 'TBD',
+                            t1Name: team1 ? (team1.p1?.name ? `${team1.p1.name} / ${team1.p2.name}` : (team1.name || 'TBD')) : 'TBD',
+                            t2Name: team2 ? (team2.p1?.name ? `${team2.p1.name} / ${team2.p2.name}` : (team2.name || 'TBD')) : 'TBD',
                             primaryColor: tournament.broadcastingSettings?.primaryColor || '#ccff00',
                             bannerText: tournament.broadcastingSettings?.bannerText || 'SMART PADEL PRO TV'
                         };
                     }
                 }
             });
-
-            setLiveMatch(foundMatch);
-            setLoading(false);
+            firebaseMatch = foundMatch;
+            updateDisplay();
         });
 
-        return () => unsubscribe();
+        // 2. Supabase Source (Polling for now, or use live subscription if needed)
+        const fetchSupabase = async () => {
+            try {
+                const live = await dataService.getLiveMatches();
+                supabaseMatches = live || [];
+                updateDisplay();
+            } catch (err) {
+                console.warn('TV: Error fetching Supabase matches', err);
+            }
+        };
+
+        const updateDisplay = () => {
+            // Prioridad: Firebase (históricamente más confiable para live scores)
+            // sino cualquier partido en Supabase marcado como LIVE
+            const finalMatch = firebaseMatch || (supabaseMatches.length > 0 ? supabaseMatches[0] : null);
+            setLiveMatch(finalMatch);
+            setLoading(false);
+        };
+
+        fetchSupabase();
+        const supInterval = setInterval(fetchSupabase, 10000);
+
+        return () => {
+            unsubscribeFirebase();
+            clearInterval(supInterval);
+        };
     }, []);
 
     if (loading) {
