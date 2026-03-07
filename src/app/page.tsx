@@ -130,7 +130,7 @@ export default function HomePage() {
                             <p className="text-xs font-black uppercase italic text-white tracking-tight">{user?.email}</p>
                         </div>
                         <div className="w-14 h-14 bg-padel-primary rounded-[1.4rem] flex items-center justify-center text-black shadow-[0_0_20px_rgba(204,255,0,0.3)] border border-black/10">
-                            <UserCircle size={28} weight="fill" />
+                            <UserCircle size={28} />
                         </div>
                     </motion.div>
                 </div>

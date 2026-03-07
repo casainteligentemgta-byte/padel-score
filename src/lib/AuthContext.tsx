@@ -219,10 +219,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setProfile(null);
     };
 
-    const isAdmin = profile?.role === ROLES.ADMIN ||
-        user?.email?.toLowerCase().includes('casainteligente');
-    const isPlayer = profile?.role === ROLES.PLAYER;
-    const isMarker = profile?.role === ROLES.MARKER;
+    const isAdmin = !!(profile?.role === ROLES.ADMIN ||
+        user?.email?.toLowerCase().includes('casainteligente'));
+    const isPlayer = !!(profile?.role === ROLES.PLAYER);
+    const isMarker = !!(profile?.role === ROLES.MARKER);
     const markerCanchas: string[] = isMarker && Array.isArray(profile?.markerCanchas) ? profile.markerCanchas : [];
     const canMarkInCancha = (canchaId: string) => isAdmin || (isMarker && markerCanchas.includes(canchaId));
     const refreshProfile = async () => {

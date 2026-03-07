@@ -11,6 +11,7 @@ export interface MediaContent {
   nombre_sponsor: string | null;
   duracion_segundos: number | null;
   nombre: string | null;
+  activa: boolean | null;
   created_at: string;
   updated_at: string;
 }

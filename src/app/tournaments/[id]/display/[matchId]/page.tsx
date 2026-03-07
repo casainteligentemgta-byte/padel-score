@@ -146,7 +146,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     // Estilo del reloj y del cronómetro
     const [relojOcasion, setRelojOcasion] = useState<string>('default');
     const [cronometroTipo, setCronometroTipo] = useState<string>('default');
-    const [animacionActual, setAnimacionActual] = useState<{ id: string; ts: number } | null>(null);
+    const [animacionActual, setAnimacionActual] = useState<{ id: string; ts: number; url?: string } | null>(null);
     const [animacionesMarcador, setAnimacionesMarcador] = useState<Record<string, { nombre: string; url: string }>>({});
 
     useEffect(() => {
@@ -156,7 +156,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
             { path: 'publicidad_master/cronometro_tipo', setter: setCronometroTipo },
         ];
         const unsubscribers = refs.map(r => {
-            const node = ref(rtdb, r.path);
+            const node = ref(rtdb!, r.path);
             const h = (s: any) => r.setter(s.val() || 'default');
             onValue(node, h);
             return () => off(node, 'value', h);
@@ -256,8 +256,8 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     return;
                 }
 
-                const vidId = statusData.find(s => s.pantalla_id === videoKey)?.media_content_id;
-                const carId = statusData.find(s => s.pantalla_id === carouselKey)?.media_content_id;
+                const vidId = statusData.find((s: any) => s.pantalla_id === videoKey)?.media_content_id;
+                const carId = statusData.find((s: any) => s.pantalla_id === carouselKey)?.media_content_id;
 
                 // 3. Obtener el contenido multimedia para video
                 if (vidId) {

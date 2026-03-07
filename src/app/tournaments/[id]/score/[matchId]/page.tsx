@@ -204,7 +204,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                 actualStartTime: nowIso
             });
             // Update local state immediately to trigger timer without waiting for subscription
-            setMatch(prev => prev ? { ...prev, status: MatchStatus.LIVE, startedAt: nowIso, actualStartTime: nowIso } : prev);
+            setMatch((prev: any) => prev ? { ...prev, status: MatchStatus.LIVE, startedAt: nowIso, actualStartTime: nowIso } : prev);
         } catch (err) {
             console.error('[startMatch] Error:', err);
             alert('Error al iniciar el partido. Por favor, reintenta.');
