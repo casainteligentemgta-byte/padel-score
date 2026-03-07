@@ -11,22 +11,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
     children,
-}: Readonly<{
-    children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
     return (
-        <html lang="es" suppressHydrationWarning>
+        <html lang="es" suppressHydrationWarning style={{ background: "#0a0a0a" }}>
             <head>
-                <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
-                <link rel="preconnect" href="https://fonts.googleapis.com" />
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+                <style dangerouslySetInnerHTML={{ __html: "html,body{background:#0a0a0a!important;margin:0!important;min-height:100vh!important;color:#fff!important;}" }} />
             </head>
             <body suppressHydrationWarning style={{ margin: 0, backgroundColor: "#0a0a0a", color: "#fff", fontFamily: "system-ui, sans-serif", minHeight: "100vh" }}>
-                <div style={{ padding: 8, background: "#1a1a1a", color: "#ccff00", fontSize: 12 }}>Layout OK</div>
                 <RootErrorBoundary>
                     <AuthProvider>
                         <AppSettingsProvider>
-                            <main className="min-h-screen">
+                            <main className="min-h-screen" style={{ minHeight: "100vh" }}>
                                 {children}
                             </main>
                         </AppSettingsProvider>

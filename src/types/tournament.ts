@@ -154,3 +154,12 @@ export interface Group {
     ownerId: string;
     createdAt: any;
 }
+
+export interface MatchAnimation {
+    id: string;
+    name: string;
+    type: 'SIDE_CHANGE' | 'GAME_WON' | 'MATCH_WON' | 'GENERAL';
+    url: string;
+    isActive: boolean;
+    createdAt: any;
+}

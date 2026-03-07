@@ -1,5 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+    corePlugins: {
+        preflight: false, // Evita que Tailwind resetee el fondo y deje todo blanco
+    },
     content: [
         "./src/**/*.{js,ts,jsx,tsx,mdx}",
     ],

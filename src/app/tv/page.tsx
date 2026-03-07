@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query } from 'firebase/firestore';
-import { Trophy, Zap, Radio, Clock } from 'lucide-react';
+import { Trophy, Zap, Radio, Clock, Thermometer } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MatchStatus } from '@/types/tournament';
 
@@ -11,11 +11,20 @@ export default function TVKioskPage() {
     const [liveMatch, setLiveMatch] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [temp, setTemp] = useState<number | null>(null);
 
     // Reloj digital para el TV
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
+    }, []);
+
+    // Fetch temperatura (Isla de Margarita)
+    useEffect(() => {
+        fetch('https://api.open-meteo.com/v1/forecast?latitude=11.0&longitude=-63.9&current_weather=true')
+            .then(r => r.json())
+            .then(data => setTemp(Math.round(data.current_weather?.temperature ?? 0)))
+            .catch(() => { });
     }, []);
 
     // Escuchar partidos en vivo globalmente
@@ -129,11 +138,22 @@ export default function TVKioskPage() {
                                     <p className="label-cancha text-xl text-padel-primary">Pista {liveMatch.court} • {liveMatch.category}</p>
                                 </div>
                             </div>
-                            <div className="text-right">
-                                <div className="text-5xl font-black italic tracking-tighter tabular-nums text-white">
-                                    {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            <div className="flex flex-col items-center justify-center bg-white/5 backdrop-blur-md border border-white/10 px-8 py-3 rounded-[2rem] shadow-2xl"
+                                style={{ minWidth: 'fit-content' }}>
+                                <div className="text-6xl font-black italic tracking-tighter tabular-nums text-white leading-none">
+                                    {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
-                                <p className="text-sm font-black uppercase tracking-widest text-gray-500 mt-2">Margarita Padel Club</p>
+                                <div className="flex items-center justify-between w-full mt-3 pt-3 border-t border-white/10 gap-6">
+                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-gray-500 whitespace-nowrap">
+                                        {currentTime.toLocaleDateString('es-VE', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase()}
+                                    </span>
+                                    {temp !== null && (
+                                        <div className="flex items-center gap-2 pl-4 border-l border-white/10">
+                                            <Thermometer className="w-4 h-4 text-padel-primary" />
+                                            <span className="text-2xl font-black italic text-padel-primary">{temp}°C</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
 

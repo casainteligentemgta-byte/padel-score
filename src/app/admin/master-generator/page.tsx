@@ -34,7 +34,6 @@ import { MasterScheduleEngine, MasterScheduleConfig, CategoryConfig } from '@/se
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { useRouter } from 'next/navigation';
-import { uploadToSupabase } from '@/lib/storage';
 
 // Colores fijos por formato (icono siempre a color)
 const FORMAT_COLORS = {
@@ -244,17 +243,35 @@ export default function MasterGeneratorPage() {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        const maxSize = 5 * 1024 * 1024; // 5 MB
+        if (file.size > maxSize) {
+            alert('El archivo es demasiado grande. Usa una imagen de menos de 5 MB.');
+            return;
+        }
+        const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowed.includes(file.type)) {
+            alert('Formato no válido. Usa JPG, PNG, GIF o WebP.');
+            return;
+        }
+
         setIsUploadingLogo(true);
         try {
-            // Se usa el servicio de storage de Supabase (bucket publicidad como default en lib/storage)
-            // se puede especificar un path como 'sponsors/logo.png'
-            const fileName = `sponsors/${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
-            const publicUrl = await uploadToSupabase(file, fileName);
-
+            const path = `sponsors/${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
+            const publicUrl = await dataService.uploadFile(file, path);
             setEventData(prev => ({ ...prev, sponsorLogoUrl: publicUrl }));
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error uploading logo:', error);
-            alert('Error al subir el logo. Inténtalo de nuevo.');
+            const msg = (error?.message || String(error)).toLowerCase();
+            if (msg.includes('configurado') || msg.includes('supabase')) {
+                alert('Supabase no está configurado. Revisa .env.local (NEXT_PUBLIC_SUPABASE_URL y ANON_KEY).');
+            } else if (msg.includes('row-level security') || msg.includes('rls') || msg.includes('policy')) {
+                alert('Storage bloqueado por políticas RLS. En Supabase: Storage → bucket "patrocinantes" → Policies → New policy: permite INSERT y SELECT para el bucket "patrocinantes". Instrucciones y SQL en docs/STORAGE_PATROCINANTES.md. Mientras tanto puedes pegar la URL del logo en el campo de texto.');
+            } else if (msg.includes('bucket') || msg.includes('not found') || msg.includes('storage')) {
+                const bucket = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET?.trim() ? process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET : 'public';
+                alert(`Bucket "${bucket}" no encontrado. Comprueba en Supabase → Storage que exista un bucket con ese nombre exacto (minúsculas) y "Public bucket" activado. O pega la URL del logo en el campo de texto.`);
+            } else {
+                alert('Error al subir el logo. Inténtalo de nuevo o pega la URL del logo en el campo de texto.');
+            }
         } finally {
             setIsUploadingLogo(false);
         }
@@ -1310,9 +1327,10 @@ export default function MasterGeneratorPage() {
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                                            <div className="space-y-1.5 min-w-0">
+                                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
+                                                    <UserPlus className="w-3.5 h-3.5 text-padel-primary shrink-0" />
                                                     Nombre del Patrocinante
                                                 </label>
                                                 <input
@@ -1324,12 +1342,12 @@ export default function MasterGeneratorPage() {
                                                 />
                                             </div>
 
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
-                                                    <ImageIcon className="w-3.5 h-3.5 text-padel-primary" />
+                                            <div className="space-y-1.5 min-w-0">
+                                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
+                                                    <ImageIcon className="w-3.5 h-3.5 text-padel-primary shrink-0" />
                                                     Logo del patrocinante
                                                 </label>
-                                                <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-3 flex-wrap">
                                                     <button
                                                         type="button"
                                                         onClick={() => document.getElementById('logo-upload')?.click()}
@@ -1377,8 +1395,11 @@ export default function MasterGeneratorPage() {
                                             </div>
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch col-span-2">
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Fecha Inicio</label>
+                                                <div className="space-y-1.5 min-w-0">
+                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
+                                                        <Calendar className="w-3.5 h-3.5 text-padel-primary shrink-0" />
+                                                        Fecha Inicio
+                                                    </label>
                                                     <div className="relative">
                                                         <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                                                         <input
@@ -1394,8 +1415,11 @@ export default function MasterGeneratorPage() {
                                                         />
                                                     </div>
                                                 </div>
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Duración</label>
+                                                <div className="space-y-1.5 min-w-0">
+                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
+                                                        <Sparkles className="w-3.5 h-3.5 text-padel-primary shrink-0" />
+                                                        Duración
+                                                    </label>
                                                     <div className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 flex items-center gap-2">
                                                         <Sparkles className="w-4 h-4 text-padel-primary animate-pulse shrink-0" />
                                                         <p className="text-sm font-bold text-white uppercase italic leading-tight">Calculada por IA</p>
@@ -1404,8 +1428,11 @@ export default function MasterGeneratorPage() {
                                             </div>
 
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 col-span-2 pt-2">
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Apertura</label>
+                                                <div className="space-y-1.5 min-w-0">
+                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
+                                                        <Clock className="w-3.5 h-3.5 text-padel-primary shrink-0" />
+                                                        Apertura
+                                                    </label>
                                                     <div className="relative">
                                                         <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
                                                         <input
@@ -1416,8 +1443,9 @@ export default function MasterGeneratorPage() {
                                                         />
                                                     </div>
                                                 </div>
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                                                <div className="space-y-1.5 min-w-0">
+                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
+                                                        <Clock className="w-3.5 h-3.5 text-padel-primary shrink-0" />
                                                         Cierre{eventData.dailyEndTime < eventData.dailyStartTime && <span className="ml-1 text-padel-primary">(+1d)</span>}
                                                     </label>
                                                     <div className="relative">
@@ -1936,20 +1964,8 @@ export default function MasterGeneratorPage() {
                             )}
                         </AnimatePresence>
 
-                        {/* Navigation Buttons and AI Tip */}
+                        {/* Navigation Buttons */}
                         <div className="max-w-md mx-auto mt-12 mb-16 space-y-6">
-                            {/* AI Assistant Tip */}
-                            <div className="bg-padel-primary/5 border border-padel-primary/10 rounded-2xl p-4 space-y-1.5 relative overflow-hidden group">
-                                <div className="absolute top-0 right-0 w-24 h-24 bg-padel-primary/10 blur-[50px] rounded-full pointer-events-none group-hover:bg-padel-primary/20 transition-all duration-1000"></div>
-                                <div className="flex items-center gap-1.5 text-padel-primary relative z-10">
-                                    <Sparkles className="w-4 h-4" />
-                                    <span className="text-[10px] font-black uppercase tracking-[0.2em]">Tip del Organizador</span>
-                                </div>
-                                <p className="text-xs text-zinc-400 leading-relaxed italic relative z-10">
-                                    "El sistema garantiza que ningún jugador juegue dos partidos seguidos. Las finales se agenden automáticamente al último slot disponible."
-                                </p>
-                            </div>
-
                             <div className="space-y-4">
                                 {step < 3 ? (
                                     <button

@@ -23,7 +23,7 @@ import {
     ZapOff
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { ref, onValue, off } from 'firebase/database';
+import { ref, onValue, off, update } from 'firebase/database';
 import { rtdb } from '@/lib/rtdb';
 import { dispararAnimacionMarcador } from '@/lib/rtdbService';
 import { dataService } from '@/lib/dataService';
@@ -60,6 +60,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     const [finishClicks, setFinishClicks] = useState(0);
     const [now, setNow] = useState(new Date());
     const [animacionesMarcador, setAnimacionesMarcador] = useState<Record<string, { nombre: string; url: string }>>({});
+    const [sideChangeAnimations, setSideChangeAnimations] = useState<any[]>([]);
 
     useEffect(() => {
         const timer = setInterval(() => setNow(new Date()), 1000);
@@ -72,6 +73,12 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         const handler = (snap: any) => setAnimacionesMarcador(snap.val() || {});
         onValue(animRef, handler);
         return () => off(animRef, 'value', handler);
+    }, []);
+
+    useEffect(() => {
+        dataService.getAnimations('SIDE_CHANGE')
+            .then(setSideChangeAnimations)
+            .catch(err => console.error('Error fetching SIDE_CHANGE animations:', err));
     }, []);
 
     /** Primeras 6 animaciones del marcador (orden estable) para los 6 pads de cada lado */
@@ -145,12 +152,17 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
         // Partido LIVE o PAUSED: arrancar el reloj y sincronizar con hora guardada (persiste al cerrar/abrir)
         if (status === MatchStatus.LIVE || status === MatchStatus.PAUSED) {
+            // Sincronizar duración inicial
+            const startMs = getMatchStartTimeMs(match);
+            if (startMs != null) {
+                const elapsed = Math.floor((Date.now() - startMs) / 1000);
+                setDuration(Math.max(0, elapsed));
+            } else {
+                setDuration(0);
+            }
+
+            // Iniciar intervalo si no existe
             if (!timerRef.current) {
-                const startMs = getMatchStartTimeMs(match);
-                if (startMs != null) {
-                    const elapsed = Math.floor((Date.now() - startMs) / 1000);
-                    setDuration(Math.max(0, elapsed));
-                }
                 timerRef.current = setInterval(() => {
                     setDuration(prev => prev + 1);
                 }, 1000);
@@ -158,8 +170,12 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             return;
         }
 
-        // PENDING u otro: detener reloj
-        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        // PENDING u otro (como CANCELLED): detener reloj
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+        }
+        setDuration(0);
 
         return () => {
             if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -172,20 +188,27 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         const courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
         const c = courtNum(match);
 
-        // Fetch current matches to check court availability
-        const currentMatches = await dataService.getMatches(id);
-        const otherLiveOnCourt = currentMatches.some((m: any) => m.id !== realId && m.status === MatchStatus.LIVE && courtNum(m) === c);
+        try {
+            // Fetch current matches to check court availability
+            const currentMatches = await dataService.getMatches(id);
+            const otherLiveOnCourt = currentMatches.some((m: any) => m.id !== realId && m.status === MatchStatus.LIVE && courtNum(m) === c);
 
-        if (otherLiveOnCourt) {
-            alert(`No puede haber dos partidos en vivo en la misma pista. Ya hay un partido en vivo en la pista ${c}.`);
-            return;
+            if (otherLiveOnCourt) {
+                alert(`No puede haber dos partidos en vivo en la misma pista. Ya hay un partido en vivo en la pista ${c}.`);
+                return;
+            }
+            const nowIso = new Date().toISOString();
+            await dataService.updateMatch(id, realId, {
+                status: MatchStatus.LIVE,
+                startedAt: nowIso,
+                actualStartTime: nowIso
+            });
+            // Update local state immediately to trigger timer without waiting for subscription
+            setMatch(prev => prev ? { ...prev, status: MatchStatus.LIVE, startedAt: nowIso, actualStartTime: nowIso } : prev);
+        } catch (err) {
+            console.error('[startMatch] Error:', err);
+            alert('Error al iniciar el partido. Por favor, reintenta.');
         }
-        const nowIso = new Date().toISOString();
-        await dataService.updateMatch(id, realId, {
-            status: MatchStatus.LIVE,
-            startedAt: nowIso,
-            actualStartTime: nowIso
-        });
     };
 
     // Medical Timer logic — reinicia en loop hasta que el árbitro pulse Reanudar
@@ -213,8 +236,14 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     };
 
     useEffect(() => {
-        if (!id || authLoading) return;
-        setLoading(true);
+        if (!id) return;
+
+        // Si authLoading es true, esperamos a que termine antes de lanzar las peticiones iniciales
+        // Pero no reiniciamos todo el efecto si authLoading cambia después (para evitar bucles)
+        if (authLoading && !tournament) return;
+
+        // Solo marcar como cargando la primera vez para evitar parpadeos en re-renders del efecto
+        if (!tournament) setLoading(true);
 
         let currentTournament: any = null;
         let currentMatches: any[] = [];
@@ -325,7 +354,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             unsubFM();
             clearTimeout(timeout);
         };
-    }, [id, matchId, authLoading, tournament?.teams]);
+    }, [id, matchId]);
 
     const saveHistory = () => {
         if (match) {
@@ -334,17 +363,28 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     };
 
     const undoPoint = async () => {
-        if (history.length === 0) return;
+        if (history.length === 0 || !match) return;
         const previousState = history[history.length - 1];
         setHistory(prev => prev.slice(0, -1));
 
-        await dataService.updateMatch(id, match.id, {
+        const updatedData = {
             points: previousState.points,
             games: previousState.games,
             sets: previousState.sets,
             server: previousState.server,
             isTiebreak: previousState.isTiebreak ?? false
-        });
+        };
+
+        // Actualización optimista
+        setMatch({ ...match, ...updatedData });
+
+        try {
+            await dataService.updateMatch(id, match.id, updatedData);
+        } catch (err) {
+            console.error('[undoPoint] Error:', err);
+            setMatch(match);
+            alert('Error al deshacer el último punto.');
+        }
     };
 
     const updateScore = async (side: 't1' | 't2', action: 'plus' | 'minus') => {
@@ -358,21 +398,27 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         saveHistory();
 
         const otherSide = side === 't1' ? 't2' : 't1';
-        let newPoints = { ...match.points };
+        let newPoints = {
+            t1: match.points?.t1 || '0',
+            t2: match.points?.t2 || '0',
+            ...match.points
+        };
+
+        let optimisticMatch = { ...match };
 
         // ── Lógica de Tiebreak ───────────────────────────────────────────
         if (match.isTiebreak) {
-            const currentP = parseInt(match.points?.[side] || '0');
-            const otherP = parseInt(match.points?.[otherSide] || '0');
+            const currentP = parseInt(newPoints[side] || '0');
+            const otherP = parseInt(newPoints[otherSide] || '0');
             const nextP = currentP + 1;
             newPoints[side] = nextP.toString();
 
-            // Rotación de saque en Tiebreak: 1er punto (sacador actual), luego cada 2 puntos cambia de equipo
+            // Rotación de saque en Tiebreak
             const totalPoints = nextP + otherP;
-            let nextServer = match.server;
+            let nextServer = { ...match.server };
             if (totalPoints === 1 || (totalPoints > 1 && (totalPoints - 1) % 2 === 0)) {
                 const nextTeam = match.server.team === 1 ? 2 : 1;
-                const nextPlayer = match.server.player === 1 ? 2 : 1; // Alternar jugador
+                const nextPlayer = match.server.player === 1 ? 2 : 1;
                 nextServer = { team: nextTeam as 1 | 2, player: nextPlayer as 1 | 2 };
             }
 
@@ -384,14 +430,22 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             }
 
             const updatedData = { points: newPoints, server: nextServer };
-            await dataService.updateMatch(id, match.id, updatedData);
+            // Actualización optimista
+            setMatch({ ...match, ...updatedData });
+            try {
+                await dataService.updateMatch(id, match.id, updatedData);
+            } catch (err) {
+                console.error('[updateScore Tiebreak] Error:', err);
+                setMatch(match); // Revertir en caso de error
+                alert('No se pudo guardar el punto. Verifica tu conexión.');
+            }
             return;
         }
 
         // ── Lógica Tradicional / Punto de Oro ─────────────────────────────
         const points = ['0', '15', '30', '40', 'AD'];
-        const currentPoints = match.points?.[side] || '0';
-        const otherPoints = match.points?.[otherSide] || '0';
+        const currentPoints = newPoints[side];
+        const otherPoints = newPoints[otherSide];
 
         if (currentPoints === '40') {
             if (otherPoints === '40') {
@@ -411,11 +465,23 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             await winGame(side);
             return;
         } else {
-            const nextIdx = points.indexOf(currentPoints) + 1;
-            newPoints[side] = points[nextIdx];
+            const nextIdx = points.indexOf(currentPoints);
+            if (nextIdx !== -1 && nextIdx < points.length - 1) {
+                newPoints[side] = points[nextIdx + 1];
+            } else {
+                newPoints[side] = '15'; // Fallback
+            }
         }
 
-        await dataService.updateMatch(id, match.id, { points: newPoints });
+        // Actualización optimista
+        setMatch({ ...match, points: newPoints });
+        try {
+            await dataService.updateMatch(id, match.id, { points: newPoints });
+        } catch (err) {
+            console.error('[updateScore] Error:', err);
+            setMatch(match); // Revertir
+            alert('Error al sincronizar el punto. Reintentando...');
+        }
     };
 
     const winGame = async (side: 't1' | 't2') => {
@@ -438,33 +504,64 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         // Avisar cambio de cancha en games impares terminados (1, 3, 5...)
         if (totalGames % 2 === 1) {
             setShowSideChange(true);
+            // Disparar animación de cambio de cancha si existen en la biblioteca
+            if (sideChangeAnimations.length > 0) {
+                const randomAnim = sideChangeAnimations[Math.floor(Math.random() * sideChangeAnimations.length)];
+                // Usamos un ID temporal o especial para indicar que viene de la biblioteca de Supabase
+                // Para que el display lo entienda, necesitamos que el display también pueda leer de Supabase
+                // O mandamos la URL directamente si el receptor lo soporta.
+                // Ajustemos dispararAnimacionMarcador para aceptar un objeto completo.
+                const pathRef = ref(rtdb!, `canchas/cancha_${matchCourt}/animacion_actual`);
+                update(pathRef, {
+                    id: randomAnim.id,
+                    url: randomAnim.url, // Pasamos la URL directamente para que el display no necesite buscarla
+                    ts: Date.now()
+                });
+            }
         }
 
-        // Rotación de sacador (regla pádel: alterna cada game de equipo, y cada 2 turnos de equipo alterna jugador)
+        // Rotación de sacador
         const team = (totalGames % 2 === 0) ? 1 : 2;
         const teamNumTurns = Math.floor(totalGames / 2);
         const player = (teamNumTurns % 2 === 0) ? 1 : 2;
         const nextServer = { team: team as 1 | 2, player: player as 1 | 2 };
 
         // ── Lógica de Set ────────────────────────────────────────────────
-        // 6-x con diferencia de 2, o 7-5, o 7-x en tiebreak
-        if ((g1 >= 6 && g1 - g2 >= 2) || (g2 >= 6 && g2 - g1 >= 2) || g1 === 7 || g2 === 7) {
+        const isEntryTiebreak = g1 === 6 && g2 === 6;
+        const isSetFinished = (g1 >= 6 && g1 - g2 >= 2) || (g2 >= 6 && g2 - g1 >= 2) || g1 === 7 || g2 === 7;
+
+        if (isSetFinished) {
             await winSet(side, newGames);
-        } else if (g1 === 6 && g2 === 6) {
-            // ENTRAR EN TIEBREAK
-            await dataService.updateMatch(id, match.id, {
+        } else if (isEntryTiebreak) {
+            const updatedData = {
                 games: newGames,
                 points: { t1: '0', t2: '0' },
                 isTiebreak: true,
                 server: nextServer
-            });
+            };
+            setMatch({ ...match, ...updatedData });
+            try {
+                await dataService.updateMatch(id, match.id, updatedData);
+            } catch (err) {
+                console.error('[winGame Tiebreak] Error:', err);
+                setMatch(match);
+                alert('Error al entrar en Tiebreak.');
+            }
         } else {
             // Juego Normal
-            await dataService.updateMatch(id, match.id, {
+            const updatedData = {
                 games: newGames,
                 points: { t1: '0', t2: '0' },
                 server: nextServer
-            });
+            };
+            setMatch({ ...match, ...updatedData });
+            try {
+                await dataService.updateMatch(id, match.id, updatedData);
+            } catch (err) {
+                console.error('[winGame] Error:', err);
+                setMatch(match);
+                alert('Error al guardar el juego ganado.');
+            }
         }
     };
 
@@ -473,17 +570,16 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         newSets[side]++;
 
         const isSuperTiebreakSet = (match.superTiebreak || match.matchFormat === 'SUPER_TIEBREAK') && (match.setScores?.length === 2 || ((match.sets?.t1 ?? 0) + (match.sets?.t2 ?? 0)) === 1);
-        // Guardar el score de este set para el cuadro (Set 1, Set 2). En STB no añadimos 1-0, guardamos superTiebreakScore aparte.
         const newSetScores = isSuperTiebreakSet
             ? (match.setScores || [])
             : [...(match.setScores || []), { t1: finalGames.t1, t2: finalGames.t2 }];
 
-        const isMatchFinished = newSets[side] >= 2;
+        const isMatchFinished = newSets[side] >= (match.matchFormat === 'ONE_SET_6' || match.matchFormat === 'ONE_SET_9' ? 1 : 2);
         const stbScore = isMatchFinished && isSuperTiebreakSet && match.points
             ? { t1: parseInt(String(match.points.t1 || 0), 10), t2: parseInt(String(match.points.t2 || 0), 10) }
             : (match.superTiebreakScore ?? undefined);
 
-        await dataService.updateMatch(id, match.id, {
+        const updatedData = {
             games: isMatchFinished ? finalGames : { t1: 0, t2: 0 },
             points: { t1: '0', t2: '0' },
             sets: newSets,
@@ -492,14 +588,22 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             isTiebreak: false,
             status: isMatchFinished ? MatchStatus.FINISHED : match.status,
             finishedAt: isMatchFinished ? new Date().toISOString() : match.finishedAt || null
-        });
+        };
 
-        // Al terminar el partido, llevar a la pantalla de evento (Todos del torneo)
-        if (isMatchFinished && id) {
-            const eventIds = (tournament?.eventTournamentIds as string[] | undefined)?.filter(Boolean).length
-                ? (tournament.eventTournamentIds as string[]).join(',')
-                : id;
-            router.push(`/tournaments/event?ids=${eventIds}`);
+        // Actualización optimista
+        setMatch({ ...match, ...updatedData });
+
+        try {
+            await dataService.updateMatch(id, match.id, updatedData);
+            if (isMatchFinished && id) {
+                setTimeout(() => {
+                    window.location.href = `/tournaments/${id}`;
+                }, 3000);
+            }
+        } catch (err) {
+            console.error('[winSet] Error:', err);
+            setMatch(match);
+            alert('Error al finalizar el set. Por favor, revisa tu conexión.');
         }
     };
 
@@ -583,13 +687,15 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         await dataService.updateMatch(id, match.id, { status: newStatus });
     };
 
-    if (loading) return (
+    // Si está cargando auth o el perfil aún no llega (pero hay usuario), seguimos en loading para evitar parpadeos de acceso restringido
+    if (loading || authLoading || (user && !profile)) return (
         <div className="h-screen bg-[#0a0a0a] flex items-center justify-center">
             <RefreshCw className="w-8 h-8 text-padel-primary animate-spin" />
         </div>
     );
 
     if (!canControl) {
+
         return (
             <div className="h-screen bg-[#0a0a0a] flex items-center justify-center p-10">
                 <div className="max-w-md w-full bg-[#111] border border-white/10 rounded-[2.5rem] p-10 text-center">
@@ -644,8 +750,8 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                             <div className="bg-padel-primary text-black px-8 py-4 rounded-2xl flex items-center gap-4 shadow-2xl border-b-4 border-black/20">
                                 <RefreshCw className="w-6 h-6 animate-spin-slow" />
                                 <div className="flex flex-col">
-                                    <span className="font-black italic uppercase text-lg leading-none">Change Ends</span>
-                                    <span className="text-[10px] font-bold opacity-70 uppercase tracking-widest">Odd Game Finished</span>
+                                    <span className="font-black italic uppercase text-lg leading-none">Cambio de Cancha</span>
+                                    <span className="text-[10px] font-bold opacity-70 uppercase tracking-widest">Juego Impar Finalizado</span>
                                 </div>
                                 <button
                                     onClick={() => setShowSideChange(false)}

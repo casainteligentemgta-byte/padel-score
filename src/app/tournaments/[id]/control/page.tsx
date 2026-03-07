@@ -144,9 +144,8 @@ function MiniDock({
             </Link>
 
             {/* ADS */}
-            <button
-                onClick={() => onToggleAds(match.id, !isAds)}
-                disabled={isUpdating}
+            <Link
+                href={`/tournaments/${tournamentId}/control/ads`}
                 className={`flex flex-col items-center justify-center gap-1.5 py-3.5 transition-all active:scale-95 border-r border-white/[0.05] w-full
                     ${isAds
                         ? 'bg-yellow-500/15 text-yellow-400 hover:bg-yellow-500/25'
@@ -162,7 +161,7 @@ function MiniDock({
                 <span className="text-[8px] font-black uppercase tracking-widest leading-none">
                     {isAds ? 'ADS ON' : 'ADS'}
                 </span>
-            </button>
+            </Link>
 
             {/* EN VIVO */}
             <button

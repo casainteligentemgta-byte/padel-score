@@ -168,4 +168,40 @@ Es recomendable que, en cualquier flujo donde el usuario formalice una inscripci
 
 ---
 
-*Última actualización: 2025. Incluye auto-inscripción, sexo en registro de jugador y evitación de cruces de horarios.*
+## 11. Directrices de elegibilidad (sexo y edad)
+
+**Regla:** No se debe permitir inscribir a un jugador en una categoría que no corresponda a su **sexo** ni a su **edad**.
+
+### 11.1 Sexo
+
+- Cada categoría de inscripción puede tener **género:** `MALE` (masculino), `FEMALE` (femenino) o `MIXED` (mixto).
+- El jugador solo puede inscribirse en categorías donde el género de la categoría coincida con el suyo, o la categoría sea **MIXED**.
+- El sexo del jugador se toma de su **ficha de jugador** (participante en `/players/register`, campo `gender`). Si no tiene ficha o no tiene sexo, solo se le muestran categorías **MIXED** (o se le pide completar la ficha).
+
+### 11.2 Edad
+
+- Las categorías pueden definir **rango de edad** opcional: `ageMin` y `ageMax` (años cumplidos).
+- El jugador solo puede inscribirse en categorías cuya franja de edad incluya su edad actual (calculada desde `birthDate` del participante). Si la categoría no tiene `ageMin`/`ageMax`, cualquier edad puede inscribirse.
+- Si el jugador no tiene fecha de nacimiento, solo se le muestran categorías **sin restricción de edad** (o se le pide completar la ficha).
+
+### 11.3 Resumen
+
+| Categoría | Jugador | ¿Puede inscribirse? |
+|-----------|---------|---------------------|
+| MALE / FEMALE / MIXED | Mismo sexo o MIXED | Sí |
+| MALE | Sexo femenino | No |
+| ageMin–ageMax | birthDate y edad en rango | Sí |
+| ageMin–ageMax | Sin birthDate o edad fuera | No |
+| Sin edad | Cualquiera | Sí |
+
+La pantalla `/tournaments/[id]/inscribirme` filtra las categorías y valida al enviar para cumplir estas directrices.
+
+### 11.4 Cupos por categoría
+
+- Al crear una categoría, el organizador indica el **nº de parejas** (ej. 8). Los cupos se crean automáticamente: **maxSlots = parejas × 2** (cada pareja = 2 plazas). Si no indica parejas, no hay límite.
+- Al inscribirse, se cuentan las inscripciones existentes por categoría (tabla `inscriptions`, `tournament_id` + `category_key`). Si el número de inscritos alcanza el cupo, la categoría se muestra como **Completo** y no se puede seleccionar.
+- En la pantalla "Inscribirme" se muestra "X / N plazas" cuando la categoría tiene cupo. Si todas las categorías elegibles están completas, se muestra un mensaje y no se puede enviar.
+
+---
+
+*Última actualización: 2025. Incluye auto-inscripción, sexo en registro de jugador, evitación de cruces de horarios, directrices de elegibilidad por sexo y edad, y cupos por categoría.*

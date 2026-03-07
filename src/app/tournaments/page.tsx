@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
-import { Trophy, Calendar, MapPin, ChevronRight, Plus, RefreshCw, LogOut, Trash2 } from 'lucide-react';
+import { Trophy, Calendar, MapPin, ChevronRight, Plus, RefreshCw, LogOut, Trash2, User } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import LoginButton from '@/components/LoginButton';
@@ -20,7 +20,8 @@ export default function MyTournamentsPage() {
     const loadTournaments = async () => {
         if (user) {
             try {
-                const data = await dataService.getMyTournaments(user.uid);
+                // Jugadores ven todos los torneos (p. ej. creados por admin); admins/organizadores también
+                const data = await dataService.listAllTournaments();
                 setTournaments(data);
             } catch (err) {
                 console.error(err);
@@ -94,8 +95,8 @@ export default function MyTournamentsPage() {
                             <div className="inline-flex p-4 rounded-full bg-white/5 text-gray-600">
                                 <Trophy className="w-8 h-8" />
                             </div>
-                            <h2 className="text-xl font-bold">No tienes torneos aún</h2>
-                            <p className="text-gray-500 text-sm">Próximamente verás aquí la lista de tus competencias activas.</p>
+                            <h2 className="text-xl font-bold">No hay torneos disponibles</h2>
+                            <p className="text-gray-500 text-sm">Cuando se creen torneos, aparecerán aquí para ver e inscribirte.</p>
                         </div>
                     ) : (
                         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -168,49 +169,66 @@ export default function MyTournamentsPage() {
                                                                     </span>
                                                                 </div>
                                                                 <div className="flex items-center gap-1.5">
-                                                                    <button
-                                                                        onClick={async (e) => {
-                                                                            e.preventDefault();
-                                                                            e.stopPropagation();
-                                                                            if (!confirm(`¿Eliminar este evento completo (${groupTournaments.length} categorías)? No se puede deshacer.`)) return;
-                                                                            try {
-                                                                                await Promise.all(groupTournaments.map(t => dataService.deleteTournament(t.id)));
-                                                                                setTournaments(prev => prev.filter(t => !groupTournaments.some(g => g.id === t.id)));
-                                                                            } catch {
-                                                                                alert('Error al eliminar el evento');
-                                                                            }
-                                                                        }}
-                                                                        className="p-1 rounded-lg text-padel-primary/40 hover:text-red-500 hover:bg-red-500/10 transition-colors"
-                                                                        title="Eliminar evento completo"
-                                                                    >
-                                                                        <Trash2 className="w-3 h-3" />
-                                                                    </button>
+                                                                    {(isAdmin || groupTournaments.every(t => t.ownerId === user?.uid)) && (
+                                                                        <button
+                                                                            onClick={async (e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                if (!confirm(`¿Eliminar este evento completo (${groupTournaments.length} categorías)? No se puede deshacer.`)) return;
+                                                                                try {
+                                                                                    await Promise.all(groupTournaments.map(t => dataService.deleteTournament(t.id)));
+                                                                                    setTournaments(prev => prev.filter(t => !groupTournaments.some(g => g.id === t.id)));
+                                                                                } catch {
+                                                                                    alert('Error al eliminar el evento');
+                                                                                }
+                                                                            }}
+                                                                            className="p-1 rounded-lg text-padel-primary/40 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                                                                            title="Eliminar evento completo"
+                                                                        >
+                                                                            <Trash2 className="w-3 h-3" />
+                                                                        </button>
+                                                                    )}
                                                                     <ChevronRight className="w-3.5 h-3.5 text-padel-primary" />
                                                                 </div>
                                                             </div>
                                                         </Link>
                                                     )}
-                                                    {groupTournaments.map(t => (
-                                                        <Link key={t.id} href={`/tournaments/${t.id}`}>
-                                                            <div className="flex items-center justify-between px-3 py-2 bg-white/5 hover:bg-padel-primary/10 rounded-xl border border-white/5 hover:border-padel-primary/30 transition-all group/btn">
-                                                                <div className="flex items-center gap-2">
+                                                    {groupTournaments.map(t => {
+                                                        const isOwnerOfT = t.ownerId === user?.uid;
+                                                        const showInscribirme = user && !isAdmin && !isOwnerOfT;
+                                                        return (
+                                                            <div key={t.id} className="flex items-center justify-between gap-2 px-3 py-2 bg-white/5 hover:bg-padel-primary/10 rounded-xl border border-white/5 hover:border-padel-primary/30 transition-all group/btn">
+                                                                <Link href={`/tournaments/${t.id}`} className="flex items-center gap-2 min-w-0 flex-1">
                                                                     <div className="w-1.5 h-1.5 rounded-full bg-padel-primary flex-shrink-0" />
                                                                     <span className="text-[10px] font-black uppercase italic tracking-wider text-gray-300 group-hover/btn:text-padel-primary">
                                                                         Categoría {t.category}
                                                                     </span>
-                                                                </div>
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <button
-                                                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(e, t.id); }}
-                                                                        className="p-1 rounded-lg text-gray-700 hover:text-red-500 transition-colors"
-                                                                    >
-                                                                        <Trash2 className="w-3 h-3" />
-                                                                    </button>
-                                                                    <ChevronRight className="w-3.5 h-3.5 text-padel-primary" />
+                                                                    <ChevronRight className="w-3.5 h-3.5 text-padel-primary flex-shrink-0" />
+                                                                </Link>
+                                                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                                    {showInscribirme && (
+                                                                        <Link
+                                                                            href={`/tournaments/${t.id}/inscribirme`}
+                                                                            onClick={(e) => e.stopPropagation()}
+                                                                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#ccff00]/20 border border-[#ccff00]/40 text-[#ccff00] hover:bg-[#ccff00]/30 text-[10px] font-black uppercase tracking-wider"
+                                                                            title="Inscribirme"
+                                                                        >
+                                                                            <User className="w-3 h-3" />
+                                                                            Inscribirme
+                                                                        </Link>
+                                                                    )}
+                                                                    {(isAdmin || isOwnerOfT) && (
+                                                                        <button
+                                                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(e, t.id); }}
+                                                                            className="p-1 rounded-lg text-gray-700 hover:text-red-500 transition-colors"
+                                                                        >
+                                                                            <Trash2 className="w-3 h-3" />
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             </div>
-                                                        </Link>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         </motion.div>

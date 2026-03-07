@@ -11,7 +11,7 @@ import {
     setModoPuntos,
 } from '@/lib/rtdbService';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
     Crosshair, Wifi, WifiOff, ChevronUp, ChevronDown,
     Play, Square, RefreshCw, Shield, Trophy, Zap, Star, AlertCircle
@@ -52,13 +52,29 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
         }
     }, [user, canchaId, canMarkInCancha]);
 
-    // ── Escuchar estado de la cancha en RTDB ───────────────────────────────
+    // ── Escuchar estado de la cancha en RTDB; actualizar solo si datos visibles cambiaron (evita parpadeo) ──
     useEffect(() => {
         if (!rtdb) return;
+        setLoadingCancha(true);
         const canchaRef = ref(rtdb, `canchas/${canchaId}`);
+        let prevStableJson = '';
+        let firstLoad = true;
         const handler = (snap: any) => {
-            setCanchaData(snap.val());
-            setLoadingCancha(false);
+            const val = snap.val();
+            if (firstLoad) {
+                firstLoad = false;
+                setLoadingCancha(false);
+            }
+            // Comparar solo datos que afectan la UI; ignorar ultimo_update (cambia en cada escritura y provoca re-renders)
+            const stable = val == null ? null : (() => {
+                const m = val.marcador;
+                return { estado: val.estado, marcador: m ? { ...m, ultimo_update: undefined } : m };
+            })();
+            const nextJson = stable == null ? '' : JSON.stringify(stable);
+            if (nextJson !== prevStableJson) {
+                prevStableJson = nextJson;
+                setCanchaData(val);
+            }
         };
         onValue(canchaRef, handler, (err) => {
             console.error(`[Marker] Error leyendo cancha ${canchaId}:`, err);
@@ -184,9 +200,9 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
     }
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white font-outfit pb-24">
+        <div className="min-h-screen bg-[#050505] text-white font-outfit pb-24 [contain:layout] [transform:translateZ(0)]">
             {/* Header */}
-            <div className="sticky top-0 z-40 bg-black/80 backdrop-blur-xl border-b border-white/10 px-6 py-4">
+            <div className="sticky top-0 z-40 bg-[#0a0a0a] border-b border-white/10 px-6 py-4">
                 <div className="flex items-center justify-between max-w-lg mx-auto">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-padel-primary/10 rounded-2xl flex items-center justify-center border border-padel-primary/20">
@@ -211,12 +227,7 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
             <div className="max-w-lg mx-auto px-6 pt-8 space-y-6">
                 {/* ── ESTADO: ESPERA → Botón activar ── */}
                 {!isEnVivo && (
-                    <AnimatePresence>
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="space-y-6"
-                        >
+                    <div className="space-y-6">
                             <div className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4">
                                 <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
                                     <Shield className="w-4 h-4" /> Configurar Partido
@@ -255,17 +266,12 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
                                 {activando ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
                                 INICIAR PARTIDO
                             </motion.button>
-                        </motion.div>
-                    </AnimatePresence>
+                    </div>
                 )}
 
                 {/* ── ESTADO: EN VIVO → Controles de marcador ── */}
                 {isEnVivo && marcador && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="space-y-5"
-                    >
+                    <div className="space-y-5">
                         {/* Equipos */}
                         <div className="grid grid-cols-2 gap-3">
                             {(['local', 'visitante'] as const).map((lado, i) => {
@@ -313,7 +319,7 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
 
                         {/* Puntos */}
                         <ScoreRow
-                            label={`PUNTOS${marcador.modo_puntos === 'tiebreak' ? ' — TIEBREAK' : marcador.modo_puntos === 'super_tiebreak' ? ' — SUPER TB' : ''}`}
+                            label={`PUNTOS${marcador.modo_puntos === 'tiebreak' ? ' — TIEBREAK' : marcador.modo_puntos === 'super_tiebreak' ? ' — SUPER TIE BREAK' : ''}`}
                             localVal={marcador.puntos.local}
                             visitanteVal={marcador.puntos.visitante}
                             onUpLocal={() => cambiarPunto('local', 1)}
@@ -322,7 +328,7 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
                             onDownVisitante={() => cambiarPunto('visitante', -1)}
                         />
 
-                        {/* Modo de puntos: Tiebreak / Super Tiebreak */}
+                        {/* Modo de puntos: Tiebreak / Super Tie Break (STB) */}
                         <div className="grid grid-cols-2 gap-3">
                             <button
                                 onClick={() => setModoPuntos(
@@ -348,7 +354,7 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
                                     }`}
                             >
                                 <Star className="w-3.5 h-3.5" />
-                                {marcador.modo_puntos === 'super_tiebreak' ? 'SUPER TB ACTIVO' : 'Super TB'}
+                                {marcador.modo_puntos === 'super_tiebreak' ? 'STB ACTIVO' : 'Super Tie Break'}
                             </button>
                         </div>
 
@@ -372,7 +378,7 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
                             <Square className="w-4 h-4" />
                             TERMINAR PARTIDO
                         </button>
-                    </motion.div>
+                    </div>
                 )}
             </div>
 

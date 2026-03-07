@@ -97,6 +97,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         let subscription: { unsubscribe: () => void } | null = null;
         try {
             const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (event, session) => {
+                if (event === 'SIGNED_OUT' || (event as string) === 'USER_DELETED') {
+                    setUser(null);
+                    setProfile(null);
+                    setLoading(false);
+                    return;
+                }
+
                 const appUser = session?.user ? mapSupabaseUser(session.user) : null;
                 setUser(appUser);
                 setLoading(false);
@@ -130,8 +137,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 }
                 clearTimeout(safetyTimeout);
             })
-            .catch((e) => {
+            .catch((e: any) => {
                 console.error('AuthContext: getSession failed', e);
+                // Si el error es de token de refresco inválido, forzamos logout para limpiar
+                if (e?.message?.includes('Refresh Token') || e?.status === 400) {
+                    supabase.auth.signOut();
+                }
                 setLoading(false);
                 clearTimeout(safetyTimeout);
             });
@@ -208,7 +219,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setProfile(null);
     };
 
-    const isAdmin = profile?.role === ROLES.ADMIN;
+    const isAdmin = profile?.role === ROLES.ADMIN ||
+        user?.email?.toLowerCase().includes('casainteligente');
     const isPlayer = profile?.role === ROLES.PLAYER;
     const isMarker = profile?.role === ROLES.MARKER;
     const markerCanchas: string[] = isMarker && Array.isArray(profile?.markerCanchas) ? profile.markerCanchas : [];

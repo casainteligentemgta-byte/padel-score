@@ -1,14 +1,48 @@
 'use client';
 
-export default function GlobalError(props: { error: Error; reset: () => void }) {
-    const { error, reset } = props;
+/**
+ * Captura errores en la raíz de la app (incl. layout).
+ * Si ves "Internal Server Error", el mensaje real debería aparecer aquí o en la terminal.
+ */
+export default function GlobalError({
+    error,
+    reset,
+}: {
+    error: Error & { digest?: string };
+    reset: () => void;
+}) {
     return (
         <html lang="es">
-            <body style={{ margin: 0, minHeight: '100vh', background: '#0a0a0a', color: '#fff', fontFamily: 'system-ui', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-                <div style={{ textAlign: 'center', maxWidth: 480 }}>
-                    <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Algo ha fallado</h1>
-                    <p style={{ fontSize: 14, color: '#888', marginBottom: 24 }}>{error?.message || 'Error desconocido'}</p>
-                    <button onClick={() => reset()} style={{ background: '#ccff00', color: '#000', border: 'none', padding: '12px 24px', borderRadius: 12, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
+            <body style={{ margin: 0, background: '#0a0a0a', color: '#fff', fontFamily: 'system-ui', minHeight: '100vh', padding: 24 }}>
+                <div style={{ maxWidth: 560 }}>
+                    <h1 style={{ fontSize: 20, marginBottom: 12 }}>Error en la aplicación</h1>
+                    <p style={{ fontSize: 14, color: '#ccc', marginBottom: 8 }}>
+                        {error?.message || 'Error desconocido'}
+                    </p>
+                    {error?.digest && (
+                        <p style={{ fontSize: 12, color: '#666', marginBottom: 16 }}>
+                            Código: {error.digest}
+                        </p>
+                    )}
+                    <p style={{ fontSize: 12, color: '#888', marginBottom: 24 }}>
+                        Comprueba la terminal donde ejecutaste <code style={{ background: '#222', padding: '2px 6px' }}>npm run dev</code> para ver el detalle.
+                        Asegúrate de tener <code style={{ background: '#222', padding: '2px 6px' }}>.env.local</code> con
+                        <code style={{ background: '#222', padding: '2px 6px' }}>NEXT_PUBLIC_SUPABASE_URL</code> y
+                        <code style={{ background: '#222', padding: '2px 6px' }}>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>.
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => reset()}
+                        style={{
+                            padding: '12px 24px',
+                            background: '#ccff00',
+                            color: '#000',
+                            border: 'none',
+                            borderRadius: 12,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                        }}
+                    >
                         Reintentar
                     </button>
                 </div>

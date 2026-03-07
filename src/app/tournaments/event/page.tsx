@@ -324,7 +324,11 @@ function EventView() {
     return (
         <div className="min-h-screen bg-[#0a0a0a] text-white font-outfit flex flex-col">
             <TournamentHeader
-                eventName={firstT?.name ?? firstT?.complexName ?? 'Evento'}
+                eventName={(() => {
+                    const raw = firstT?.name ?? firstT?.complexName ?? 'Evento';
+                    return typeof raw === 'string' && raw.includes(' - ') ? raw.split(' - ')[0].trim() : raw;
+                })()}
+                complexName={firstT?.complexName}
                 eventDate={firstT?.startDate}
                 allMatchesCount={allMatches.length}
                 liveCnt={liveCnt}

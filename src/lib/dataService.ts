@@ -367,10 +367,22 @@ export const dataService = {
     },
 
     async uploadFile(file: File, path: string) {
-        const { data, error } = await supabase().storage.from('public').upload(path, file, { upsert: true });
-        if (error) throw error;
-        const { data: urlData } = supabase().storage.from('public').getPublicUrl(data.path);
-        return urlData.publicUrl;
+        const preferred = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET?.trim()) || 'public';
+        const bucketsToTry = [preferred];
+        if (preferred !== 'public') bucketsToTry.push('public');
+
+        for (const bucket of bucketsToTry) {
+            const { data, error } = await supabase().storage.from(bucket).upload(path, file, { upsert: true });
+            if (!error) {
+                const { data: urlData } = supabase().storage.from(bucket).getPublicUrl(data.path);
+                return urlData.publicUrl;
+            }
+            const isNotFound = (error.message || '').toLowerCase().includes('not found') || (error.message || '').toLowerCase().includes('bucket');
+            if (!isNotFound || bucket === bucketsToTry[bucketsToTry.length - 1]) {
+                throw new Error(`[Storage] ${error.message || String(error)} (bucket: "${bucket}")`);
+            }
+        }
+        throw new Error('[Storage] Bucket not found');
     },
 
     async getAdminSettings(): Promise<AdminSettings | null> {
@@ -510,4 +522,24 @@ export const dataService = {
             channel.unsubscribe();
         };
     },
+
+    async getAnimations(type?: string) {
+        let query = supabase().from('match_animations').select('*').eq('is_active', true);
+        if (type) query = query.eq('type', type);
+        const { data, error } = await query;
+        if (error) throw error;
+        return data || [];
+    },
+
+    async getSponsorsByTournament(tournamentId: string) {
+        const { data, error } = await supabase()
+            .from('sponsor_carousel')
+            .select('*')
+            .eq('tournament_id', tournamentId)
+            .eq('is_active', true)
+            .order('display_order', { ascending: true });
+
+        if (error) throw error;
+        return data || [];
+    }
 };

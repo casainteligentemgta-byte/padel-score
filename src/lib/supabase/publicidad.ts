@@ -2,7 +2,7 @@
  * Tipos y constantes para el sistema de publicidad y pantallas (Supabase)
  */
 
-export type MediaTipo = 'video_url' | 'video_file' | 'imagen';
+export type MediaTipo = 'video_url' | 'video_file' | 'imagen' | 'animacion' | 'url_web';
 
 export interface MediaContent {
   id: string;

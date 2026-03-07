@@ -1,9 +1,9 @@
 import { createClient } from '@/lib/supabase/client';
 
-const BUCKET = 'publicidad';
+const BUCKET = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET) || 'patrocinantes';
 
 /**
- * Sube un archivo al bucket "publicidad" de Supabase Storage.
+ * Sube un archivo al bucket de Supabase Storage.
  * Devuelve la URL pública del archivo.
  */
 export async function uploadToSupabase(
@@ -18,7 +18,10 @@ export async function uploadToSupabase(
     upsert: false,
   });
 
-  if (error) throw error;
+  if (error) {
+    console.error('Error uploading to bucket:', BUCKET, error);
+    throw error;
+  }
 
   const {
     data: { publicUrl },
