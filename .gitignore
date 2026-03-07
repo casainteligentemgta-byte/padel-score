@@ -30,6 +30,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# proyecto ajeno (no compilar en build)
+/smart-padel
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
