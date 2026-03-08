@@ -127,9 +127,14 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
         }
     }, [user, authLoading, router]);
 
-    const categories: InscriptionCategoryOption[] = Array.isArray(tournament?.inscriptionCategories)
+    const categories: InscriptionCategoryOption[] = (Array.isArray(tournament?.inscriptionCategories) && tournament.inscriptionCategories.length > 0)
         ? tournament.inscriptionCategories
-        : [];
+        : (tournament ? [{
+            key: 'GENERAL',
+            name: `${tournament.category || 'Categoría Única'} ${tournament.gender === 'MALE' ? 'Masculino' : tournament.gender === 'FEMALE' ? 'Femenino' : 'Mixto'}`,
+            price: 0,
+            gender: tournament.gender || undefined,
+        }] : []);
 
     const playerAge = getAgeFromBirthDate(playerProfile?.birthDate);
     const eligibleCategories = filterEligibleCategories(
@@ -326,13 +331,11 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                                                 return (
                                                     <label
                                                         key={cat.key}
-                                                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
-                                                            full ? 'bg-white/5 border-white/5 cursor-not-allowed opacity-70' : 'cursor-pointer'
-                                                        } ${
-                                                            selectedCategories.has(cat.key)
+                                                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${full ? 'bg-white/5 border-white/5 cursor-not-allowed opacity-70' : 'cursor-pointer'
+                                                            } ${selectedCategories.has(cat.key)
                                                                 ? 'bg-[#ccff00]/10 border-[#ccff00]/40'
                                                                 : !full ? 'bg-white/5 border-white/10 hover:border-white/20' : ''
-                                                        }`}
+                                                            }`}
                                                     >
                                                         <div className="flex items-center gap-3">
                                                             <input

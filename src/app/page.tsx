@@ -1,211 +1,313 @@
 'use client';
 
-import Link from 'next/link';
-import { useAuth } from '@/lib/AuthContext';
-import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Trophy, Users, Settings, Radio, Sparkles,
-    DollarSign, Receipt, Brain, Megaphone,
-    ShieldCheck, Calendar, Activity, Layout,
-    UserCircle, ChevronRight, Play, ExternalLink
+    Mail,
+    Lock,
+    Chrome,
+    User,
+    AlertCircle,
+    CheckCircle2,
+    RefreshCw,
+    ChevronRight,
+    Zap,
+    Eye,
+    EyeOff
 } from 'lucide-react';
+import { useAuth } from '@/lib/AuthContext';
+import { isValidEmail, isValidPassword } from '@/lib/authValidators';
+import { getAuthErrorMessage } from '@/lib/authErrorMessages';
+import { useRouter } from 'next/navigation';
 import BouncingBall from '@/components/BouncingBall';
+import { useAppSettings } from '@/lib/AppSettingsContext';
 
 export default function HomePage() {
-    const { isAdmin, user, loading } = useAuth();
+    const { user, loading: authLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
+    const { clubName } = useAppSettings();
+    const router = useRouter();
+    const [isLogin, setIsLogin] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
 
-    if (loading) {
+    const [formData, setFormData] = useState({
+        email: '',
+        password: '',
+        name: ''
+    });
+
+    useEffect(() => {
+        if (!authLoading && user) router.replace('/tournaments');
+    }, [authLoading, user, router]);
+
+    const handleGoogleSignIn = async () => {
+        setLoading(true);
+        setError(null);
+        setSuccess(null);
+        try {
+            await signInWithGoogle();
+        } catch (err: any) {
+            console.error('[Login Google]', err);
+            setError(getAuthErrorMessage(err));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleForgotPassword = async () => {
+        if (!formData.email) {
+            setError('Ingresa tu email para restablecer la contraseña.');
+            return;
+        }
+        setLoading(true);
+        setError(null);
+        try {
+            await forgotPassword(formData.email);
+            setSuccess('Email de recuperación enviado. Revisa tu bandeja de entrada.');
+        } catch (err: any) {
+            setError('Error al enviar el correo de recuperación.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError(null);
+
+        if (!isValidEmail(formData.email)) {
+            setError('Correo electrónico no válido.');
+            return;
+        }
+        if (!isValidPassword(formData.password)) {
+            setError('Mínimo 6 caracteres en la contraseña.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            if (isLogin) {
+                await signInWithEmail(formData.email, formData.password);
+            } else {
+                await signUpWithEmail(formData.email, formData.password, formData.name);
+            }
+            router.push('/tournaments');
+        } catch (err: any) {
+            setError(getAuthErrorMessage(err));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (authLoading) {
         return (
-            <div className="h-screen bg-[#050505] flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-padel-primary/20 border-t-padel-primary rounded-full animate-spin" />
+            <div className="h-dvh bg-[#050505] flex items-center justify-center">
+                <BouncingBall size={40} bounceHeight={2} />
             </div>
         );
     }
-
-    if (!isAdmin) {
-        return (
-            <div
-                style={{
-                    minHeight: '100dvh',
-                    background: '#050505',
-                    color: '#fff',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 24,
-                    padding: 24,
-                    fontFamily: 'system-ui, sans-serif',
-                }}
-            >
-                <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                    <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-padel-primary/10 blur-[130px] rounded-full animate-pulse" />
-                </div>
-
-                <div className="flex items-center gap-3 mb-4">
-                    <BouncingBall size={32} bounceHeight={1.5} />
-                    <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0, position: 'relative' }}>
-                        SMART <span style={{ color: '#ccff00' }}>PADEL</span>
-                    </h1>
-                </div>
-                <p style={{ fontSize: 14, color: '#888', margin: 0, position: 'relative' }}>The Professional Scoreboard</p>
-                <div style={{ display: 'flex', gap: 16, marginTop: 16, position: 'relative' }}>
-                    <Link
-                        href={user ? "/tournaments" : "/login"}
-                        style={{
-                            display: 'inline-block',
-                            padding: '14px 28px',
-                            background: '#ccff00',
-                            color: '#000',
-                            fontWeight: 700,
-                            textDecoration: 'none',
-                            borderRadius: 12,
-                        }}
-                    >
-                        {user ? 'Mis Torneos' : 'Entrar'}
-                    </Link>
-                    <Link
-                        href="/tournaments"
-                        style={{
-                            display: 'inline-block',
-                            padding: '14px 28px',
-                            background: 'rgba(255,255,255,0.1)',
-                            color: '#fff',
-                            fontWeight: 700,
-                            textDecoration: 'none',
-                            borderRadius: 12,
-                            border: '1px solid rgba(255,255,255,0.2)',
-                        }}
-                    >
-                        Ver Torneos
-                    </Link>
-                </div>
-            </div>
-        );
-    }
-
-    // --- ADMIN HUB VIEW ---
-    const adminCards = [
-        { name: 'Torneos', href: '/tournaments', icon: Trophy, color: 'from-padel-primary/20', desc: 'Gestión de categorías y llaves' },
-        { name: 'Generador Maestro', href: '/admin/master-generator', icon: Sparkles, color: 'from-blue-500/20', desc: 'Creación inteligente de fixtures' },
-        { name: 'En Vivo', href: '/live', icon: Radio, color: 'from-red-500/20', desc: 'Marcadores en tiempo real' },
-        { name: 'Ranking', href: '/ranking', icon: Activity, color: 'from-emerald-500/20', desc: 'Estadísticas y puntuaciones' },
-        { name: 'Validación de Pagos', href: '/admin/validacion-pagos', icon: Receipt, color: 'from-yellow-500/20', desc: 'Control de inscripciones' },
-        { name: 'Publicidad', href: '/admin/publicidad', icon: Megaphone, color: 'from-purple-500/20', desc: 'Banners y patrocinios' },
-        { name: 'Gastos', href: '/expenses', icon: DollarSign, color: 'from-rose-500/20', desc: 'Administración financiera' },
-        { name: 'Jugadores', href: '/players', icon: Users, color: 'from-cyan-500/20', desc: 'Base de datos de participantes' },
-        { name: 'Control de Marcadores', href: '/admin/boards', icon: Layout, color: 'from-indigo-500/20', desc: 'Pizarras y televisores' },
-        { name: 'Agentes AI', href: '/agents', icon: Brain, color: 'from-pink-500/20', desc: 'Asistencia automatizada' },
-        { name: 'Configuración', href: '/admin/settings', icon: Settings, color: 'from-gray-500/20', desc: 'Ajustes del sistema' },
-        { name: 'Mi Cuenta', href: '/mi-cuenta', icon: UserCircle, color: 'from-white/10', desc: 'Perfil del administrador' },
-    ];
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12 font-outfit relative selection:bg-padel-primary selection:text-black shadow-[inset_0_0_100px_rgba(0,0,0,0.8)]">
-            {/* Ambient Lighting */}
-            <div className="fixed inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-[-15%] right-[-10%] w-[60%] h-[60%] bg-padel-primary/10 blur-[140px] rounded-full animate-pulse" />
-                <div className="absolute bottom-[-15%] left-[-10%] w-[50%] h-[50%] bg-blue-500/5 blur-[120px] rounded-full" />
+        <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center relative overflow-hidden px-6 py-12 font-outfit">
+
+            {/* Grid Aura Background */}
+            <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(to right, #ccff00 1px, transparent 1px), linear-gradient(to bottom, #ccff00 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
+                <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-padel-primary/10 blur-[150px] rounded-full animate-pulse" style={{ animationDuration: '6s' }} />
+                <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/5 blur-[120px] rounded-full animate-pulse" style={{ animationDuration: '9s', animationDelay: '3s' }} />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40%] h-[40%] bg-padel-primary/5 blur-[100px] rounded-full" />
             </div>
 
-            <main className="max-w-7xl mx-auto relative z-10">
-                {/* Upper Header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-16">
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                className="relative z-10 w-full max-w-md"
+            >
+                {/* Header Section */}
+                <div className="flex flex-col items-center mb-10 text-center">
                     <motion.div
-                        initial={{ opacity: 0, x: -30 }}
-                        animate={{ opacity: 1, x: 0 }}
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.2 }}
+                        className="flex items-center gap-4"
                     >
-                        <div className="flex items-center gap-4 mb-2">
-                            <h4 className="text-[10px] font-black uppercase tracking-[0.5em] text-padel-primary italic">Master Control Unit</h4>
-                        </div>
-                        <div className="flex items-center gap-6">
-                            <BouncingBall size={48} bounceHeight={1.4} />
-                            <h1 className="text-5xl md:text-7xl font-black italic uppercase tracking-tighter leading-none">
-                                SMART<span className="text-padel-primary">PADEL</span><span className="text-white/20 ml-4 font-normal not-italic">HUB</span>
-                            </h1>
-                        </div>
-                        <p className="text-gray-500 font-bold uppercase tracking-widest mt-4 flex items-center gap-2">
-                            <ShieldCheck className="w-4 h-4 text-padel-primary" /> Acceso de Super Administrador con privilegios totales
-                        </p>
+                        <BouncingBall size={28} bounceHeight={1.4} />
+                        <h1 className="text-4xl md:text-5xl font-black italic tracking-tighter uppercase text-white">
+                            SMART <span className="text-padel-primary">PADEL</span>
+                        </h1>
                     </motion.div>
-
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="flex items-center gap-6 p-1.5 bg-white/[0.03] border border-white/5 rounded-[2rem] backdrop-blur-3xl"
-                    >
-                        <div className="pl-6 pr-2">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Sesión Activa</p>
-                            <p className="text-xs font-black uppercase italic text-white tracking-tight">{user?.email}</p>
-                        </div>
-                        <div className="w-14 h-14 bg-padel-primary rounded-[1.4rem] flex items-center justify-center text-black shadow-[0_0_20px_rgba(204,255,0,0.3)] border border-black/10">
-                            <UserCircle size={28} />
-                        </div>
-                    </motion.div>
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">
+                        {clubName || 'Smart Padel Experience'}
+                    </p>
                 </div>
 
-                {/* Grid Area */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {adminCards.map((card, idx) => (
-                        <motion.div
-                            key={card.name}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: idx * 0.05 }}
-                        >
-                            <Link
-                                href={card.href}
-                                className={`group block relative h-full bg-gradient-to-br ${card.color} to-transparent border border-white/5 rounded-[2.5rem] p-8 hover:scale-[1.03] active:scale-[0.98] transition-all duration-500 overflow-hidden shadow-2xl backdrop-blur-sm hover:border-padel-primary/30`}
+                {/* Auth Card Container - Now Transparent to remove 'rectangulo blanco' perception */}
+                <div className="w-full">
+                    <div className="p-0">
+                        {/* Selector Tab - Text Only Style */}
+                        <div className="flex justify-center gap-10 mb-12 border-b border-white/5 pb-2">
+                            <button
+                                onClick={() => { setIsLogin(true); setError(null); }}
+                                className="relative pb-2 bg-transparent border-none outline-none cursor-pointer"
                             >
-                                {/* Glow Effect */}
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-padel-primary/5 blur-[40px] rounded-full group-hover:bg-padel-primary/10 transition-colors" />
+                                <span className={`text-sm font-bold tracking-widest uppercase transition-all duration-300 ${isLogin ? 'text-padel-primary' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                                    Entrar
+                                </span>
+                                {isLogin && (
+                                    <motion.div
+                                        layoutId="activeTabUnderline"
+                                        className="absolute bottom-[-1px] left-0 right-0 h-[2.5px] bg-padel-primary"
+                                        transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                                    />
+                                )}
+                            </button>
+                            <button
+                                onClick={() => { setIsLogin(false); setError(null); }}
+                                className="relative pb-2 bg-transparent border-none outline-none cursor-pointer"
+                            >
+                                <span className={`text-sm font-bold tracking-widest uppercase transition-all duration-300 ${!isLogin ? 'text-padel-primary' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                                    Registro
+                                </span>
+                                {!isLogin && (
+                                    <motion.div
+                                        layoutId="activeTabUnderline"
+                                        className="absolute bottom-[-1px] left-0 right-0 h-[2.5px] bg-padel-primary"
+                                        transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                                    />
+                                )}
+                            </button>
+                        </div>
 
-                                <div className="relative z-10 flex flex-col h-full">
-                                    <div className="w-14 h-14 bg-black/40 border border-white/10 rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform duration-500 group-hover:shadow-[0_0_30px_rgba(204,255,0,0.15)] group-hover:border-padel-primary/40">
-                                        <card.icon className="w-7 h-7 text-gray-400 group-hover:text-padel-primary transition-colors" />
-                                    </div>
+                        <form onSubmit={handleSubmit} className="space-y-5">
+                            <AnimatePresence mode="wait">
+                                {!isLogin && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="overflow-hidden"
+                                    >
+                                        <div className="relative group mb-4">
+                                            <div className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center opacity-40 group-focus-within:opacity-100 transition-opacity">
+                                                <User className="w-full h-full text-padel-primary" />
+                                            </div>
+                                            <input
+                                                required={!isLogin}
+                                                type="text"
+                                                placeholder="NOMBRE COMPLETO"
+                                                className="w-full h-16 bg-transparent border border-white/10 rounded-full pl-16 pr-6 text-sm outline-none focus:border-padel-primary/40 focus:bg-white/[0.02] transition-all font-bold text-white placeholder:text-zinc-700 tracking-wider"
+                                                value={formData.name}
+                                                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                            />
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
 
-                                    <div className="mt-auto">
-                                        <h3 className="text-lg font-black italic uppercase tracking-tighter mb-1 group-hover:text-white transition-colors flex items-center gap-2">
-                                            {card.name}
-                                            <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-                                        </h3>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 leading-snug group-hover:text-gray-400 transition-colors">
-                                            {card.desc}
-                                        </p>
-                                    </div>
+                            <div className="relative group">
+                                <div className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center opacity-40 group-focus-within:opacity-100 transition-opacity">
+                                    <Mail className="w-full h-full text-padel-primary" />
                                 </div>
-                            </Link>
-                        </motion.div>
-                    ))}
+                                <input
+                                    required
+                                    type="email"
+                                    placeholder="CORREO ELECTRÓNICO"
+                                    className="w-full h-16 bg-transparent border border-white/10 rounded-full pl-16 pr-6 text-sm outline-none focus:border-padel-primary/40 focus:bg-white/[0.02] transition-all font-bold text-white placeholder:text-zinc-700 tracking-wider"
+                                    value={formData.email}
+                                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="relative group">
+                                <div className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center opacity-40 group-focus-within:opacity-100 transition-opacity">
+                                    <Lock className="w-full h-full text-padel-primary" />
+                                </div>
+                                <input
+                                    required
+                                    type={showPassword ? 'text' : 'password'}
+                                    placeholder="CONTRASEÑA"
+                                    className="w-full h-16 bg-transparent border border-white/10 rounded-full pl-16 pr-14 text-sm outline-none focus:border-padel-primary/40 focus:bg-white/[0.02] transition-all font-bold text-white placeholder:text-zinc-700 tracking-wider"
+                                    value={formData.password}
+                                    onChange={e => setFormData({ ...formData, password: e.target.value })}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-7 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-padel-primary transition-colors bg-transparent border-none p-0 outline-none cursor-pointer"
+                                >
+                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                </button>
+                            </div>
+
+                            <AnimatePresence>
+                                {(error || success) && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="overflow-hidden"
+                                    >
+                                        <div className={`flex items-start gap-3 p-4 rounded-3xl border ${error ? 'bg-red-500/5 border-red-500/10' : 'bg-padel-primary/5 border-padel-primary/10'}`}>
+                                            {error ? <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" /> : <CheckCircle2 className="w-4 h-4 text-padel-primary shrink-0 mt-0.5" />}
+                                            <p className={`text-[10px] font-bold uppercase tracking-widest ${error ? 'text-red-400' : 'text-padel-primary'}`}>{error || success}</p>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            <button
+                                disabled={loading}
+                                type="submit"
+                                className="w-full h-16 bg-padel-primary text-black rounded-full font-black uppercase text-sm hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_15px_30px_rgba(204,255,0,0.1)] flex items-center justify-center gap-3 disabled:opacity-50 mt-6 group"
+                            >
+                                {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : (
+                                    <>
+                                        <span>{isLogin ? 'ENTRAR AHORA' : 'CREAR CUENTA PADEL'}</span>
+                                        <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                                    </>
+                                )}
+                            </button>
+                        </form>
+
+                        <div className="mt-8 space-y-6">
+                            {isLogin && (
+                                <div className="flex justify-center">
+                                    <button
+                                        onClick={handleForgotPassword}
+                                        className="text-[10px] font-bold text-zinc-600 hover:text-padel-primary uppercase tracking-widest transition-colors"
+                                    >
+                                        ¿Olvidaste tu contraseña?
+                                    </button>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={handleGoogleSignIn}
+                                className="w-full h-16 bg-transparent border border-white/5 text-zinc-400 rounded-full font-bold text-sm hover:bg-white/[0.02] hover:text-white hover:border-white/20 transition-all flex items-center justify-center gap-4 group"
+                            >
+                                <Chrome className="w-5 h-5 text-white/40 group-hover:text-white transition-colors" />
+                                CONTINUAR CON GOOGLE
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
-                {/* Footer Quick Stats/Status */}
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 1 }}
-                    className="mt-16 pt-8 border-t border-white/5 flex flex-wrap justify-center gap-x-12 gap-y-6 opacity-40 hover:opacity-100 transition-opacity"
-                >
-                    <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-padel-primary animate-pulse" />
-                        <span className="text-[9px] font-black uppercase tracking-[0.3em]">Core Services Online</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <Play className="w-3 h-3 text-padel-primary" />
-                        <span className="text-[9px] font-black uppercase tracking-[0.3em]">Ready for action</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <ExternalLink className="w-3 h-3 text-padel-primary group-hover:rotate-45 transition-transform" />
-                        <span className="text-[9px] font-black uppercase tracking-[0.3em]">Production Environment</span>
-                    </div>
-                </motion.div>
-            </main>
-
-            <style jsx global>{`
-                @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap');
-                .font-outfit { font-family: 'Outfit', sans-serif; }
-            `}</style>
+                {/* Footer Controls */}
+                <div className="mt-16 flex flex-col items-center">
+                    <button
+                        onClick={() => {
+                            enableDevMode();
+                            router.push('/tournaments');
+                        }}
+                        className="flex items-center gap-2 text-[9px] font-bold text-padel-primary/10 hover:text-padel-primary/40 uppercase tracking-[0.4em] transition-all"
+                    >
+                        <Zap className="w-3 h-3" /> Sandbox Mode
+                    </button>
+                </div>
+            </motion.div>
         </div>
     );
 }

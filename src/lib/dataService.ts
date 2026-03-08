@@ -231,7 +231,7 @@ export const dataService = {
     async getParticipant(id: string) {
         const { data, error } = await supabase().from('participants').select('*').eq('id', id).single();
         if (error || !data) return null;
-        return { id: data.id, ...data.data, createdAt: data.created_at, updatedAt: data.updated_at };
+        return { id: data.id, ...data.data, ownerId: data.owner_id, createdAt: data.created_at, updatedAt: data.updated_at };
     },
 
     async deleteParticipant(id: string) {
