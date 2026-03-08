@@ -26,6 +26,8 @@ import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+import BouncingBall from '@/components/BouncingBall';
+
 export default function AdminHubPage() {
     const { isAdmin, loading, profile, logout } = useAuth();
     const router = useRouter();
@@ -120,8 +122,10 @@ export default function AdminHubPage() {
 
             {/* Sidebar Navigation (Hidden on mobile) */}
             <aside className="fixed left-0 top-0 bottom-0 w-20 hidden lg:flex flex-col items-center py-8 bg-black/40 backdrop-blur-3xl border-r border-white/5 z-50">
-                <div className="w-10 h-10 bg-padel-primary rounded-xl flex items-center justify-center mb-auto shadow-[0_0_20px_rgba(204,255,0,0.2)]">
-                    <ShieldCheck className="w-6 h-6 text-black" />
+                <div className="mb-auto flex flex-col items-center">
+                    <div className="w-12 h-16 flex items-end justify-center">
+                        <BouncingBall size={18} bounceHeight={1.8} />
+                    </div>
                 </div>
 
                 <button onClick={logout} className="p-4 rounded-2xl text-gray-700 hover:text-red-500 transition-colors group relative">
@@ -135,14 +139,15 @@ export default function AdminHubPage() {
                 {/* Global Top Bar */}
                 <header className="px-4 sm:px-8 py-2 sm:py-3 flex flex-col sm:flex-row justify-between items-center bg-black/20 backdrop-blur-md border-b border-white/5 sticky top-0 z-40">
                     <div className="flex items-center gap-2 sm:gap-4 mb-2 sm:mb-0">
-                        <div className="lg:hidden w-8 h-8 sm:w-10 sm:h-10 bg-padel-primary rounded-lg sm:rounded-xl flex items-center justify-center">
-                            <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
+                        <div className="lg:hidden w-10 h-10 flex items-center justify-center">
+                            <BouncingBall size={14} bounceHeight={1.5} />
                         </div>
                         <div>
                             <h4 className="text-[7px] font-black uppercase tracking-[0.4em] text-padel-primary italic">Control Tower Pro</h4>
                             <h2 className="text-sm sm:text-base lg:text-xl font-black uppercase italic tracking-tighter">Panel de <span className="text-padel-primary">Administración</span></h2>
                         </div>
                     </div>
+
 
                     <div className="flex items-center gap-3 sm:gap-6">
                         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full border border-white/10 group focus-within:border-padel-primary/30 transition-all">
