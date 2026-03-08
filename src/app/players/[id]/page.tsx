@@ -148,10 +148,10 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                             {canEdit && (
                                 <button
                                     onClick={() => router.push(`/players/register?edit=${player.id}`)}
-                                    className="h-11 px-6 rounded-2xl bg-padel-primary text-black font-black uppercase italic tracking-tighter text-xs shadow-[0_10px_25px_rgba(204,255,0,0.3)] hover:scale-105 transition-all flex items-center gap-2"
+                                    className="h-10 px-4 md:h-11 md:px-6 rounded-2xl bg-padel-primary text-black font-black uppercase italic tracking-tighter text-[10px] md:text-xs shadow-[0_10px_25px_rgba(204,255,0,0.3)] hover:scale-105 transition-all flex items-center gap-2 whitespace-nowrap"
                                 >
                                     <Edit2 className="w-4 h-4" />
-                                    <span>EDITAR</span>
+                                    <span>EDITAR PERFIL</span>
                                 </button>
                             )}
                         </div>
@@ -196,9 +196,20 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                                                 JUGADOR SMART PRO
                                             </span>
                                         </div>
-                                        <h2 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.4)] truncate">
-                                            {player.name} <span className="text-padel-primary drop-shadow-[0_0_15px_rgba(204,255,0,0.6)]">{player.lastName}</span>
-                                        </h2>
+                                        <div className="flex items-center gap-4 justify-center md:justify-start">
+                                            <h2 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.4)] truncate">
+                                                {player.name} <span className="text-padel-primary drop-shadow-[0_0_15px_rgba(204,255,0,0.6)]">{player.lastName}</span>
+                                            </h2>
+                                            {canEdit && (
+                                                <button
+                                                    onClick={() => router.push(`/players/register?edit=${player.id}`)}
+                                                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-padel-primary/20 border border-white/10 hover:border-padel-primary/50 transition-all text-zinc-500 hover:text-padel-primary group mb-1 shrink-0"
+                                                    title="Editar perfil"
+                                                >
+                                                    <Edit2 className="w-4 h-4 transition-transform group-hover:scale-110" />
+                                                </button>
+                                            )}
+                                        </div>
                                         <div className="flex flex-wrap items-center gap-4 justify-center md:justify-start text-zinc-400">
                                             <div className="flex items-center gap-2 bg-white/5 px-4 py-2 rounded-xl border border-white/5">
                                                 <Target className="w-3 h-3 text-blue-400" />
