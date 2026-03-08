@@ -234,6 +234,73 @@ export const dataService = {
         return { id: data.id, ...data.data, ownerId: data.owner_id, createdAt: data.created_at, updatedAt: data.updated_at };
     },
 
+    async getPlayerStats(playerId: string) {
+        // This is a complex calculation that fetches all matches for a player
+        // and computes the requested metrics: played, won, lost, streak, effectiveness.
+
+        try {
+            // Get all matches from tournament_matches
+            // In a real scenario, we might want to filter this by participant_id if we have a junction table
+            // but since matches are stored in JSON 'data' field, we fetch all for now or filter if possible.
+            const { data: matches, error } = await supabase()
+                .from('tournament_matches')
+                .select('*');
+
+            if (error) throw error;
+
+            let played = 0;
+            let won = 0;
+            let lost = 0;
+            let streak = 0;
+            let effectiveness = 0;
+            const results: boolean[] = []; // true for win, false for loss
+
+            (matches || []).forEach((m: any) => {
+                const matchData = m.data || {};
+                const isTeam1 = (matchData.team1?.player1?.id === playerId || matchData.team1?.player2?.id === playerId);
+                const isTeam2 = (matchData.team2?.player1?.id === playerId || matchData.team2?.player2?.id === playerId);
+                const isSingle1 = matchData.player1?.id === playerId;
+                const isSingle2 = matchData.player2?.id === playerId;
+
+                if (isTeam1 || isTeam2 || isSingle1 || isSingle2) {
+                    played++;
+                    const winner = matchData.winner; // 1 or 2
+                    const playerWon = (winner === 1 && (isTeam1 || isSingle1)) || (winner === 2 && (isTeam2 || isSingle2));
+
+                    if (playerWon) won++;
+                    else lost++;
+
+                    // Store results for streak (assuming matches come in chron order, but let's assume for now)
+                    results.push(playerWon);
+                }
+            });
+
+            // Calculate current streak
+            if (results.length > 0) {
+                const lastResult = results[results.length - 1];
+                let count = 0;
+                for (let i = results.length - 1; i >= 0; i--) {
+                    if (results[i] === lastResult) count++;
+                    else break;
+                }
+                streak = count;
+                effectiveness = Math.round((won / played) * 100);
+            }
+
+            return {
+                played,
+                won,
+                lost,
+                streak: `${streak}${results[results.length - 1] ? 'W' : 'L'}`,
+                effectiveness: `${effectiveness}%`,
+                ranking: '#142', // Placeholder for now
+            };
+        } catch (e) {
+            console.error('Error calculating player stats:', e);
+            return null;
+        }
+    },
+
     async deleteParticipant(id: string) {
         const { error } = await supabase().from('participants').delete().eq('id', id);
         if (error) throw error;

@@ -1006,16 +1006,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                 <span className="hidden sm:inline">Cuadro</span>
                             </button>
                         )}
-                        {!canManageTournament && user && (
-                            <Link
-                                href={`/tournaments/${id}/inscribirme`}
-                                className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#ccff00]/20 border border-[#ccff00]/40 text-[#ccff00] hover:bg-[#ccff00]/30 text-xs font-bold uppercase tracking-widest"
-                                title="Inscribirme en este torneo"
-                            >
-                                <User className="w-4 h-4" />
-                                Inscribirme
-                            </Link>
-                        )}
+
                         <button
                             type="button"
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsShareModalOpen(true); }}

@@ -44,6 +44,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
     const { user, loading: authLoading, isAdmin } = useAuth();
     const [player, setPlayer] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [playerStats, setPlayerStats] = useState<any>(null);
 
     useEffect(() => {
         const loadPlayer = async () => {
@@ -52,6 +53,9 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                 const data = await dataService.getParticipant(id);
                 if (data) {
                     setPlayer(data);
+                    // Fetch real stats
+                    const statsData = await dataService.getPlayerStats(id);
+                    if (statsData) setPlayerStats(statsData);
                 } else {
                     router.push('/players');
                 }
@@ -95,7 +99,17 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
 
     if (!player) return null;
 
-    const canEdit = isAdmin || (user && player.owner_id === user.uid);
+    const canEdit = isAdmin || (user && player.ownerId === user.uid);
+
+    // Mock stats for visualization - these will be populated by calculations later
+    const stats = [
+        { label: 'RANK TOTAL', val: playerStats?.ranking || '#142', color: 'text-blue-400', icon: Award },
+        { label: 'GANADOS', val: playerStats?.won.toString().padStart(2, '0') || '00', color: 'text-padel-primary', icon: Trophy },
+        { label: 'EFECTIVIDAD', val: playerStats?.effectiveness || '0%', color: 'text-yellow-400', icon: Zap },
+        { label: 'RACHA', val: playerStats?.streak || '0-', color: 'text-emerald-400', icon: Activity },
+        { label: 'JUGADOS', val: playerStats?.played.toString().padStart(2, '0') || '00', color: 'text-zinc-500', icon: Target },
+        { label: 'PERDIDOS', val: playerStats?.lost.toString().padStart(2, '0') || '00', color: 'text-red-400', icon: AlertCircle },
+    ];
 
     return (
         <div className="ipad-screen-container bg-[#080808] text-white font-outfit relative overflow-hidden">
@@ -235,12 +249,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                                 <Activity className="w-2.5 h-2.5 text-padel-primary" /> ESTADÍSTICAS
                             </h3>
                             <div className="grid grid-cols-2 gap-4">
-                                {[
-                                    { label: 'RANKING', val: '#142', color: 'text-blue-400', icon: Award },
-                                    { label: 'GANADOS', val: '08', color: 'text-padel-primary', icon: Trophy },
-                                    { label: 'PUNTOS', val: '4,280', color: 'text-yellow-400', icon: Star },
-                                    { label: 'FIABILIDAD', val: '98%', color: 'text-emerald-400', icon: ShieldCheck },
-                                ].map((s) => (
+                                {stats.map((s) => (
                                     <div key={s.label} className="bg-zinc-900/40 border border-white/5 p-4 rounded-[30px] backdrop-blur-2xl flex flex-col items-center gap-2 hover:bg-zinc-900 transition-all group">
                                         <s.icon className={`w-4 h-4 ${s.color} opacity-40 group-hover:opacity-100 transition-opacity`} />
                                         <span className={`text-xl font-black italic tracking-tighter ${s.color}`}>{s.val}</span>
