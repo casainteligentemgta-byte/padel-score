@@ -42,12 +42,12 @@ export default function HomePage() {
                     <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-padel-primary/10 blur-[130px] rounded-full animate-pulse" />
                 </div>
 
-                <div className="relative mb-4">
+                <div className="flex items-center gap-3 mb-4">
                     <BouncingBall size={32} bounceHeight={1.5} />
+                    <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0, position: 'relative' }}>
+                        SMART <span style={{ color: '#ccff00' }}>PADEL</span>
+                    </h1>
                 </div>
-                <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0, position: 'relative' }}>
-                    PADEL <span style={{ color: '#ccff00' }}>SMART</span>
-                </h1>
                 <p style={{ fontSize: 14, color: '#888', margin: 0, position: 'relative' }}>The Professional Scoreboard</p>
                 <div style={{ display: 'flex', gap: 16, marginTop: 16, position: 'relative' }}>
                     <Link
@@ -116,12 +116,14 @@ export default function HomePage() {
                         animate={{ opacity: 1, x: 0 }}
                     >
                         <div className="flex items-center gap-4 mb-2">
-                            <BouncingBall size={24} bounceHeight={1.2} />
                             <h4 className="text-[10px] font-black uppercase tracking-[0.5em] text-padel-primary italic">Master Control Unit</h4>
                         </div>
-                        <h1 className="text-5xl md:text-7xl font-black italic uppercase tracking-tighter leading-none">
-                            PADEL<span className="text-padel-primary">SMART</span><span className="text-white/20 ml-4 font-normal not-italic">HUB</span>
-                        </h1>
+                        <div className="flex items-center gap-6">
+                            <BouncingBall size={48} bounceHeight={1.4} />
+                            <h1 className="text-5xl md:text-7xl font-black italic uppercase tracking-tighter leading-none">
+                                SMART<span className="text-padel-primary">PADEL</span><span className="text-white/20 ml-4 font-normal not-italic">HUB</span>
+                            </h1>
+                        </div>
                         <p className="text-gray-500 font-bold uppercase tracking-widest mt-4 flex items-center gap-2">
                             <ShieldCheck className="w-4 h-4 text-padel-primary" /> Acceso de Super Administrador con privilegios totales
                         </p>

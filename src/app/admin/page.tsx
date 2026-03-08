@@ -138,13 +138,13 @@ export default function AdminHubPage() {
             <main className="lg:pl-20 relative z-10">
                 {/* Global Top Bar */}
                 <header className="px-4 sm:px-8 py-2 sm:py-3 flex flex-col sm:flex-row justify-between items-center bg-black/20 backdrop-blur-md border-b border-white/5 sticky top-0 z-40">
-                    <div className="flex items-center gap-2 sm:gap-4 mb-2 sm:mb-0">
-                        <div className="lg:hidden w-10 h-10 flex items-center justify-center">
-                            <BouncingBall size={14} bounceHeight={1.5} />
-                        </div>
+                    <div className="flex items-center gap-4 mb-2 sm:mb-0">
+                        <BouncingBall size={20} bounceHeight={1.4} />
                         <div>
                             <h4 className="text-[7px] font-black uppercase tracking-[0.4em] text-padel-primary italic">Control Tower Pro</h4>
-                            <h2 className="text-sm sm:text-base lg:text-xl font-black uppercase italic tracking-tighter">Panel de <span className="text-padel-primary">Administración</span></h2>
+                            <h2 className="text-sm sm:text-base lg:text-xl font-black uppercase italic tracking-tighter">
+                                SMART <span className="text-padel-primary">PADEL</span> ADMIN
+                            </h2>
                         </div>
                     </div>
 
