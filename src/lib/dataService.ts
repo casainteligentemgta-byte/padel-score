@@ -33,6 +33,12 @@ export type InscriptionData = {
     receiptUrl?: string | null;
     paymentStatus: 'pending' | 'paid' | 'alert';
     alertMessage?: string | null;
+    // New payment details
+    paymentMethod?: string;
+    paymentDate?: string;
+    paymentBank?: string;
+    paymentAmount?: number;
+    paymentReference?: string;
 };
 
 export const dataService = {
@@ -497,7 +503,13 @@ export const dataService = {
                 receipt_url: data.receiptUrl,
                 payment_status: data.paymentStatus ?? 'pending',
                 alert_message: data.alertMessage,
-                data: {},
+                data: {
+                    paymentMethod: data.paymentMethod,
+                    paymentDate: data.paymentDate,
+                    paymentBank: data.paymentBank,
+                    paymentAmount: data.paymentAmount,
+                    paymentReference: data.paymentReference,
+                },
                 created_at: now(),
                 updated_at: now(),
             })

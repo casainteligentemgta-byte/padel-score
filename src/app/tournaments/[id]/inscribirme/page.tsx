@@ -6,7 +6,21 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import Sidebar from '@/components/Sidebar';
-import { ArrowLeft, CheckCircle2, FileText, Loader2, AlertCircle } from 'lucide-react';
+import {
+    ArrowLeft,
+    CheckCircle2,
+    FileText,
+    Loader2,
+    AlertCircle,
+    CreditCard,
+    Landmark,
+    Calendar as CalendarIcon,
+    Hash,
+    DollarSign,
+    Camera,
+    Upload,
+    X
+} from 'lucide-react';
 
 /** Categorías de inscripción que el organizador puede configurar en el torneo (tournament.inscriptionCategories). */
 export type InscriptionCategoryOption = {
@@ -67,6 +81,15 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
     const [success, setSuccess] = useState(false);
     const [playerProfile, setPlayerProfile] = useState<{ gender?: 'MALE' | 'FEMALE'; birthDate?: string } | null>(null);
     const [inscriptionCountByCategory, setInscriptionCountByCategory] = useState<Record<string, number>>({});
+    const [paymentData, setPaymentData] = useState({
+        method: 'Pago Móvil',
+        bank: '',
+        date: new Date().toISOString().split('T')[0],
+        amount: '',
+        reference: '',
+        receiptUrl: ''
+    });
+    const [uploading, setUploading] = useState(false);
 
     useEffect(() => {
         if (!tournamentId || authLoading) return;
@@ -164,6 +187,27 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
         });
     };
 
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !user) return;
+
+        setUploading(true);
+        try {
+            const path = `inscriptions/receipts/${user.uid}_${Date.now()}_${file.name}`;
+            const url = await dataService.uploadFile(file, path);
+            setPaymentData(prev => ({ ...prev, receiptUrl: url }));
+        } catch (err: any) {
+            setError('Error al subir el comprobante: ' + err.message);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const totalPrice = Array.from(selectedCategories).reduce((acc, key) => {
+        const cat = categories.find(c => c.key === key);
+        return acc + (cat?.price || 0);
+    }, 0);
+
     const handleSubmit = async () => {
         if (!user?.uid || !tournament) return;
         if (selectedCategories.size === 0) {
@@ -208,6 +252,12 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                         participantEmail,
                         participantId,
                         paymentStatus: 'pending',
+                        paymentMethod: paymentData.method,
+                        paymentBank: paymentData.bank,
+                        paymentDate: paymentData.date,
+                        paymentAmount: paymentData.amount ? parseFloat(paymentData.amount) : undefined,
+                        paymentReference: paymentData.reference,
+                        receiptUrl: paymentData.receiptUrl || undefined,
                     },
                     user.uid
                 );
@@ -369,6 +419,138 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                                             })}
                                         </div>
                                     </section>
+
+                                    {selectedCategories.size > 0 && (
+                                        <section className="mb-8 space-y-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-full bg-[#ccff00]/10 flex items-center justify-center">
+                                                    <CreditCard className="w-5 h-5 text-[#ccff00]" />
+                                                </div>
+                                                <h2 className="text-lg font-black uppercase italic tracking-tighter">Datos de Pago</h2>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Metodo de Pago</label>
+                                                    <div className="relative">
+                                                        <input
+                                                            type="text"
+                                                            value={paymentData.method}
+                                                            onChange={(e) => setPaymentData({ ...paymentData, method: e.target.value })}
+                                                            placeholder="Ej: Pago Móvil"
+                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Banco Emisor</label>
+                                                    <div className="relative">
+                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                                                            <Landmark className="w-5 h-5" />
+                                                        </div>
+                                                        <input
+                                                            type="text"
+                                                            value={paymentData.bank}
+                                                            onChange={(e) => setPaymentData({ ...paymentData, bank: e.target.value })}
+                                                            placeholder="Nombre del banco"
+                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Fecha del Pago</label>
+                                                    <div className="relative">
+                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                                                            <CalendarIcon className="w-5 h-5" />
+                                                        </div>
+                                                        <input
+                                                            type="date"
+                                                            value={paymentData.date}
+                                                            onChange={(e) => setPaymentData({ ...paymentData, date: e.target.value })}
+                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Monto Pagado ($)</label>
+                                                    <div className="relative">
+                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                                                            <DollarSign className="w-5 h-5" />
+                                                        </div>
+                                                        <input
+                                                            type="number"
+                                                            value={paymentData.amount}
+                                                            onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
+                                                            placeholder={totalPrice > 0 ? totalPrice.toString() : "0.00"}
+                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-2 md:col-span-2">
+                                                    <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Referencia / Confirmación</label>
+                                                    <div className="relative">
+                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                                                            <Hash className="w-5 h-5" />
+                                                        </div>
+                                                        <input
+                                                            type="text"
+                                                            value={paymentData.reference}
+                                                            onChange={(e) => setPaymentData({ ...paymentData, reference: e.target.value })}
+                                                            placeholder="Número de referencia"
+                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Comprobante (Foto/Captura)</label>
+                                                <div className="relative">
+                                                    {paymentData.receiptUrl ? (
+                                                        <div className="relative rounded-2xl overflow-hidden border-2 border-[#ccff00]/30 aspect-video">
+                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                            <img src={paymentData.receiptUrl} alt="Comprobante" className="w-full h-full object-cover" />
+                                                            <button
+                                                                onClick={() => setPaymentData({ ...paymentData, receiptUrl: '' })}
+                                                                className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center text-white"
+                                                            >
+                                                                <X className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex gap-3">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => document.getElementById('receipt-upload')?.click()}
+                                                                className="flex-1 flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed border-white/10 bg-white/5 hover:bg-white/10 hover:border-[#ccff00]/30 transition-all gap-2"
+                                                                disabled={uploading}
+                                                            >
+                                                                {uploading ? (
+                                                                    <Loader2 className="w-8 h-8 text-[#ccff00] animate-spin" />
+                                                                ) : (
+                                                                    <>
+                                                                        <Upload className="w-8 h-8 text-gray-500" />
+                                                                        <span className="text-[10px] font-black uppercase text-gray-500">Subir Archivo</span>
+                                                                    </>
+                                                                )}
+                                                            </button>
+                                                            <input
+                                                                id="receipt-upload"
+                                                                type="file"
+                                                                accept="image/*"
+                                                                className="hidden"
+                                                                onChange={handleFileUpload}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </section>
+                                    )}
 
                                     <section className="mb-8">
                                         <label className="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 cursor-pointer">

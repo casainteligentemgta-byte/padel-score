@@ -20,7 +20,8 @@ import {
     ChevronDown,
     Search,
     X,
-    Info
+    Info,
+    DollarSign
 } from 'lucide-react';
 import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
@@ -1667,9 +1668,9 @@ export default function NewTournamentPage() {
                                         {LEVEL_CATEGORIES.map((cat) => (
                                             <button
                                                 key={cat.id}
+                                                type="button"
                                                 onClick={() => {
                                                     setTournamentData({ ...tournamentData, category: cat.id });
-                                                    setStep(7);
                                                 }}
                                                 className={`p-5 rounded-[1.5rem] border-2 text-center transition-all group flex flex-col items-center gap-2 ${tournamentData.category === cat.id
                                                     ? 'border-padel-primary bg-padel-primary/10 shadow-[0_0_20px_rgba(204,255,0,0.15)]'
@@ -1683,6 +1684,54 @@ export default function NewTournamentPage() {
                                             </button>
                                         ))}
                                     </div>
+
+                                    {tournamentData.category && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="mt-6 p-6 rounded-[2rem] bg-white/5 border border-white/10 space-y-4"
+                                        >
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-10 h-10 rounded-full bg-padel-primary/10 flex items-center justify-center">
+                                                    <DollarSign className="w-5 h-5 text-padel-primary" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-black uppercase italic text-white leading-none">Precio de Inscripción</h4>
+                                                    <p className="text-[10px] text-gray-500 mt-1 uppercase font-bold tracking-tighter">Establece el costo para esta categoría</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="relative">
+                                                <input
+                                                    type="number"
+                                                    value={tournamentData.inscriptionCategories?.[0]?.price ?? 0}
+                                                    onChange={(e) => {
+                                                        const price = parseFloat(e.target.value) || 0;
+                                                        const cat = LEVEL_CATEGORIES.find(c => c.id === tournamentData.category);
+                                                        setTournamentData({
+                                                            ...tournamentData,
+                                                            inscriptionCategories: [{
+                                                                key: tournamentData.category,
+                                                                name: cat?.label || tournamentData.category,
+                                                                price: price
+                                                            }]
+                                                        });
+                                                    }}
+                                                    placeholder="0.00"
+                                                    className="w-full bg-black/40 border-2 border-white/10 rounded-2xl p-4 pl-12 text-white font-bold focus:border-padel-primary transition-all outline-none"
+                                                />
+                                                <span className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500 font-bold">$</span>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => setStep(7)}
+                                                className="w-full py-4 mt-2 bg-padel-primary text-black font-black uppercase italic rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_10px_20px_rgba(204,255,0,0.2)]"
+                                            >
+                                                Continuar
+                                            </button>
+                                        </motion.div>
+                                    )}
                                 </div>
                             </motion.div>
                         )}
