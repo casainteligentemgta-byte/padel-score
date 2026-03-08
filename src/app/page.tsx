@@ -23,7 +23,7 @@ import BouncingBall from '@/components/BouncingBall';
 import { useAppSettings } from '@/lib/AppSettingsContext';
 
 export default function HomePage() {
-    const { user, loading: authLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
+    const { user, isAdmin, loading: authLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
     const { clubName } = useAppSettings();
     const router = useRouter();
     const [isLogin, setIsLogin] = useState(true);
@@ -39,8 +39,14 @@ export default function HomePage() {
     });
 
     useEffect(() => {
-        if (!authLoading && user) router.replace('/tournaments');
-    }, [authLoading, user, router]);
+        if (!authLoading && user) {
+            if (isAdmin) {
+                router.replace('/admin');
+            } else {
+                router.replace('/tournaments');
+            }
+        }
+    }, [authLoading, user, isAdmin, router]);
 
     const handleGoogleSignIn = async () => {
         setLoading(true);
@@ -93,7 +99,12 @@ export default function HomePage() {
             } else {
                 await signUpWithEmail(formData.email, formData.password, formData.name);
             }
-            router.push('/tournaments');
+            if (isAdmin) {
+                router.push('/admin');
+            } else {
+                router.push('/tournaments');
+            }
+
         } catch (err: any) {
             setError(getAuthErrorMessage(err));
         } finally {
