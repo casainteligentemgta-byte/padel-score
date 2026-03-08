@@ -9,6 +9,7 @@ import {
     ShieldCheck, Calendar, Activity, Layout,
     UserCircle, ChevronRight, Play, ExternalLink
 } from 'lucide-react';
+import BouncingBall from '@/components/BouncingBall';
 
 export default function HomePage() {
     const { isAdmin, user, loading } = useAuth();
@@ -41,6 +42,9 @@ export default function HomePage() {
                     <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-padel-primary/10 blur-[130px] rounded-full animate-pulse" />
                 </div>
 
+                <div className="relative mb-4">
+                    <BouncingBall size={32} bounceHeight={1.5} />
+                </div>
                 <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0, position: 'relative' }}>
                     PADEL <span style={{ color: '#ccff00' }}>SMART</span>
                 </h1>
@@ -111,7 +115,10 @@ export default function HomePage() {
                         initial={{ opacity: 0, x: -30 }}
                         animate={{ opacity: 1, x: 0 }}
                     >
-                        <h4 className="text-[10px] font-black uppercase tracking-[0.5em] text-padel-primary italic mb-2">Master Control Unit</h4>
+                        <div className="flex items-center gap-4 mb-2">
+                            <BouncingBall size={24} bounceHeight={1.2} />
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.5em] text-padel-primary italic">Master Control Unit</h4>
+                        </div>
                         <h1 className="text-5xl md:text-7xl font-black italic uppercase tracking-tighter leading-none">
                             PADEL<span className="text-padel-primary">SMART</span><span className="text-white/20 ml-4 font-normal not-italic">HUB</span>
                         </h1>
