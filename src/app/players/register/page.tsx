@@ -59,7 +59,7 @@ function RegistrationFormContent() {
         bloodType: 'O+',
         allergies: '',
         medicalConditions: '',
-        phone: '',
+        phone: '+58',
         email: '',
         instagram: '',
         dni: '',

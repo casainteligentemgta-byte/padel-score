@@ -122,7 +122,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
             <div className="ipad-scroll-area !pr-0">
                 {/* Header Section - Modern and Glassy */}
                 <header className="sticky top-0 z-[60] bg-[#080808]/40 backdrop-blur-xl border-b border-white/5">
-                    <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between ml-20 md:ml-24">
+                    <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between ml-20 md:ml-24">
                         <div className="flex items-center gap-4">
                             <button
                                 onClick={() => router.back()}
@@ -158,21 +158,21 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                     </div>
                 </header>
 
-                <main className="max-w-5xl mx-auto px-6 py-10 space-y-10 pb-32">
+                <main className="max-w-5xl mx-auto px-6 py-6 space-y-6 pb-20">
                     {/* Primary Identity Card */}
                     <div className="relative">
                         <motion.section
                             initial={{ opacity: 0, y: 30 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="bg-zinc-900/40 border border-white/5 p-10 md:p-12 rounded-[50px] backdrop-blur-3xl overflow-hidden shadow-2xl relative"
+                            className="bg-zinc-900/40 border border-white/5 p-6 md:p-8 rounded-[40px] backdrop-blur-3xl overflow-hidden shadow-2xl relative"
                         >
                             <div className="absolute top-0 right-0 w-64 h-64 bg-padel-primary/10 blur-[100px] -mr-32 -mt-32 rounded-full pointer-events-none" />
 
                             <div className="flex flex-col md:flex-row gap-10 items-center md:items-start relative z-10">
                                 {/* Photo Profile with Glow */}
                                 <div className="relative shrink-0">
-                                    <div className="w-48 h-48 md:w-56 md:h-56 rounded-[50px] border-4 border-zinc-800 p-1.5 bg-zinc-800 shadow-3xl overflow-hidden group/photo">
-                                        <div className="w-full h-full rounded-[42px] overflow-hidden bg-zinc-900 relative">
+                                    <div className="w-32 h-32 md:w-40 md:h-40 rounded-[35px] border-4 border-zinc-800 p-1 bg-zinc-800 shadow-3xl overflow-hidden group/photo">
+                                        <div className="w-full h-full rounded-[28px] overflow-hidden bg-zinc-900 relative">
                                             {player.photo ? (
                                                 <img src={player.photo} alt="" className="w-full h-full object-cover" />
                                             ) : (
@@ -253,88 +253,86 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                     </div>
 
                     {/* Dashboard Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                         {/* Stats Pillar */}
-                        <div className="space-y-6">
-                            <h3 className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.4em] italic mb-2 ml-4 flex items-center gap-2">
-                                <Activity className="w-2.5 h-2.5 text-padel-primary" /> ESTADÍSTICAS
+                        <div className="lg:col-span-1 space-y-4">
+                            <h3 className="text-[9px] font-black uppercase text-zinc-500 tracking-[0.3em] italic mb-1 ml-2 flex items-center gap-2">
+                                <Activity className="w-2.5 h-2.5 text-padel-primary" /> STATS
                             </h3>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-3">
                                 {stats.map((s) => (
-                                    <div key={s.label} className="bg-zinc-900/40 border border-white/5 p-4 rounded-[30px] backdrop-blur-2xl flex flex-col items-center gap-2 hover:bg-zinc-900 transition-all group">
-                                        <s.icon className={`w-4 h-4 ${s.color} opacity-40 group-hover:opacity-100 transition-opacity`} />
-                                        <span className={`text-xl font-black italic tracking-tighter ${s.color}`}>{s.val}</span>
-                                        <span className="text-[7px] font-black uppercase text-zinc-600 tracking-widest">{s.label}</span>
+                                    <div key={s.label} className="bg-zinc-900/40 border border-white/5 p-3 rounded-2xl backdrop-blur-2xl flex flex-col items-center gap-1 hover:bg-zinc-900 transition-all group">
+                                        <s.icon className={`w-3.5 h-3.5 ${s.color} opacity-40 group-hover:opacity-100 transition-opacity`} />
+                                        <span className={`text-base font-black italic tracking-tighter ${s.color}`}>{s.val}</span>
+                                        <span className="text-[6px] font-black uppercase text-zinc-600 tracking-widest">{s.label}</span>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
                         {/* Identity & Medical Details */}
-                        <div className="lg:col-span-2 space-y-8">
+                        <div className="lg:col-span-3 space-y-6">
                             {/* Medical Summary - Impactful */}
-                            <section className="bg-zinc-900/40 border border-red-500/10 p-8 rounded-[40px] backdrop-blur-3xl relative overflow-hidden group">
-                                <div className="absolute top-0 right-0 p-6 opacity-5">
-                                    <HeartPulse className="w-12 h-12 text-red-500" />
+                            <section className="bg-zinc-900/40 border border-red-500/10 p-6 rounded-[35px] backdrop-blur-3xl relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-4 opacity-5">
+                                    <HeartPulse className="w-10 h-10 text-red-500" />
                                 </div>
-                                <div className="flex items-center gap-3 mb-6">
-                                    <div className="w-1 h-6 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.6)]" />
-                                    <h3 className="text-base font-black uppercase italic tracking-tighter text-red-500 drop-shadow-[0_0_10px_rgba(239,68,68,0.4)]">Protocolo Médico</h3>
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-1 h-5 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.6)]" />
+                                    <h3 className="text-sm font-black uppercase italic tracking-tighter text-red-500 drop-shadow-[0_0_10px_rgba(239,68,68,0.4)]">Protocolo Médico</h3>
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                    <div className="bg-black/40 p-4 rounded-2xl border border-red-500/10 flex flex-col items-center justify-center gap-1">
-                                        <span className="text-[8px] font-black uppercase text-zinc-600 tracking-widest italic">SANGRE</span>
-                                        <span className="text-3xl font-black italic tracking-tighter text-white drop-shadow-lg">{player.bloodType || 'O+'}</span>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="bg-black/40 p-3 rounded-2xl border border-red-500/10 flex flex-col items-center justify-center gap-1">
+                                        <span className="text-[7px] font-black uppercase text-zinc-600 tracking-widest italic">SANGRE</span>
+                                        <span className="text-2xl font-black italic tracking-tighter text-white drop-shadow-lg">{player.bloodType || 'O+'}</span>
                                     </div>
-                                    <div className="space-y-3">
-                                        <div className="bg-black/20 p-3 rounded-xl border border-white/5">
-                                            <p className="text-[8px] font-black text-red-500/80 uppercase tracking-widest italic mb-0.5">Alergias</p>
-                                            <p className="text-[10px] font-bold text-zinc-400 truncate">{player.allergies || 'SIN REPORTES'}</p>
-                                        </div>
-                                        <div className="bg-black/20 p-3 rounded-xl border border-white/5">
-                                            <p className="text-[8px] font-black text-red-500/80 uppercase tracking-widest italic mb-0.5">Condiciones</p>
-                                            <p className="text-[10px] font-bold text-zinc-400 truncate">{player.medicalConditions || 'ÓPTIMO'}</p>
-                                        </div>
+                                    <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                                        <p className="text-[7px] font-black text-red-500/80 uppercase tracking-widest italic mb-0.5">Alergias</p>
+                                        <p className="text-[9px] font-bold text-zinc-400 truncate uppercase">{player.allergies || 'SIN REPORTES'}</p>
+                                    </div>
+                                    <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                                        <p className="text-[7px] font-black text-red-500/80 uppercase tracking-widest italic mb-0.5">Condiciones</p>
+                                        <p className="text-[9px] font-bold text-zinc-400 truncate uppercase">{player.medicalConditions || 'ÓPTIMO'}</p>
                                     </div>
                                 </div>
                             </section>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {/* Technical Info */}
-                                <section className="bg-zinc-900/40 border border-white/5 p-6 rounded-[35px] backdrop-blur-2xl space-y-4">
+                                <section className="bg-zinc-900/40 border border-white/5 p-5 rounded-[30px] backdrop-blur-2xl space-y-3">
                                     <div className="flex items-center gap-2">
                                         <Shirt className="w-3.5 h-3.5 text-padel-primary" />
-                                        <h3 className="text-sm font-black uppercase italic tracking-tighter text-white">Equipación</h3>
+                                        <h3 className="text-xs font-black uppercase italic tracking-tighter text-white">Equipación</h3>
                                     </div>
                                     <div className="grid grid-cols-3 gap-2">
-                                        <div className="bg-black/40 p-3 rounded-xl border border-white/5 text-center">
-                                            <p className="text-[7px] font-black text-zinc-600 uppercase mb-0.5">FRANELA</p>
-                                            <p className="text-lg font-black italic text-padel-primary">{player.suitSize || 'M'}</p>
+                                        <div className="bg-black/40 p-2 rounded-xl border border-white/5 text-center">
+                                            <p className="text-[6px] font-black text-zinc-600 uppercase mb-0.5">FRANELA</p>
+                                            <p className="text-base font-black italic text-padel-primary">{player.suitSize || 'M'}</p>
                                         </div>
-                                        <div className="bg-black/40 p-3 rounded-xl border border-white/5 text-center">
-                                            <p className="text-[7px] font-black text-zinc-600 uppercase mb-0.5">SHORT</p>
-                                            <p className="text-lg font-black italic text-padel-primary">{player.shortSize || 'M'}</p>
+                                        <div className="bg-black/40 p-2 rounded-xl border border-white/5 text-center">
+                                            <p className="text-[6px] font-black text-zinc-600 uppercase mb-0.5">SHORT</p>
+                                            <p className="text-base font-black italic text-padel-primary">{player.shortSize || 'M'}</p>
                                         </div>
-                                        <div className="bg-black/40 p-3 rounded-xl border border-white/5 text-center">
-                                            <p className="text-[7px] font-black text-zinc-600 uppercase mb-0.5">EU SIZE</p>
-                                            <p className="text-lg font-black italic text-padel-primary">{player.shoeSize || '--'}</p>
+                                        <div className="bg-black/40 p-2 rounded-xl border border-white/5 text-center">
+                                            <p className="text-[6px] font-black text-zinc-600 uppercase mb-0.5">EU SIZE</p>
+                                            <p className="text-base font-black italic text-padel-primary">{player.shoeSize || '--'}</p>
                                         </div>
                                     </div>
                                 </section>
 
                                 {/* Identity Card */}
-                                <section className="bg-zinc-900/40 border border-white/5 p-6 rounded-[35px] backdrop-blur-2xl space-y-3">
+                                <section className="bg-zinc-900/40 border border-white/5 p-5 rounded-[30px] backdrop-blur-2xl space-y-3">
                                     <div className="flex items-center gap-2 mb-1">
                                         <Dna className="w-3.5 h-3.5 text-zinc-600" />
-                                        <h3 className="text-sm font-black uppercase italic tracking-tighter text-white">Registro</h3>
+                                        <h3 className="text-xs font-black uppercase italic tracking-tighter text-white">Registro</h3>
                                     </div>
-                                    <div className="space-y-3 text-xs font-bold">
-                                        <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl">
-                                            <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest italic">DNI / CÉDULA</span>
+                                    <div className="space-y-2 text-[10px] font-bold">
+                                        <div className="flex justify-between items-center bg-black/20 p-2 rounded-lg">
+                                            <span className="text-[7px] font-black text-zinc-600 uppercase tracking-widest italic">DNI / CÉDULA</span>
                                             <span className="italic tracking-tighter">{player.dni || 'S/R'}</span>
                                         </div>
-                                        <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl">
-                                            <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest italic">GÉNERO</span>
+                                        <div className="flex justify-between items-center bg-black/20 p-2 rounded-lg">
+                                            <span className="text-[7px] font-black text-zinc-600 uppercase tracking-widest italic">GÉNERO</span>
                                             <span className="italic tracking-tighter uppercase">{player.gender === 'FEMALE' ? 'FEMENINO' : 'MASCULINO'}</span>
                                         </div>
                                     </div>
@@ -344,20 +342,16 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                     </div>
 
 
-                    {/* Timeline / Recent Activity Placeholders */}
-                    <section className="bg-[#111111]/80 border border-white/5 p-12 rounded-[50px] backdrop-blur-3xl relative overflow-hidden text-center space-y-8">
+                    {/* Timeline Placeholder - More Compact */}
+                    <section className="bg-[#111111]/80 border border-white/5 p-6 rounded-[35px] backdrop-blur-3xl relative overflow-hidden text-center space-y-4">
                         <div className="absolute inset-0 bg-padel-primary/5 blur-[80px] rounded-full pointer-events-none" />
-                        <div className="w-16 h-16 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center mx-auto shadow-2xl">
-                            <Activity className="w-7 h-7 text-zinc-800" />
+                        <div className="w-10 h-10 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center mx-auto shadow-2xl">
+                            <Activity className="w-4 h-4 text-zinc-800" />
                         </div>
-                        <div className="space-y-2">
-                            <h4 className="text-xl font-black italic tracking-tighter text-zinc-500 uppercase">Sin Competencia Registrada</h4>
-                            <p className="text-[10px] font-bold text-zinc-700 uppercase tracking-[0.4em] max-w-xs mx-auto italic">Historial Smart Padel en preparación</p>
+                        <div className="space-y-1">
+                            <h4 className="text-sm font-black italic tracking-tighter text-zinc-500 uppercase">Sin Competencia Registrada</h4>
+                            <p className="text-[8px] font-bold text-zinc-700 uppercase tracking-[0.4em] max-w-xs mx-auto italic">Historial Smart Padel en preparación</p>
                         </div>
-                        <button className="h-14 px-8 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.3em] overflow-hidden group hover:bg-white/10 transition-all flex items-center gap-3 mx-auto italic">
-                            VER CRONOGRAMA PRO
-                            <ArrowRight className="w-4 h-4 border-l border-white/20 pl-4 h-full flex items-center" />
-                        </button>
                     </section>
                 </main>
             </div>
