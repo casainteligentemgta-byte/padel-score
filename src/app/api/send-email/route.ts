@@ -1,18 +1,25 @@
 import { Resend } from 'resend';
 import { NextResponse } from 'next/server';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function POST(request: Request) {
-    try {
-        const { type, data } = await request.json();
+  const apiKey = process.env.RESEND_API_KEY;
 
-        let subject = '';
-        let html = '';
+  if (!apiKey) {
+    console.error('RESEND_API_KEY is missing from environment variables');
+    return NextResponse.json({ error: 'Service configuration error' }, { status: 500 });
+  }
 
-        if (type === 'NEW_PLAYER') {
-            subject = `🎾 Nuevo Jugador Registrado: ${data.name} ${data.lastName}`;
-            html = `
+  const resend = new Resend(apiKey);
+
+  try {
+    const { type, data } = await request.json();
+
+    let subject = '';
+    let html = '';
+
+    if (type === 'NEW_PLAYER') {
+      subject = `🎾 Nuevo Jugador Registrado: ${data.name} ${data.lastName}`;
+      html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
           <h2 style="color: #ccff00; background: #000; padding: 10px; border-radius: 5px; text-align: center; font-style: italic; text-transform: uppercase;">Smart Padel Pro</h2>
           <p>Se ha registrado un nuevo jugador en la plataforma:</p>
@@ -29,9 +36,9 @@ export async function POST(request: Request) {
           <p style="font-size: 12px; color: #666; text-align: center;">Sistema de Notificaciones Smart Padel</p>
         </div>
       `;
-        } else if (type === 'NEW_INSCRIPTION') {
-            subject = `🏆 Nueva Inscripción: ${data.participantName} en ${data.tournamentName}`;
-            html = `
+    } else if (type === 'NEW_INSCRIPTION') {
+      subject = `🏆 Nueva Inscripción: ${data.participantName} en ${data.tournamentName}`;
+      html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
           <h2 style="color: #ccff00; background: #000; padding: 10px; border-radius: 5px; text-align: center; font-style: italic; text-transform: uppercase;">Smart Padel Pro</h2>
           <p>Un jugador se ha inscrito en un torneo:</p>
@@ -48,21 +55,21 @@ export async function POST(request: Request) {
           <p style="font-size: 12px; color: #666; text-align: center;">Sistema de Notificaciones Smart Padel</p>
         </div>
       `;
-        }
-
-        const { error } = await resend.emails.send({
-            from: 'Smart Padel Pro <notifications@resend.dev>',
-            to: ['casainteligentemgta@gmail.com'],
-            subject: subject,
-            html: html,
-        });
-
-        if (error) {
-            return NextResponse.json({ error }, { status: 400 });
-        }
-
-        return NextResponse.json({ success: true });
-    } catch (err: any) {
-        return NextResponse.json({ error: err.message }, { status: 500 });
     }
+
+    const { error } = await resend.emails.send({
+      from: 'Smart Padel Pro <notifications@resend.dev>',
+      to: ['casainteligentemgta@gmail.com'],
+      subject: subject,
+      html: html,
+    });
+
+    if (error) {
+      return NextResponse.json({ error }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }
