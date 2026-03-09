@@ -205,6 +205,7 @@ export default function MasterGeneratorPage() {
     const [pendingAdvanceCount, setPendingAdvanceCount] = useState<1 | 2>(2);
     const [pendingQuickQualification, setPendingQuickQualification] = useState(false);
     const [pendingConsolacionMatchFormat, setPendingConsolacionMatchFormat] = useState<'ONE_SET_9' | 'TWO_SHORT_SETS'>('TWO_SHORT_SETS');
+    const [pendingPrice, setPendingPrice] = useState<number>(0);
 
     // Sorteo aleatorio: barajar equipos antes de repartir en grupos (por defecto activado)
     const [sorteoAleatorio, setSorteoAleatorio] = useState(true);
@@ -236,6 +237,7 @@ export default function MasterGeneratorPage() {
         setPendingTournamentType('AMERICANO');
         setPendingPointsGoal(16);
         setPendingRRFormat('ONE_SET_6');
+        setPendingPrice(0);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -257,7 +259,7 @@ export default function MasterGeneratorPage() {
         setIsUploadingLogo(true);
         try {
             const path = `sponsors/${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
-            const publicUrl = await dataService.uploadFile(file, path);
+            const publicUrl = await dataService.uploadFile(file, path, 'patrocinantes');
             setEventData(prev => ({ ...prev, sponsorLogoUrl: publicUrl }));
         } catch (error: any) {
             console.error('Error uploading logo:', error);
@@ -348,6 +350,7 @@ export default function MasterGeneratorPage() {
         setPendingAdvanceCount(2);
         setPendingQuickQualification(false);
         setPendingConsolacionMatchFormat('TWO_SHORT_SETS');
+        setPendingPrice(0);
     };
 
     const confirmAddCategory = () => {
@@ -375,6 +378,7 @@ export default function MasterGeneratorPage() {
                         quickQualification: pendingTournamentType === 'ROUND_ROBIN' && pendingAdvanceCount === 2 ? pendingQuickQualification : undefined,
                         type: pendingTournamentType === 'CUADRO_CONSOLACION' ? TournamentType.CUADRO_CONSOLACION : TournamentType.ROUND_ROBIN,
                         consolacionMatchFormat: pendingTournamentType === 'CUADRO_CONSOLACION' ? pendingConsolacionMatchFormat : undefined,
+                        inscriptionPrice: pendingPrice,
                         teams: Array.from({ length: pendingNumTeams }, (_, j) => ({
                             id: `team-${c.id}-${j}`,
                             p1: { id: `p1-${c.id}-${j}`, name: `Jugador ${j * 2 + 1}` },
@@ -404,6 +408,7 @@ export default function MasterGeneratorPage() {
                     advanceCount: pendingAdvanceCount,
                     quickQualification: pendingTournamentType === 'ROUND_ROBIN' && pendingAdvanceCount === 2 ? pendingQuickQualification : undefined,
                     consolacionMatchFormat: pendingTournamentType === 'CUADRO_CONSOLACION' ? pendingConsolacionMatchFormat : undefined,
+                    inscriptionPrice: pendingPrice,
                     teams: Array.from({ length: pendingNumTeams }, (_, i) => ({
                         id: `team-${id}-${i}`,
                         p1: { id: `p1-${id}-${i}`, name: `Jugador ${i * 2 + 1}` },
@@ -615,6 +620,7 @@ export default function MasterGeneratorPage() {
                         groupSize: cat.groupSize,
                         advanceCount: (cat as any).advanceCount ?? 2,
                         pointsGoal: (cat as any).pointsGoal ?? 24,
+                        inscriptionPrice: cat.inscriptionPrice ?? 0,
                         status: 'Programado',
                         ...(eventData.sponsorLogoUrl?.trim() && {
                             broadcastingSettings: {
@@ -746,9 +752,11 @@ export default function MasterGeneratorPage() {
         const h = d.getHours();
         const m = d.getMinutes();
         const weekday = d.toLocaleDateString('es-ES', { weekday: 'long' }).toUpperCase();
+
+        // Formato pedido: "DIA, MES, AÑO" (ej: 08, MARZO, 2026)
         const fullDateStr = `${day.toString().padStart(2, '0')}, ${month.toUpperCase()}, ${year}`;
         const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} HS`;
-        return { dateStr: fullDateStr, timeStr };
+        return { dateStr: fullDateStr, timeStr, weekday };
     };
 
 
@@ -1205,6 +1213,23 @@ export default function MasterGeneratorPage() {
                                                 </div>
                                             </motion.div>
                                         )}
+
+                                        {/* ── Precio de Inscripción ── */}
+                                        <div className="pt-2 border-t border-zinc-800/50 mt-2 space-y-2">
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                <DollarSign className="w-3 h-3 text-emerald-400" /> Precio de Inscripción
+                                            </label>
+                                            <div className="relative group">
+                                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-padel-primary transition-colors" />
+                                                <input
+                                                    type="number"
+                                                    value={pendingPrice}
+                                                    onChange={(e) => setPendingPrice(Number(e.target.value) || 0)}
+                                                    placeholder="0.00"
+                                                    className="w-full bg-black/40 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-black italic focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
+                                                />
+                                            </div>
+                                        </div>
                                     </AnimatePresence>
                                 </div>
                             </motion.div>
@@ -1645,6 +1670,7 @@ export default function MasterGeneratorPage() {
                                                                     setPendingAdvanceCount((cat as any).advanceCount ?? 2);
                                                                     setPendingQuickQualification(!!(cat as any).quickQualification);
                                                                     setPendingConsolacionMatchFormat((cat as any).consolacionMatchFormat ?? 'TWO_SHORT_SETS');
+                                                                    setPendingPrice(cat.inscriptionPrice ?? 0);
                                                                 }}
                                                                 className="text-zinc-600 hover:text-padel-primary transition-colors p-1.5 hover:bg-padel-primary/10 rounded-lg"
                                                             >
@@ -1669,6 +1695,11 @@ export default function MasterGeneratorPage() {
                                                         <span className="text-[10px] font-black uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-md">
                                                             {cat.setFormat === 'TIE_BREAK' ? '🎾 Tie-Break' : cat.setFormat === 'SUPER_TIE_BREAK' ? '⚡ Super TB' : '🔁 Sin TB'}
                                                         </span>
+                                                        {cat.inscriptionPrice !== undefined && (
+                                                            <span className="ml-auto text-[10px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                                                <DollarSign className="w-3 h-3" /> {cat.inscriptionPrice}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))}
@@ -1862,7 +1893,8 @@ export default function MasterGeneratorPage() {
                                                     </span>
                                                 </div>
                                                 <span className="text-[10px] font-bold text-zinc-500 uppercase italic">
-                                                    Finaliza el: <span className="text-white block">{getEstimatedEndDate().dateStr}</span><span className="text-white block">{getEstimatedEndDate().timeStr}</span>
+                                                    Fin Estimado: <span className="text-white block font-black">{getEstimatedEndDate().dateStr}</span>
+                                                    <span className="text-padel-primary block text-[9px] mt-0.5">{getEstimatedEndDate().weekday} · {getEstimatedEndDate().timeStr}</span>
                                                 </span>
                                             </div>
                                         </div>
@@ -1888,25 +1920,32 @@ export default function MasterGeneratorPage() {
                                                                 <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 md:gap-x-4">
                                                                     {/* Time column inside row */}
                                                                     <div
-                                                                        className={`flex flex-col shrink-0 w-14 ${((m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF')) ? 'cursor-pointer' : ''}`}
+                                                                        className={`flex flex-col shrink-0 w-min min-w-[56px] ${((m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF')) ? 'cursor-pointer hover:bg-white/5 p-1 -m-1 rounded-lg transition-colors' : ''}`}
                                                                         onDoubleClick={() => {
                                                                             const isEditable = (m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF');
                                                                             if (isEditable) {
                                                                                 setEditingMatchIdx(idx);
-                                                                                setNewMatchTime(new Date(new Date(m.scheduledTime).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16));
+                                                                                // Convertir UTC a locale para el input datetime-local
+                                                                                const dateObj = new Date(m.scheduledTime);
+                                                                                const yyyy = dateObj.getFullYear();
+                                                                                const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+                                                                                const dd = String(dateObj.getDate()).padStart(2, '0');
+                                                                                const hh = String(dateObj.getHours()).padStart(2, '0');
+                                                                                const min = String(dateObj.getMinutes()).padStart(2, '0');
+                                                                                setNewMatchTime(`${yyyy}-${mm}-${dd}T${hh}:${min}`);
                                                                             }
                                                                         }}
-                                                                        title={(m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF') ? 'Doble clic para editar horario' : ''}
+                                                                        title={(m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF') ? 'Doble clic para editar horario del partido' : ''}
                                                                     >
-                                                                        <span className="text-padel-primary font-black italic text-base leading-none">
+                                                                        <span className="text-padel-primary font-black italic text-base leading-none tracking-tighter">
                                                                             {new Date(m.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                                         </span>
-                                                                        <span className="text-xs text-zinc-500 font-bold uppercase mt-1">
+                                                                        <span className="text-[9px] text-zinc-500 font-bold uppercase mt-1 tracking-widest truncate">
                                                                             {new Date(m.scheduledTime).toLocaleDateString([], { weekday: 'short', day: 'numeric' })}
                                                                         </span>
                                                                         {((m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF')) && (
-                                                                            <span className="text-[9px] text-padel-primary/40 font-black italic uppercase tracking-tighter leading-none mt-1">
-                                                                                Doble clic p/ editar
+                                                                            <span className="text-[8px] text-padel-primary/60 font-black italic uppercase tracking-tighter leading-none mt-1">
+                                                                                EDICIÓN ⚡
                                                                             </span>
                                                                         )}
                                                                     </div>
@@ -1933,23 +1972,29 @@ export default function MasterGeneratorPage() {
                                                                     </div>
 
                                                                     {/* Team 1 — alineado a la derecha */}
-                                                                    <div className="min-w-0 text-right text-xs font-bold text-white truncate flex items-center justify-end">
-                                                                        {m.team1Index && (
-                                                                            <span className="inline-flex items-center justify-center w-5 h-5 bg-padel-primary/20 text-padel-primary text-[9px] font-black rounded-md mr-1.5 border border-padel-primary/30">
-                                                                                {m.team1Index}
-                                                                            </span>
-                                                                        )}
+                                                                    <div className="min-w-0 text-right text-[11px] font-bold text-white truncate flex items-center justify-end">
+                                                                        <div className="flex flex-col gap-0.5 mr-2">
+                                                                            <span className="text-zinc-500 text-[8px] uppercase font-black leading-none">EQUIPO</span>
+                                                                            {m.team1Index && (
+                                                                                <span className="inline-flex items-center justify-center h-5 px-1.5 bg-padel-primary text-black text-[10px] font-black rounded italic -skew-x-12">
+                                                                                    #{m.team1Index}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
                                                                         <span>{m.team1.p1.name} + {m.team1.p2.name}</span>
                                                                     </div>
                                                                     {/* VS — columna fija para alinear todos en vertical */}
                                                                     <div className="px-2 py-0.5 bg-zinc-800 rounded font-black text-[10px] text-zinc-500 italic shrink-0 justify-self-center">VS</div>
                                                                     {/* Team 2 — alineado a la izquierda */}
-                                                                    <div className="min-w-0 text-left text-xs font-bold text-white truncate flex items-center">
-                                                                        {m.team2Index && (
-                                                                            <span className="inline-flex items-center justify-center w-5 h-5 bg-padel-primary/20 text-padel-primary text-[9px] font-black rounded-md mr-1.5 border border-padel-primary/30">
-                                                                                {m.team2Index}
-                                                                            </span>
-                                                                        )}
+                                                                    <div className="min-w-0 text-left text-[11px] font-bold text-white truncate flex items-center">
+                                                                        <div className="flex flex-col gap-0.5 ml-0.5 mr-2">
+                                                                            <span className="text-zinc-500 text-[8px] uppercase font-black leading-none">EQUIPO</span>
+                                                                            {m.team2Index && (
+                                                                                <span className="inline-flex items-center justify-center h-5 px-1.5 bg-padel-primary text-black text-[10px] font-black rounded italic -skew-x-12">
+                                                                                    #{m.team2Index}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
                                                                         <span>{m.team2.p1.name} + {m.team2.p2.name}</span>
                                                                     </div>
                                                                 </div>

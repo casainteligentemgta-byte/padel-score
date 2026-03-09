@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import Sidebar from '@/components/Sidebar';
+import PaymentInfo from '@/components/PaymentInfo';
 import {
     ArrowLeft,
     CheckCircle2,
@@ -19,7 +20,15 @@ import {
     DollarSign,
     Camera,
     Upload,
-    X
+    X,
+    Smartphone,
+    Building2,
+    Coins,
+    Wallet,
+    Bitcoin,
+    ArrowRightLeft,
+    ChevronDown,
+    ChevronUp
 } from 'lucide-react';
 
 /** Categorías de inscripción que el organizador puede configurar en el torneo (tournament.inscriptionCategories). */
@@ -48,7 +57,6 @@ function getAgeFromBirthDate(birthDate: string | null | undefined): number | nul
     return age >= 0 ? age : null;
 }
 
-/** Filtra categorías por elegibilidad: sexo y edad del jugador (directrices de inscripción). */
 function filterEligibleCategories(
     categories: InscriptionCategoryOption[],
     playerGender: 'MALE' | 'FEMALE' | null | undefined,
@@ -68,6 +76,39 @@ function filterEligibleCategories(
     });
 }
 
+function getCurrency(method: string): string {
+    const m = (method || '').toLowerCase();
+    if (m.includes('zelle') || m.includes('binance') || m.includes('bitcoin') || m.includes('dollar') || m.includes('dólar')) {
+        return '$';
+    }
+    return 'Bs.';
+}
+
+const VENEZUELAN_BANKS = [
+    { code: '0102', name: 'Banco de Venezuela' },
+    { code: '0105', name: 'Banco Mercantil' },
+    { code: '0108', name: 'BBVA Provincial' },
+    { code: '0114', name: 'Bancaribe' },
+    { code: '0115', name: 'Banco Exterior' },
+    { code: '0128', name: 'Banco Caroní' },
+    { code: '0134', name: 'Banesco' },
+    { code: '0137', name: 'Banco Sofitasa' },
+    { code: '0138', name: 'Banco Plaza' },
+    { code: '0151', name: 'BFC Banco Fondo Común' },
+    { code: '0156', name: '100% Banco' },
+    { code: '0157', name: 'DelSur Banco Universal' },
+    { code: '0163', name: 'Banco del Tesoro' },
+    { code: '0166', name: 'Banco Agrícola de Venezuela' },
+    { code: '0168', name: 'Bancrecer' },
+    { code: '0169', name: 'Mi Banco' },
+    { code: '0171', name: 'Banco Activo' },
+    { code: '0172', name: 'Bancamiga' },
+    { code: '0174', name: 'Banplus' },
+    { code: '0175', name: 'Banco Bicentenario' },
+    { code: '0177', name: 'BANFANB' },
+    { code: '0191', name: 'BNC Banco Nacional de Crédito' },
+];
+
 export default function InscribirmePage({ params }: { params: Promise<{ id: string }> }) {
     const { id: tournamentId } = use(params);
     const router = useRouter();
@@ -82,7 +123,7 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
     const [playerProfile, setPlayerProfile] = useState<{ gender?: 'MALE' | 'FEMALE'; birthDate?: string } | null>(null);
     const [inscriptionCountByCategory, setInscriptionCountByCategory] = useState<Record<string, number>>({});
     const [paymentData, setPaymentData] = useState({
-        method: 'Pago Móvil',
+        method: '',
         bank: '',
         date: new Date().toISOString().split('T')[0],
         amount: '',
@@ -90,6 +131,7 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
         receiptUrl: ''
     });
     const [uploading, setUploading] = useState(false);
+    const [availableMethods, setAvailableMethods] = useState<any[]>([]);
 
     useEffect(() => {
         if (!tournamentId || authLoading) return;
@@ -150,12 +192,29 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
         }
     }, [user, authLoading, router]);
 
+    useEffect(() => {
+        let cancelled = false;
+        async function fetchPaymentMethods() {
+            try {
+                const methods = await dataService.getPaymentMethods();
+                if (!cancelled && methods && methods.length > 0) {
+                    setAvailableMethods(methods);
+                    setPaymentData(prev => ({ ...prev, method: methods[0].name }));
+                }
+            } catch (error) {
+                console.error("Error fetching payment methods:", error);
+            }
+        }
+        fetchPaymentMethods();
+        return () => { cancelled = true; };
+    }, []);
+
     const categories: InscriptionCategoryOption[] = (Array.isArray(tournament?.inscriptionCategories) && tournament.inscriptionCategories.length > 0)
         ? tournament.inscriptionCategories
         : (tournament ? [{
             key: 'GENERAL',
             name: `${tournament.category || 'Categoría Única'} ${tournament.gender === 'MALE' ? 'Masculino' : tournament.gender === 'FEMALE' ? 'Femenino' : 'Mixto'}`,
-            price: 0,
+            price: tournament.inscriptionPrice || 0,
             gender: tournament.gender || undefined,
         }] : []);
 
@@ -194,7 +253,7 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
         setUploading(true);
         try {
             const path = `inscriptions/receipts/${user.uid}_${Date.now()}_${file.name}`;
-            const url = await dataService.uploadFile(file, path);
+            const url = await dataService.uploadFile(file, path, 'inscripciones');
             setPaymentData(prev => ({ ...prev, receiptUrl: url }));
         } catch (err: any) {
             setError('Error al subir el comprobante: ' + err.message);
@@ -262,6 +321,35 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                     user.uid
                 );
             }
+
+            // --- EMAIL NOTIFICATION ---
+            try {
+                // Get all selected category names
+                const selectedCatNames = categories
+                    .filter(c => selectedCategories.has(c.key))
+                    .map(c => c.name)
+                    .join(', ');
+
+                await fetch('/api/send-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'NEW_INSCRIPTION',
+                        data: {
+                            participantName: profile?.name || user.displayName || user.email || 'Jugador',
+                            tournamentName: tournament.name,
+                            categoryName: selectedCatNames,
+                            amount: paymentData.amount || '0',
+                            paymentMethod: paymentData.method || 'No especificado',
+                            paymentReference: paymentData.reference || 'N/A',
+                            receiptUrl: paymentData.receiptUrl || undefined
+                        }
+                    })
+                });
+            } catch (emailError) {
+                console.error('Error sending inscription notification email:', emailError);
+            }
+
             setSuccess(true);
         } catch (e: any) {
             setError(e?.message || 'Error al registrar la inscripción.');
@@ -422,40 +510,72 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
 
                                     {selectedCategories.size > 0 && (
                                         <section className="mb-8 space-y-6">
+                                            {/* Sección: Maneras de Pago */}
+                                            {totalPrice > 0 && (
+                                                <div className="mb-8">
+                                                    <PaymentInfo />
+                                                </div>
+                                            )}
+
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 rounded-full bg-[#ccff00]/10 flex items-center justify-center">
                                                     <CreditCard className="w-5 h-5 text-[#ccff00]" />
                                                 </div>
-                                                <h2 className="text-lg font-black uppercase italic tracking-tighter">Datos de Pago</h2>
+                                                <h2 className="text-lg font-black uppercase italic tracking-tighter">
+                                                    {totalPrice > 0 ? 'Datos de Pago' : 'Resumen de Inscripción'}
+                                                </h2>
                                             </div>
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div className="space-y-2">
                                                     <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Metodo de Pago</label>
                                                     <div className="relative">
-                                                        <input
-                                                            type="text"
+                                                        <select
                                                             value={paymentData.method}
                                                             onChange={(e) => setPaymentData({ ...paymentData, method: e.target.value })}
-                                                            placeholder="Ej: Pago Móvil"
-                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
-                                                        />
+                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all appearance-none cursor-pointer"
+                                                        >
+                                                            {availableMethods.length > 0 ? (
+                                                                availableMethods.map((m) => (
+                                                                    <option key={m.id} value={m.name} className="bg-[#111]">
+                                                                        {m.name}
+                                                                    </option>
+                                                                ))
+                                                            ) : (
+                                                                <>
+                                                                    <option value="Pago Móvil" className="bg-[#111]">Pago Móvil</option>
+                                                                    <option value="Transferencia Bancaria" className="bg-[#111]">Transferencia Bancaria</option>
+                                                                    <option value="Zelle" className="bg-[#111]">Zelle</option>
+                                                                </>
+                                                            )}
+                                                        </select>
+                                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[#ccff00] pointer-events-none">
+                                                            <ChevronDown className="w-5 h-5" />
+                                                        </div>
                                                     </div>
                                                 </div>
 
                                                 <div className="space-y-2">
                                                     <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Banco Emisor</label>
                                                     <div className="relative">
-                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">
                                                             <Landmark className="w-5 h-5" />
                                                         </div>
-                                                        <input
-                                                            type="text"
+                                                        <select
                                                             value={paymentData.bank}
                                                             onChange={(e) => setPaymentData({ ...paymentData, bank: e.target.value })}
-                                                            placeholder="Nombre del banco"
-                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
-                                                        />
+                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all appearance-none cursor-pointer"
+                                                        >
+                                                            <option value="" disabled className="bg-[#111]">Seleccione un banco</option>
+                                                            {VENEZUELAN_BANKS.map((bank) => (
+                                                                <option key={bank.code} value={`${bank.code} - ${bank.name}`} className="bg-[#111]">
+                                                                    {bank.code} - {bank.name}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[#ccff00] pointer-events-none">
+                                                            <ChevronDown className="w-5 h-5" />
+                                                        </div>
                                                     </div>
                                                 </div>
 
@@ -475,16 +595,22 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                                                 </div>
 
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Monto Pagado ($)</label>
+                                                    <label className="text-[10px] font-black uppercase text-gray-500 ml-2">
+                                                        Monto Pagado ({getCurrency(paymentData.method)})
+                                                    </label>
                                                     <div className="relative">
-                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-                                                            <DollarSign className="w-5 h-5" />
+                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 flex items-center justify-center w-5 h-5 font-bold">
+                                                            {getCurrency(paymentData.method) === '$' ? (
+                                                                <DollarSign className="w-5 h-5" />
+                                                            ) : (
+                                                                <span className="text-[12px] font-black">Bs</span>
+                                                            )}
                                                         </div>
                                                         <input
                                                             type="number"
                                                             value={paymentData.amount}
                                                             onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
-                                                            placeholder={totalPrice > 0 ? totalPrice.toString() : "0.00"}
+                                                            placeholder={getCurrency(paymentData.method) === '$' ? (totalPrice > 0 ? totalPrice.toString() : "0.00") : "0.00"}
                                                             className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
                                                         />
                                                     </div>

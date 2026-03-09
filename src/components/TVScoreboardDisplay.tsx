@@ -11,8 +11,11 @@ import {
     Maximize2,
     LayoutDashboard,
     Zap,
-    History
+    History,
+    Clock,
+    Calendar
 } from 'lucide-react';
+import SponsorCarousel from './publicidad/SponsorCarousel';
 
 interface TVScoreboardDisplayProps {
     teamAName?: string;
@@ -28,7 +31,27 @@ interface TVScoreboardDisplayProps {
     smartPadelColor?: string;
     adsPlaylist?: string[];
     forcedAds?: boolean;
+    tournamentId?: string;
+    tournamentCategory?: string;
+    tournamentPhase?: string;
 }
+
+const TennisBall = () => (
+    <motion.div
+        animate={{
+            scale: [1, 1.15, 1],
+            rotate: [0, 15, -15, 0],
+            boxShadow: ["0 0 30px #ccff0088", "0 0 50px #ccff00ff", "0 0 30px #ccff0088"]
+        }}
+        transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+        className="w-14 h-14 bg-[#ccff00] rounded-full flex items-center justify-center overflow-hidden border-2 border-black/20 relative shadow-inner"
+    >
+        {/* Tennis ball seams with better definition */}
+        <div className="absolute inset-0 border-[4px] border-white/40 rounded-full scale-110 translate-x-7" />
+        <div className="absolute inset-0 border-[4px] border-white/40 rounded-full scale-110 -translate-x-7" />
+        <div className="w-3 h-3 bg-white/30 rounded-full absolute top-3 left-3 blur-[1px]" />
+    </motion.div>
+);
 
 export default function TVScoreboardDisplay({
     teamAName = "Juan Pérez / Leo Messi",
@@ -43,20 +66,45 @@ export default function TVScoreboardDisplay({
     serverIndicator = 'A',
     smartPadelColor = "#ccff00",
     adsPlaylist = [
-        "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4",
         "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4"
     ],
-    forcedAds = false
+    forcedAds = false,
+    tournamentId = "global",
+    tournamentCategory = "Primera / Masculino",
+    tournamentPhase = "Fase de Grupos"
 }: TVScoreboardDisplayProps) {
     const [isAdsMode, setIsAdsMode] = useState(forcedAds);
     const [currentAdIdx, setCurrentAdIdx] = useState(0);
+    const [currentTime, setCurrentTime] = useState(new Date());
 
     // Sync with external control
     useEffect(() => {
         setIsAdsMode(forcedAds);
     }, [forcedAds]);
 
+    // Clock effect
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
     const isGoldPoint = currentPointsA === "40" && currentPointsB === "40";
+
+    const formatDate = (date: Date) => {
+        return date.toLocaleDateString('es-ES', {
+            weekday: 'short',
+            day: 'numeric',
+            month: 'short'
+        }).toUpperCase();
+    };
+
+    const formatTime = (date: Date) => {
+        return date.toLocaleTimeString('es-ES', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+    };
 
     return (
         <div className="fixed inset-0 bg-[#08080c] text-white font-outfit overflow-hidden select-none">
@@ -69,7 +117,7 @@ export default function TVScoreboardDisplay({
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
                         transition={{ duration: 0.8, ease: "easeOut" }}
-                        className="h-full flex flex-col p-12 lg:p-20 relative"
+                        className="h-full grid grid-rows-[10fr_30fr_50fr_10fr] p-8 lg:p-12 relative overflow-hidden"
                     >
                         {/* Background Ambiance */}
                         <div className="absolute inset-0 pointer-events-none opacity-20">
@@ -77,164 +125,212 @@ export default function TVScoreboardDisplay({
                             <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[150px]" />
                         </div>
 
-                        {/* SECTION SUPERIOR: Equipos */}
-                        <header className="grid grid-cols-2 gap-20 relative z-10 mb-12">
-                            {/* Equipo A */}
-                            <div className="flex flex-col gap-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="h-2 w-16 rounded-full" style={{ backgroundColor: smartPadelColor }} />
-                                    <span className="text-gray-500 font-black uppercase tracking-[0.4em] text-sm italic">Pareja 1</span>
-                                </div>
-                                <div className="flex items-center gap-6">
-                                    <h2 className="text-5xl lg:text-7xl font-black italic uppercase tracking-tighter leading-tight drop-shadow-2xl">
-                                        {teamAName.includes(' / ') ? teamAName.split(' / ')[0] : teamAName}<br />
-                                        <span className="opacity-80">{teamAName.includes(' / ') ? teamAName.split(' / ')[1] : ''}</span>
-                                    </h2>
-                                    {serverIndicator === 'A' && (
-                                        <motion.div
-                                            animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
-                                            transition={{ repeat: Infinity, duration: 2 }}
-                                            className="p-3 bg-padel-primary rounded-full shadow-[0_0_30px_#ccff00]"
-                                        >
-                                            <div className="w-5 h-5 bg-black rounded-full" />
-                                        </motion.div>
+                        {/* ROW 1 (10%): Header Info */}
+                        <div className="flex justify-between items-center relative z-10 px-8">
+                            {/* Torneo & Categoria */}
+                            <div className="flex flex-col">
+                                <span className="text-padel-primary font-black uppercase tracking-[0.5em] text-[12px] italic mb-1.5">
+                                    {tournamentPhase}
+                                </span >
+                                <div className="flex flex-col">
+                                    <h3 className="text-2xl lg:text-4xl font-black italic uppercase tracking-tighter text-white leading-none">
+                                        {tournamentCategory.includes(' / ') ? tournamentCategory.split(' / ')[0] : tournamentCategory}
+                                    </h3>
+                                    {tournamentCategory.includes(' / ') && (
+                                        <span className="text-gray-500 text-sm lg:text-xl font-bold uppercase tracking-[0.2em] mt-1 opacity-80">{tournamentCategory.split(' / ')[1]}</span>
                                     )}
                                 </div>
                             </div>
+
+                            {/* Clock & Date */}
+                            <div className="flex items-center gap-6 bg-white/5 backdrop-blur-3xl px-6 py-3 rounded-3xl border border-white/10 shadow-2xl">
+                                <div className="flex flex-col items-end border-r border-white/10 pr-6">
+                                    <div className="flex items-center gap-2 text-gray-500 font-black text-[9px] tracking-widest uppercase mb-0.5 italic">
+                                        <Calendar className="w-2.5 h-2.5" />
+                                        {formatDate(currentTime)}
+                                    </div>
+                                    <div className="text-3xl lg:text-4xl font-black italic tabular-nums tracking-tighter text-padel-primary leading-none">
+                                        {formatTime(currentTime)}
+                                    </div>
+                                </div>
+                                <div className="flex flex-col items-center">
+                                    <div className="w-2 h-2 rounded-full bg-red-600 animate-pulse mb-1" />
+                                    <span className="text-[8px] font-black uppercase tracking-[0.3em] text-white/40">LIVE TV</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ROW 2 (30%): Equipos */}
+                        <div className="grid grid-cols-2 gap-12 items-center relative z-10 px-8">
+                            {/* Equipo A */}
+                            <motion.div
+                                initial={{ x: -50, opacity: 0 }}
+                                animate={{ x: 0, opacity: 1 }}
+                                className="flex flex-col gap-4 border-l-8 border-padel-primary pl-10 py-6 bg-gradient-to-r from-padel-primary/10 to-transparent rounded-r-[3rem]"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <span className="text-padel-primary/40 font-black uppercase tracking-[0.5em] text-[10px] italic">Lado Servidor</span>
+                                </div>
+                                <div className="flex items-center gap-8">
+                                    <div className="relative">
+                                        {serverIndicator === 'A' ? (
+                                            <TennisBall />
+                                        ) : (
+                                            <div className="w-14 h-14 rounded-full border-2 border-white/5 bg-white/2" />
+                                        )}
+                                    </div>
+                                    <h2 className="text-5xl lg:text-7xl font-black italic uppercase tracking-tighter leading-[0.9] drop-shadow-2xl">
+                                        {teamAName.includes(' / ') ? (
+                                            <>
+                                                {teamAName.split(' / ')[0]}<br />
+                                                <span className="opacity-40 text-4xl lg:text-5xl">{teamAName.split(' / ')[1]}</span>
+                                            </>
+                                        ) : teamAName}
+                                    </h2>
+                                </div>
+                            </motion.div>
 
                             {/* Equipo B */}
-                            <div className="flex flex-col items-end gap-4 text-right">
+                            <motion.div
+                                initial={{ x: 50, opacity: 0 }}
+                                animate={{ x: 0, opacity: 1 }}
+                                className="flex flex-col items-end gap-4 border-r-8 border-blue-600 pr-10 py-6 bg-gradient-to-l from-blue-600/10 to-transparent rounded-l-[3rem] text-right"
+                            >
                                 <div className="flex items-center gap-4">
-                                    <span className="text-gray-500 font-black uppercase tracking-[0.4em] text-sm italic">Pareja 2</span>
-                                    <div className="h-2 w-16 bg-blue-600 rounded-full" />
+                                    <span className="text-blue-600/40 font-black uppercase tracking-[0.5em] text-[10px] italic">Lado Receptor</span>
                                 </div>
-                                <div className="flex items-center gap-6 justify-end">
-                                    {serverIndicator === 'B' && (
-                                        <motion.div
-                                            animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
-                                            transition={{ repeat: Infinity, duration: 2 }}
-                                            className="p-3 bg-padel-primary rounded-full shadow-[0_0_30px_#ccff00]"
-                                        >
-                                            <div className="w-5 h-5 bg-black rounded-full" />
-                                        </motion.div>
-                                    )}
-                                    <h2 className="text-5xl lg:text-7xl font-black italic uppercase tracking-tighter leading-tight drop-shadow-2xl">
-                                        {teamBName.includes(' / ') ? teamBName.split(' / ')[0] : teamBName}<br />
-                                        <span className="opacity-80">{teamBName.includes(' / ') ? teamBName.split(' / ')[1] : ''}</span>
+                                <div className="flex items-center gap-8 justify-end">
+                                    <h2 className="text-5xl lg:text-7xl font-black italic uppercase tracking-tighter leading-[0.9] drop-shadow-2xl">
+                                        {teamBName.includes(' / ') ? (
+                                            <>
+                                                {teamBName.split(' / ')[0]}<br />
+                                                <span className="opacity-40 text-4xl lg:text-5xl">{teamBName.split(' / ')[1]}</span>
+                                            </>
+                                        ) : teamBName}
                                     </h2>
+                                    <div className="relative">
+                                        {serverIndicator === 'B' ? (
+                                            <TennisBall />
+                                        ) : (
+                                            <div className="w-14 h-14 rounded-full border-2 border-white/5 bg-white/2" />
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        </header>
+                            </motion.div>
+                        </div>
 
-                        {/* SECTION CENTRAL: Game Actual (Héroe) */}
-                        <main className="flex-1 flex flex-col items-center justify-center relative z-10">
-                            <div className="relative group">
+                        {/* ROW 3 (50%): Puntuación Hero Area */}
+                        <div className="flex items-center justify-center relative z-10">
+                            <div className="relative group w-full max-w-6xl">
                                 {/* Glow Effect */}
-                                <div className="absolute inset-[-40px] bg-white/5 rounded-[5rem] blur-[60px] opacity-30 animate-pulse" />
+                                <div className="absolute inset-[-60px] bg-padel-primary/5 rounded-[8rem] blur-[80px] opacity-40 animate-pulse" />
 
-                                <div className="bg-gradient-to-br from-black/80 to-black/40 backdrop-blur-3xl border-4 border-white/5 rounded-[6rem] p-16 lg:px-40 flex flex-col items-center shadow-2xl relative overflow-hidden">
-                                    {/* Scanlines */}
-                                    <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none opacity-20" />
+                                <div className="bg-gradient-to-br from-black/95 to-[#0a0a10] backdrop-blur-[50px] border-4 border-white/5 rounded-[6rem] py-16 lg:py-24 px-20 lg:px-40 flex flex-col items-center shadow-2xl relative overflow-hidden">
+                                    {/* Scanlines Effect */}
+                                    <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[length:100%_4px] pointer-events-none" />
 
-                                    <span className="text-gray-600 font-black uppercase tracking-[0.6em] text-xl mb-8 italic">MARCADOR ACTUAL</span>
-
-                                    <div className="flex items-center gap-12 lg:gap-24">
+                                    <div className="flex items-center gap-12 lg:gap-32 mb-4">
                                         <AnimatePresence mode="popLayout">
-                                            <motion.span
+                                            <motion.div
                                                 key={currentPointsA}
-                                                initial={{ y: 80, opacity: 0, scale: 0.8 }}
-                                                animate={{ y: 0, opacity: 1, scale: 1 }}
-                                                exit={{ y: -80, opacity: 0, scale: 0.8 }}
-                                                transition={{ type: "spring", damping: 15 }}
-                                                className="text-[18rem] lg:text-[28rem] font-black italic tracking-tighter leading-none"
-                                                style={{ color: smartPadelColor, textShadow: `0 0 60px ${smartPadelColor}44` }}
+                                                initial={{ y: 120, opacity: 0, scale: 0.8, filter: 'blur(20px)' }}
+                                                animate={{ y: 0, opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                                                exit={{ y: -120, opacity: 0, scale: 0.8, filter: 'blur(20px)' }}
+                                                transition={{ type: "spring", damping: 12, stiffness: 100 }}
+                                                className="text-[18rem] lg:text-[28rem] font-black italic tracking-tighter leading-none select-none"
+                                                style={{ color: smartPadelColor, textShadow: `0 0 80px ${smartPadelColor}33, 0 20px 40px rgba(0,0,0,0.5)` }}
                                             >
                                                 {currentPointsA}
-                                            </motion.span>
+                                            </motion.div>
                                         </AnimatePresence>
 
-                                        <div className="flex flex-col items-center gap-4">
-                                            <div className="w-4 h-4 rounded-full bg-white/10" />
-                                            <div className="w-4 h-4 rounded-full bg-white/10" />
+                                        <div className="flex flex-col gap-6 py-10 opacity-20">
+                                            <div className="w-6 h-6 rounded-full bg-white shadow-[0_0_20px_white]" />
+                                            <div className="w-6 h-6 rounded-full bg-white shadow-[0_0_20px_white]" />
                                         </div>
 
                                         <AnimatePresence mode="popLayout">
-                                            <motion.span
+                                            <motion.div
                                                 key={currentPointsB}
-                                                initial={{ y: 80, opacity: 0, scale: 0.8 }}
-                                                animate={{ y: 0, opacity: 1, scale: 1 }}
-                                                exit={{ y: -80, opacity: 0, scale: 0.8 }}
-                                                transition={{ type: "spring", damping: 15 }}
-                                                className="text-[18rem] lg:text-[28rem] font-black italic tracking-tighter leading-none text-white drop-shadow-[0_20px_40px_rgba(0,0,0,0.8)]"
+                                                initial={{ y: 120, opacity: 0, scale: 0.8, filter: 'blur(20px)' }}
+                                                animate={{ y: 0, opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                                                exit={{ y: -120, opacity: 0, scale: 0.8, filter: 'blur(20px)' }}
+                                                transition={{ type: "spring", damping: 12, stiffness: 100 }}
+                                                className="text-[18rem] lg:text-[28rem] font-black italic tracking-tighter leading-none text-white drop-shadow-[0_40px_60px_rgba(0,0,0,0.9)] select-none"
                                             >
                                                 {currentPointsB}
-                                            </motion.span>
+                                            </motion.div>
                                         </AnimatePresence>
                                     </div>
 
-                                    {/* Gold Point Banner */}
+                                    {/* Gold Point Indicator */}
                                     <AnimatePresence>
                                         {isGoldPoint && (
                                             <motion.div
-                                                initial={{ y: 100, opacity: 0 }}
-                                                animate={{ y: 0, opacity: 1 }}
-                                                exit={{ y: 50, opacity: 0 }}
-                                                className="absolute bottom-12 px-12 py-3 bg-red-600 rounded-[2rem] flex items-center gap-4 shadow-[0_20px_50px_rgba(220,38,38,0.4)]"
+                                                initial={{ scale: 0, rotate: -5 }}
+                                                animate={{ scale: 1, rotate: 0 }}
+                                                exit={{ scale: 0, opacity: 0 }}
+                                                className="absolute bottom-12 px-16 py-4 bg-red-600 rounded-full flex items-center gap-6 shadow-[0_0_60px_rgba(220,38,38,0.6)] border-4 border-red-500/50"
                                             >
-                                                <Zap className="w-6 h-6 text-white fill-white animate-bounce" />
-                                                <span className="text-2xl font-black italic uppercase tracking-[0.4em] text-white">PUNTO DE ORO</span>
+                                                <Zap className="w-8 h-8 text-white fill-white animate-pulse" />
+                                                <span className="text-3xl font-black italic uppercase tracking-[0.5em] text-white">PUNTO DE ORO</span>
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
                                 </div>
                             </div>
-                        </main>
+                        </div>
 
-                        {/* SECTION INFERIOR: El Partido (Historial) */}
-                        <footer className="mt-12 relative z-10">
-                            <div className="bg-white/5 border border-white/10 rounded-[4rem] p-10 flex items-center justify-between backdrop-blur-md shadow-2xl overflow-hidden relative group">
-                                <div className="absolute top-0 left-0 w-2 h-full bg-padel-primary" />
-
-                                <div className="flex items-center gap-20">
-                                    {/* Stats Team A */}
-                                    <div className="flex items-center gap-12">
-                                        <div className="flex flex-col">
-                                            <span className="text-gray-500 font-black uppercase text-[10px] tracking-widest mb-1 italic">Sets Ganados</span>
-                                            <span className="text-7xl font-black italic text-white leading-none">{setsA}</span>
-                                        </div>
-                                        <div className="flex flex-col px-10 border-l border-white/10">
-                                            <span className="text-gray-500 font-black uppercase text-[10px] tracking-widest mb-1 italic">Games Set Actual</span>
-                                            <span className="text-5xl font-black italic text-padel-primary leading-none">{gamesA}</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Previous Sets History */}
-                                    <div className="flex items-center gap-4 px-12 border-l border-white/10">
-                                        <History className="w-5 h-5 text-gray-700" />
-                                        <div className="flex gap-3">
-                                            {prevSets.map((set, idx) => (
-                                                <div key={idx} className="px-5 py-2 bg-black/40 rounded-2xl border border-white/5 flex items-center gap-2">
-                                                    <span className="text-[10px] font-black text-gray-600 mr-2 italic">S{idx + 1}</span>
-                                                    <span className="text-sm font-black italic tracking-widest text-white/60">{set}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
+                        {/* ROW 4 (10%): Partido Stats / Sponsors */}
+                        <div className="grid grid-cols-[1fr_2fr_1fr] gap-8 items-center px-8 relative z-10">
+                            {/* Sets Local */}
+                            <div className="flex items-center gap-8 bg-white/5 backdrop-blur-xl p-6 rounded-[3rem] border border-white/10 h-[100px] shadow-xl">
+                                <div className="flex flex-col">
+                                    <span className="text-gray-600 font-black uppercase text-[10px] tracking-[0.3em] italic mb-1">SET GANADOS</span>
+                                    <span className="text-6xl font-black italic text-white leading-none">{setsA}</span>
                                 </div>
-
-                                {/* Stats Team B */}
-                                <div className="flex items-center gap-20">
-                                    <div className="flex flex-col items-end px-10 border-r border-white/10">
-                                        <span className="text-gray-500 font-black uppercase text-[10px] tracking-widest mb-1 italic">Games Set Actual</span>
-                                        <span className="text-5xl font-black italic text-padel-primary leading-none">{gamesB}</span>
-                                    </div>
-                                    <div className="flex flex-col items-end">
-                                        <span className="text-gray-500 font-black uppercase text-[10px] tracking-widest mb-1 italic">Sets Ganados</span>
-                                        <span className="text-7xl font-black italic text-white leading-none">{setsB}</span>
-                                    </div>
+                                <div className="h-10 w-[1px] bg-white/10" />
+                                <div className="flex flex-col">
+                                    <span className="text-padel-primary font-black uppercase text-[10px] tracking-[0.2em] italic mb-1">GAMES SET</span>
+                                    <span className="text-5xl font-black italic text-padel-primary/80 leading-none">{gamesA}</span>
                                 </div>
                             </div>
-                        </footer>
+
+                            {/* Dynamic Sponsor Middle / Previous Sets History */}
+                            <div className="flex flex-col gap-4 items-center h-full justify-center">
+                                <div className="flex gap-4">
+                                    {prevSets.length > 0 ? prevSets.map((set, idx) => (
+                                        <div key={idx} className="px-6 py-2 bg-black/80 rounded-2xl border border-white/10 flex items-center gap-3 shadow-2xl">
+                                            <span className="text-[10px] font-black text-white/30 italic">S{idx + 1}</span>
+                                            <span className="text-2xl font-black italic tracking-widest text-padel-primary">{set}</span>
+                                        </div>
+                                    )) : (
+                                        <div className="flex items-center gap-3 opacity-30">
+                                            <History className="w-5 h-5" />
+                                            <span className="text-xs font-black uppercase tracking-widest italic text-gray-500">HISTORIAL DE PARTIDO</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="w-full max-w-lg h-24 bg-white/5 rounded-[2rem] overflow-hidden border border-white/10 relative group">
+                                    <SponsorCarousel tournamentId={tournamentId} className="h-full w-full" />
+                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
+                                </div>
+                            </div>
+
+                            {/* Sets Visitante */}
+                            <div className="flex items-center justify-end gap-8 bg-white/5 backdrop-blur-xl p-6 rounded-[3rem] border border-white/10 h-[100px] shadow-xl">
+                                <div className="flex flex-col items-end">
+                                    <span className="text-padel-primary font-black uppercase text-[10px] tracking-[0.2em] italic mb-1">GAMES SET</span>
+                                    <span className="text-5xl font-black italic text-padel-primary/80 leading-none">{gamesB}</span>
+                                </div>
+                                <div className="h-10 w-[1px] bg-white/10" />
+                                <div className="flex flex-col items-end">
+                                    <span className="text-gray-600 font-black uppercase text-[10px] tracking-[0.3em] italic mb-1">SET GANADOS</span>
+                                    <span className="text-6xl font-black italic text-white leading-none">{setsB}</span>
+                                </div>
+                            </div>
+                        </div>
                     </motion.div>
                 ) : (
                     <motion.div
@@ -247,15 +343,22 @@ export default function TVScoreboardDisplay({
                     >
                         <div className="absolute inset-0 bg-black flex items-center justify-center">
                             {/* Playlist simple generator */}
-                            <video
-                                key={currentAdIdx}
-                                src={adsPlaylist[currentAdIdx]}
-                                autoPlay
-                                muted
-                                loop={false}
-                                onEnded={() => setCurrentAdIdx(prev => (prev + 1) % adsPlaylist.length)}
-                                className="w-full h-full object-cover"
-                            />
+                            {adsPlaylist.length > 0 ? (
+                                <video
+                                    key={currentAdIdx}
+                                    src={adsPlaylist[currentAdIdx]}
+                                    autoPlay
+                                    muted
+                                    loop={false}
+                                    onEnded={() => setCurrentAdIdx(prev => (prev + 1) % adsPlaylist.length)}
+                                    className="w-full h-full object-cover"
+                                />
+                            ) : (
+                                <div className="flex flex-col items-center gap-6">
+                                    <Tv className="w-24 h-24 text-gray-800 animate-pulse" />
+                                    <p className="text-gray-600 font-black uppercase tracking-[0.4em] italic">Esperando Contenido...</p>
+                                </div>
+                            )}
 
                             {/* Ads Label */}
                             <div className="absolute top-10 right-10 flex items-center gap-4 bg-black/60 backdrop-blur-xl px-8 py-3 rounded-full border border-white/10">
@@ -282,10 +385,10 @@ export default function TVScoreboardDisplay({
             </button>
 
             {/* Brand Logo Watermark */}
-            <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[100]">
-                <div className="flex flex-col items-center">
-                    <span className="text-[10px] font-black text-gray-700 uppercase tracking-[0.5em] italic mb-1">PRO SYSTEM</span>
-                    <h1 className="text-3xl font-black italic uppercase tracking-tighter">
+            <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[50]">
+                <div className="flex flex-col items-center opacity-40 hover:opacity-100 transition-opacity">
+                    <span className="text-[8px] font-black text-gray-700 uppercase tracking-[0.5em] italic mb-1">PRO SYSTEM</span>
+                    <h1 className="text-2xl font-black italic uppercase tracking-tighter">
                         SMART <span className="text-padel-primary">PADEL</span>
                     </h1>
                 </div>
@@ -294,7 +397,7 @@ export default function TVScoreboardDisplay({
             <style jsx global>{`
                 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
                 .font-outfit { font-family: 'Outfit', sans-serif; }
-                body { background: #000; margin: 0; padding: 0; }
+                body { background: #000; margin: 0; padding: 0; overflow: hidden; }
             `}</style>
         </div>
     );

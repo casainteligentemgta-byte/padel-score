@@ -15,6 +15,7 @@ interface AuthContextType {
     forgotPassword: (email: string) => Promise<void>;
     enableDevMode: () => void | Promise<void>;
     logout: () => Promise<void>;
+    profileLoading: boolean;
     isAdmin: boolean;
     isPlayer: boolean;
     isMarker: boolean;
@@ -46,6 +47,7 @@ const AuthContext = createContext<AuthContextType>({
     enableDevMode: () => { },
     logout: async () => { },
     isAdmin: false,
+    profileLoading: true,
     isPlayer: false,
     isMarker: false,
     markerCanchas: [],
@@ -56,10 +58,12 @@ const AuthContext = createContext<AuthContextType>({
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [user, setUser] = useState<AppUser | null>(null);
     const [profile, setProfile] = useState<any | null>(null);
+    const [profileLoading, setProfileLoading] = useState(true);
     const supabase = getSupabaseClient();
     const [loading, setLoading] = useState(() => (typeof window !== 'undefined' && !supabase ? false : true));
 
     const fetchProfile = async (uid: string, opts?: { email?: string; name?: string }) => {
+        setProfileLoading(true);
         try {
             const data = await dataService.getUserProfile(uid);
             if (data) {
@@ -78,6 +82,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         } catch (error) {
             console.error('AuthContext: Error fetching user profile:', error);
             setProfile((prev: any) => prev || { role: ROLES.PLAYER, name: 'Usuario (Offline)' });
+        } finally {
+            setProfileLoading(false);
         }
     };
 
@@ -116,6 +122,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                     }).catch(err => console.error('AuthContext: Profile fetch error', err));
                 } else {
                     setProfile(null);
+                    setProfileLoading(false);
                 }
             });
             subscription = sub;
@@ -144,6 +151,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                     supabase.auth.signOut();
                 }
                 setLoading(false);
+                setProfileLoading(false);
                 clearTimeout(safetyTimeout);
             });
 
@@ -220,7 +228,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const isAdmin = !!(profile?.role === ROLES.ADMIN ||
-        user?.email?.toLowerCase().includes('casainteligente'));
+        user?.email?.toLowerCase().includes('casainteligente') ||
+        user?.email?.toLowerCase().includes('casanteligente'));
     const isPlayer = !!(profile?.role === ROLES.PLAYER);
     const isMarker = !!(profile?.role === ROLES.MARKER);
     const markerCanchas: string[] = isMarker && Array.isArray(profile?.markerCanchas) ? profile.markerCanchas : [];
@@ -234,6 +243,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             value={{
                 user,
                 profile,
+                profileLoading,
                 loading,
                 signInWithGoogle,
                 signInWithEmail,

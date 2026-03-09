@@ -24,7 +24,6 @@ import {
     Star,
     Target,
     Zap,
-    Share2,
     ShieldCheck,
     Dna,
     ArrowRight,
@@ -69,23 +68,6 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
         if (!authLoading) loadPlayer();
     }, [id, authLoading, router]);
 
-    const handleShare = async () => {
-        if (navigator.share) {
-            try {
-                await navigator.share({
-                    title: `Perfil de ${player.name} en Smart Padel`,
-                    text: `Mira el perfil de ${player.name} ${player.lastName} en Smart Padel Experience.`,
-                    url: window.location.href,
-                });
-            } catch (err) {
-                console.error('Error sharing:', err);
-            }
-        } else {
-            navigator.clipboard.writeText(window.location.href);
-            alert('¡Enlace de perfil copiado al portapapeles!');
-        }
-    };
-
     if (authLoading || loading) {
         return (
             <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
@@ -115,6 +97,14 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
         <div className="ipad-screen-container bg-[#080808] text-white font-outfit relative overflow-hidden">
             <Sidebar />
 
+            {/* Back Button Fixed Below Menu */}
+            <button
+                onClick={() => router.back()}
+                className="fixed top-24 left-6 z-[100] w-12 h-12 bg-zinc-900/60 backdrop-blur-xl border border-white/5 rounded-full flex items-center justify-center hover:bg-zinc-800 transition-all text-zinc-400 hover:text-white shadow-2xl"
+            >
+                <ArrowLeft className="w-5 h-5" />
+            </button>
+
             {/* Background Decorative Elements */}
             <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-padel-primary/5 rounded-full blur-[140px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
             <div className="absolute top-1/4 left-0 w-[400px] h-[400px] bg-blue-500/5 rounded-full blur-[120px] -translate-x-1/3 pointer-events-none" />
@@ -124,12 +114,6 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                 <header className="sticky top-0 z-[60] bg-[#080808]/40 backdrop-blur-xl border-b border-white/5">
                     <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between ml-20 md:ml-24">
                         <div className="flex items-center gap-4">
-                            <button
-                                onClick={() => router.back()}
-                                className="w-11 h-11 flex items-center justify-center rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all text-zinc-400 hover:text-white"
-                            >
-                                <ArrowLeft className="w-5 h-5" />
-                            </button>
                             <div className="hidden sm:flex flex-col">
                                 <h1 className="text-sm font-black italic uppercase tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.4)]">
                                     Perfil <span className="text-padel-primary">Pro</span>
@@ -139,12 +123,6 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
                         </div>
 
                         <div className="flex items-center gap-3">
-                            <button
-                                onClick={handleShare}
-                                className="w-11 h-11 flex items-center justify-center rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all text-zinc-400 hover:text-padel-primary"
-                            >
-                                <Share2 className="w-5 h-5" />
-                            </button>
                             {canEdit && (
                                 <button
                                     onClick={() => router.push(`/players/register?edit=${player.id}`)}

@@ -23,7 +23,7 @@ import BouncingBall from '@/components/BouncingBall';
 import { useAppSettings } from '@/lib/AppSettingsContext';
 
 export default function HomePage() {
-    const { user, isAdmin, loading: authLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
+    const { user, isAdmin, loading: authLoading, profileLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
     const { clubName } = useAppSettings();
     const router = useRouter();
     const [isLogin, setIsLogin] = useState(true);
@@ -39,14 +39,14 @@ export default function HomePage() {
     });
 
     useEffect(() => {
-        if (!authLoading && user) {
+        if (!authLoading && !profileLoading && user) {
             if (isAdmin) {
                 router.replace('/admin');
             } else {
-                router.replace('/tournaments');
+                router.replace('/hub');
             }
         }
-    }, [authLoading, user, isAdmin, router]);
+    }, [authLoading, profileLoading, user, isAdmin, router]);
 
     const handleGoogleSignIn = async () => {
         setLoading(true);
@@ -288,7 +288,7 @@ export default function HomePage() {
                                 <div className="flex justify-center">
                                     <button
                                         onClick={handleForgotPassword}
-                                        className="text-[10px] font-bold text-zinc-600 hover:text-padel-primary uppercase tracking-widest transition-colors"
+                                        className="text-[10px] font-bold text-white/40 hover:text-white uppercase tracking-widest transition-colors bg-[#050505] border-none p-0 outline-none"
                                     >
                                         ¿Olvidaste tu contraseña?
                                     </button>
@@ -313,7 +313,7 @@ export default function HomePage() {
                             enableDevMode();
                             router.push('/tournaments');
                         }}
-                        className="flex items-center gap-2 text-[9px] font-bold text-padel-primary/10 hover:text-padel-primary/40 uppercase tracking-[0.4em] transition-all"
+                        className="flex items-center gap-2 text-[9px] font-bold text-white/10 hover:text-white/40 uppercase tracking-[0.4em] transition-all bg-[#050505] border-none p-0 outline-none"
                     >
                         <Zap className="w-3 h-3" /> Sandbox Mode
                     </button>

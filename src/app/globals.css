@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -20,13 +22,20 @@
    * xl: 24px  → título de página
    * 2xl: 36px → hero (pantalla score, display)
    */
-  --text-xs: 0.625rem;    /* 10px */
-  --text-sm: 0.75rem;     /* 12px */
-  --text-base: 0.875rem;  /* 14px */
-  --text-md: 1rem;        /* 16px */
-  --text-lg: 1.125rem;   /* 18px */
-  --text-xl: 1.5rem;     /* 24px */
-  --text-2xl: 2.25rem;   /* 36px */
+  --text-xs: 0.625rem;
+  /* 10px */
+  --text-sm: 0.75rem;
+  /* 12px */
+  --text-base: 0.875rem;
+  /* 14px */
+  --text-md: 1rem;
+  /* 16px */
+  --text-lg: 1.125rem;
+  /* 18px */
+  --text-xl: 1.5rem;
+  /* 24px */
+  --text-2xl: 2.25rem;
+  /* 36px */
 
   /* ── Criterios unificados: colores de texto ────────────────────────────
    * primary: blanco   → títulos y contenido principal
@@ -125,30 +134,35 @@ body {
     @apply font-black italic uppercase tracking-tighter leading-tight;
     color: rgb(var(--text-primary));
   }
+
   /** Título de sección → lg, primary */
   .title-section {
     font-size: var(--text-lg);
     @apply font-black italic uppercase tracking-tighter;
     color: rgb(var(--text-primary));
   }
+
   /** Nombre de pista destacado → lg, primary */
   .label-cancha {
     font-size: var(--text-lg);
     @apply font-black italic uppercase tracking-tighter;
     color: rgb(var(--text-primary));
   }
+
   /** Nombre de pista hero (score, display) → 2xl, primary */
   .label-cancha-hero {
     font-size: var(--text-2xl);
     @apply font-black italic uppercase tracking-tighter leading-none;
     color: rgb(var(--text-primary));
   }
+
   /** Nombre de pista en listas/meta → xs, muted */
   .label-cancha-meta {
     font-size: var(--text-xs);
     @apply font-black uppercase tracking-widest;
     color: rgb(var(--text-muted));
   }
+
   /** Subtítulo bajo título → xs, muted */
   .subtitle-page {
     font-size: var(--text-xs);
@@ -157,17 +171,49 @@ body {
   }
 
   /* Utilidades por tamaño y color (usar cuando no aplique una clase semántica) */
-  .text-size-xs { font-size: var(--text-xs); }
-  .text-size-sm { font-size: var(--text-sm); }
-  .text-size-base { font-size: var(--text-base); }
-  .text-size-md { font-size: var(--text-md); }
-  .text-size-lg { font-size: var(--text-lg); }
-  .text-size-xl { font-size: var(--text-xl); }
-  .text-size-2xl { font-size: var(--text-2xl); }
-  .text-type-primary { color: rgb(var(--text-primary)); }
-  .text-type-secondary { color: rgb(var(--text-secondary)); }
-  .text-type-muted { color: rgb(var(--text-muted)); }
-  .text-type-accent { color: rgb(var(--text-accent)); }
+  .text-size-xs {
+    font-size: var(--text-xs);
+  }
+
+  .text-size-sm {
+    font-size: var(--text-sm);
+  }
+
+  .text-size-base {
+    font-size: var(--text-base);
+  }
+
+  .text-size-md {
+    font-size: var(--text-md);
+  }
+
+  .text-size-lg {
+    font-size: var(--text-lg);
+  }
+
+  .text-size-xl {
+    font-size: var(--text-xl);
+  }
+
+  .text-size-2xl {
+    font-size: var(--text-2xl);
+  }
+
+  .text-type-primary {
+    color: rgb(var(--text-primary));
+  }
+
+  .text-type-secondary {
+    color: rgb(var(--text-secondary));
+  }
+
+  .text-type-muted {
+    color: rgb(var(--text-muted));
+  }
+
+  .text-type-accent {
+    color: rgb(var(--text-accent));
+  }
 
   .premium-gradient {
     background: radial-gradient(circle at top right, rgba(204, 255, 0, 0.05), transparent 40%),
@@ -182,8 +228,24 @@ body {
     from {
       transform: rotate(0deg);
     }
+
     to {
       transform: rotate(360deg);
     }
+  }
+
+  /* Fix autofill background in dark mode */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  textarea:-webkit-autofill:hover,
+  textarea:-webkit-autofill:focus,
+  select:-webkit-autofill,
+  select:-webkit-autofill:hover,
+  select:-webkit-autofill:focus {
+    -webkit-text-fill-color: white !important;
+    -webkit-box-shadow: 0 0 0px 1000px #0a0a0a inset !important;
+    transition: background-color 5000s ease-in-out 0s;
   }
 }

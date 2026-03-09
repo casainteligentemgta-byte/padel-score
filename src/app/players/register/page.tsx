@@ -69,43 +69,46 @@ function RegistrationFormContent() {
         photo: ''
     });
 
-    // Load data if editing
+    // Load data if editing or set default email
     useEffect(() => {
         const loadPlayerData = async () => {
-            if (!editId) return;
-            setFetching(true);
-            try {
-                const player = await dataService.getParticipant(editId);
-                if (player) {
-                    setFormData({
-                        name: player.name || '',
-                        lastName: player.lastName || '',
-                        gender: (player.gender as 'MALE' | 'FEMALE') || 'MALE',
-                        level: player.level || 4,
-                        position: player.position || 'Drive',
-                        birthDate: player.birthDate || '',
-                        bloodType: player.bloodType || 'O+',
-                        allergies: player.allergies || '',
-                        medicalConditions: player.medicalConditions || '',
-                        phone: player.phone || '',
-                        email: player.email || '',
-                        instagram: player.instagram || '',
-                        dni: player.dni || '',
-                        suitSize: player.suitSize || 'M',
-                        shortSize: player.shortSize || 'M',
-                        shoeSize: player.shoeSize || '',
-                        photo: player.photo || ''
-                    });
+            if (editId) {
+                setFetching(true);
+                try {
+                    const player = await dataService.getParticipant(editId);
+                    if (player) {
+                        setFormData({
+                            name: player.name || '',
+                            lastName: player.lastName || '',
+                            gender: (player.gender as 'MALE' | 'FEMALE') || 'MALE',
+                            level: player.level || 4,
+                            position: player.position || 'Drive',
+                            birthDate: player.birthDate || '',
+                            bloodType: player.bloodType || 'O+',
+                            allergies: player.allergies || '',
+                            medicalConditions: player.medicalConditions || '',
+                            phone: player.phone || '',
+                            email: player.email || '',
+                            instagram: player.instagram || '',
+                            dni: player.dni || '',
+                            suitSize: player.suitSize || 'M',
+                            shortSize: player.shortSize || 'M',
+                            shoeSize: player.shoeSize || '',
+                            photo: player.photo || ''
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error loading player:', error);
+                } finally {
+                    setFetching(false);
                 }
-            } catch (error) {
-                console.error('Error loading player:', error);
-            } finally {
-                setFetching(false);
+            } else if (user?.email) {
+                setFormData(prev => ({ ...prev, email: user.email || '' }));
             }
         };
 
         if (!authLoading) loadPlayerData();
-    }, [editId, authLoading]);
+    }, [editId, authLoading, user]);
 
     const updateField = (field: string, value: any) => {
         if (field === 'dni') {
@@ -206,6 +209,30 @@ function RegistrationFormContent() {
                     registeredAt: new Date(),
                     status: 'Activo'
                 }, user.uid);
+
+                // --- EMAIL NOTIFICATION ---
+                try {
+                    await fetch('/api/send-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            type: 'NEW_PLAYER',
+                            data: {
+                                name: formData.name,
+                                lastName: formData.lastName,
+                                dni: formData.dni,
+                                phone: formData.phone,
+                                email: formData.email,
+                                instagram: formData.instagram,
+                                level: formData.level,
+                                position: formData.position
+                            }
+                        })
+                    });
+                } catch (emailError) {
+                    console.error('Error sending notification email:', emailError);
+                }
+
                 alert('¡Jugador registrado con éxito!');
                 router.push(`/players/${result.id}`);
             }
@@ -242,26 +269,26 @@ function RegistrationFormContent() {
             <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-blue-500/5 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2 pointer-events-none" />
 
             <div ref={scrollAreaRef} className="ipad-scroll-area !pr-0">
-                <header className="sticky top-0 z-50 bg-[#080808]/80 backdrop-blur-md border-b border-white/5 ml-20 md:ml-24">
-                    <div className="max-w-md mx-auto px-6 py-5 flex items-center justify-between">
+                <header className="sticky top-0 z-50 bg-[#080808]/90 backdrop-blur-xl border-b border-white/5 ml-20 md:ml-24">
+                    <div className="max-w-md mx-auto px-6 py-2 flex items-center justify-between">
                         <button
                             onClick={() => router.back()}
-                            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all active:scale-95 group"
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 transition-all active:scale-95 group"
                         >
-                            <ArrowLeft className="w-5 h-5 text-zinc-400 group-hover:text-white" />
+                            <ArrowLeft className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white" />
                         </button>
                         <div className="flex-1 flex flex-col items-center justify-center">
-                            <h1 className="text-lg font-black italic uppercase tracking-tighter text-center text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.5)]">
+                            <h1 className="text-base font-black italic uppercase tracking-tighter text-center text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.5)]">
                                 {editId ? (
                                     <span className="text-padel-primary drop-shadow-[0_0_20px_rgba(204,255,0,0.6)]">Actualizar Ficha</span>
                                 ) : (
                                     <>REGISTRATE <span className="text-padel-primary drop-shadow-[0_0_20px_rgba(204,255,0,0.6)]">PRO</span></>
                                 )}
                             </h1>
-                            <p className="text-[9px] font-black text-white/40 uppercase tracking-[0.5em] italic mt-1 drop-shadow-[0_0_10px_rgba(204,255,0,0.2)]">SISTEMA OFICIAL SMART PADEL</p>
+                            <p className="text-[8px] font-black text-white/40 uppercase tracking-[0.5em] italic mt-0.5 drop-shadow-[0_0_10px_rgba(204,255,0,0.2)]">SISTEMA OFICIAL SMART PADEL</p>
                         </div>
-                        <div className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white/5 border border-white/5">
-                            <Star className="w-5 h-5 text-padel-primary" />
+                        <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 border border-white/5">
+                            <Star className="w-3.5 h-3.5 text-padel-primary" />
                         </div>
                     </div>
                     {/* Progress Bar Visual Only */}
@@ -269,22 +296,32 @@ function RegistrationFormContent() {
                         <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: "33%" }}
-                            className="h-full bg-padel-primary shadow-[0_0_10px_#ccff00]"
+                            className="h-full bg-padel-primary shadow-[0_0_8px_#ccff00]"
                         />
                     </div>
                 </header>
 
-                <main className="max-w-2xl mx-auto px-6 py-10 space-y-12 pb-32 relative z-10">
+                <main className="max-w-2xl mx-auto px-4 py-4 space-y-4 pb-24 relative z-10">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="space-y-12"
+                        className="space-y-4"
                     >
+                        {/* Bienvenido Header */}
+                        <div className="flex flex-col items-center justify-center space-y-1 mb-6">
+                            <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
+                                Bienvenido, <span className="text-padel-primary">CRACK</span>
+                            </h2>
+                            <p className="text-[8px] font-black text-white/40 uppercase tracking-[0.5em] italic">sistema smart padel</p>
+                        </div>
+
                         {/* Paso 1. Foto de Perfil Header Style */}
-                        <section className="flex flex-col items-center bg-zinc-900/20 p-8 rounded-[40px] border border-white/5">
-                            <div className="flex items-center gap-3 mb-8 bg-black/40 px-6 py-2.5 rounded-full border border-padel-primary/40 shadow-[0_0_15px_rgba(204,255,0,0.2)]">
-                                <span className="text-[10px] font-black bg-padel-primary text-black px-4 py-1 rounded-full italic shadow-[0_0_10px_#ccff00]">PASO 1</span>
-                                <span className="text-[11px] font-black uppercase text-white tracking-widest italic drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]">Tu Foto Oficial</span>
+                        <section className="flex flex-col items-center bg-zinc-900/20 p-6 rounded-3xl border border-white/5 relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-padel-primary/20 to-transparent" />
+
+                            <div className="flex flex-col items-center gap-1.5 mb-8">
+                                <span className="text-[8px] font-black bg-white text-black px-3 py-0.5 rounded-full italic">PASO 1</span>
+                                <span className="text-[11px] font-black uppercase text-white tracking-[0.2em] italic">FOTO DEL JUGADOR</span>
                             </div>
 
                             <div className="relative group">
@@ -294,132 +331,114 @@ function RegistrationFormContent() {
                                     <button
                                         type="button"
                                         onClick={() => setShowPhotoOptions(true)}
-                                        className="relative w-48 h-48 rounded-[60px] border-4 border-zinc-800 p-1.5 bg-zinc-800 shadow-3xl overflow-hidden flex items-center justify-center transition-all duration-500 hover:scale-105 active:scale-95 group focus:outline-none ring-1 ring-white/10"
+                                        className="relative w-32 h-32 rounded-[40px] border-2 border-zinc-800 p-1 bg-zinc-800 shadow-lg overflow-hidden flex items-center justify-center transition-all duration-500 hover:scale-105 active:scale-95 group focus:outline-none ring-1 ring-white/5"
                                     >
-                                        <div className="w-full h-full rounded-[48px] overflow-hidden bg-zinc-900 border border-white/5 relative">
+                                        <div className="w-full h-full rounded-[30px] overflow-hidden bg-zinc-900 border border-white/5 relative">
                                             {formData.photo ? (
                                                 <img src={formData.photo} alt="Vista previa" className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />
                                             ) : (
                                                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#0a0a0a]">
                                                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_transparent_0%,_#000_100%)] opacity-50" />
-                                                    <User className="w-24 h-24 text-zinc-800 relative z-10" />
-                                                    <span className="text-[8px] font-black uppercase text-zinc-700 tracking-[0.5em] relative z-10">SUBIR FOTO</span>
+                                                    <User className="w-16 h-16 text-zinc-800 relative z-10" />
+                                                    <span className="text-[6px] font-black uppercase text-zinc-700 tracking-[0.4em] relative z-10">SUBIR FOTO</span>
                                                 </div>
                                             )}
-
                                             <div className="absolute inset-0 bg-padel-primary/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
-                                                <Camera className="w-12 h-12 text-black drop-shadow-xl" />
+                                                <Camera className="w-10 h-10 text-black" />
                                             </div>
                                         </div>
                                     </button>
-
                                     <button
                                         onClick={() => setShowPhotoOptions(true)}
-                                        className="absolute -bottom-3 -right-3 w-16 h-16 rounded-[24px] bg-padel-primary flex items-center justify-center text-black border-[6px] border-[#0c0c0c] shadow-[0_15px_30px_rgba(204,255,0,0.4)] hover:scale-110 active:scale-90 transition-all group"
+                                        className="absolute -bottom-1 -right-1 w-11 h-11 rounded-2xl bg-padel-primary flex items-center justify-center text-black border-[3px] border-[#0c0c0c] shadow-lg hover:scale-110 active:scale-90 transition-all group"
                                     >
-                                        <Camera className="w-8 h-8 group-hover:rotate-12 transition-transform" />
+                                        <Camera className="w-5 h-5 group-hover:rotate-12 transition-transform" />
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="mt-12 text-center space-y-4">
-                                <h2 className="text-xl md:text-2xl font-black italic uppercase tracking-tighter leading-none text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.3)]">
-                                    {formData.name || 'Bienvenido'} <span className="text-padel-primary drop-shadow-[0_0_25px_rgba(204,255,0,0.5)]">{formData.lastName || 'Jugador'}</span>
-                                </h2>
-                                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.5em] max-w-xs mx-auto drop-shadow-[0_0_10px_rgba(204,255,0,0.2)]">DATOS DEL JUGADOR <span className="text-white italic">SMART</span></p>
+                            <div className="mt-6 text-center">
+                                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.3em] italic">REGISTRO <span className="text-padel-primary">OFICIAL</span></span>
                             </div>
                         </section>
 
                         {/* Paso 2. Información General - Card Style */}
-                        <section className="bg-zinc-900/40 border border-white/5 p-10 rounded-[50px] backdrop-blur-3xl space-y-12 relative overflow-hidden group/card shadow-[0_40px_100px_rgba(0,0,0,0.4)]">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-padel-primary/5 rounded-full blur-[80px] pointer-events-none" />
+                        <section className="bg-zinc-900/40 border border-white/5 p-5 rounded-3xl backdrop-blur-3xl space-y-5 relative overflow-hidden group/card">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-padel-primary/5 rounded-full blur-[60px] pointer-events-none" />
 
-                            <div className="flex flex-col items-center justify-center space-y-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-1.5 h-8 bg-padel-primary rounded-full shadow-[0_0_20px_rgba(204,255,0,0.6)]" />
-                                    <h3 className="text-xl font-black uppercase italic tracking-tighter text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.8)]">Ficha de Identidad</h3>
-                                </div>
-                                <span className="text-[9px] font-black bg-padel-primary/20 text-padel-primary border border-padel-primary/30 px-6 py-1.5 rounded-full uppercase tracking-[0.3em] block shadow-[0_0_15px_rgba(204,255,0,0.2)] w-fit italic">PASO 2</span>
+                            <div className="flex flex-col items-center gap-1.5 mb-4">
+                                <span className="text-[8px] font-black bg-white text-black px-3 py-0.5 rounded-full italic">PASO 2</span>
+                                <span className="text-[11px] font-black uppercase text-white tracking-[0.2em] italic">FICHA DEL JUGADOR</span>
                             </div>
 
-                            <div className="space-y-8">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest pl-1">Nombre</label>
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Nombres</label>
                                         <div className="relative group/input">
                                             <input
                                                 type="text"
-                                                placeholder="Nombre del jugador"
-                                                className="w-full bg-black/50 border-2 border-white/5 rounded-3xl px-8 py-6 text-base font-bold focus:border-padel-primary focus:bg-black/80 ring-0 outline-none transition-all italic text-white placeholder:text-zinc-800"
+                                                placeholder="Nombres"
+                                                className="w-full bg-zinc-950 border border-white/20 rounded-xl px-4 py-3 text-xs font-bold focus:border-padel-primary focus:bg-black outline-none transition-all italic text-white placeholder:text-zinc-600"
                                                 value={formData.name}
                                                 onChange={e => updateField('name', e.target.value)}
                                             />
-                                            <User className="absolute right-6 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-800 group-focus-within/input:text-padel-primary transition-colors" />
+                                            <User className="absolute right-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600 group-focus-within/input:text-padel-primary transition-colors" />
                                         </div>
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase text-zinc-600 tracking-widest pl-1">Apellido</label>
+                                    <div className="space-y-1">
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Apellidos</label>
                                         <input
                                             type="text"
-                                            placeholder="Ej. Pérez"
-                                            className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-sm font-bold focus:border-padel-primary focus:bg-black/60 outline-none transition-all italic text-white placeholder:text-zinc-800"
+                                            placeholder="Apellidos"
+                                            className="w-full bg-zinc-950 border border-white/20 rounded-xl px-4 py-3 text-xs font-bold focus:border-padel-primary focus:bg-black outline-none transition-all italic text-white placeholder:text-zinc-600"
                                             value={formData.lastName}
                                             onChange={e => updateField('lastName', e.target.value)}
                                         />
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase text-zinc-600 tracking-widest pl-1">Cédula / DNI</label>
-                                        <div className="relative group">
-                                            <input
-                                                type="text"
-                                                placeholder="V-00.000.000"
-                                                className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-sm font-bold focus:border-padel-primary focus:bg-black/60 outline-none transition-all text-white placeholder:text-zinc-800"
-                                                value={formData.dni}
-                                                onChange={e => updateField('dni', e.target.value)}
-                                            />
-                                            <div className="absolute right-5 top-1/2 -translate-y-1/2 opacity-20 pointer-events-none group-focus-within:text-padel-primary group-focus-within:opacity-100 transition-all">
-                                                <Award className="w-5 h-5" />
-                                            </div>
-                                        </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Cédula</label>
+                                        <input
+                                            type="text"
+                                            placeholder="V-00.000.000"
+                                            className="w-full bg-zinc-950 border border-white/20 rounded-xl px-4 py-3 text-xs font-bold focus:border-padel-primary focus:bg-black outline-none transition-all text-white placeholder:text-zinc-600"
+                                            value={formData.dni}
+                                            onChange={e => updateField('dni', e.target.value)}
+                                        />
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase text-zinc-600 tracking-widest pl-1">Nacimiento</label>
+                                    <div className="space-y-1">
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Fecha de Nacimiento</label>
                                         <input
                                             type="date"
-                                            className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-sm font-bold focus:border-padel-primary focus:bg-black/60 outline-none transition-all h-[64px] [color-scheme:dark] text-white"
+                                            className="w-full bg-zinc-950 border border-white/20 rounded-xl px-4 py-3 text-xs font-bold focus:border-padel-primary focus:bg-black outline-none transition-all h-[42px] [color-scheme:dark] text-white"
                                             value={formData.birthDate}
                                             onChange={e => updateField('birthDate', e.target.value)}
                                         />
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase text-zinc-600 tracking-widest pl-1">WhatsApp</label>
-                                        <div className="relative group">
-                                            <input
-                                                type="text"
-                                                placeholder="+58 412 0000000"
-                                                className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-sm font-bold focus:border-padel-primary focus:bg-black/60 outline-none transition-all text-white placeholder:text-zinc-800"
-                                                value={formData.phone}
-                                                onChange={e => updateField('phone', e.target.value)}
-                                            />
-                                            <div className="absolute right-5 top-1/2 -translate-y-1/2 opacity-20 pointer-events-none group-focus-within:text-emerald-500 group-focus-within:opacity-100 transition-all">
-                                                <Phone className="w-5 h-5" />
-                                            </div>
-                                        </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">WhatsApp</label>
+                                        <input
+                                            type="text"
+                                            placeholder="+58 412 0000000"
+                                            className="w-full bg-zinc-950 border border-white/20 rounded-xl px-4 py-3 text-xs font-bold focus:border-padel-primary focus:bg-black outline-none transition-all text-white placeholder:text-zinc-600"
+                                            value={formData.phone}
+                                            onChange={e => updateField('phone', e.target.value)}
+                                        />
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase text-zinc-600 tracking-widest pl-1">Instagram</label>
+                                    <div className="space-y-1">
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Instagram</label>
                                         <div className="relative group">
-                                            <span className="absolute left-6 top-1/2 -translate-y-1/2 text-zinc-600 font-black text-sm group-focus-within:text-padel-primary transition-colors">@</span>
+                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600 font-black text-[10px] group-focus-within:text-padel-primary transition-colors">@</span>
                                             <input
                                                 type="text"
                                                 placeholder="usuario"
-                                                className="w-full bg-black/40 border border-white/5 rounded-2xl pl-12 pr-6 py-5 text-sm font-bold focus:border-padel-primary focus:bg-black/60 outline-none transition-all italic text-white placeholder:text-zinc-800"
+                                                className="w-full bg-zinc-950 border border-white/20 rounded-xl pl-9 pr-4 py-3 text-xs font-bold focus:border-padel-primary focus:bg-black outline-none transition-all italic text-white placeholder:text-zinc-600"
                                                 value={formData.instagram}
                                                 onChange={e => updateField('instagram', e.target.value)}
                                             />
@@ -427,21 +446,32 @@ function RegistrationFormContent() {
                                     </div>
                                 </div>
 
-                                <div className="pt-8 border-t border-white/5 grid grid-cols-1 md:grid-cols-2 gap-10">
-                                    <div className="space-y-4">
-                                        <label className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.2em] pl-1 flex justify-between items-center">
+                                <div className="space-y-1">
+                                    <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Email</label>
+                                    <input
+                                        type="email"
+                                        placeholder="email@ejemplo.com"
+                                        className="w-full bg-zinc-950 border border-white/20 rounded-xl px-4 py-3 text-xs font-bold focus:border-padel-primary focus:bg-black outline-none transition-all text-white placeholder:text-zinc-600"
+                                        value={formData.email}
+                                        onChange={e => updateField('email', e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="pt-4 border-t border-white/5 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1 flex justify-between items-center">
                                             <span>NIVEL DE JUEGO</span>
-                                            <span className="text-padel-primary bg-padel-primary/10 px-3 py-1 rounded-full italic text-[9px]">CAT. {formData.level}</span>
+                                            <span className="text-padel-primary italic text-[7px]">CAT. {formData.level}</span>
                                         </label>
-                                        <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
+                                        <div className="grid grid-cols-7 gap-1">
                                             {levels.map(lvl => (
                                                 <button
                                                     key={lvl}
                                                     type="button"
                                                     onClick={() => updateField('level', lvl)}
-                                                    className={`h-11 rounded-xl flex items-center justify-center font-black text-xs transition-all duration-300 ${formData.level === lvl
-                                                        ? 'bg-padel-primary text-black scale-105 shadow-[0_0_15px_rgba(204,255,0,0.4)]'
-                                                        : 'bg-white/5 border border-white/5 text-zinc-600 hover:text-zinc-400 hover:bg-white/10'
+                                                    className={`h-8 rounded-lg flex items-center justify-center font-black text-[10px] transition-all duration-300 ${formData.level === lvl
+                                                        ? 'bg-padel-primary text-black shadow-[0_0_10px_rgba(204,255,0,0.3)]'
+                                                        : 'bg-white/5 border border-white/5 text-zinc-600 hover:bg-white/10'
                                                         }`}
                                                 >
                                                     {lvl}
@@ -450,55 +480,57 @@ function RegistrationFormContent() {
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-4">
-                                            <label className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.2em] text-center block">SEXO</label>
-                                            <div className="grid grid-cols-2 gap-2 bg-black/40 p-1.5 rounded-2xl border border-white/5">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-2">
+                                            <label className="text-[8px] font-black uppercase text-white tracking-widest text-center block">SEXO</label>
+                                            <div className="grid grid-cols-2 gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
                                                 <button
+                                                    key="MALE"
                                                     type="button"
                                                     onClick={() => updateField('gender', 'MALE')}
-                                                    className={`h-10 rounded-xl flex items-center justify-center text-[9px] font-black uppercase tracking-widest transition-all duration-300 ${formData.gender === 'MALE'
-                                                        ? 'bg-padel-primary text-black shadow-lg scale-105'
-                                                        : 'text-zinc-600 hover:text-zinc-400 hover:bg-white/5'
+                                                    className={`h-7 rounded-lg flex items-center justify-center text-[7px] font-black uppercase tracking-widest transition-all ${formData.gender === 'MALE'
+                                                        ? 'bg-padel-primary text-black'
+                                                        : 'text-zinc-600 hover:bg-white/5'
                                                         }`}
                                                 >
-                                                    MASC
+                                                    M
                                                 </button>
                                                 <button
+                                                    key="FEMALE"
                                                     type="button"
                                                     onClick={() => updateField('gender', 'FEMALE')}
-                                                    className={`h-10 rounded-xl flex items-center justify-center text-[9px] font-black uppercase tracking-widest transition-all duration-300 ${formData.gender === 'FEMALE'
-                                                        ? 'bg-padel-primary text-black shadow-lg scale-105'
-                                                        : 'text-zinc-600 hover:text-zinc-400 hover:bg-white/5'
+                                                    className={`h-7 rounded-lg flex items-center justify-center text-[7px] font-black uppercase tracking-widest transition-all ${formData.gender === 'FEMALE'
+                                                        ? 'bg-padel-primary text-black'
+                                                        : 'text-zinc-600 hover:bg-white/5'
                                                         }`}
                                                 >
-                                                    FEM
+                                                    F
                                                 </button>
                                             </div>
                                         </div>
 
-                                        <div className="space-y-4">
-                                            <label className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.2em] text-center block">POSICIÓN</label>
-                                            <div className="grid grid-cols-2 gap-2 bg-black/40 p-1.5 rounded-2xl border border-white/5">
+                                        <div className="space-y-2">
+                                            <label className="text-[8px] font-black uppercase text-white tracking-widest text-center block">POSICIÓN</label>
+                                            <div className="grid grid-cols-2 gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
                                                 <button
                                                     type="button"
                                                     onClick={() => updateField('position', 'Drive')}
-                                                    className={`h-10 rounded-xl flex items-center justify-center text-[9px] font-black uppercase tracking-widest transition-all duration-300 ${formData.position === 'Drive'
-                                                        ? 'bg-padel-primary text-black shadow-lg scale-105'
-                                                        : 'text-zinc-600 hover:text-zinc-400 hover:bg-white/5'
+                                                    className={`h-7 rounded-lg flex items-center justify-center text-[7px] font-black uppercase tracking-widest transition-all ${formData.position === 'Drive'
+                                                        ? 'bg-padel-primary text-black'
+                                                        : 'text-zinc-600 hover:bg-white/5'
                                                         }`}
                                                 >
-                                                    DRIVE
+                                                    DRI
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => updateField('position', 'Revés')}
-                                                    className={`h-10 rounded-xl flex items-center justify-center text-[9px] font-black uppercase tracking-widest transition-all duration-300 ${formData.position === 'Revés'
-                                                        ? 'bg-padel-primary text-black shadow-lg scale-105'
-                                                        : 'text-zinc-600 hover:text-zinc-400 hover:bg-white/5'
+                                                    className={`h-7 rounded-lg flex items-center justify-center text-[7px] font-black uppercase tracking-widest transition-all ${formData.position === 'Revés'
+                                                        ? 'bg-padel-primary text-black'
+                                                        : 'text-zinc-600 hover:bg-white/5'
                                                         }`}
                                                 >
-                                                    REVÉS
+                                                    REV
                                                 </button>
                                             </div>
                                         </div>
@@ -508,28 +540,26 @@ function RegistrationFormContent() {
                         </section>
 
                         {/* 3. Información Médica y Equipación */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Protocolo Médico */}
-                            <section className="bg-zinc-900/40 border border-red-500/10 p-10 rounded-[50px] backdrop-blur-2xl space-y-8 relative overflow-hidden">
-                                <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-red-500/5 rounded-full blur-[50px] pointer-events-none" />
-
-                                <div className="flex items-center justify-center gap-4">
-                                    <div className="w-2.5 h-10 bg-red-500 rounded-full shadow-[0_0_30px_rgba(239,68,68,1)] animate-pulse" />
-                                    <h3 className="text-lg font-black uppercase italic tracking-widest text-red-500 drop-shadow-[0_0_25px_rgba(239,68,68,0.9)]">Protocolo Médico</h3>
+                            <section className="bg-zinc-900/40 border border-white/5 p-5 rounded-3xl backdrop-blur-2xl space-y-4">
+                                <div className="flex flex-col items-center gap-1.5 mb-4">
+                                    <span className="text-[8px] font-black bg-white text-black px-3 py-0.5 rounded-full italic">PASO 3</span>
+                                    <span className="text-[11px] font-black uppercase text-red-500 tracking-[0.2em] italic">DATOS DE SALUD</span>
                                 </div>
 
-                                <div className="space-y-6">
-                                    <div className="space-y-3">
-                                        <label className="text-[9px] font-black uppercase text-zinc-600 tracking-widest pl-1">Grupo Sanguíneo</label>
-                                        <div className="grid grid-cols-4 gap-2">
+                                <div className="space-y-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Sangre</label>
+                                        <div className="grid grid-cols-4 gap-1">
                                             {bloodTypes.map(type => (
                                                 <button
                                                     key={type}
                                                     type="button"
                                                     onClick={() => updateField('bloodType', type)}
-                                                    className={`h-10 rounded-xl flex items-center justify-center text-[10px] font-black transition-all duration-300 ${formData.bloodType === type
-                                                        ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]'
-                                                        : 'bg-white/5 border border-white/5 text-zinc-600 hover:text-white hover:bg-white/10'
+                                                    className={`h-7 rounded-lg flex items-center justify-center text-[9px] font-black transition-all ${formData.bloodType === type
+                                                        ? 'bg-red-500 text-white shadow-[0_0_8px_rgba(239,68,68,0.3)]'
+                                                        : 'bg-white/5 border border-white/5 text-zinc-500 hover:bg-white/10'
                                                         }`}
                                                 >
                                                     {type}
@@ -538,135 +568,119 @@ function RegistrationFormContent() {
                                         </div>
                                     </div>
 
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black uppercase text-zinc-600 tracking-widest pl-1">Alergias</label>
+                                    <div className="space-y-1">
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Alergias</label>
                                         <div className="relative group">
                                             <input
                                                 type="text"
-                                                placeholder="Ej. Penicilina (o dejar vacío)"
-                                                className="w-full bg-black/40 border border-white/5 rounded-2xl pl-12 pr-6 py-5 text-xs font-bold focus:border-red-500/50 outline-none transition-all italic text-white placeholder:text-zinc-800"
+                                                placeholder="Ej. Penicilina"
+                                                className="w-full bg-zinc-950 border border-white/20 rounded-xl pl-8 pr-4 py-3 text-[10px] font-bold focus:border-red-500/50 focus:bg-black outline-none transition-all italic text-white placeholder:text-zinc-600"
                                                 value={formData.allergies}
                                                 onChange={e => updateField('allergies', e.target.value)}
                                             />
-                                            <AlertCircle className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-red-500/30 group-focus-within:text-red-500 transition-colors" />
+                                            <AlertCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-800 group-focus-within:text-red-500" />
                                         </div>
                                     </div>
 
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black uppercase text-zinc-600 tracking-widest pl-1">Padecimientos / Lesiones</label>
+                                    <div className="space-y-1">
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Observaciones</label>
                                         <div className="relative group">
                                             <input
                                                 type="text"
-                                                placeholder="Ej. Lesión en hombro..."
-                                                className="w-full bg-black/40 border border-white/5 rounded-2xl pl-12 pr-6 py-5 text-xs font-bold focus:border-red-500/50 outline-none transition-all italic text-white placeholder:text-zinc-800"
+                                                placeholder="Ej. Lesión"
+                                                className="w-full bg-zinc-950 border border-white/20 rounded-xl pl-8 pr-4 py-3 text-[10px] font-bold focus:border-red-500/50 focus:bg-black outline-none transition-all italic text-white placeholder:text-zinc-600"
                                                 value={formData.medicalConditions}
                                                 onChange={e => updateField('medicalConditions', e.target.value)}
                                             />
-                                            <Stethoscope className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-red-500/30 group-focus-within:text-red-500 transition-colors" />
+                                            <Stethoscope className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-800 group-focus-within:text-red-500" />
                                         </div>
                                     </div>
                                 </div>
                             </section>
 
                             {/* Tallas del Jugador */}
-                            <section className="bg-zinc-900/40 border border-padel-primary/10 p-10 rounded-[50px] backdrop-blur-2xl space-y-8 relative overflow-hidden">
-                                <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-padel-primary/5 rounded-full blur-[50px] pointer-events-none" />
-
-                                <div className="flex items-center justify-center gap-4">
-                                    <div className="w-2.5 h-10 bg-padel-primary rounded-full shadow-[0_0_30px_rgba(204,255,0,1)]" />
-                                    <h3 className="text-lg font-black uppercase italic tracking-widest text-[#ccff00] drop-shadow-[0_0_25px_rgba(204,255,0,0.8)]">Tallas del Jugador</h3>
+                            <section className="bg-zinc-900/40 border border-white/5 p-5 rounded-3xl backdrop-blur-2xl space-y-4">
+                                <div className="flex flex-col items-center gap-1.5 mb-4">
+                                    <span className="text-[8px] font-black bg-white text-black px-3 py-0.5 rounded-full italic">PASO 4</span>
+                                    <span className="text-[11px] font-black uppercase text-white tracking-[0.2em] italic">EQUIPACIÓN</span>
                                 </div>
 
-                                <div className="space-y-8">
-                                    <div className="grid grid-cols-2 gap-6">
-                                        <div className="space-y-3">
-                                            <label className="text-[10px] font-black uppercase text-zinc-600 tracking-widest pl-1">Franela</label>
-                                            <div className="grid grid-cols-2 gap-2 bg-black/40 p-1.5 rounded-2xl border border-white/5">
-                                                <select
-                                                    className="col-span-2 w-full bg-transparent text-center font-black uppercase text-xs outline-none py-2 appearance-none text-white cursor-pointer"
-                                                    value={formData.suitSize}
-                                                    onChange={e => updateField('suitSize', e.target.value)}
-                                                >
-                                                    {sizes.map(s => <option key={s} value={s} className="bg-[#1a1a1a]">{s}</option>)}
-                                                </select>
-                                            </div>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                            <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Franela</label>
+                                            <select
+                                                className="w-full bg-zinc-950 border border-white/20 rounded-xl px-2 py-2 text-[10px] font-black uppercase outline-none appearance-none text-white text-center focus:border-padel-primary focus:bg-black transition-all"
+                                                value={formData.suitSize}
+                                                onChange={e => updateField('suitSize', e.target.value)}
+                                            >
+                                                {sizes.map(s => <option key={s} value={s} className="bg-zinc-900">{s}</option>)}
+                                            </select>
                                         </div>
-                                        <div className="space-y-3">
-                                            <label className="text-[10px] font-black uppercase text-zinc-600 tracking-widest pl-1">Short / Falda</label>
-                                            <div className="grid grid-cols-2 gap-2 bg-black/40 p-1.5 rounded-2xl border border-white/5">
-                                                <select
-                                                    className="col-span-2 w-full bg-transparent text-center font-black uppercase text-xs outline-none py-2 appearance-none text-white cursor-pointer"
-                                                    value={formData.shortSize}
-                                                    onChange={e => updateField('shortSize', e.target.value)}
-                                                >
-                                                    {sizes.map(s => <option key={s} value={s} className="bg-[#1a1a1a]">{s}</option>)}
-                                                </select>
-                                            </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Short</label>
+                                            <select
+                                                className="w-full bg-zinc-950 border border-white/20 rounded-xl px-2 py-2 text-[10px] font-black uppercase outline-none appearance-none text-white text-center focus:border-padel-primary focus:bg-black transition-all"
+                                                value={formData.shortSize}
+                                                onChange={e => updateField('shortSize', e.target.value)}
+                                            >
+                                                {sizes.map(s => <option key={s} value={s} className="bg-zinc-900">{s}</option>)}
+                                            </select>
                                         </div>
                                     </div>
 
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black uppercase text-zinc-600 tracking-widest pl-1">Calzado (Talla EU)</label>
+                                    <div className="space-y-1">
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Calzado (EU)</label>
                                         <div className="relative group">
                                             <input
                                                 type="number"
                                                 placeholder="Ej. 42"
-                                                className="w-full bg-black/40 border border-white/5 rounded-2xl pl-12 pr-6 py-5 text-sm font-black focus:border-padel-primary/40 outline-none transition-all text-white placeholder:text-zinc-800"
+                                                className="w-full bg-zinc-950 border border-white/20 rounded-xl pl-8 pr-4 py-3 text-[10px] font-black focus:border-padel-primary/40 focus:bg-black outline-none transition-all text-white placeholder:text-zinc-600"
                                                 value={formData.shoeSize}
                                                 onChange={e => updateField('shoeSize', e.target.value)}
                                             />
-                                            <Footprints className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-padel-primary/30 group-focus-within:text-padel-primary transition-colors" />
+                                            <Footprints className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-800 group-focus-within:text-padel-primary" />
                                         </div>
                                     </div>
-
-                                    <p className="text-[9px] text-zinc-600 text-center italic font-bold tracking-widest uppercase py-2 leading-relaxed">
-                                        Garantizamos tu equipación oficial para eventos pro.
-                                    </p>
+                                    <p className="text-[7px] text-zinc-600 text-center italic font-bold tracking-widest uppercase">DATOS PARA TU EQUIPACIÓN PRO</p>
                                 </div>
                             </section>
                         </div>
 
                         {/* Terms and Conditions Checkbox */}
-                        <div className="pt-10 px-6">
-                            <label className="flex items-center gap-4 cursor-pointer group">
-                                <div className="relative">
+                        <div className="px-4">
+                            <label className="flex items-center gap-3 cursor-pointer group">
+                                <div className="relative flex-shrink-0">
                                     <input
                                         type="checkbox"
                                         className="sr-only"
                                         checked={acceptedTerms}
                                         onChange={e => setAcceptedTerms(e.target.checked)}
                                     />
-                                    <div className={`w-8 h-8 rounded-xl border-2 transition-all flex items-center justify-center ${acceptedTerms ? 'bg-padel-primary border-padel-primary shadow-[0_0_15px_rgba(204,255,0,0.4)]' : 'bg-white/5 border-white/10 group-hover:border-padel-primary/40'}`}>
-                                        {acceptedTerms && <CheckCircle2 className="w-5 h-5 text-black" />}
+                                    <div className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center bg-padel-primary border-padel-primary shadow-lg ${acceptedTerms ? 'shadow-padel-primary/40 scale-110' : 'shadow-padel-primary/10 opacity-90'}`}>
+                                        {acceptedTerms && <CheckCircle2 className="w-4 h-4 text-black" strokeWidth={4} />}
                                     </div>
                                 </div>
-                                <span className="text-[11px] font-black uppercase text-zinc-500 tracking-widest leading-relaxed">
-                                    Acepto el <button type="button" onClick={(e) => { e.stopPropagation(); setShowTermsModal(true); }} className="text-padel-primary hover:underline underline-offset-4">Contrato de Competición</button> y la <button type="button" onClick={(e) => { e.stopPropagation(); setShowTermsModal(true); }} className="text-padel-primary hover:underline underline-offset-4">Política de Privacidad</button>
-                                </span>
+                                <div className="flex-1 text-[7.8px] font-black uppercase text-white tracking-[-0.04em] leading-[1] text-justify">
+                                    DECLARO HABER LEÍDO, COMPRENDIDO Y ACEPTADO LOS <button type="button" onClick={(e) => { e.stopPropagation(); setShowTermsModal(true); }} className="bg-transparent p-0 border-none inline text-white font-black underline transition-all uppercase">TÉRMINOS Y CONDICIONES</button> Y LA <button type="button" onClick={(e) => { e.stopPropagation(); setShowTermsModal(true); }} className="bg-transparent p-0 border-none inline text-white font-black underline transition-all uppercase">POLÍTICA DE PRIVACIDAD</button>
+                                </div>
                             </label>
                         </div>
 
                         {/* Submit Button */}
-                        <div className="pt-10 pb-20 px-4">
+                        <div className="pt-2 pb-10 px-4">
                             <button
                                 type="button"
                                 onClick={handleSave}
                                 disabled={loading || !acceptedTerms}
-                                className={`w-full h-28 rounded-[40px] font-black text-3xl uppercase italic flex items-center justify-center gap-6 transition-all group relative overflow-hidden ${loading || !acceptedTerms ? 'bg-zinc-800 text-zinc-600 grayscale cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-[#ccff00] via-[#defa00] to-[#aacc00] text-black hover:scale-[1.03] active:scale-95 shadow-[0_30px_90px_rgba(204,255,0,0.4)]'}`}
+                                className={`w-full h-14 rounded-2xl font-black text-sm uppercase italic flex items-center justify-center gap-3 transition-all group relative overflow-hidden ${loading || !acceptedTerms ? 'bg-zinc-800/50 text-zinc-700 cursor-not-allowed' : 'bg-padel-primary text-black hover:scale-[1.01] active:scale-[0.98] shadow-lg shadow-padel-primary/10'}`}
                             >
-                                {!loading && acceptedTerms && <div className="absolute inset-0 bg-white/30 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 skew-x-[45deg]" />}
-
-                                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-[radial-gradient(circle_at_center,_white_0%,_transparent_70%)] pointer-events-none" />
-
                                 {loading ? (
-                                    <div className="w-12 h-12 border-[6px] border-black border-t-transparent rounded-full animate-spin" />
+                                    <div className="w-5 h-5 border-[3px] border-black border-t-transparent rounded-full animate-spin" />
                                 ) : (
                                     <>
-                                        <div className="flex flex-col items-center leading-none">
-                                            <span className="text-[10px] font-black tracking-[0.3em] opacity-40 mb-1">FINALIZAR</span>
-                                            {editId ? 'GUARDAR' : 'CREAR FICHA'}
-                                        </div>
-                                        {editId ? <Save className="w-10 h-10 group-hover:rotate-12 transition-transform" /> : <Award className="w-10 h-10 group-hover:scale-125 transition-transform" />}
+                                        <span className="tracking-[0.2em]">{editId ? 'ACTUALIZAR PERFIL' : 'REGISTRAR JUGADOR'}</span>
+                                        {editId ? <Save className="w-4 h-4" /> : <Award className="w-4 h-4" />}
                                     </>
                                 )}
                             </button>
@@ -736,7 +750,7 @@ function RegistrationFormContent() {
                                         setAcceptedTerms(true);
                                         setShowTermsModal(false);
                                     }}
-                                    className="mt-10 w-full py-6 bg-padel-primary text-black rounded-3xl font-black uppercase italic text-sm tracking-widest hover:scale-105 transition-all shadow-[0_15px_30px_rgba(204,255,0,0.3)] flex-shrink-0"
+                                    className="mt-6 w-full py-4 bg-padel-primary text-black rounded-2xl font-black uppercase italic text-sm tracking-widest hover:scale-105 transition-all shadow-lg flex-shrink-0"
                                 >
                                     ¡ACEPTO Y QUIERO JUGAR!
                                 </button>
@@ -760,27 +774,27 @@ function RegistrationFormContent() {
                                 initial={{ y: 200, opacity: 0 }}
                                 animate={{ y: 0, opacity: 1 }}
                                 exit={{ y: 200, opacity: 0 }}
-                                className="bg-[#111111] w-full max-w-sm rounded-[40px] p-8 border border-white/10 relative z-[120] space-y-8 shadow-3xl"
+                                className="bg-[#111111] w-full max-w-sm rounded-[32px] p-6 border border-white/10 relative z-[120] space-y-6 shadow-2xl"
                             >
-                                <div className="space-y-2 text-center">
-                                    <h3 className="text-2xl font-black italic uppercase tracking-tighter">Captura tu Perfil</h3>
-                                    <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">¿Cómo quieres subir tu foto?</p>
+                                <div className="space-y-1 text-center">
+                                    <h3 className="text-xl font-black italic uppercase tracking-tighter">Captura tu Perfil</h3>
+                                    <p className="text-[9px] text-zinc-600 font-bold uppercase tracking-widest">Elige cómo subir tu foto</p>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-2 gap-3">
                                     <button
                                         onClick={startCamera}
-                                        className="flex flex-col items-center gap-4 p-8 rounded-3xl bg-white/5 hover:bg-padel-primary/10 border border-white/5 hover:border-padel-primary/30 transition-all group"
+                                        className="flex flex-col items-center gap-3 p-6 rounded-2xl bg-white/5 hover:bg-padel-primary/10 border border-white/5 hover:border-padel-primary/30 transition-all group"
                                     >
-                                        <Camera className="w-10 h-10 text-zinc-600 group-hover:text-padel-primary group-hover:scale-110 transition-all" />
-                                        <span className="text-[9px] font-black uppercase tracking-widest group-hover:text-white">CÁMARA</span>
+                                        <Camera className="w-8 h-8 text-zinc-600 group-hover:text-padel-primary group-hover:scale-110 transition-all" />
+                                        <span className="text-[8px] font-black uppercase tracking-widest group-hover:text-white">CÁMARA</span>
                                     </button>
                                     <button
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="flex flex-col items-center gap-4 p-8 rounded-3xl bg-white/5 hover:bg-padel-primary/10 border border-white/5 hover:border-padel-primary/30 transition-all group"
+                                        className="flex flex-col items-center gap-3 p-6 rounded-2xl bg-white/5 hover:bg-padel-primary/10 border border-white/5 hover:border-padel-primary/30 transition-all group"
                                     >
-                                        <Upload className="w-10 h-10 text-zinc-600 group-hover:text-padel-primary group-hover:scale-110 transition-all" />
-                                        <span className="text-[9px] font-black uppercase tracking-widest group-hover:text-white">GALERÍA</span>
+                                        <Upload className="w-8 h-8 text-zinc-600 group-hover:text-padel-primary group-hover:scale-110 transition-all" />
+                                        <span className="text-[8px] font-black uppercase tracking-widest group-hover:text-white">GALERÍA</span>
                                     </button>
                                 </div>
 
@@ -794,7 +808,7 @@ function RegistrationFormContent() {
 
                                 <button
                                     onClick={() => setShowPhotoOptions(false)}
-                                    className="w-full py-4 text-zinc-600 font-black uppercase text-[10px] tracking-[0.3em] hover:text-white transition-colors"
+                                    className="w-full py-2 text-zinc-600 font-black uppercase text-[9px] tracking-[0.3em] hover:text-white transition-colors"
                                 >
                                     VOLVER
                                 </button>

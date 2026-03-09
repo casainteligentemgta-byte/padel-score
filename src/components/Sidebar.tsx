@@ -62,10 +62,10 @@ export default function Sidebar() {
     };
 
     const hubItems = [
+        { name: 'Perfil', onClick: handleMisDatosClick, icon: User, color: 'text-purple-400', bg: 'bg-purple-400/10' },
         { name: 'Torneos', href: '/tournaments', icon: Trophy, color: 'text-padel-primary', bg: 'bg-padel-primary/10' },
         { name: 'Ranking', href: '/ranking', icon: Medal, color: 'text-blue-400', bg: 'bg-blue-400/10' },
         { name: 'Wallet', onClick: () => { }, icon: Wallet, color: 'text-emerald-400', bg: 'bg-emerald-400/10', disabled: true },
-        { name: 'Perfil', onClick: handleMisDatosClick, icon: User, color: 'text-purple-400', bg: 'bg-purple-400/10' },
     ];
 
     const adminItems = [

@@ -24,7 +24,17 @@ import Link from 'next/link';
 import BouncingBall from '@/components/BouncingBall';
 
 export default function LoginPage() {
-    const { user, loading: authLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
+    const {
+        user,
+        loading: authLoading,
+        profileLoading,
+        isAdmin,
+        signInWithGoogle,
+        signInWithEmail,
+        signUpWithEmail,
+        forgotPassword,
+        enableDevMode
+    } = useAuth();
     const router = useRouter();
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
@@ -39,8 +49,14 @@ export default function LoginPage() {
     });
 
     useEffect(() => {
-        if (!authLoading && user) router.replace('/tournaments');
-    }, [authLoading, user, router]);
+        if (!authLoading && user && !profileLoading) {
+            if (isAdmin) {
+                router.replace('/admin');
+            } else {
+                router.replace('/tournaments');
+            }
+        }
+    }, [authLoading, user, profileLoading, isAdmin, router]);
 
     const handleGoogleSignIn = async () => {
         setLoading(true);
@@ -93,7 +109,11 @@ export default function LoginPage() {
             } else {
                 await signUpWithEmail(formData.email, formData.password, formData.name);
             }
-            router.push('/tournaments');
+            if (isAdmin) {
+                router.push('/admin');
+            } else {
+                router.push('/tournaments');
+            }
         } catch (err: any) {
             setError(getAuthErrorMessage(err));
         } finally {

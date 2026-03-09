@@ -117,6 +117,9 @@ export default function TVCourtDisplayPage({ params }: { params: Promise<{ court
             smartPadelColor={tournament?.broadcastingSettings?.primaryColor || "#ccff00"}
             adsPlaylist={tournament?.broadcastingSettings?.adMediaUrls}
             forcedAds={activeMatch.forcedAds || false}
+            tournamentId={tournament?.id}
+            tournamentCategory={activeMatch.category || tournament?.category || "Categoría Libre"}
+            tournamentPhase={activeMatch.phase || "Eliminatorias"}
         />
     );
 }

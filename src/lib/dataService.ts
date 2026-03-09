@@ -439,23 +439,34 @@ export const dataService = {
         if (error) throw error;
     },
 
-    async uploadFile(file: File, path: string) {
-        const preferred = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET?.trim()) || 'public';
+    async uploadFile(file: File, path: string, bucketName?: string) {
+        const preferred = bucketName ||
+            (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET?.trim()) ||
+            'patrocinantes';
+
         const bucketsToTry = [preferred];
-        if (preferred !== 'public') bucketsToTry.push('public');
+        // If preferred is not 'inscripciones', try it too for receipts if relevant
+        if (preferred !== 'inscripciones') bucketsToTry.push('inscripciones');
+        // Final fallback to public
+        if (!bucketsToTry.includes('public')) bucketsToTry.push('public');
+
+        let lastError: any = null;
 
         for (const bucket of bucketsToTry) {
-            const { data, error } = await supabase().storage.from(bucket).upload(path, file, { upsert: true });
-            if (!error) {
-                const { data: urlData } = supabase().storage.from(bucket).getPublicUrl(data.path);
-                return urlData.publicUrl;
-            }
-            const isNotFound = (error.message || '').toLowerCase().includes('not found') || (error.message || '').toLowerCase().includes('bucket');
-            if (!isNotFound || bucket === bucketsToTry[bucketsToTry.length - 1]) {
-                throw new Error(`[Storage] ${error.message || String(error)} (bucket: "${bucket}")`);
+            try {
+                const { data, error } = await supabase().storage.from(bucket).upload(path, file, { upsert: true });
+                if (!error) {
+                    const { data: urlData } = supabase().storage.from(bucket).getPublicUrl(data.path);
+                    return urlData.publicUrl;
+                }
+                lastError = error;
+            } catch (e) {
+                lastError = e;
             }
         }
-        throw new Error('[Storage] Bucket not found');
+
+        const errMsg = lastError?.message || String(lastError);
+        throw new Error(`[Storage] ${errMsg} (Tried buckets: ${bucketsToTry.join(', ')})`);
     },
 
     async getAdminSettings(): Promise<AdminSettings | null> {
@@ -538,6 +549,31 @@ export const dataService = {
             receiptUrl: r.receipt_url,
             paymentStatus: r.payment_status,
             alertMessage: r.alert_message,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+        }));
+    },
+
+    async getAllInscriptions() {
+        const { data, error } = await supabase()
+            .from('inscriptions')
+            .select('*')
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data || []).map((r: any) => ({
+            id: r.id,
+            tournamentId: r.tournament_id,
+            tournamentName: r.tournament_name,
+            categoryKey: r.category_key,
+            categoryPrice: r.category_price,
+            participantName: r.participant_name,
+            participantEmail: r.participant_email,
+            participantId: r.participant_id,
+            amountExtracted: r.amount_extracted,
+            receiptUrl: r.receipt_url,
+            paymentStatus: r.payment_status,
+            alertMessage: r.alert_message,
+            paymentData: r.data,
             createdAt: r.created_at,
             updatedAt: r.updated_at,
         }));
@@ -681,5 +717,15 @@ export const dataService = {
             console.error('[dataService] getLiveMatches failed:', e);
             return [];
         }
+    },
+
+    async getPaymentMethods() {
+        const { data, error } = await supabase()
+            .from('payment_methods')
+            .select('*')
+            .eq('is_active', true)
+            .order('created_at', { ascending: true });
+        if (error) throw error;
+        return data || [];
     }
 };
