@@ -30,7 +30,7 @@ function mapSupabaseUser(su: { id: string; email?: string; user_metadata?: Recor
     return {
         uid: su.id,
         id: su.id,
-        email: su.email ?? null,
+        email: su.email || (meta.email as string) || null,
         displayName: (meta.full_name as string) || (meta.name as string) || su.email || null,
         photoURL: (meta.avatar_url as string) || (meta.picture as string) || null,
     };
@@ -227,9 +227,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setProfile(null);
     };
 
-    const isAdmin = !!(profile?.role === ROLES.ADMIN ||
+    const isAdmin = !!(
+        profile?.role === ROLES.ADMIN ||
         user?.email?.toLowerCase().includes('casainteligente') ||
-        user?.email?.toLowerCase().includes('casanteligente'));
+        user?.email?.toLowerCase().includes('casanteligente') ||
+        user?.email === 'casainteligentemgta@gmail.com'
+    );
     const isPlayer = !!(profile?.role === ROLES.PLAYER);
     const isMarker = !!(profile?.role === ROLES.MARKER);
     const markerCanchas: string[] = isMarker && Array.isArray(profile?.markerCanchas) ? profile.markerCanchas : [];
