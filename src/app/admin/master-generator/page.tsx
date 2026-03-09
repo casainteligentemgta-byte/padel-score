@@ -27,7 +27,8 @@ import {
     ImageIcon,
     Loader2,
     Upload,
-    Link as LinkIcon
+    Link as LinkIcon,
+    DollarSign
 } from 'lucide-react';
 import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournament';
 import { MasterScheduleEngine, MasterScheduleConfig, CategoryConfig } from '@/services/MasterScheduleEngine';
