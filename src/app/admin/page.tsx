@@ -121,21 +121,45 @@ export default function AdminHubPage() {
             </div>
 
             {/* Sidebar Navigation (Hidden on mobile) */}
-            <aside className="fixed left-0 top-0 bottom-0 w-20 hidden lg:flex flex-col items-center py-8 bg-black/40 backdrop-blur-3xl border-r border-white/5 z-50">
-                <div className="mb-auto flex flex-col items-center">
+            <aside className="fixed left-0 top-0 bottom-0 w-24 hidden lg:flex flex-col items-center py-8 bg-black/60 backdrop-blur-3xl border-r border-white/5 z-50">
+                <div className="mb-12 flex flex-col items-center">
                     <div className="w-12 h-16 flex items-end justify-center">
                         <BouncingBall size={18} bounceHeight={1.8} />
                     </div>
                 </div>
 
-                <button onClick={logout} className="p-4 rounded-2xl text-gray-700 hover:text-red-500 transition-colors group relative">
-                    <LogOut className="w-6 h-6" />
-                    <span className="absolute left-full ml-2 px-2 py-1 bg-red-500 text-white text-[10px] font-bold uppercase rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Salir</span>
-                </button>
+                <nav className="flex-1 flex flex-col gap-4">
+                    {adminSections.map((section, idx) => (
+                        <Link
+                            key={section.title}
+                            href={section.href}
+                            className="group relative"
+                        >
+                            <div className="w-14 h-14 bg-white/5 hover:bg-padel-primary rounded-2xl border border-white/5 hover:border-padel-primary flex items-center justify-center transition-all duration-300 hover:scale-110 shadow-lg cursor-pointer">
+                                <section.icon className={`w-6 h-6 ${section.iconColor} group-hover:text-black transition-colors`} />
+                            </div>
+
+                            {/* Floating Tooltip */}
+                            <div className="absolute left-full ml-4 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-padel-primary text-black text-[10px] font-black uppercase rounded-lg opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100 origin-left pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                                {section.title}
+                            </div>
+                        </Link>
+                    ))}
+                </nav>
+
+                <div className="mt-auto pt-8 border-t border-white/5 w-full flex flex-col items-center gap-4">
+                    <button
+                        onClick={logout}
+                        className="w-12 h-12 rounded-2xl text-zinc-600 hover:text-white hover:bg-red-500/20 flex items-center justify-center transition-all group relative"
+                    >
+                        <LogOut className="w-5 h-5" />
+                        <span className="absolute left-full ml-4 px-2 py-1 bg-red-500 text-white text-[8px] font-bold uppercase rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">Cerrar Sesión</span>
+                    </button>
+                </div>
             </aside>
 
             {/* Main Content Area */}
-            <main className="lg:pl-20 relative z-10">
+            <main className="lg:pl-24 relative z-10">
                 {/* Global Top Bar */}
                 <header className="px-4 sm:px-8 py-2 sm:py-3 flex flex-col sm:flex-row justify-between items-center bg-black/20 backdrop-blur-md border-b border-white/5 sticky top-0 z-40">
                     <div className="flex items-center gap-4 mb-2 sm:mb-0">
