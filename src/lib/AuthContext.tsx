@@ -231,7 +231,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         profile?.role === ROLES.ADMIN ||
         user?.email?.toLowerCase().includes('casainteligente') ||
         user?.email?.toLowerCase().includes('casanteligente') ||
-        user?.email === 'casainteligentemgta@gmail.com'
+        user?.email?.toLowerCase().includes('casainteligentemgta') ||
+        user?.email?.toLowerCase() === 'casainteligentemgta@gmail.com'
     );
     const isPlayer = !!(profile?.role === ROLES.PLAYER);
     const isMarker = !!(profile?.role === ROLES.MARKER);

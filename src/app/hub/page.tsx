@@ -10,7 +10,10 @@ import {
     Settings,
     LayoutGrid,
     Search,
-    LogOut
+    LogOut,
+    Home,
+    Shield,
+    FileText
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
@@ -65,6 +68,24 @@ export default function HubPage() {
             bg: 'bg-emerald-400/10',
             border: 'border-emerald-400/10',
             disabled: true
+        }
+    ];
+
+    const utilityItems = [
+        {
+            name: 'Inicio',
+            icon: Home,
+            href: '/'
+        },
+        {
+            name: 'Privacidad',
+            icon: Shield,
+            href: '/politica-privacidad'
+        },
+        {
+            name: 'Términos',
+            icon: FileText,
+            href: '/terminos-inscripcion'
         }
     ];
 
@@ -143,13 +164,30 @@ export default function HubPage() {
                             ))}
                         </div>
 
+                        {/* Utility Bar */}
+                        <div className="grid grid-cols-3 gap-3 mb-8">
+                            {utilityItems.map((item, index) => (
+                                <motion.button
+                                    key={item.name}
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ delay: 0.4 + (index * 0.1) }}
+                                    onClick={() => router.push(item.href)}
+                                    className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all"
+                                >
+                                    <item.icon className="w-4 h-4 text-zinc-400 mb-1" />
+                                    <span className="text-[8px] font-bold uppercase tracking-widest text-zinc-500">{item.name}</span>
+                                </motion.button>
+                            ))}
+                        </div>
+
                         {/* Logout Button */}
-                        <div className="flex justify-center mt-4 mb-8">
+                        <div className="flex justify-center mt-4 mb-12">
                             <button
                                 onClick={() => logout()}
-                                className="flex items-center gap-2 text-[#FF2800] font-black uppercase italic tracking-[0.2em] text-[11px] hover:scale-105 transition-all bg-transparent border-none outline-none"
+                                className="flex items-center gap-2 text-[#FF2800] font-black uppercase italic tracking-[0.2em] text-[10px] hover:scale-105 transition-all bg-transparent border-none outline-none"
                             >
-                                <LogOut className="w-4 h-4 text-[#FF2800]" />
+                                <LogOut className="w-3.5 h-3.5 text-[#FF2800]" />
                                 FINALIZAR SESIÓN
                             </button>
                         </div>

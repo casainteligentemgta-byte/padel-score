@@ -50,11 +50,7 @@ export default function LoginPage() {
 
     useEffect(() => {
         if (!authLoading && user && !profileLoading) {
-            if (isAdmin) {
-                router.replace('/admin');
-            } else {
-                router.replace('/tournaments');
-            }
+            router.replace(isAdmin ? '/admin' : '/hub');
         }
     }, [authLoading, user, profileLoading, isAdmin, router]);
 
@@ -112,7 +108,7 @@ export default function LoginPage() {
             if (isAdmin) {
                 router.push('/admin');
             } else {
-                router.push('/tournaments');
+                router.push('/hub');
             }
         } catch (err: any) {
             setError(getAuthErrorMessage(err));
