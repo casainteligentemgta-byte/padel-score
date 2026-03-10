@@ -453,7 +453,7 @@ export default function AdminPublicidad() {
                   </td>
                   <td className="px-6 py-5 text-center">
                     <button
-                      onClick={() => handleDownload(item.url, item.nombre_sponsor || item.nombre)}
+                      onClick={() => handleDownload(item.url, (item.nombre_sponsor || item.nombre) || '')}
                       className="p-2 opacity-40 hover:opacity-100 hover:bg-white/5 rounded-xl transition-all text-white"
                       title="Descargar archivo"
                     >
