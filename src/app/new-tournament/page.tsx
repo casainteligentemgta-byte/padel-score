@@ -39,11 +39,12 @@ const INITIAL_DATA = {
     groupSize: 3,
     matchFormat: 'ONE_SET_6' as 'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS',
     scoringSystem: 'GOLDEN_POINT' as 'GOLDEN_POINT' | 'TRADITIONAL',
+    tieBreakType: 'TB' as 'TB' | 'STB',
     startDate: new Date().toISOString().split('T')[0],
-    startTime: '08:00',
-    endTime: '22:00',
+    startTime: '16:00',
+    endTime: '23:30',
     complexName: '',
-    totalCourts: 4,
+    totalCourts: 3,
     courtNames: [] as string[],
     bufferMinutes: 2,
     advanceCount: 2,
@@ -333,7 +334,7 @@ export default function NewTournamentPage() {
                 // ── Asignación directa de tiempos/canchas a los pairings ──────────────────
                 // No usamos generateSchedule (que trunca por horario) sino que asignamos
                 // slots directamente sobre los allPairings para garantizar TODOS los partidos.
-                const numCourts = Math.max(1, tournamentData.courtNames.length);
+                const numCourts = tournamentData.courtNames.length > 0 ? tournamentData.courtNames.length : Math.max(1, tournamentData.totalCourts);
                 const [startH, startMin] = (tournamentData.startTime || "08:00").split(':').map(Number);
                 const slotMinutes = matchDuration + 2; // duración + buffer
 
@@ -521,6 +522,7 @@ export default function NewTournamentPage() {
                 isReduced: tournamentData.isReduced,
                 matchFormat: tournamentData.matchFormat,
                 scoringSystem: tournamentData.scoringSystem,
+                tieBreakType: tournamentData.tieBreakType,
                 groupAssignments: groupAssignments,
                 advancementRule: tournamentData.type === TournamentType.ROUND_ROBIN
                     ? { teamsPerGroup: tournamentData.groupSize, advanceCount: tournamentData.advanceCount, nextRound: Object.keys(groupAssignments).length === 2 ? 'QF' : 'SF' }
@@ -548,7 +550,7 @@ export default function NewTournamentPage() {
     };
 
     const nextStep = () => {
-        if (step === 3 && tournamentData.type !== TournamentType.ROUND_ROBIN) {
+        if (step === 3 && ![TournamentType.ROUND_ROBIN, TournamentType.KNOCKOUT, TournamentType.CRUZADO].includes(tournamentData.type as any)) {
             setStep(5);
         } else {
             setStep(s => Math.min(s + 1, 7));
@@ -556,7 +558,7 @@ export default function NewTournamentPage() {
     };
 
     const prevStep = () => {
-        if (step === 5 && tournamentData.type !== TournamentType.ROUND_ROBIN) {
+        if (step === 5 && ![TournamentType.ROUND_ROBIN, TournamentType.KNOCKOUT, TournamentType.CRUZADO].includes(tournamentData.type as any)) {
             setStep(3);
         } else {
             setStep(s => Math.max(s - 1, 1));
@@ -684,11 +686,10 @@ export default function NewTournamentPage() {
                             {[1, 2, 3, 4, 5, 6, 7].map(i => {
                                 let isActive = step >= i;
                                 // Handle visual skip for non-Round Robin
-                                if (tournamentData.type !== TournamentType.ROUND_ROBIN) {
+                                if (![TournamentType.ROUND_ROBIN, TournamentType.KNOCKOUT, TournamentType.CRUZADO].includes(tournamentData.type as any)) {
                                     if (step === 3 && i === 4) isActive = false;
                                     if (step >= 5 && i === 4) isActive = true;
-                                }
-                                return (
+                                } return (
                                     <div
                                         key={i}
                                         className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${isActive ? 'bg-padel-primary shadow-[0_0_10px_rgba(204,255,0,0.5)]' : 'bg-white/10'}`}
@@ -964,7 +965,7 @@ export default function NewTournamentPage() {
                                                     ...tournamentData,
                                                     complexName: c.name,
                                                     totalCourts: c.courts,
-                                                    courtNames: []
+                                                    courtNames: Array.from({ length: c.courts }, (_, i) => `Pista ${i + 1}`)
                                                 });
                                             }}
                                             className={`p-4 rounded-xl border text-left transition-all ${tournamentData.complexName === c.name ? 'border-padel-primary bg-padel-primary/10' : 'border-white/5 bg-white/5 hover:border-white/10'}`}
@@ -1133,7 +1134,7 @@ export default function NewTournamentPage() {
                                             key={type.id}
                                             onClick={() => {
                                                 setTournamentData({ ...tournamentData, type: type.id as any });
-                                                if (type.id === TournamentType.ROUND_ROBIN) setStep(4);
+                                                if ([TournamentType.ROUND_ROBIN, TournamentType.KNOCKOUT, TournamentType.CRUZADO].includes(type.id as any)) setStep(4);
                                                 else setStep(5);
                                             }}
                                             className={`group relative overflow-hidden rounded-3xl border-2 transition-all p-6 flex items-center justify-between gap-4 ${tournamentData.type === type.id
@@ -1505,13 +1506,37 @@ export default function NewTournamentPage() {
                                             </div>
                                         </div>
 
+                                        {/* Tie-break Type */}
+                                        <div className="space-y-4">
+                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Desempate (Tie-break)</label>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                {[
+                                                    { id: 'TB', label: 'Tie-break (7)', desc: 'Desempate a 7 puntos' },
+                                                    { id: 'STB', label: 'Super Tie-break (10)', desc: 'Desempate a 10 puntos' },
+                                                ].map(tb => (
+                                                    <button
+                                                        key={tb.id}
+                                                        onClick={() => setTournamentData({ ...tournamentData, tieBreakType: tb.id as any })}
+                                                        className={`p-4 rounded-xl text-left transition-all border ${tournamentData.tieBreakType === tb.id
+                                                            ? 'bg-padel-primary border-padel-primary text-black shadow-lg scale-[1.02]'
+                                                            : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
+                                                    >
+                                                        <span className="block font-black italic text-xs uppercase mb-1">{tb.label}</span>
+                                                        <span className={`block text-[8px] font-bold uppercase opacity-60 ${tournamentData.tieBreakType === tb.id ? 'text-black' : 'text-gray-600'}`}>
+                                                            {tb.desc}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
                                         {/* Scoring System */}
                                         <div className="space-y-4">
                                             <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Sistema de Puntuación</label>
                                             <div className="grid grid-cols-1 gap-2">
                                                 {[
-                                                    { id: 'GOLDEN_POINT', label: 'Punto de Oro', desc: 'Sin ventaja en el 40-40' },
-                                                    { id: 'TRADITIONAL', label: 'Ventaja Tradicional', desc: 'Sistema clásico de ventajas' },
+                                                    { id: 'GOLDEN_POINT', label: 'Punto de Oro', desc: 'Sin ventaja (al primero en ganar)' },
+                                                    { id: 'TRADITIONAL', label: 'Con Ventaja (Deuce)', desc: 'Sistema clásico (V-40, etc.)' },
                                                 ].map(sys => (
                                                     <button
                                                         key={sys.id}

@@ -19,16 +19,31 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import BouncingBall from '@/components/BouncingBall';
+import InvitationManager from '@/components/InvitationManager';
 
 export default function HubPage() {
     const { user, profile, logout, loading: authLoading } = useAuth();
     const router = useRouter();
 
-    const handlePlayerClick = () => {
-        if (profile?.id) {
-            router.push(`/players/${profile.id}`);
-        } else if (user?.uid) {
-            router.push('/players/register?mis-datos=1');
+    const handlePlayerClick = async () => {
+        if (!user?.uid) {
+            router.push('/login');
+            return;
+        }
+
+        try {
+            const mine = await dataService.getMyParticipants(user.uid);
+            const player = mine?.[0];
+            if (player?.id) {
+                // Si ya tiene ficha, vamos al formulario de edición (rellenado)
+                router.push(`/players/register?edit=${player.id}`);
+            } else {
+                // Si no tiene ficha, vamos al registro inicial
+                router.push('/players/register?mis-datos=1');
+            }
+        } catch (e) {
+            console.error('HubPage: error loading player profile', e);
+            router.push('/mi-cuenta');
         }
     };
 
@@ -71,23 +86,6 @@ export default function HubPage() {
         }
     ];
 
-    const utilityItems = [
-        {
-            name: 'Inicio',
-            icon: Home,
-            href: '/'
-        },
-        {
-            name: 'Privacidad',
-            icon: Shield,
-            href: '/politica-privacidad'
-        },
-        {
-            name: 'Términos',
-            icon: FileText,
-            href: '/terminos-inscripcion'
-        }
-    ];
 
     if (authLoading) {
         return (
@@ -112,6 +110,14 @@ export default function HubPage() {
                         <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white">
                             HOLA, <span className="text-padel-primary">{profile?.name?.split(' ')[0] || 'CRACK'}</span>
                         </h1>
+                        {profile?.uniqueCode && (
+                            <div className="mt-2 flex flex-col items-center">
+                                <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-[0.3em]">Tu Código de Jugador</span>
+                                <span className="text-lg font-black text-white tracking-[0.2em] font-mono bg-white/5 px-4 py-1 rounded-full border border-white/10 mt-1">
+                                    {profile.uniqueCode}
+                                </span>
+                            </div>
+                        )}
                     </div>
                 </header>
 
@@ -164,21 +170,8 @@ export default function HubPage() {
                             ))}
                         </div>
 
-                        {/* Utility Bar */}
-                        <div className="grid grid-cols-3 gap-3 mb-8">
-                            {utilityItems.map((item, index) => (
-                                <motion.button
-                                    key={item.name}
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ delay: 0.4 + (index * 0.1) }}
-                                    onClick={() => router.push(item.href)}
-                                    className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all"
-                                >
-                                    <item.icon className="w-4 h-4 text-zinc-400 mb-1" />
-                                    <span className="text-[8px] font-bold uppercase tracking-widest text-zinc-500">{item.name}</span>
-                                </motion.button>
-                            ))}
+                        <div className="space-y-6 mb-8">
+                            <InvitationManager />
                         </div>
 
                         {/* Logout Button */}

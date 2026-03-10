@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { dataService, type AdminSettings } from './dataService';
 
-const DEFAULTS = { appTitle: 'Smart Padel', clubName: '' };
+const DEFAULTS = { appTitle: 'Smart Padel', clubName: 'Bodeguero' };
 
 type AppSettingsContextValue = {
     appTitle: string;
@@ -17,7 +17,7 @@ const AppSettingsContext = createContext<AppSettingsContextValue>({
     ...DEFAULTS,
     timezone: '',
     loading: true,
-    refresh: async () => {},
+    refresh: async () => { },
 });
 
 export function AppSettingsProvider({ children }: { children: React.ReactNode }) {

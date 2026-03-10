@@ -166,7 +166,7 @@ function ScoreInput({
                     onClick={handleSave}
                     disabled={saving || g1 === g2}
                     title={g1 === g2 ? 'No puede ser empate' : 'Guardar resultado'}
-                    className="h-9 w-9 rounded-lg bg-padel-primary hover:bg-white text-black flex items-center justify-center transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="h-9 w-9 rounded-lg bg-padel-primary hover:opacity-90 text-black flex items-center justify-center transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     {saving
                         ? <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
@@ -355,7 +355,7 @@ export default function GroupPhaseView({
                             onClick={() => setActiveView(v.key)}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === v.key
                                 ? 'bg-padel-primary text-black shadow-lg shadow-padel-primary/20'
-                                : 'text-gray-500 hover:text-white'
+                                : 'text-gray-500 hover:text-padel-primary'
                                 }`}
                         >
                             <v.icon className="w-3 h-3" />
@@ -392,7 +392,7 @@ export default function GroupPhaseView({
                             onClick={() => setActiveGroup(name)}
                             className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all whitespace-nowrap flex items-center gap-1.5 ${currentGroup === name
                                 ? 'bg-padel-primary text-black shadow-[0_8px_20px_rgba(204,255,0,0.2)] scale-105'
-                                : 'bg-white/5 text-gray-500 hover:bg-white/10 border border-white/10'
+                                : 'bg-[#111] text-gray-500 hover:bg-[#1a1a1a] border border-white/5'
                                 }`}
                         >
                             <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[8px] font-black ${currentGroup === name ? 'bg-black/20' : 'bg-white/10'}`}>{name}</span>
@@ -599,8 +599,24 @@ export default function GroupPhaseView({
                                                     className={`group transition-colors ${isFinished ? 'bg-white/[0.01]' : 'hover:bg-white/[0.02]'}`}
                                                 >
                                                     <div className="flex items-center gap-3 px-5 py-3.5">
-                                                        {/* Status dot */}
-                                                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isFinished ? 'bg-green-500/40' : isLive ? 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-white/10'}`} />
+                                                        {/* Status & Time */}
+                                                        <div className="flex flex-col items-center gap-2 flex-shrink-0 min-w-[45px]">
+                                                            <div className={`w-2 h-2 rounded-full ${isFinished ? 'bg-green-500/40' : isLive ? 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-white/10'}`} />
+                                                            {(() => {
+                                                                const raw = match.scheduledTime || match.time;
+                                                                if (!raw) return null;
+                                                                const d = raw?.toDate ? raw.toDate() : new Date(raw);
+                                                                if (isNaN(d.getTime())) return null;
+                                                                const dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+                                                                const timeStr = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+                                                                return (
+                                                                    <div className="flex flex-col items-center gap-0.5">
+                                                                        <span className="text-[7px] font-black text-padel-primary/40 uppercase tracking-tighter">{dateStr}</span>
+                                                                        <span className="text-[9px] font-bold text-gray-500 tabular-nums">{timeStr}</span>
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </div>
 
                                                         {/* Team 1 & 2 */}
                                                         <div className="flex-1 min-w-0">
@@ -721,7 +737,7 @@ export default function GroupPhaseView({
                                         <p className="text-[10px] text-white font-bold mb-3">Se crearán las eliminatorias con los mejores de cada grupo.</p>
                                         <button
                                             onClick={() => { setFinishConfirm(false); onFinishGroupPhase(); }}
-                                            className="w-full py-2 bg-padel-primary hover:bg-white text-black text-[10px] font-black uppercase rounded-xl transition-all"
+                                            className="w-full py-2 bg-padel-primary hover:opacity-90 text-black text-[10px] font-black uppercase rounded-xl transition-all"
                                         >
                                             ✓ Confirmar
                                         </button>
@@ -729,7 +745,7 @@ export default function GroupPhaseView({
                                 )}
                                 <button
                                     onClick={() => setFinishConfirm(c => !c)}
-                                    className="flex items-center gap-2 px-5 py-3.5 bg-padel-primary hover:bg-white text-black font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-padel-primary/30 transition-all active:scale-95"
+                                    className="flex items-center gap-2 px-5 py-3.5 bg-padel-primary hover:opacity-90 text-black font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-padel-primary/30 transition-all active:scale-95"
                                 >
                                     <Flag className="w-4 h-4" />
                                     Finalizar Fase de Grupos

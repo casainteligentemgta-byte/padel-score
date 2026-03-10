@@ -15,6 +15,7 @@ import {
     ChevronRight,
     RefreshCw,
     User,
+    ArrowLeft,
     Link as LinkIcon,
     Share2,
     Copy,
@@ -769,19 +770,12 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const _nextSlot = _earliestMin !== null && _earliestMin > 0
         ? _pending.filter(p => _toMin(p.scheduledTime) === _earliestMin)
         : _pending;
-    // Clave compuesta estable aunque el ID sea undefined (matches se regeneran en cada render)
-    const _mkKey = (p: any) => `${_toMin(p.scheduledTime)}_${p.court ?? p.courtIndex ?? ''}`;
     const _courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
+    // Clave compuesta estable aunque el ID sea undefined (matches se regeneran en cada render)
+    const _mkKey = (p: any) => `${_toMin(p.scheduledTime)}_${_courtNum(p)}`;
 
-    // Por Comenzar: un solo partido por pista (el más próximo en el tiempo para esa pista)
-    const _nextByCourt = new Map<number, any>();
-    for (const p of _pending) {
-        const c = _courtNum(p);
-        if (c < 1 || c > _numCanchas) continue;
-        const existing = _nextByCourt.get(c);
-        if (!existing || _toMsT(p.scheduledTime) < _toMsT(existing.scheduledTime)) _nextByCourt.set(c, p);
-    }
-    const _nextUpKeys = new Set([..._nextByCourt.values()].map(_mkKey));
+    // Por Comenzar: mostrar exactamente los partidos que caben en las pistas disponibles (ej: 3 en Bodeguero)
+    const _nextUpKeys = new Set(_pending.slice(0, _numCanchas).map(_mkKey));
 
     // En Vivo: un solo partido por pista (no puede haber dos en vivo en la misma pista)
     const _liveByCourt = new Map<number, any>();
@@ -806,7 +800,9 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const filteredMatches = matches.filter(m => {
         if (activeTab === 'Todos') return true;
         if (activeTab === 'En Vivo') return _allowedLiveIds.has(m.id);
-        if (activeTab === 'Por Comenzar') return _nextUpKeys.has(_mkKey(m));
+        if (activeTab === 'Por Comenzar') {
+            return _nextUpKeys.has(_mkKey(m));
+        }
 
         if (activeTab === 'Finalizados') return m.status === MatchStatus.FINISHED;
         if (activeTab === 'Grupos' || activeTab === 'Ranking') return false;
@@ -983,12 +979,12 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                 <div className="max-w-4xl mx-auto px-6 pt-6 pb-4 flex justify-between items-center">
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-3 ml-12 md:ml-0">
-                            <Link href="/tournaments" className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors">
-                                <span className="material-symbols-outlined text-sm">arrow_back</span>
+                            <Link href="/tournaments" className="w-10 h-10 flex items-center justify-center rounded-full bg-padel-primary/10 hover:bg-padel-primary/20 transition-all active:scale-95 border border-padel-primary/20">
+                                <ArrowLeft className="w-5 h-5 text-padel-primary stroke-[3px]" />
                             </Link>
                             <div>
-                                <h1 className="text-lg font-bold leading-tight">
-                                    {tournament?.name || ''}
+                                <h1 className="text-lg font-black uppercase italic tracking-tighter leading-tight">
+                                    {tournament.name}
                                 </h1>
                             </div>
                         </div>
@@ -998,7 +994,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                             <button
                                 type="button"
                                 onClick={() => setActiveTab('Todos')}
-                                className="flex items-center gap-2 px-4 py-2 rounded-full bg-padel-primary/20 border border-padel-primary/40 text-padel-primary hover:bg-padel-primary/30 transition-colors text-xs font-bold uppercase tracking-widest"
+                                className="flex items-center gap-2 px-4 py-2 rounded-full bg-padel-primary text-black hover:ring-2 hover:ring-padel-primary/30 transition-all text-xs font-black italic uppercase tracking-widest active:scale-95"
                                 title="Ver cuadro de partidos"
                             >
                                 Siguiente
@@ -1010,14 +1006,48 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                         <button
                             type="button"
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsShareModalOpen(true); }}
-                            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
+                            className="w-10 h-10 flex items-center justify-center rounded-full bg-padel-primary text-black hover:ring-2 hover:ring-padel-primary/30 transition-all active:scale-90"
                             title="Compartir"
                         >
-                            <Share2 className="w-4 h-4 text-padel-primary" />
+                            <Share2 className="w-5 h-5" />
                         </button>
                     </div>
                 </div>
             </header>
+
+            {/* Tabs for content switching - Moved to top as requested */}
+            {!isLiveDashboard && (
+                <nav className="bg-[#0a0a0a]/60 backdrop-blur-md border-b border-white/5 py-3 sticky top-[4.5rem] z-50">
+                    <div className="max-w-4xl mx-auto px-4 overflow-x-auto hide-scrollbar">
+                        <div className="flex flex-nowrap items-center gap-2">
+                            {visibleTabs.map((tab, tabIdx) => {
+                                const isLive = tab === 'En Vivo';
+                                const isActive = activeTab === tab;
+                                return (
+                                    <button
+                                        key={`tab-top-${tabIdx}-${tab}`}
+                                        onClick={() => setActiveTab(tab)}
+                                        className={`flex-1 min-w-[90px] px-4 py-2.5 rounded-xl text-[10px] font-black italic uppercase tracking-widest transition-all duration-300 transform active:scale-95 border
+                                            ${isActive
+                                                ? isLive
+                                                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 border-red-500/50'
+                                                    : 'bg-padel-primary text-black shadow-lg shadow-padel-primary/20 border-padel-primary/50'
+                                                : 'bg-white/5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300 border-white/5'
+                                            }`}
+                                    >
+                                        {isLive ? (
+                                            <span className="flex items-center justify-center gap-1.5">
+                                                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : 'bg-red-500'} animate-pulse`} />
+                                                {tab}
+                                            </span>
+                                        ) : tab}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </nav>
+            )}
 
             {/* Content Area (pizarra / cuadro / listados) */}
             <div className={`ipad-scroll-area pb-20 ${isLiveDashboard ? 'overflow-hidden !pr-0' : (activeTab === 'Por Comenzar' ? 'overflow-hidden' : '')}`}>
@@ -1477,7 +1507,8 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                         const cols = _numCanchas <= 1 ? 1 : _numCanchas <= 2 ? 2 : 3;
                                         const gridCols = cols === 1 ? 'grid-cols-1' : cols === 2 ? 'grid-cols-2' : 'grid-cols-3';
                                         if (isLiveDashboard) return `grid ${gridCols} gap-4 h-full items-start`;
-                                        if (activeTab === 'Por Comenzar') return `grid ${gridCols} gap-3 flex-1 min-h-0 items-start`;
+                                        if (activeTab === 'Por Comenzar') return `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 flex-1 min-h-0 items-start`;
+
                                         return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start';
                                     })()}>
                                         {displayMatches.filter((match: any) => match && match.team1 && match.team2).map((match: any, idx: number) => {
@@ -1543,8 +1574,15 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                                 return <span className="text-[11px] font-bold text-orange-400 tracking-wider flex-shrink-0">{estTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>;
                                                                             }
                                                                             const d = raw?.toDate ? raw.toDate() : new Date(raw);
-                                                                            const hhmm = isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
-                                                                            return <span className="text-[11px] font-bold text-gray-400 tracking-wider flex-shrink-0">{hhmm}</span>;
+                                                                            if (isNaN(d.getTime())) return <span className="text-[11px] font-bold text-gray-400 tracking-wider flex-shrink-0">—</span>;
+                                                                            const dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+                                                                            const timeStr = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+                                                                            return (
+                                                                                <div className="flex flex-col items-start gap-0.5 flex-shrink-0">
+                                                                                    <span className="text-[10px] font-black text-padel-primary/60 tracking-tighter uppercase">{dateStr}</span>
+                                                                                    <span className="text-[11px] font-bold text-gray-400 tracking-wider">{timeStr}</span>
+                                                                                </div>
+                                                                            );
                                                                         })()}
                                                                         <span className="text-white/30 flex-shrink-0">·</span>
                                                                         <span className={`text-[11px] font-black uppercase tracking-widest italic flex-shrink-0 ${match.status === MatchStatus.LIVE ? 'text-padel-primary' : 'text-gray-500'}`}>
@@ -1838,38 +1876,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                 </main>
             </div>
 
-            {/* Navbar debajo de la pizarra: pestañas fijas al fondo */}
-            <nav className="fixed bottom-0 left-0 right-0 z-[50] bg-[#0a0a0a]/95 backdrop-blur-xl border-t border-white/10 safe-area-pb">
-                <div className="max-w-4xl mx-auto px-2 py-2 overflow-x-auto hide-scrollbar flex justify-center">
-                    <div className="flex flex-wrap justify-center gap-x-1 gap-y-1">
-                        {visibleTabs.map((tab, tabIdx) => {
-                            const isLive = tab === 'En Vivo';
-                            return (
-                                <button
-                                    key={`tab-${tabIdx}-${tab}`}
-                                    onClick={() => setActiveTab(tab)}
-                                    className={`min-w-[80px] px-3 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap
-                                        ${activeTab === tab
-                                            ? isLive
-                                                ? 'border-red-500 text-red-400'
-                                                : 'border-padel-primary text-padel-primary'
-                                            : isLive
-                                                ? 'border-transparent text-red-600 hover:text-red-400'
-                                                : 'border-transparent text-gray-500 hover:text-gray-300'
-                                        }`}
-                                >
-                                    {isLive ? (
-                                        <span className="flex items-center justify-center gap-1">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-                                            {tab}
-                                        </span>
-                                    ) : tab}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-            </nav>
+
 
             {/* Score Management Modal */}
             <AnimatePresence>
@@ -2051,14 +2058,12 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                     <div className="p-6 space-y-4">
                                         <button
                                             onClick={sharePDFCuadro}
-                                            className="w-full flex items-center justify-center gap-3 p-4 rounded-2xl bg-padel-primary/20 border border-padel-primary/40 hover:bg-padel-primary/30 transition-all group"
+                                            className="w-full flex items-center justify-center gap-3 p-4 rounded-2xl bg-padel-primary hover:opacity-90 text-black transition-all transform active:scale-95 group"
                                         >
-                                            <div className="w-10 h-10 rounded-full bg-padel-primary flex items-center justify-center text-black">
-                                                <Download className="w-5 h-5" />
-                                            </div>
+                                            <Download className="w-5 h-5" />
                                             <div className="text-left">
-                                                <span className="text-sm font-black uppercase tracking-tight text-padel-primary block">Compartir PDF del cuadro</span>
-                                                <span className="text-[10px] text-white/70 font-bold uppercase tracking-widest">Descarga o comparte el cuadro del torneo</span>
+                                                <span className="text-sm font-black italic uppercase tracking-tight block">Compartir PDF del cuadro</span>
+                                                <span className="text-[10px] opacity-70 font-bold uppercase tracking-widest">Descarga el cuadro del torneo</span>
                                             </div>
                                         </button>
                                         <div className="grid grid-cols-2 gap-3">
@@ -2102,24 +2107,24 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                     setCopied(true);
                                                     setTimeout(() => setCopied(false), 2000);
                                                 }}
-                                                className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-padel-primary/10 border border-padel-primary/20 hover:bg-padel-primary/20 transition-all group"
+                                                className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all transform active:scale-95 group ${copied ? 'bg-padel-primary border-padel-primary text-black' : 'bg-[#111] border-white/10 hover:bg-[#1a1a1a] text-padel-primary'}`}
                                             >
-                                                <div className="w-10 h-10 rounded-full bg-padel-primary flex items-center justify-center text-black">
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${copied ? 'bg-black text-padel-primary' : 'bg-padel-primary text-black'}`}>
                                                     {copied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
                                                 </div>
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-padel-primary">{copied ? 'Copiado' : 'Copiar link'}</span>
+                                                <span className={`text-[9px] font-black uppercase tracking-widest ${copied ? 'text-black' : 'text-padel-primary'}`}>{copied ? 'Copiado' : 'Link'}</span>
                                             </button>
 
                                             <button
                                                 onClick={generatePDF}
-                                                className="col-span-2 flex items-center justify-center gap-3 p-4 rounded-2xl bg-white/10 border border-white/20 hover:bg-white/20 transition-all group"
+                                                className="col-span-2 flex items-center justify-center gap-3 p-4 rounded-2xl bg-zinc-900 border border-white/5 hover:border-padel-primary/50 transition-all transform active:scale-[0.98] group"
                                             >
-                                                <div className="w-10 h-10 rounded-full bg-[#ccff00] flex items-center justify-center text-black">
-                                                    <Download className="w-5 h-5" />
+                                                <div className="w-10 h-10 rounded-full bg-padel-primary flex items-center justify-center text-black shadow-lg shadow-padel-primary/20">
+                                                    <FileText className="w-5 h-5" />
                                                 </div>
                                                 <div className="text-left">
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-white block">Descargar Planilla</span>
-                                                    <span className="text-[8px] text-gray-500 font-bold uppercase tracking-widest">Documento PDF (A4)</span>
+                                                    <span className="text-xs font-black italic uppercase tracking-widest text-white block">Descargar Planilla de Control</span>
+                                                    <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Documento PDF Oficial (A4)</span>
                                                 </div>
                                             </button>
                                         </div>

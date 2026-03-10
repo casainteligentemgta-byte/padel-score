@@ -30,7 +30,8 @@ import {
   ChevronRight,
   ExternalLink,
   Search,
-  Clock
+  Clock,
+  Download
 } from 'lucide-react';
 
 const isVideoFile = (f: File) => f.type.startsWith('video/');
@@ -198,6 +199,26 @@ export default function AdminPublicidad() {
     }
   };
 
+  const handleDownload = async (url: string, filename: string) => {
+    if (!url) return;
+    try {
+      // Intentar forzar descarga a través de blob
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename || 'descarga';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (e) {
+      // Fallback: abrir en nueva pestaña
+      window.open(url, '_blank');
+    }
+  };
+
   const deleteMedia = async (id: string) => {
     if (!supabase || !confirm('¿Eliminar este contenido?')) return;
     try {
@@ -351,6 +372,16 @@ export default function AdminPublicidad() {
     }
   };
 
+  const updateMediaName = async (id: string, nuevoNombre: string) => {
+    if (!supabase || !nuevoNombre.trim()) return;
+    try {
+      await supabase.from('media_content').update({ nombre_sponsor: nuevoNombre.trim() }).eq('id', id);
+      setMediaList(prev => prev.map(item => item.id === id ? { ...item, nombre_sponsor: nuevoNombre.trim() } : item));
+    } catch (e: any) {
+      setError('Error al actualizar nombre');
+    }
+  };
+
   const renderTable = (items: MediaContent[], accentClass: string) => (
     <div className="overflow-hidden bg-black/20 border border-white/5 rounded-[2rem]">
       <div className="max-h-[350px] overflow-y-auto custom-scroll">
@@ -361,6 +392,7 @@ export default function AdminPublicidad() {
               <th className="px-6 py-5 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center">Emisión</th>
               <th className="px-6 py-5 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center">Tiempo (s)</th>
               <th className="px-6 py-5 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center">Borrar</th>
+              <th className="px-6 py-5 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center">Descargar</th>
               <th className="px-6 py-5 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center">Vista</th>
             </tr>
           </thead>
@@ -379,9 +411,12 @@ export default function AdminPublicidad() {
                       <div className="w-8 h-8 rounded-lg bg-black/40 flex items-center justify-center border border-white/5">
                         {item.tipo.includes('video') ? <Video size={14} className="text-padel-primary" /> : item.tipo === 'imagen' ? <ImageIcon size={14} className="text-blue-400" /> : item.tipo === 'url_web' ? <ExternalLink size={14} className="text-orange-400" /> : <Layers size={14} className="text-purple-400" />}
                       </div>
-                      <span className={`text-xs font-black uppercase tracking-tight italic text-white group-hover:${accentClass} transition-colors truncate max-w-[300px]`}>
-                        {item.nombre_sponsor || item.nombre || 'Sin título'}
-                      </span>
+                      <input
+                        type="text"
+                        defaultValue={item.nombre_sponsor || item.nombre || 'Sin título'}
+                        onBlur={(e) => updateMediaName(item.id, e.target.value)}
+                        className={`bg-transparent border-none outline-none text-xs font-black uppercase tracking-tight italic text-white focus:${accentClass} group-hover:text-padel-primary transition-colors truncate max-w-[300px]`}
+                      />
                     </div>
                   </td>
                   <td className="px-6 py-5 text-center">
@@ -414,6 +449,15 @@ export default function AdminPublicidad() {
                       className="p-2 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
                     >
                       <Trash2 size={16} />
+                    </button>
+                  </td>
+                  <td className="px-6 py-5 text-center">
+                    <button
+                      onClick={() => handleDownload(item.url, item.nombre_sponsor || item.nombre)}
+                      className="p-2 opacity-40 hover:opacity-100 hover:bg-white/5 rounded-xl transition-all text-white"
+                      title="Descargar archivo"
+                    >
+                      <Download size={16} />
                     </button>
                   </td>
                   <td className="px-6 py-5 text-center">
@@ -463,11 +507,14 @@ export default function AdminPublicidad() {
         {/* Global Header */}
         <header className="flex flex-col md:flex-row justify-between items-center gap-6 mb-12 relative z-10">
           <div className="flex items-center gap-4">
-            <BouncingBall size={48} />
             <div>
               <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-padel-primary italic opacity-70">Multimedia Control Tower</h4>
-              <h1 className="text-4xl font-black italic uppercase tracking-tighter">
-                PADEL <span className="text-padel-primary">SMART</span> <span className="text-white/20 not-italic ml-2">ADS</span>
+              <h1 className="text-4xl font-black italic uppercase tracking-tighter flex items-center gap-3">
+                <span className="text-padel-primary">SMART</span> PADEL
+                <div className="mb-2">
+                  <BouncingBall size={20} />
+                </div>
+                <span className="text-white/20 not-italic">ADS</span>
               </h1>
             </div>
           </div>
@@ -928,7 +975,21 @@ export default function AdminPublicidad() {
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setPreviewUrl(null)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="relative z-10 w-full max-w-4xl aspect-video bg-black rounded-3xl overflow-hidden shadow-3xl border border-white/10">
-              <button onClick={() => setPreviewUrl(null)} className="absolute top-6 right-6 p-2 bg-black/50 hover:bg-black rounded-full text-white z-20"><X /></button>
+              <div className="absolute top-6 right-6 flex gap-3 z-20">
+                <button
+                  onClick={() => handleDownload(previewUrl!, 'preview_content')}
+                  className="p-2 bg-black/50 hover:bg-black rounded-full text-white transition-all border border-white/10"
+                  title="Descargar"
+                >
+                  <Download size={20} />
+                </button>
+                <button
+                  onClick={() => setPreviewUrl(null)}
+                  className="p-2 bg-black/50 hover:bg-black rounded-full text-white transition-all border border-white/10"
+                >
+                  <X size={20} />
+                </button>
+              </div>
               {previewUrl.match(/\.(mp4|webm|mov|m4v)/i) ? (
                 <video src={previewUrl} className="w-full h-full" controls autoPlay />
               ) : (

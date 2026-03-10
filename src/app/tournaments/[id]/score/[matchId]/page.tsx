@@ -254,6 +254,9 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             if (t.scoringSystem) {
                 setIsGoldenPoint(t.scoringSystem === 'GOLDEN_POINT');
             }
+            if (t.tieBreakType) {
+                setTiebreakTo(t.tieBreakType === 'STB' ? 10 : 7);
+            }
 
             // Resolver partido
             let foundMatchRaw = ms.find((m: any) => m.id === matchId);

@@ -67,6 +67,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         try {
             const data = await dataService.getUserProfile(uid);
             if (data) {
+                // If profile exists but missing uniqueCode, generate and update it
+                if (!data.uniqueCode) {
+                    const code = await dataService.setUserProfile(uid, { ...data, uniqueCode: undefined });
+                    // Re-fetch to get the new code properly updated in state
+                    const updatedData = await dataService.getUserProfile(uid);
+                    setProfile(updatedData);
+                    return updatedData;
+                }
                 setProfile(data);
                 return data;
             }
@@ -223,7 +231,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const logout = async () => {
-        if (supabase) await supabase.auth.signOut();
+        if (supabase) {
+            try {
+                await supabase.auth.signOut();
+            } catch (e) {
+                console.error('AuthContext: Error during signOut:', e);
+            }
+        }
+        setUser(null);
         setProfile(null);
     };
 

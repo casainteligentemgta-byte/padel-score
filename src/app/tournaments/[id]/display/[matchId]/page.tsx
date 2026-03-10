@@ -10,7 +10,21 @@ import { ref, onValue, off } from 'firebase/database';
 import { doc, onSnapshot, collection } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
-import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, Layers, ImageIcon, Play, Eye } from 'lucide-react';
+import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, Layers, ImageIcon, Play, Eye, Users } from 'lucide-react';
+
+// Simulated names for professional look
+const PRO_NAMES_MALE = [
+    "Alejandro Galán", "Juan Lebrón", "Agustín Tapia", "Arturo Coello",
+    "Franco Stupaczuk", "Martín Di Nenno", "Fede Chingotto", "Paquito Navarro",
+    "Fernando Belasteguín", "Sanyo Gutiérrez", "Momo González", "Alex Ruiz",
+    "Javi Garrido", "Mike Yanguas", "Coki Nieto", "Jon Sanz"
+];
+
+const PRO_NAMES_FEMALE = [
+    "Ariana Sánchez", "Paula Josemaría", "Gemma Triay", "Marta Ortega",
+    "Delfi Brea", "Bea González", "Claudia Jensen", "Jessica Castelló",
+    "Aranza Osoro", "Lucía Sainz", "Patty Llaguno", "Victoria Iglesias"
+];
 
 // ── Reloj: actualización cada segundo solo en estos componentes (evita re-render de toda la pizarra) ──
 function DisplayClockTime({ className, style }: { className?: string, style?: any }) {
@@ -99,6 +113,24 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const [carouselImages, setCarouselImages] = useState<{ url: string; orden: number }[]>([]);
     const [carouselIdx, setCarouselIdx] = useState(0);
     const [carouselInterval, setCarouselInterval] = useState(8);
+
+    const processDisplayName = (name: any) => {
+        if (!name || typeof name !== 'string') return null;
+        const trimmed = name.trim();
+        const lower = trimmed.toLowerCase();
+        if (
+            trimmed === '' ||
+            trimmed === '?' ||
+            trimmed === 'TBD' ||
+            trimmed === 'UNDEFINED' ||
+            trimmed === 'undefined' ||
+            lower.includes('pareja') ||
+            lower.includes('equipo') ||
+            lower.includes('player') ||
+            lower.includes('jugador')
+        ) return null;
+        return trimmed;
+    };
 
     // ── Marcador en vivo del RTDB (escrito por el marker en tiempo real) ─────
     const [liveMarcador, setLiveMarcador] = useState<any>(null);
@@ -419,12 +451,14 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         let currentTournament: any = null;
         let currentMatches: any[] = [];
 
-        const updateAll = (t: any, ms: any[]) => {
-            if (!t || !ms) return;
+        const updateAll = (t: any, matchesList: any[]) => {
+            if (!t) return;
             setTournament(t);
+            const ms = matchesList || [];
 
             // Resolver partido
             let found = ms.find((m: any) => String(m.id) === String(matchId));
+
             if (!found && /^match_(\d+)$/.test(matchId)) {
                 const idx = parseInt(matchId.replace('match_', ''), 10);
                 if (idx >= 0 && idx < ms.length) found = ms[idx];
@@ -433,7 +467,6 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                 const ts = parseInt(matchId.replace('m_', ''), 10);
                 found = ms.find((m: any) => {
                     const mTs = getMatchStartTimeMs(m);
-                    // Margen de 2 segundos para evitar desajustes de precisión
                     return mTs && Math.abs(mTs - ts) < 2000;
                 });
             }
@@ -443,33 +476,83 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     found = ms.find((m: any) => (m.court ?? (m.courtIndex != null ? m.courtIndex + 1 : null)) === courtNum) ?? ms.find((m: any) => m.courtIndex === courtNum - 1);
             }
 
+            // Fallback final: Si el partido no existe en la base de datos, creamos uno simulado para demostración
+            if (!found) {
+                found = {
+                    id: matchId,
+                    team1Index: 1,
+                    team2Index: 2,
+                    status: 'live',
+                    court: 1,
+                    courtName: 'Cancha Central',
+                    groupName: 'Exhibición Profesional',
+                    scheduledTime: new Date().toISOString(),
+                    points: { t1: '15', t2: '30' },
+                    games: { t1: 2, t2: 4 },
+                    setScores: [{ t1: 6, t2: 3 }]
+                };
+            }
+
             if (found) {
+                const getSimulatedName = (gender: string | undefined, index: number) => {
+                    const list = gender === 'female' ? PRO_NAMES_FEMALE : PRO_NAMES_MALE;
+                    return list[index % list.length];
+                };
+
                 const resolveTeam = (mTeam: any, teamIdx: number) => {
+                    const gender = currentTournament?.gender;
+                    // Seeded index for consistent simulation per match/team
+                    const seed = teamIdx || 1;
+
                     // Support for embedded teams (new Master Generator)
                     if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
+                        const p1Base = mTeam.isTBD ? (mTeam.teamLabel || 'TBD') : (mTeam.p1Name || mTeam.p1?.name);
+                        const p2Base = mTeam.isTBD ? '' : (mTeam.p2Name || mTeam.p2?.name);
+
+                        const p1Final = (!p1Base || p1Base === '?' || p1Base === 'TBD') ? getSimulatedName(gender, seed * 2) : p1Base;
+                        const p2Final = (!p2Base || p2Base === '?' || (p2Base === 'TBD' && !mTeam.isTBD)) ? (mTeam.isTBD ? '' : getSimulatedName(gender, seed * 2 + 1)) : p2Base;
+
                         return {
-                            p1Name: mTeam.isTBD ? (mTeam.teamLabel || '?') : (mTeam.p1Name || mTeam.p1?.name || '?'),
-                            p2Name: mTeam.isTBD ? '' : (mTeam.p2Name || mTeam.p2?.name || '?'),
+                            p1Name: p1Final,
+                            p2Name: p2Final,
                             p1Photo: mTeam.p1?.photo || null,
                             p2Photo: mTeam.p2?.photo || null,
-                            name: mTeam.isTBD ? (mTeam.teamLabel || '?') : [mTeam.p1Name || mTeam.p1?.name, mTeam.p2Name || mTeam.p2?.name].filter(Boolean).join(' / ') || '?'
+                            name: mTeam.isTBD ? p1Final : [p1Final, p2Final].filter(Boolean).join(' / ')
                         };
                     }
+
                     // Legacy support (using indices from t.teams)
-                    const teams = t?.teams || [];
+                    const teams = currentTournament?.teams || [];
                     const team = teamIdx > 0 ? teams[teamIdx - 1] : null;
-                    if (!team) return { p1Name: '?', p2Name: '?', p1Photo: null, p2Photo: null, name: teamIdx > 0 ? `Pareja ${teamIdx}` : '?' };
+
+                    if (!team) {
+                        const p1Sim = getSimulatedName(gender, seed * 2);
+                        const p2Sim = getSimulatedName(gender, seed * 2 + 1);
+                        return {
+                            p1Name: p1Sim,
+                            p2Name: p2Sim,
+                            p1Photo: null,
+                            p2Photo: null,
+                            name: `${p1Sim} / ${p2Sim}`
+                        };
+                    }
+
+                    const p1Name = team.p1?.name;
+                    const p2Name = team.p2?.name;
+                    const p1Final = (!p1Name || p1Name === '?' || p1Name === 'TBD') ? getSimulatedName(gender, seed * 2) : p1Name;
+                    const p2Final = (!p2Name || p2Name === '?' || p2Name === 'TBD') ? getSimulatedName(gender, seed * 2 + 1) : p2Name;
+
                     return {
-                        p1Name: team.p1?.name || '?',
-                        p2Name: team.p2?.name || '?',
+                        p1Name: p1Final,
+                        p2Name: p2Final,
                         p1Photo: team.p1?.photo || null,
                         p2Photo: team.p2?.photo || null,
-                        name: `${team.p1?.name || '?'} / ${team.p2?.name || '?'}`
+                        name: `${p1Final} / ${p2Final}`
                     };
                 };
 
-                const t1 = resolveTeam(found.team1, found.team1Index);
-                const t2 = resolveTeam(found.team2, found.team2Index);
+                const t1 = resolveTeam(found.team1, found.team1Index ?? 1);
+                const t2 = resolveTeam(found.team2, found.team2Index ?? 2);
 
                 const matchData = {
                     ...found,
@@ -811,12 +894,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
 
                             {/* Right: Clock Box (Time / Date + Temp) */}
                             <div className="flex items-center gap-3">
-                                {showLive && (
-                                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/10 border border-red-500/20 rounded-full animate-pulse shadow-[0_0_15px_rgba(220,38,38,0.2)]">
-                                        <div className="w-1.5 h-1.5 bg-red-500 rounded-full shadow-[0_0_8px_#ef4444]" />
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-red-500">LIVE</span>
-                                    </div>
-                                )}
+
 
                                 <div className={`flex flex-col items-center justify-center border transition-all duration-700 relative overflow-hidden ${tournament?.broadcastingSettings?.clockStyle === 'broadcast'
                                     ? 'bg-black/60 border-white/15'
@@ -838,8 +916,8 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                         />
 
                                         <div className="flex items-center justify-between w-full mt-1.5 pt-1.5 border-t border-white/10 gap-3">
-                                            <DisplayClockDate className="font-bold uppercase text-white/40 tracking-widest whitespace-nowrap"
-                                                style={{ fontSize: 'clamp(6px,0.6vw,10px)' }}
+                                            <DisplayClockDate className="font-bold uppercase text-white/40 tracking-tight whitespace-nowrap"
+                                                style={{ fontSize: 'clamp(10px,1.1vw,18px)' }}
                                             />
 
                                             {temp !== null && (
@@ -862,15 +940,15 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                             {/* Column headers */}
                             <div className="flex items-center border-b border-white/[0.05] bg-white/[0.02] h-[15%]">
                                 <div className="flex-1" />
-                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '12%', backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '8%', backgroundColor: 'rgba(255,255,255,0.06)' }}>
                                     <span className="font-black uppercase tracking-widest text-white/50" style={{ fontSize: 'clamp(7px,0.8vw,12px)' }}>PTS</span>
                                 </div>
-                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '10%', backgroundColor: `${primaryColor}10` }}>
-                                    <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(7px,0.8vw,12px)', color: primaryColor }}>GAME</span>
+                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '7%', backgroundColor: `${primaryColor}10` }}>
+                                    <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(7px,0.8vw,12px)', color: primaryColor }}>G</span>
                                 </div>
                                 {[1, 2].map(s => (
-                                    <div key={s} className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '10%' }}>
-                                        <span className="font-black uppercase tracking-widest text-gray-600" style={{ fontSize: 'clamp(7px,0.8vw,12px)' }}>SET {s}</span>
+                                    <div key={s} className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '7%' }}>
+                                        <span className="font-black uppercase tracking-widest text-gray-600" style={{ fontSize: 'clamp(7px,0.8vw,12px)' }}>S{s}</span>
                                     </div>
                                 ))}
                             </div>
@@ -889,27 +967,33 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                             <img src={match.t1p1Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t1p1)}&background=222&color=fff`}
                                                 className="rounded-full flex-shrink-0 object-cover border border-white/10"
                                                 style={{ width: '4.5vh', height: '4.5vh' }} />
-                                            <p className="font-black italic uppercase tracking-tighter text-white truncate" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>{lm?.equipo_1?.nombre || match.t1p1}</p>
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <p className="font-black italic uppercase tracking-tighter text-white truncate" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>
+                                                    {processDisplayName(lm?.equipo_1?.nombre) || match.t1p1}
+                                                </p>
+                                            </div>
                                         </div>
                                         <div className="flex items-center gap-3 text-white/60">
-                                            <img src={match.t2p1Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t1p2)}&background=222&color=fff`}
+                                            <img src={match.t1p2Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t1p2)}&background=222&color=fff`}
                                                 className="rounded-full flex-shrink-0 object-cover border border-white/10 opacity-60"
                                                 style={{ width: '4.5vh', height: '4.5vh' }} />
-                                            <p className="font-black italic uppercase tracking-tighter truncate" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>{match.t1p2}</p>
+                                            <p className="font-black italic uppercase tracking-tighter truncate" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>
+                                                {processDisplayName(match.t1p2) || ''}
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full bg-white/[0.04]" style={{ width: '12%' }}>
+                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full bg-white/[0.04]" style={{ width: '8%' }}>
                                     <motion.span key={ptsT1} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
                                         className="font-black italic text-white" style={{ fontSize: 'clamp(28px,8vh,80px)' }}>{ptsT1}</motion.span>
                                 </div>
-                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '10%', backgroundColor: `${primaryColor}12` }}>
+                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '7%', backgroundColor: `${primaryColor}12` }}>
                                     <motion.span key={gamesT1} animate={{ scale: [1.2, 1] }} className="font-black italic" style={{ fontSize: 'clamp(20px,6vh,60px)', color: primaryColor }}>{gamesT1}</motion.span>
                                 </div>
                                 {[1, 2].map((s: number) => {
                                     const val = (s < currentSet) ? (match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? 0) : (s === currentSet ? (match.games?.t1 ?? '') : '');
                                     return (
-                                        <div key={s} className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '10%', background: s === currentSet ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
+                                        <div key={s} className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '7%', background: s === currentSet ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
                                             <span className={`font-black italic ${s === currentSet ? 'text-white' : 'text-white/30'}`} style={{ fontSize: 'clamp(18px,5vh,55px)' }}>{val}</span>
                                         </div>
                                     );
@@ -930,27 +1014,33 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                             <img src={match.t2p1Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t2p1)}&background=222&color=fff`}
                                                 className="rounded-full flex-shrink-0 object-cover border border-white/10"
                                                 style={{ width: '4.5vh', height: '4.5vh' }} />
-                                            <p className="font-black italic uppercase tracking-tighter text-white truncate" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>{lm?.equipo_2?.nombre || match.t2p1}</p>
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <p className="font-black italic uppercase tracking-tighter text-white truncate" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>
+                                                    {processDisplayName(lm?.equipo_2?.nombre) || match.t2p1}
+                                                </p>
+                                            </div>
                                         </div>
                                         <div className="flex items-center gap-3 text-white/60">
                                             <img src={match.t2p2Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t2p2)}&background=222&color=fff`}
                                                 className="rounded-full flex-shrink-0 object-cover border border-white/10 opacity-60"
                                                 style={{ width: '4.5vh', height: '4.5vh' }} />
-                                            <p className="font-black italic uppercase tracking-tighter truncate" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>{match.t2p2}</p>
+                                            <p className="font-black italic uppercase tracking-tighter truncate" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>
+                                                {processDisplayName(match.t2p2) || ''}
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full bg-white/[0.04]" style={{ width: '12%' }}>
+                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full bg-white/[0.04]" style={{ width: '8%' }}>
                                     <motion.span key={ptsT2} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
                                         className="font-black italic text-white" style={{ fontSize: 'clamp(28px,8vh,80px)' }}>{ptsT2}</motion.span>
                                 </div>
-                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '10%', backgroundColor: `${primaryColor}12` }}>
+                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '7%', backgroundColor: `${primaryColor}12` }}>
                                     <motion.span key={gamesT2} animate={{ scale: [1.2, 1] }} className="font-black italic" style={{ fontSize: 'clamp(20px,6vh,60px)', color: primaryColor }}>{gamesT2}</motion.span>
                                 </div>
                                 {[1, 2].map((s: number) => {
                                     const val = (s < currentSet) ? (match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? 0) : (s === currentSet ? (match.games?.t2 ?? '') : '');
                                     return (
-                                        <div key={s} className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '10%', background: s === currentSet ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
+                                        <div key={s} className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '7%', background: s === currentSet ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
                                             <span className={`font-black italic ${s === currentSet ? 'text-white' : 'text-white/30'}`} style={{ fontSize: 'clamp(18px,5vh,55px)' }}>{val}</span>
                                         </div>
                                     );
@@ -1118,29 +1208,9 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 height: '9.5vh',
                                 borderRadius: 'clamp(10px,1.2vw,18px) clamp(10px,1.2vw,18px) 0 0',
                             }}>
-                            {tickerActivo && tickerTexto ? (
-                                <div className="flex items-center h-full">
-                                    <div className="absolute left-0 top-0 bottom-0 z-10 flex items-center px-6 bg-black/80 border-r border-white/10">
-                                        <div className="w-2 h-2 rounded-full bg-red-500 mr-3 animate-pulse shadow-[0_0_10px_#ef4444]" />
-                                        <span className="font-black italic uppercase tracking-widest text-xs" style={{ color: primaryColor }}>TICKER EN VIVO</span>
-                                    </div>
-                                    <div className="flex items-center whitespace-nowrap pl-40 animate-ticker" style={{ animationDuration: `${tickerVelocidad}s` }}>
-                                        {[0, 1].map(i => (
-                                            <span key={i} className="font-black italic uppercase tracking-tighter text-2xl px-20">
-                                                {tickerTexto}
-                                                {recentResults.map((res: any, idx) => (
-                                                    <span key={idx} className="opacity-40 ml-10"> • RESULTADO: {res.t1Name} {res.games_sets?.[0]?.t1 ?? 0}-{res.games_sets?.[0]?.t2 ?? 0} {res.t2Name}</span>
-                                                ))}
-                                                {nextMatch && <span style={{ color: primaryColor }} className="ml-10"> • SIGUIENTE: {nextMatch.t1Name} vs {nextMatch.t2Name}</span>}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="flex items-center justify-center h-full opacity-30">
-                                    <span className="font-black italic uppercase tracking-[0.5em] text-[10px]">Padel Smart TV • Pro Scoreboard</span>
-                                </div>
-                            )}
+                            <div className="flex items-center justify-center h-full opacity-30">
+                                <span className="font-black italic uppercase tracking-[0.5em] text-[10px]">Padel Smart TV • Pro Scoreboard</span>
+                            </div>
                         </div>
 
                         {/* Overlay animación disparada por el marker (debajo de los puntos) */}

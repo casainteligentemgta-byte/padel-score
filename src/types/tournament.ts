@@ -69,6 +69,7 @@ export interface Tournament {
     groupSize?: number;
     matchFormat?: 'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS';
     scoringSystem?: 'GOLDEN_POINT' | 'TRADITIONAL';
+    tieBreakType?: 'TB' | 'STB';
     groupAssignments?: { [groupName: string]: string[] }; // groupName -> list of teamIds
     broadcastingSettings?: {
         primaryColor?: string;

@@ -14,7 +14,7 @@ interface MatchListProps {
     filteredMatches: any[];
     allMatches: any[];
     effectiveLiveIds: Set<string>;
-    earliestMinute: number | null;
+    nextUpIds: Set<string>;
     numCanchas: number;
     numSlotsPorComenzar: number;
     tournaments: Record<string, any>;
@@ -29,7 +29,7 @@ export const MatchList: React.FC<MatchListProps> = ({
     filteredMatches,
     allMatches,
     effectiveLiveIds,
-    earliestMinute,
+    nextUpIds,
     numCanchas,
     numSlotsPorComenzar,
     tournaments,
@@ -126,11 +126,7 @@ export const MatchList: React.FC<MatchListProps> = ({
                                 idx={idx}
                                 matchNumber={allMatches.indexOf(match) + 1}
                                 isEffectivelyLive={effectiveLiveIds.has(match.id)}
-                                isNextUp={
-                                    match.status === MatchStatus.PENDING &&
-                                    earliestMinute !== null &&
-                                    toMinute(match.scheduledTime) === earliestMinute
-                                }
+                                isNextUp={nextUpIds.has(match.id)}
                             />
                         ))
                     )}

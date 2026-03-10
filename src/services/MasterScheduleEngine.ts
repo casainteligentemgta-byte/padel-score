@@ -41,6 +41,19 @@ export interface MasterScheduleConfig {
 }
 
 
+const PRO_NAMES_MALE = [
+    "Alejandro Galán", "Juan Lebrón", "Agustín Tapia", "Arturo Coello",
+    "Franco Stupaczuk", "Martín Di Nenno", "Fede Chingotto", "Paquito Navarro",
+    "Fernando Belasteguín", "Sanyo Gutiérrez", "Momo González", "Alex Ruiz",
+    "Javi Garrido", "Mike Yanguas", "Coki Nieto", "Jon Sanz"
+];
+
+const PRO_NAMES_FEMALE = [
+    "Ariana Sánchez", "Paula Josemaría", "Gemma Triay", "Marta Ortega",
+    "Delfi Brea", "Bea González", "Claudia Jensen", "Jessica Castelló",
+    "Aranza Osoro", "Lucía Sainz", "Patty Llaguno", "Victoria Iglesias"
+];
+
 export class MasterScheduleEngine {
 
     static generateMasterSchedule(config: MasterScheduleConfig) {
@@ -138,7 +151,7 @@ export class MasterScheduleEngine {
             .map(name => ({
                 name,
                 queue: name === 'Fase de Grupos'
-                    ? this.shuffle(allMatches.filter(m => m.roundName === name))
+                    ? allMatches.filter(m => m.roundName === name)
                     : sortByKnockoutPriority(allMatches.filter(m => m.roundName === name)),
             }))
             .filter(p => p.queue.length > 0);
@@ -356,14 +369,19 @@ export class MasterScheduleEngine {
         const hasRealName = (name?: string) =>
             !!name && name.trim() !== '' && !name.startsWith('TBD') && !name.startsWith('Jugador ');
 
+        const getSimulatedName = (gender: string, index: number) => {
+            const list = gender === 'FEMALE' ? PRO_NAMES_FEMALE : PRO_NAMES_MALE;
+            return list[index % list.length];
+        };
+
         for (const team of teams) {
-            if (!hasRealName(team?.p1?.name)) {
-                if (!team.p1) team.p1 = { id: `auto_${cat.category}_${playerCounter}` };
-                team.p1.name = `Jugador ${playerCounter++}`;
+            if (!team.p1) team.p1 = { id: `auto_${cat.category}_${playerCounter}`, name: getSimulatedName(cat.gender, playerCounter++) };
+            if (!hasRealName(team.p1.name)) {
+                team.p1.name = getSimulatedName(cat.gender, playerCounter++);
             }
-            if (!hasRealName(team?.p2?.name)) {
-                if (!team.p2) team.p2 = { id: `auto_${cat.category}_${playerCounter}` };
-                team.p2.name = `Jugador ${playerCounter++}`;
+            if (!team.p2) team.p2 = { id: `auto_${cat.category}_${playerCounter}`, name: getSimulatedName(cat.gender, playerCounter++) };
+            if (!hasRealName(team.p2.name)) {
+                team.p2.name = getSimulatedName(cat.gender, playerCounter++);
             }
         }
 
@@ -475,13 +493,13 @@ export class MasterScheduleEngine {
                 }
                 // SFs genéricas
                 result.push({
-                    team1: { p1: { id: 'tbd_c1', name: 'Gan. C1' }, isTBD: true, teamLabel: 'Ganador C1' },
-                    team2: { p1: { id: 'tbd_c2', name: 'Gan. C2' }, isTBD: true, teamLabel: 'Ganador C2' },
+                    team1: { p1: { id: 'tbd_c1', name: 'Gan. C1' }, p2: { id: 'tbd_c1_p2', name: '' }, isTBD: true, teamLabel: 'Ganador C1' },
+                    team2: { p1: { id: 'tbd_c2', name: 'Gan. C2' }, p2: { id: 'tbd_c2_p2', name: '' }, isTBD: true, teamLabel: 'Ganador C2' },
                     roundName: 'SEMIFINAL', isKnockout: true, isFinal: false
                 });
                 result.push({
-                    team1: { p1: { id: 'tbd_c3', name: 'Gan. C3' }, isTBD: true, teamLabel: 'Ganador C3' },
-                    team2: { p1: { id: 'tbd_c4', name: 'Gan. C4' }, isTBD: true, teamLabel: 'Ganador C4' },
+                    team1: { p1: { id: 'tbd_c3', name: 'Gan. C3' }, p2: { id: 'tbd_c3_p2', name: '' }, isTBD: true, teamLabel: 'Ganador C3' },
+                    team2: { p1: { id: 'tbd_c4', name: 'Gan. C4' }, p2: { id: 'tbd_c4_p2', name: '' }, isTBD: true, teamLabel: 'Ganador C3' },
                     roundName: 'SEMIFINAL', isKnockout: true, isFinal: false
                 });
                 // Final

@@ -86,15 +86,14 @@ export const CAT_COLORS: Record<string, string> = {
 export const TABS = [
     { label: 'Todos', value: 'all' },
     { label: 'Grupos', value: 'groups' },
-    { label: 'Por Jugar', value: MatchStatus.PENDING },
+    { label: 'Por Comenzar', value: MatchStatus.PENDING },
     { label: 'En Vivo', value: MatchStatus.LIVE },
     { label: 'Finalizados', value: MatchStatus.FINISHED },
     { label: 'Reglas', value: 'rules' },
 ];
 
 export const KNOWN_COMPLEXES: Record<string, number> = {
-    'Casa Inteligente': 4,
-    'Casa Inteligente Padel Center': 4,
+    'Bodeguero': 3,
     'Hotel Tibisay': 2,
     'Tibisay Padel': 2,
     'Padel 360': 6

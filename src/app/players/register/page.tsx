@@ -511,7 +511,7 @@ function RegistrationFormContent() {
 
                                         <div className="space-y-2">
                                             <label className="text-[8px] font-black uppercase text-white tracking-widest text-center block">POSICIÓN</label>
-                                            <div className="grid grid-cols-2 gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
+                                            <div className="grid grid-cols-3 gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
                                                 <button
                                                     type="button"
                                                     onClick={() => updateField('position', 'Drive')}
@@ -531,6 +531,16 @@ function RegistrationFormContent() {
                                                         }`}
                                                 >
                                                     REV
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => updateField('position', 'Ambos')}
+                                                    className={`h-7 rounded-lg flex items-center justify-center text-[7px] font-black uppercase tracking-widest transition-all ${formData.position === 'Ambos'
+                                                        ? 'bg-padel-primary text-black'
+                                                        : 'text-zinc-600 hover:bg-white/5'
+                                                        }`}
+                                                >
+                                                    AMB
                                                 </button>
                                             </div>
                                         </div>

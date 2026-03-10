@@ -14,6 +14,15 @@ export const ROLES = {
     MARKER: 'marker',
 };
 
+const generateUniqueCode = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+};
+
 export type AdminSettings = {
     clubName?: string;
     appTitle?: string;
@@ -39,9 +48,40 @@ export type InscriptionData = {
     paymentBank?: string;
     paymentAmount?: number;
     paymentReference?: string;
+    partnerId?: string;
+    partnerName?: string;
 };
 
 export const dataService = {
+    // Media & Ticker Management
+    async getTiraInformativa() {
+        const { data, error } = await supabase()
+            .from('tira_informativa')
+            .select('*')
+            .eq('activo', true)
+            .order('orden', { ascending: true });
+        if (error) throw error;
+        return data || [];
+    },
+
+    async getPantallas() {
+        const { data, error } = await supabase()
+            .from('pantallas')
+            .select('*')
+            .order('nombre', { ascending: true });
+        if (error) throw error;
+        return data || [];
+    },
+
+    async getPantallaEstado(pantallaId: string) {
+        const { data, error } = await supabase()
+            .from('display_estado')
+            .select('*, media_content(*)')
+            .ilike('pantalla_id', `${pantallaId}%`);
+        if (error) throw error;
+        return data || [];
+    },
+
     async createTournament(data: any, ownerId: string) {
         const { id, ...rest } = data;
         const { data: row, error } = await supabase()
@@ -345,6 +385,7 @@ export const dataService = {
             name: data.name,
             email: data.email || null,
             markerCanchas: data.marker_canchas || [],
+            uniqueCode: data.unique_code,
             createdAt: data.created_at,
             updatedAt: data.updated_at,
         };
@@ -366,17 +407,29 @@ export const dataService = {
             payload.email = email;
         }
 
+        // Si no se provee unique_code, intentamos mantener el existente o generar uno nuevo
+        if (!data.uniqueCode) {
+            const existing = await this.getUserProfile(uid);
+            if (!existing?.uniqueCode) {
+                payload.unique_code = generateUniqueCode();
+            }
+        } else {
+            payload.unique_code = data.uniqueCode;
+        }
+
         const { error } = await supabase()
             .from('profiles')
             .upsert(payload, { onConflict: 'id' });
         if (error) {
             // Si el error es por columna inexistente, reintentamos sin email para no romper el sistema
             if (error.code === '42703') {
-                console.warn('[dataService] La tabla profiles no tiene columna email. Reintentando sin email.');
-                delete payload.email;
+                console.warn('[dataService] La tabla profiles no tiene columna email o unique_code. Reintentando sin campos conflictivos.');
+                const cleanPayload = { ...payload };
+                delete cleanPayload.email;
+                delete cleanPayload.unique_code;
                 const { error: retryError } = await supabase()
                     .from('profiles')
-                    .upsert(payload, { onConflict: 'id' });
+                    .upsert(cleanPayload, { onConflict: 'id' });
                 if (retryError) throw retryError;
             } else {
                 throw error;
@@ -411,6 +464,171 @@ export const dataService = {
             markerCanchas: r.marker_canchas,
             createdAt: r.created_at,
             updatedAt: r.updated_at,
+        }));
+    },
+
+    async getUserByUniqueCode(code: string) {
+        const cleanedCode = code.trim().toUpperCase().replace(/\s/g, '');
+        const { data, error } = await supabase()
+            .from('profiles')
+            .select('id, name, email')
+            .eq('unique_code', cleanedCode)
+            .single();
+        if (error) {
+            if (error.code === 'PGRST116') return null; // No encontrado
+            throw error;
+        }
+        return data;
+    },
+
+    async createTeamInvitation(tournamentId: string, category: string, playerAId: string, playerBId: string) {
+        if (playerAId === playerBId) throw new Error('No puedes invitarte a ti mismo.');
+
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 2);
+
+        const { data, error } = await supabase()
+            .from('teams')
+            .insert({
+                tournament_id: tournamentId,
+                category: category,
+                player_a_id: playerAId,
+                player_b_id: playerBId,
+                status: 'pending',
+                expires_at: expiresAt.toISOString(),
+                created_at: now(),
+                updated_at: now(),
+            })
+            .select()
+            .single();
+
+        if (error) {
+            if (error.code === '23505') throw new Error('Ya existe una inscripción o invitación para esta pareja en esta categoría.');
+            throw error;
+        }
+
+        // Enviar notificación al Jugador B
+        try {
+            await this.sendNotification({
+                user_id: playerBId,
+                sender_id: playerAId,
+                team_id: data.id,
+                type: 'tournament_invite',
+                message: `¡Tienes un lugar reservado! Acepta antes de que expire el tiempo para asegurar tu participación en el torneo.`,
+            });
+        } catch (nError) {
+            console.error('[dataService] Error sending notification:', nError);
+        }
+
+        return data;
+    },
+
+    async sendNotification(notif: { user_id: string; sender_id: string; team_id: string; type: string; message: string }) {
+        const { error } = await supabase()
+            .from('notifications')
+            .insert({
+                ...notif,
+                is_read: false,
+                created_at: now(),
+            });
+        if (error) {
+            // Log error but don't crash the main flow
+            console.error('[dataService] Error inserting notification (check if table notifications exists):', error);
+        }
+    },
+
+    async getOccupiedSlots(tournamentId: string, category: string) {
+        const currentTime = new Date().toISOString();
+
+        // Contamos equipos aceptados + los pendientes que no han expirado
+        // Nota: Si la columna expires_at es nula, se asume que no expira (o se maneja según lógica)
+        const { data, error } = await supabase()
+            .from('teams')
+            .select('id, status, expires_at')
+            .eq('tournament_id', tournamentId)
+            .eq('category', category);
+
+        if (error) throw error;
+
+        const occupied = (data || []).filter(t => {
+            if (t.status === 'accepted') return true;
+            if (t.status === 'pending') {
+                if (!t.expires_at) return true; // Si no tiene fecha, lo contamos como pendiente eterno (si aplica)
+                return new Date(t.expires_at) > new Date();
+            }
+            return false;
+        });
+
+        return occupied.length;
+    },
+
+    async getMyInvitations(userId: string) {
+        const { data, error } = await supabase()
+            .from('teams')
+            .select(`
+                *,
+                player_a:profiles!player_a_id(name),
+                tournaments(id, data)
+            `)
+            .eq('player_b_id', userId)
+            .eq('status', 'pending');
+
+        if (error) throw error;
+        return (data || []).map((inv: any) => ({
+            ...inv,
+            tournament_name: inv.tournaments?.data?.name || 'Torneo Sin Nombre',
+            inviter_name: inv.player_a?.name || 'Jugador'
+        }));
+    },
+
+    async respondToInvitation(teamId: string, status: 'accepted' | 'rejected') {
+        if (status === 'rejected') {
+            const { error } = await supabase()
+                .from('teams')
+                .delete()
+                .eq('id', teamId);
+            if (error) throw error;
+        } else {
+            // Verificar si ha expirado antes de aceptar
+            const { data: team, error: fetchError } = await supabase()
+                .from('teams')
+                .select('expires_at, status')
+                .eq('id', teamId)
+                .single();
+
+            if (fetchError || !team) {
+                throw new Error('La reserva ha expirado o no existe, pide a tu compañero que te invite de nuevo.');
+            }
+
+            if (team.status === 'pending' && team.expires_at && new Date(team.expires_at) < new Date()) {
+                // Borrar automáticamente el equipo expirado
+                await supabase().from('teams').delete().eq('id', teamId);
+                throw new Error('La reserva ha expirado, pide a tu compañero que te invite de nuevo.');
+            }
+
+            const { error } = await supabase()
+                .from('teams')
+                .update({ status: 'accepted', updated_at: now() })
+                .eq('id', teamId);
+            if (error) throw error;
+        }
+    },
+
+    async getSentInvitations(tournamentId: string, playerAId: string) {
+        const { data, error } = await supabase()
+            .from('teams')
+            .select(`
+                *,
+                player_b:profiles!player_b_id(name)
+            `)
+            .eq('tournament_id', tournamentId)
+            .eq('player_a_id', playerAId)
+            .eq('status', 'pending');
+
+        if (error) throw error;
+        return (data || []).map((inv: any) => ({
+            ...inv,
+            partner_name: inv.player_b?.name || 'Jugador'
         }));
     },
 
@@ -520,6 +738,8 @@ export const dataService = {
                     paymentBank: data.paymentBank,
                     paymentAmount: data.paymentAmount,
                     paymentReference: data.paymentReference,
+                    partnerId: data.partnerId,
+                    partnerName: data.partnerName,
                 },
                 created_at: now(),
                 updated_at: now(),

@@ -28,7 +28,9 @@ import {
     Bitcoin,
     ArrowRightLeft,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    Search,
+    RefreshCw
 } from 'lucide-react';
 
 /** Categorías de inscripción que el organizador puede configurar en el torneo (tournament.inscriptionCategories). */
@@ -133,6 +135,22 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
     const [uploading, setUploading] = useState(false);
     const [availableMethods, setAvailableMethods] = useState<any[]>([]);
 
+    // Partner search state
+    const [partnerCode, setPartnerCode] = useState<string>('');
+    const [searchingPartner, setSearchingPartner] = useState(false);
+    const [foundPartner, setFoundPartner] = useState<any>(null);
+    const [partnerError, setPartnerError] = useState<string | null>(null);
+    const [showPartnerConfirm, setShowPartnerConfirm] = useState(false);
+    const [pendingInvitation, setPendingInvitation] = useState<any | null>(null);
+    const [timeLeft, setTimeLeft] = useState<string>('');
+
+    // Auto-search partner when code is 6 chars
+    useEffect(() => {
+        if (partnerCode.length === 6 && !foundPartner && !searchingPartner) {
+            handlePartnerSearch();
+        }
+    }, [partnerCode]);
+
     useEffect(() => {
         if (!tournamentId || authLoading) return;
         let cancelled = false;
@@ -172,25 +190,74 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
     useEffect(() => {
         if (!tournamentId) return;
         let cancelled = false;
-        dataService.getInscriptionsByTournament(tournamentId).then((list) => {
-            if (cancelled) return;
-            const counts: Record<string, number> = {};
-            (list || []).forEach((ins) => {
-                const k = ins.categoryKey ?? '';
-                counts[k] = (counts[k] ?? 0) + 1;
-            });
-            setInscriptionCountByCategory(counts);
-        }).catch(() => {
-            if (!cancelled) setInscriptionCountByCategory({});
-        });
+
+        async function loadCounts() {
+            try {
+                // Si el torneo tiene categorías, cargamos el cupo real (ocupado + pendiente no expirado)
+                if (tournament?.inscriptionCategories?.length) {
+                    const counts: Record<string, number> = {};
+                    for (const cat of tournament.inscriptionCategories) {
+                        const count = await dataService.getOccupiedSlots(tournamentId, cat.key);
+                        counts[cat.key] = count;
+                    }
+                    if (!cancelled) setInscriptionCountByCategory(counts);
+                } else {
+                    // Fallback antiguo si no hay categorías definidas formalmente
+                    const list = await dataService.getInscriptionsByTournament(tournamentId);
+                    if (cancelled) return;
+                    const counts: Record<string, number> = {};
+                    (list || []).forEach((ins) => {
+                        const k = ins.categoryKey ?? '';
+                        counts[k] = (counts[k] ?? 0) + 1;
+                    });
+                    if (!cancelled) setInscriptionCountByCategory(counts);
+                }
+            } catch (err) {
+                console.error("Error loading slot counts:", err);
+            }
+        }
+
+        loadCounts();
         return () => { cancelled = true; };
-    }, [tournamentId]);
+    }, [tournamentId, tournament?.inscriptionCategories]);
 
     useEffect(() => {
         if (!authLoading && !user) {
             router.replace('/login?from=inscribirme');
         }
     }, [user, authLoading, router]);
+
+    // Consultar si yo envié alguna invitación pendiente en este torneo
+    useEffect(() => {
+        if (!user?.uid || !tournamentId) return;
+        dataService.getSentInvitations(tournamentId, user.uid).then(invs => {
+            if (invs.length > 0) {
+                setPendingInvitation(invs[0]);
+            }
+        });
+    }, [user?.uid, tournamentId]);
+
+    // Timer para el countdown de la reserva
+    useEffect(() => {
+        if (!pendingInvitation?.expires_at) return;
+
+        const interval = setInterval(() => {
+            const now = new Date();
+            const expiry = new Date(pendingInvitation.expires_at);
+            const diff = expiry.getTime() - now.getTime();
+
+            if (diff <= 0) {
+                setPendingInvitation(null);
+                clearInterval(interval);
+            } else {
+                const minutes = Math.floor(diff / 60000);
+                const seconds = Math.floor((diff % 60000) / 1000);
+                setTimeLeft(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [pendingInvitation]);
 
     useEffect(() => {
         let cancelled = false;
@@ -262,6 +329,35 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
         }
     };
 
+    const handlePartnerSearch = async () => {
+        if (partnerCode.length !== 6) {
+            setPartnerError('El código debe ser de 6 dígitos.');
+            return;
+        }
+
+        setSearchingPartner(true);
+        setPartnerError(null);
+        setFoundPartner(null);
+
+        try {
+            const profile = await dataService.getUserByUniqueCode(partnerCode);
+            if (profile) {
+                if (profile.id === user?.uid) {
+                    setPartnerError('No puedes invitarte a ti mismo.');
+                } else {
+                    setFoundPartner(profile);
+                }
+            } else {
+                setPartnerError('Jugador no encontrado. Verifique el código.');
+            }
+        } catch (err) {
+            setPartnerError('Error al buscar el jugador.');
+            console.error(err);
+        } finally {
+            setSearchingPartner(false);
+        }
+    };
+
     const totalPrice = Array.from(selectedCategories).reduce((acc, key) => {
         const cat = categories.find(c => c.key === key);
         return acc + (cat?.price || 0);
@@ -285,6 +381,26 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
             setError('Una o más categorías ya están completas. Desmárcalas e intenta de nuevo.');
             return;
         }
+
+        // Auto-search one last time if code is present but no partner found
+        let currentPartner = foundPartner;
+        if (selectedCategories.size > 0 && !currentPartner && partnerCode.length === 6) {
+            setError('Buscando pareja...');
+            try {
+                const profile = await dataService.getUserByUniqueCode(partnerCode);
+                if (profile && profile.id !== user.uid) {
+                    currentPartner = profile;
+                    setFoundPartner(profile);
+                }
+            } catch (err) {
+                // Ignore silent error here, will be caught by !foundPartner check below
+            }
+        }
+
+        if (selectedCategories.size > 0 && !currentPartner) {
+            setError(partnerError || 'Debes buscar y confirmar a tu pareja usando su código de 6 dígitos.');
+            return;
+        }
         if (!acceptTerms) {
             setError('Debes aceptar los términos de inscripción.');
             return;
@@ -301,6 +417,8 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
             for (const key of selectedCategories) {
                 const cat = categories.find((c) => c.key === key);
                 if (!cat) continue;
+
+                // Add inscription
                 await dataService.addInscription(
                     {
                         tournamentId,
@@ -317,9 +435,25 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                         paymentAmount: paymentData.amount ? parseFloat(paymentData.amount) : undefined,
                         paymentReference: paymentData.reference,
                         receiptUrl: paymentData.receiptUrl || undefined,
+                        partnerId: currentPartner?.id,
+                        partnerName: currentPartner?.name
                     },
                     user.uid
                 );
+
+                // Also create a team record/invitation
+                if (currentPartner) {
+                    const inv = await dataService.createTeamInvitation(
+                        tournamentId,
+                        cat.key,
+                        user.uid,
+                        currentPartner.id
+                    );
+                    setPendingInvitation({
+                        ...inv,
+                        partner_name: currentPartner.name
+                    });
+                }
             }
 
             // --- EMAIL NOTIFICATION ---
@@ -398,6 +532,31 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                                 className="inline-block px-6 py-3 bg-[#ccff00] text-black font-black rounded-2xl uppercase text-sm"
                             >
                                 Volver al torneo
+                            </Link>
+                        </div>
+                    ) : pendingInvitation ? (
+                        /* VISTA PLAYER A: ESPERANDO */
+                        <div className="max-w-md mx-auto p-8 rounded-3xl bg-white/5 border border-white/10 text-center space-y-6">
+                            <div className="w-20 h-20 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto">
+                                <RefreshCw className="w-10 h-10 text-amber-500 animate-[spin_3s_linear_infinite]" />
+                            </div>
+                            <h2 className="text-xl font-black uppercase italic italic tracking-tighter">Esperando respuesta</h2>
+                            <p className="text-gray-400 text-sm">
+                                Has invitado a <span className="text-white font-bold">{pendingInvitation.partner_name}</span>.
+                                El equipo se confirmará cuando acepte la invitación.
+                            </p>
+                            <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
+                                <p className="text-[10px] font-black uppercase text-gray-500 tracking-[0.2em] mb-2">Tu lugar se liberará en:</p>
+                                <p className="text-4xl font-mono font-black text-[#ccff00]">{timeLeft || '00:00'}</p>
+                            </div>
+                            <p className="text-[10px] text-amber-500 uppercase font-black tracking-widest px-4">
+                                Tienes un lugar reservado por 2 horas para asegurar tu cupo.
+                            </p>
+                            <Link
+                                href={`/tournaments/${tournamentId}`}
+                                className="block w-full py-4 rounded-2xl bg-white/10 text-white font-black uppercase text-sm"
+                            >
+                                Salir por ahora
                             </Link>
                         </div>
                     ) : (
@@ -498,9 +657,11 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                                                             {slotsLabel && (
                                                                 <span className="text-[10px] text-gray-500">{slotsLabel}</span>
                                                             )}
-                                                            <span className={`text-sm font-black ${full ? 'text-gray-500' : 'text-[#ccff00]'}`}>
-                                                                {cat.price > 0 ? `$${cat.price}` : 'Gratis'}
-                                                            </span>
+                                                            {cat.price > 0 && (
+                                                                <span className={`text-sm font-black ${full ? 'text-gray-500' : 'text-[#ccff00]'}`}>
+                                                                    ${cat.price}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </label>
                                                 );
@@ -509,172 +670,251 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                                     </section>
 
                                     {selectedCategories.size > 0 && (
-                                        <section className="mb-8 space-y-6">
-                                            {/* Sección: Maneras de Pago */}
-                                            {totalPrice > 0 && (
-                                                <div className="mb-8">
-                                                    <PaymentInfo />
+                                        <section className="mb-8 space-y-4">
+                                            <h2 className="text-xs font-black uppercase tracking-widest text-[#ccff00] mb-2">
+                                                Datos del Compañero
+                                            </h2>
+                                            <p className="text-[10px] text-gray-500 mb-4 uppercase">
+                                                Ingresa el código de 6 dígitos de tu pareja para completar el equipo.
+                                            </p>
+
+                                            <div className="flex gap-2">
+                                                <div className="relative flex-1">
+                                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                                                        <Search className="w-5 h-5" />
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        value={partnerCode}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value.replace(/\s/g, '').toUpperCase().slice(0, 6);
+                                                            setPartnerCode(val);
+                                                            if (foundPartner) setFoundPartner(null);
+                                                            if (partnerError) setPartnerError(null);
+                                                        }}
+                                                        placeholder="CÓDIGO (EJ: PX45T2)"
+                                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all uppercase tracking-widest font-mono"
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={handlePartnerSearch}
+                                                    disabled={searchingPartner || partnerCode.length !== 6}
+                                                    className="px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-bold hover:bg-white/10 transition-all disabled:opacity-50"
+                                                >
+                                                    {searchingPartner ? <Loader2 className="w-5 h-5 animate-spin" /> : 'BUSCAR'}
+                                                </button>
+                                            </div>
+
+                                            {partnerError && (
+                                                <div className="text-red-500 text-[10px] font-bold uppercase flex items-center gap-1 mt-1">
+                                                    <AlertCircle size={12} />
+                                                    {partnerError}
                                                 </div>
                                             )}
 
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-[#ccff00]/10 flex items-center justify-center">
-                                                    <CreditCard className="w-5 h-5 text-[#ccff00]" />
-                                                </div>
-                                                <h2 className="text-lg font-black uppercase italic tracking-tighter">
-                                                    {totalPrice > 0 ? 'Datos de Pago' : 'Resumen de Inscripción'}
-                                                </h2>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Metodo de Pago</label>
-                                                    <div className="relative">
-                                                        <select
-                                                            value={paymentData.method}
-                                                            onChange={(e) => setPaymentData({ ...paymentData, method: e.target.value })}
-                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all appearance-none cursor-pointer"
+                                            {foundPartner && (
+                                                <div className="p-4 rounded-2xl bg-[#ccff00]/10 border border-[#ccff00]/30 animate-in fade-in slide-in-from-top-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <p className="text-[10px] text-[#ccff00] font-black uppercase tracking-tighter">Compañero Confirmado</p>
+                                                            <p className="text-white font-bold">{foundPartner.name}</p>
+                                                            <p className="text-[10px] text-gray-500">{foundPartner.email}</p>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => {
+                                                                setFoundPartner(null);
+                                                                setPartnerCode('');
+                                                            }}
+                                                            className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-white"
                                                         >
-                                                            {availableMethods.length > 0 ? (
-                                                                availableMethods.map((m) => (
-                                                                    <option key={m.id} value={m.name} className="bg-[#111]">
-                                                                        {m.name}
-                                                                    </option>
-                                                                ))
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </section>
+                                    )}
+
+                                    {selectedCategories.size > 0 && (
+                                        <section className="mb-8 space-y-6">
+                                            {/* Sección: Maneras de Pago - Solo si hay monto que pagar */}
+                                            {totalPrice > 0 ? (
+                                                <>
+                                                    <div className="mb-8">
+                                                        <PaymentInfo />
+                                                    </div>
+
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-full bg-[#ccff00]/10 flex items-center justify-center">
+                                                            <CreditCard className="w-5 h-5 text-[#ccff00]" />
+                                                        </div>
+                                                        <h2 className="text-lg font-black uppercase italic tracking-tighter">
+                                                            Datos de Pago
+                                                        </h2>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Metodo de Pago</label>
+                                                            <div className="relative">
+                                                                <select
+                                                                    value={paymentData.method}
+                                                                    onChange={(e) => setPaymentData({ ...paymentData, method: e.target.value })}
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all appearance-none cursor-pointer"
+                                                                >
+                                                                    {availableMethods.length > 0 ? (
+                                                                        availableMethods.map((m) => (
+                                                                            <option key={m.id} value={m.name} className="bg-[#111]">
+                                                                                {m.name}
+                                                                            </option>
+                                                                        ))
+                                                                    ) : (
+                                                                        <>
+                                                                            <option value="Pago Móvil" className="bg-[#111]">Pago Móvil</option>
+                                                                            <option value="Transferencia Bancaria" className="bg-[#111]">Transferencia Bancaria</option>
+                                                                            <option value="Zelle" className="bg-[#111]">Zelle</option>
+                                                                        </>
+                                                                    )}
+                                                                </select>
+                                                                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[#ccff00] pointer-events-none">
+                                                                    <ChevronDown className="w-5 h-5" />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Banco Emisor</label>
+                                                            <div className="relative">
+                                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">
+                                                                    <Landmark className="w-5 h-5" />
+                                                                </div>
+                                                                <select
+                                                                    value={paymentData.bank}
+                                                                    onChange={(e) => setPaymentData({ ...paymentData, bank: e.target.value })}
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all appearance-none cursor-pointer"
+                                                                >
+                                                                    <option value="" disabled className="bg-[#111]">Seleccione un banco</option>
+                                                                    {VENEZUELAN_BANKS.map((bank) => (
+                                                                        <option key={bank.code} value={`${bank.code} - ${bank.name}`} className="bg-[#111]">
+                                                                            {bank.code} - {bank.name}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[#ccff00] pointer-events-none">
+                                                                    <ChevronDown className="w-5 h-5" />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Fecha del Pago</label>
+                                                            <div className="relative">
+                                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                                                                    <CalendarIcon className="w-5 h-5" />
+                                                                </div>
+                                                                <input
+                                                                    type="date"
+                                                                    value={paymentData.date}
+                                                                    onChange={(e) => setPaymentData({ ...paymentData, date: e.target.value })}
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase text-gray-500 ml-2">
+                                                                Monto Pagado ({getCurrency(paymentData.method)})
+                                                            </label>
+                                                            <div className="relative">
+                                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 flex items-center justify-center w-5 h-5 font-bold">
+                                                                    {getCurrency(paymentData.method) === '$' ? (
+                                                                        <DollarSign className="w-5 h-5" />
+                                                                    ) : (
+                                                                        <span className="text-[12px] font-black">Bs</span>
+                                                                    )}
+                                                                </div>
+                                                                <input
+                                                                    type="number"
+                                                                    value={paymentData.amount}
+                                                                    onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
+                                                                    placeholder={getCurrency(paymentData.method) === '$' ? (totalPrice > 0 ? totalPrice.toString() : "0.00") : "0.00"}
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="space-y-2 md:col-span-2">
+                                                            <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Referencia / Confirmación</label>
+                                                            <div className="relative">
+                                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                                                                    <Hash className="w-5 h-5" />
+                                                                </div>
+                                                                <input
+                                                                    type="text"
+                                                                    value={paymentData.reference}
+                                                                    onChange={(e) => setPaymentData({ ...paymentData, reference: e.target.value })}
+                                                                    placeholder="Número de referencia"
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Comprobante (Foto/Captura)</label>
+                                                        <div className="relative">
+                                                            {paymentData.receiptUrl ? (
+                                                                <div className="relative rounded-2xl overflow-hidden border-2 border-[#ccff00]/30 aspect-video">
+                                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                                    <img src={paymentData.receiptUrl} alt="Comprobante" className="w-full h-full object-cover" />
+                                                                    <button
+                                                                        onClick={() => setPaymentData({ ...paymentData, receiptUrl: '' })}
+                                                                        className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center text-white"
+                                                                    >
+                                                                        <X className="w-4 h-4" />
+                                                                    </button>
+                                                                </div>
                                                             ) : (
-                                                                <>
-                                                                    <option value="Pago Móvil" className="bg-[#111]">Pago Móvil</option>
-                                                                    <option value="Transferencia Bancaria" className="bg-[#111]">Transferencia Bancaria</option>
-                                                                    <option value="Zelle" className="bg-[#111]">Zelle</option>
-                                                                </>
-                                                            )}
-                                                        </select>
-                                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[#ccff00] pointer-events-none">
-                                                            <ChevronDown className="w-5 h-5" />
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Banco Emisor</label>
-                                                    <div className="relative">
-                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">
-                                                            <Landmark className="w-5 h-5" />
-                                                        </div>
-                                                        <select
-                                                            value={paymentData.bank}
-                                                            onChange={(e) => setPaymentData({ ...paymentData, bank: e.target.value })}
-                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all appearance-none cursor-pointer"
-                                                        >
-                                                            <option value="" disabled className="bg-[#111]">Seleccione un banco</option>
-                                                            {VENEZUELAN_BANKS.map((bank) => (
-                                                                <option key={bank.code} value={`${bank.code} - ${bank.name}`} className="bg-[#111]">
-                                                                    {bank.code} - {bank.name}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[#ccff00] pointer-events-none">
-                                                            <ChevronDown className="w-5 h-5" />
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Fecha del Pago</label>
-                                                    <div className="relative">
-                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-                                                            <CalendarIcon className="w-5 h-5" />
-                                                        </div>
-                                                        <input
-                                                            type="date"
-                                                            value={paymentData.date}
-                                                            onChange={(e) => setPaymentData({ ...paymentData, date: e.target.value })}
-                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] font-black uppercase text-gray-500 ml-2">
-                                                        Monto Pagado ({getCurrency(paymentData.method)})
-                                                    </label>
-                                                    <div className="relative">
-                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 flex items-center justify-center w-5 h-5 font-bold">
-                                                            {getCurrency(paymentData.method) === '$' ? (
-                                                                <DollarSign className="w-5 h-5" />
-                                                            ) : (
-                                                                <span className="text-[12px] font-black">Bs</span>
+                                                                <div className="flex gap-3">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => document.getElementById('receipt-upload')?.click()}
+                                                                        className="flex-1 flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed border-white/10 bg-white/5 hover:bg-white/10 hover:border-[#ccff00]/30 transition-all gap-2"
+                                                                        disabled={uploading}
+                                                                    >
+                                                                        {uploading ? (
+                                                                            <Loader2 className="w-8 h-8 text-[#ccff00] animate-spin" />
+                                                                        ) : (
+                                                                            <>
+                                                                                <Upload className="w-8 h-8 text-gray-500" />
+                                                                                <span className="text-[10px] font-black uppercase text-gray-500">Subir Archivo</span>
+                                                                            </>
+                                                                        )}
+                                                                    </button>
+                                                                    <input
+                                                                        id="receipt-upload"
+                                                                        type="file"
+                                                                        accept="image/*"
+                                                                        className="hidden"
+                                                                        onChange={handleFileUpload}
+                                                                    />
+                                                                </div>
                                                             )}
                                                         </div>
-                                                        <input
-                                                            type="number"
-                                                            value={paymentData.amount}
-                                                            onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
-                                                            placeholder={getCurrency(paymentData.method) === '$' ? (totalPrice > 0 ? totalPrice.toString() : "0.00") : "0.00"}
-                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
-                                                        />
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="rounded-2xl bg-[#ccff00]/5 border border-[#ccff00]/20 p-6 flex items-center gap-4">
+                                                    <div className="w-12 h-12 rounded-full bg-[#ccff00]/10 flex items-center justify-center shrink-0">
+                                                        <CheckCircle2 className="w-6 h-6 text-[#ccff00]" />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="font-black uppercase text-sm">Inscripción Gratuita</h3>
+                                                        <p className="text-[10px] text-gray-500 uppercase tracking-widest">No se requiere información de pago para esta categoría.</p>
                                                     </div>
                                                 </div>
-
-                                                <div className="space-y-2 md:col-span-2">
-                                                    <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Referencia / Confirmación</label>
-                                                    <div className="relative">
-                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-                                                            <Hash className="w-5 h-5" />
-                                                        </div>
-                                                        <input
-                                                            type="text"
-                                                            value={paymentData.reference}
-                                                            onChange={(e) => setPaymentData({ ...paymentData, reference: e.target.value })}
-                                                            placeholder="Número de referencia"
-                                                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Comprobante (Foto/Captura)</label>
-                                                <div className="relative">
-                                                    {paymentData.receiptUrl ? (
-                                                        <div className="relative rounded-2xl overflow-hidden border-2 border-[#ccff00]/30 aspect-video">
-                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                            <img src={paymentData.receiptUrl} alt="Comprobante" className="w-full h-full object-cover" />
-                                                            <button
-                                                                onClick={() => setPaymentData({ ...paymentData, receiptUrl: '' })}
-                                                                className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center text-white"
-                                                            >
-                                                                <X className="w-4 h-4" />
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex gap-3">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => document.getElementById('receipt-upload')?.click()}
-                                                                className="flex-1 flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed border-white/10 bg-white/5 hover:bg-white/10 hover:border-[#ccff00]/30 transition-all gap-2"
-                                                                disabled={uploading}
-                                                            >
-                                                                {uploading ? (
-                                                                    <Loader2 className="w-8 h-8 text-[#ccff00] animate-spin" />
-                                                                ) : (
-                                                                    <>
-                                                                        <Upload className="w-8 h-8 text-gray-500" />
-                                                                        <span className="text-[10px] font-black uppercase text-gray-500">Subir Archivo</span>
-                                                                    </>
-                                                                )}
-                                                            </button>
-                                                            <input
-                                                                id="receipt-upload"
-                                                                type="file"
-                                                                accept="image/*"
-                                                                className="hidden"
-                                                                onChange={handleFileUpload}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
+                                            )}
                                         </section>
                                     )}
 

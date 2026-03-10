@@ -65,7 +65,7 @@ function EventView() {
     const generateMatchesPDF = () => {
         const doc = new jsPDF() as any;
         const firstT = Object.values(tournaments)[0];
-        const eventName = firstT?.complexName ?? 'Evento de Padel';
+        const eventName = firstT?.eventName ?? firstT?.name ?? firstT?.complexName ?? 'Evento de Padel';
         const eventDate = firstT?.startDate
             ? new Date(firstT.startDate).toLocaleDateString('es-ES')
             : '';
@@ -105,7 +105,8 @@ function EventView() {
     };
 
     const handleShare = (type: 'whatsapp' | 'email' | 'download') => {
-        const eventName = Object.values(tournaments)[0]?.complexName ?? 'Evento de Padel';
+        const firstT = Object.values(tournaments)[0];
+        const eventName = firstT?.eventName ?? firstT?.name ?? firstT?.complexName ?? 'Evento de Padel';
         const shareUrl = window.location.href;
         const text = `Te comparto la planilla de juegos del evento *${eventName}*.\nPuedes ver los resultados en tiempo real aquí: ${shareUrl}`;
 
@@ -242,7 +243,6 @@ function EventView() {
     })();
 
     const allPending = allMatches.filter(m => m.status === MatchStatus.PENDING);
-    const earliestMinute = allPending.length > 0 ? toMinute(allPending[0].scheduledTime) : null;
     const numSlotsPorComenzar = Math.min(numCanchas, allPending.length);
     const nextUpMatches = allPending.slice(0, numSlotsPorComenzar);
 
@@ -251,6 +251,7 @@ function EventView() {
         .sort((a, b) => Number(a.court ?? 99) - Number(b.court ?? 99))
         .slice(0, numCanchas);
 
+    const nextUpIds = new Set(nextUpMatches.map(m => m.id));
     const effectiveLiveIds = new Set(effectiveLiveMatches.map(m => m.id));
 
     const liveCnt = Math.min(numCanchas, allMatches.filter(m => m.status === MatchStatus.LIVE).length);
@@ -325,8 +326,8 @@ function EventView() {
         <div className="min-h-screen bg-[#0a0a0a] text-white font-outfit flex flex-col">
             <TournamentHeader
                 eventName={(() => {
-                    const raw = firstT?.name ?? firstT?.complexName ?? 'Evento';
-                    return typeof raw === 'string' && raw.includes(' - ') ? raw.split(' - ')[0].trim() : raw;
+                    const raw = firstT?.eventName ?? firstT?.name ?? firstT?.complexName ?? 'Evento';
+                    return raw;
                 })()}
                 complexName={firstT?.complexName}
                 eventDate={firstT?.startDate}
@@ -379,7 +380,7 @@ function EventView() {
                         filteredMatches={filtered}
                         allMatches={allMatches}
                         effectiveLiveIds={effectiveLiveIds}
-                        earliestMinute={earliestMinute}
+                        nextUpIds={nextUpIds}
                         numCanchas={numCanchas}
                         numSlotsPorComenzar={numSlotsPorComenzar}
                         tournaments={tournaments}

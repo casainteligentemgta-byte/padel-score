@@ -129,8 +129,8 @@ const INITIAL_EVENT_DATA: MasterScheduleConfig = {
     complexName: '',
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-    dailyStartTime: '07:00',
-    dailyEndTime: '22:00',
+    dailyStartTime: '16:00',
+    dailyEndTime: '23:30',
     numCourts: 3,
     courtNames: Array.from({ length: 3 }, (_, i) => `Pista ${i + 1}`),
     matchDurationMinutes: 60,
@@ -275,6 +275,36 @@ export default function MasterGeneratorPage() {
             } else {
                 alert('Error al subir el logo. Inténtalo de nuevo o pega la URL del logo en el campo de texto.');
             }
+        } finally {
+            setIsUploadingLogo(false);
+        }
+    };
+
+    const handleSubirDesdeUrl = async () => {
+        const url = eventData.sponsorLogoUrl;
+        if (!url || !url.startsWith('http')) return;
+
+        // Evitar re-subir lo que ya está en nuestro storage
+        if (url.includes('supabase.co/storage')) return;
+
+        setIsUploadingLogo(true);
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Error al descargar la imagen');
+            const blob = await response.blob();
+
+            // Determinar extensión e imagen
+            const extension = blob.type.split('/')[1] || 'png';
+            const fileName = `logo-url-${Date.now()}.${extension}`;
+            const file = new File([blob], fileName, { type: blob.type });
+
+            const path = `sponsors/${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
+            const publicUrl = await dataService.uploadFile(file, path, 'patrocinantes');
+            setEventData(prev => ({ ...prev, sponsorLogoUrl: publicUrl }));
+            alert('¡Imagen importada con éxito a tu galería!');
+        } catch (error: any) {
+            console.error('Error al subir desde URL:', error);
+            alert('No se pudo "subir" automáticamente desde esta URL debido a protecciones de seguridad del sitio externo (CORS). El logo se usará directamente desde su enlace original.');
         } finally {
             setIsUploadingLogo(false);
         }
@@ -613,6 +643,7 @@ export default function MasterGeneratorPage() {
                         startTime: eventData.dailyStartTime,
                         endTime: eventData.dailyEndTime,
                         complexName: eventData.complexName ?? '',
+                        eventName: eventData.tournamentName ?? '',
                         totalCourts: eventData.numCourts ?? 3,
                         courtNames: eventData.courtNames ?? [],
                         bufferMinutes: eventData.bufferMinutes ?? 10,
@@ -621,6 +652,8 @@ export default function MasterGeneratorPage() {
                         groupSize: cat.groupSize,
                         advanceCount: (cat as any).advanceCount ?? 2,
                         pointsGoal: (cat as any).pointsGoal ?? 24,
+                        scoringSystem: cat.goldenPoint ? 'GOLDEN_POINT' : 'TRADITIONAL',
+                        tieBreakType: cat.setFormat === 'SUPER_TIE_BREAK' ? 'STB' : 'TB',
                         inscriptionPrice: cat.inscriptionPrice ?? 0,
                         status: 'Programado',
                         ...(eventData.sponsorLogoUrl?.trim() && {
@@ -1053,7 +1086,7 @@ export default function MasterGeneratorPage() {
                                                 className="space-y-2"
                                             >
                                                 <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                    <Sparkles className="w-3 h-3 text-yellow-400" /> A cuántos puntos
+                                                    <Trophy className="w-3 h-3 text-yellow-400" /> A cuántos puntos
                                                 </label>
                                                 <div className="grid grid-cols-6 gap-2">
                                                     {[4, 8, 12, 16, 20, 24].map(pts => {
@@ -1215,6 +1248,48 @@ export default function MasterGeneratorPage() {
                                             </motion.div>
                                         )}
 
+                                        {/* ── Punto de Oro & Tie-Break ── */}
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Sistema de Puntuación</label>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPendingGolden(true)}
+                                                        className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${pendingGolden ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
+                                                    >
+                                                        Punto de Oro
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPendingGolden(false)}
+                                                        className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${!pendingGolden ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
+                                                    >
+                                                        Deuce / Tradicional
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Tipo de Desempate</label>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPendingSetFormat('TIE_BREAK')}
+                                                        className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${pendingSetFormat === 'TIE_BREAK' ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
+                                                    >
+                                                        TB (7 pts)
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPendingSetFormat('SUPER_TIE_BREAK')}
+                                                        className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${pendingSetFormat === 'SUPER_TIE_BREAK' ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
+                                                    >
+                                                        STB (10 pts)
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         {/* ── Precio de Inscripción ── */}
                                         <div className="pt-2 border-t border-zinc-800/50 mt-2 space-y-2">
                                             <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
@@ -1227,7 +1302,7 @@ export default function MasterGeneratorPage() {
                                                     value={pendingPrice}
                                                     onChange={(e) => setPendingPrice(Number(e.target.value) || 0)}
                                                     placeholder="0.00"
-                                                    className="w-full bg-black/40 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-black italic focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
+                                                    className="w-full bg-black/40 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-black italic text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
                                                 />
                                             </div>
                                         </div>
@@ -1262,7 +1337,10 @@ export default function MasterGeneratorPage() {
                 <header className="flex items-center gap-4 mb-3 shrink-0">
                     <button
                         type="button"
-                        onClick={() => router.back()}
+                        onClick={() => {
+                            if (step > 1) setStep(step - 1);
+                            else router.back();
+                        }}
                         className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors shrink-0 p-2 -ml-2 rounded-xl hover:bg-white/5"
                         aria-label="Atrás"
                     >
@@ -1271,7 +1349,7 @@ export default function MasterGeneratorPage() {
                     </button>
                     <div className="flex items-center gap-2.5 flex-1">
                         <div className="w-8 h-8 bg-padel-primary/10 border border-padel-primary/20 rounded-xl flex items-center justify-center">
-                            <Sparkles className="w-4 h-4 text-padel-primary" />
+                            <Trophy className="w-4 h-4 text-padel-primary" />
                         </div>
                         <div>
                             <h1 className="text-lg font-black italic uppercase tracking-tighter leading-none">
@@ -1326,7 +1404,7 @@ export default function MasterGeneratorPage() {
                                                     type="text"
                                                     value={eventData.tournamentName}
                                                     onChange={(e) => setEventData({ ...eventData, tournamentName: e.target.value })}
-                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-base font-bold focus:border-padel-primary outline-none transition-all"
+                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-base font-bold text-white focus:border-padel-primary outline-none transition-all"
                                                     placeholder="Ej: Virgen del Valle Open..."
                                                 />
                                             </div>
@@ -1343,7 +1421,7 @@ export default function MasterGeneratorPage() {
                                                             courtNames: Array.from({ length: complex?.courts || eventData.numCourts }, (_, i) => `Pista ${i + 1}`)
                                                         });
                                                     }}
-                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary transition-all font-bold"
+                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary transition-all font-bold text-white"
                                                 >
                                                     <option value="" disabled>— Selecciona una sede —</option>
                                                     {COMPLEXES.map(c => (
@@ -1364,7 +1442,7 @@ export default function MasterGeneratorPage() {
                                                     value={eventData.sponsorName ?? ''}
                                                     onChange={(e) => setEventData({ ...eventData, sponsorName: e.target.value })}
                                                     placeholder="Ej: Banco Mercantil"
-                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-sm font-medium focus:border-padel-primary outline-none transition-all"
+                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-sm font-medium text-white focus:border-padel-primary outline-none transition-all"
                                                 />
                                             </div>
 
@@ -1393,8 +1471,18 @@ export default function MasterGeneratorPage() {
                                                             value={eventData.sponsorLogoUrl || ''}
                                                             onChange={e => setEventData(prev => ({ ...prev, sponsorLogoUrl: e.target.value }))}
                                                             placeholder="O pega una URL..."
-                                                            className="w-full bg-black/40 border border-zinc-800 rounded-xl py-2.5 pl-9 pr-4 text-xs focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
+                                                            className="w-full bg-black/40 border border-zinc-800 rounded-xl py-2.5 pl-9 pr-16 text-xs text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
                                                         />
+                                                        {eventData.sponsorLogoUrl && eventData.sponsorLogoUrl.startsWith('http') && !eventData.sponsorLogoUrl.includes('supabase.co/storage') && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleSubirDesdeUrl}
+                                                                disabled={isUploadingLogo}
+                                                                className="absolute right-1 top-1 bottom-1 px-3 bg-padel-primary/20 hover:bg-padel-primary text-padel-primary hover:text-white rounded-lg transition-all text-[10px] font-bold disabled:opacity-50"
+                                                            >
+                                                                {isUploadingLogo ? '...' : 'SUBIR'}
+                                                            </button>
+                                                        )}
                                                     </div>
 
                                                     {eventData.sponsorLogoUrl && (
@@ -1437,17 +1525,17 @@ export default function MasterGeneratorPage() {
                                                                 if (newStart && eventData.endDate && eventData.endDate < newStart) next.endDate = newStart;
                                                                 setEventData(next);
                                                             }}
-                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-9 outline-none focus:border-padel-primary"
+                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-9 outline-none focus:border-padel-primary text-white"
                                                         />
                                                     </div>
                                                 </div>
                                                 <div className="space-y-1.5 min-w-0">
                                                     <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
-                                                        <Sparkles className="w-3.5 h-3.5 text-padel-primary shrink-0" />
+                                                        <Trophy className="w-3.5 h-3.5 text-padel-primary shrink-0" />
                                                         Duración
                                                     </label>
                                                     <div className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 flex items-center gap-2">
-                                                        <Sparkles className="w-4 h-4 text-padel-primary animate-pulse shrink-0" />
+                                                        <Trophy className="w-4 h-4 text-padel-primary shrink-0" />
                                                         <p className="text-sm font-bold text-white uppercase italic leading-tight">Calculada por IA</p>
                                                     </div>
                                                 </div>
@@ -1465,7 +1553,7 @@ export default function MasterGeneratorPage() {
                                                             type="time"
                                                             value={eventData.dailyStartTime}
                                                             onChange={(e) => setEventData({ ...eventData, dailyStartTime: e.target.value })}
-                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-8 outline-none focus:border-padel-primary text-sm"
+                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-8 outline-none focus:border-padel-primary text-sm text-white"
                                                         />
                                                     </div>
                                                 </div>
@@ -1480,7 +1568,7 @@ export default function MasterGeneratorPage() {
                                                             type="time"
                                                             value={eventData.dailyEndTime}
                                                             onChange={(e) => setEventData({ ...eventData, dailyEndTime: e.target.value })}
-                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-8 outline-none focus:border-padel-primary text-sm"
+                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-8 outline-none focus:border-padel-primary text-sm text-white"
                                                         />
                                                     </div>
                                                 </div>
@@ -1491,7 +1579,7 @@ export default function MasterGeneratorPage() {
                                                         min={30} max={180} step={5}
                                                         value={eventData.matchDurationMinutes}
                                                         onChange={(e) => setEventData({ ...eventData, matchDurationMinutes: parseInt(e.target.value) || 60 })}
-                                                        className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary font-bold text-center text-base"
+                                                        className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary font-bold text-center text-base text-white"
                                                     />
                                                 </div>
                                                 <div className="space-y-1.5">
@@ -1501,7 +1589,7 @@ export default function MasterGeneratorPage() {
                                                         min={0} max={60} step={5}
                                                         value={eventData.bufferMinutes}
                                                         onChange={(e) => setEventData({ ...eventData, bufferMinutes: parseInt(e.target.value) || 10 })}
-                                                        className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary font-bold text-center text-base"
+                                                        className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary font-bold text-center text-base text-white"
                                                     />
                                                 </div>
                                             </div>
@@ -1623,17 +1711,44 @@ export default function MasterGeneratorPage() {
                                                     TournamentCategory.SUMA_10, TournamentCategory.SUMA_11
                                                 ].map(level => {
                                                     const exists = eventData.categories.some(c => c.gender === activeGender && c.category === level);
+
+                                                    // Colores dinámicos por género
+                                                    const isMale = activeGender === 'MALE';
+                                                    const isFemale = activeGender === 'FEMALE';
+                                                    const isMixed = activeGender === 'MIXED';
+
+                                                    let buttonClasses = "";
+                                                    if (exists) {
+                                                        if (isMale) buttonClasses = "bg-blue-500/10 border-blue-500 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.2)]";
+                                                        else if (isFemale) buttonClasses = "bg-pink-500/10 border-pink-500 text-pink-400 shadow-[0_0_15px_rgba(236,72,153,0.2)]";
+                                                        else buttonClasses = "bg-purple-500/10 border-purple-500 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]";
+                                                    } else {
+                                                        const hoverClasses = isMale ? "hover:border-blue-500 hover:text-blue-400 hover:bg-blue-500/5" :
+                                                            isFemale ? "hover:border-pink-500 hover:text-pink-400 hover:bg-pink-500/5" :
+                                                                "hover:border-purple-500 hover:text-purple-400 hover:bg-purple-500/5";
+                                                        buttonClasses = `bg-black/40 border-zinc-800 text-zinc-500 ${hoverClasses}`;
+                                                    }
+
                                                     return (
                                                         <button
                                                             key={level}
-                                                            onClick={() => exists ? null : addCategory(activeGender, level)}
-                                                            disabled={exists}
-                                                            className={`p-2.5 rounded-xl border transition-all text-center text-xs font-bold ${exists
-                                                                ? 'bg-zinc-800/50 border-zinc-700 text-zinc-600 cursor-not-allowed'
-                                                                : 'bg-black/50 border-zinc-700 hover:border-padel-primary hover:text-padel-primary'
-                                                                }`}
+                                                            onClick={() => {
+                                                                if (exists) {
+                                                                    const catObj = eventData.categories.find(c => c.gender === activeGender && c.category === level);
+                                                                    if (catObj) removeCategory(catObj.id);
+                                                                } else {
+                                                                    addCategory(activeGender, level);
+                                                                }
+                                                            }}
+                                                            className={`relative p-2.5 rounded-xl border-2 transition-all text-center text-[10px] font-black uppercase italic tracking-tighter active:scale-95 ${buttonClasses}`}
                                                         >
                                                             {catLevelLabels[level] || level}
+                                                            {exists && (
+                                                                <div className={`absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center border-2 border-[#0a0a0a] ${isMale ? 'bg-blue-500' : isFemale ? 'bg-pink-500' : 'bg-purple-500'
+                                                                    }`}>
+                                                                    <Check className="w-2.5 h-2.5 text-black" strokeWidth={4} />
+                                                                </div>
+                                                            )}
                                                         </button>
                                                     );
                                                 })}
@@ -1733,7 +1848,7 @@ export default function MasterGeneratorPage() {
                                                 <select
                                                     value={eventData.matchDurationMinutes}
                                                     onChange={(e) => setEventData({ ...eventData, matchDurationMinutes: Number(e.target.value) || 60 })}
-                                                    className="w-full bg-black/50 border border-zinc-800 rounded-2xl p-4 outline-none focus:border-padel-primary transition-all font-bold"
+                                                    className="w-full bg-black/50 border border-zinc-800 rounded-2xl p-4 outline-none focus:border-padel-primary transition-all font-bold text-white"
                                                 >
                                                     <option value={60}>60 Minutos / Partido</option>
                                                     <option value={75}>75 Minutos / Partido</option>
@@ -1750,7 +1865,7 @@ export default function MasterGeneratorPage() {
                                                 <select
                                                     value={eventData.bufferMinutes}
                                                     onChange={(e) => setEventData({ ...eventData, bufferMinutes: Number(e.target.value) })}
-                                                    className="w-full bg-black/50 border border-zinc-800 rounded-2xl p-4 outline-none focus:border-blue-400 transition-all font-bold"
+                                                    className="w-full bg-black/50 border border-zinc-800 rounded-2xl p-4 outline-none focus:border-blue-400 transition-all font-bold text-white"
                                                 >
                                                     <option value={5}>5 Minutos entre juegos</option>
                                                     <option value={10}>10 Minutos entre juegos</option>
@@ -1782,7 +1897,7 @@ export default function MasterGeneratorPage() {
                                                                     newNames[i] = e.target.value;
                                                                     setEventData({ ...eventData, courtNames: newNames });
                                                                 }}
-                                                                className="bg-transparent border-none outline-none text-sm font-bold w-full focus:text-padel-primary transition-colors"
+                                                                className="bg-transparent border-none outline-none text-sm font-bold w-full focus:text-padel-primary transition-colors text-white"
                                                                 placeholder={`Pista ${i + 1}`}
                                                             />
                                                             <button
@@ -1828,7 +1943,7 @@ export default function MasterGeneratorPage() {
                                         {eventData.categories.length > 0 && (
                                             <div className="bg-padel-primary/5 border border-padel-primary/20 rounded-3xl p-6 space-y-4">
                                                 <div className="flex items-center gap-3">
-                                                    <Sparkles className="w-5 h-5 text-padel-primary" />
+                                                    <Trophy className="w-5 h-5 text-padel-primary" />
                                                     <h3 className="font-black uppercase tracking-tighter text-sm text-padel-primary">Resumen Pre-Generación</h3>
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-3">
@@ -1888,7 +2003,7 @@ export default function MasterGeneratorPage() {
                                             </h2>
                                             <div className="flex items-center gap-3">
                                                 <div className={`px-2 py-1 rounded-lg border border-white/5 flex items-center gap-2 ${getIntensityLabel().bg}`}>
-                                                    <Sparkles className={`w-3 h-3 ${getIntensityLabel().color}`} />
+                                                    <Trophy className={`w-3 h-3 ${getIntensityLabel().color}`} />
                                                     <span className={`text-[9px] font-black uppercase tracking-widest ${getIntensityLabel().color}`}>
                                                         {getIntensityLabel().label}
                                                     </span>
@@ -1982,7 +2097,7 @@ export default function MasterGeneratorPage() {
                                                                                 </span>
                                                                             )}
                                                                         </div>
-                                                                        <span>{m.team1.p1.name} + {m.team1.p2.name}</span>
+                                                                        <span>{m.team1Name}</span>
                                                                     </div>
                                                                     {/* VS — columna fija para alinear todos en vertical */}
                                                                     <div className="px-2 py-0.5 bg-zinc-800 rounded font-black text-[10px] text-zinc-500 italic shrink-0 justify-self-center">VS</div>
@@ -1996,7 +2111,7 @@ export default function MasterGeneratorPage() {
                                                                                 </span>
                                                                             )}
                                                                         </div>
-                                                                        <span>{m.team2.p1.name} + {m.team2.p2.name}</span>
+                                                                        <span>{m.team2Name}</span>
                                                                     </div>
                                                                 </div>
                                                             </td>
@@ -2041,7 +2156,7 @@ export default function MasterGeneratorPage() {
                                             {isGenerating ? (
                                                 <>GENERANDO...</>
                                             ) : (
-                                                <>GENERAR FIXTURE <Sparkles className="w-6 h-6 group-hover:scale-125 transition-transform" /></>
+                                                <>GENERAR FIXTURE <Trophy className="w-6 h-6 group-hover:scale-125 transition-transform" /></>
                                             )}
                                         </button>
                                     </div>
@@ -2061,23 +2176,14 @@ export default function MasterGeneratorPage() {
                                         </button>
                                         <button
                                             type="button"
-                                            onClick={() => setStep(1)}
+                                            onClick={() => router.back()}
                                             className="w-full py-4 text-zinc-500 font-bold hover:text-white transition-colors uppercase tracking-widest text-[10px]"
                                         >
-                                            Descartar y Volver
+                                            Cancelar y Salir
                                         </button>
                                     </div>
                                 ) : null}
 
-                                {step > 1 && step < 4 && (
-                                    <button
-                                        type="button"
-                                        onClick={prevStep}
-                                        className="w-full py-4 text-zinc-600 font-bold hover:text-zinc-400 transition-colors uppercase tracking-widest text-[10px]"
-                                    >
-                                        Atrás
-                                    </button>
-                                )}
                             </div>
                         </div>
                     </main>

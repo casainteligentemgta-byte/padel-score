@@ -45,11 +45,13 @@ export class ScheduleEngine {
             pairings = this.generateBasicPairings(numTeams);
         }
 
-        // Shuffle Fisher-Yates
+        // No shuffle to preserve logical order of games
+        /*
         for (let i = pairings.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [pairings[i], pairings[j]] = [pairings[j], pairings[i]];
         }
+        */
 
         console.log(`[ScheduleEngine] ${pairings.length} pairings for ${numTeams} teams, ${numCourts} courts`);
 

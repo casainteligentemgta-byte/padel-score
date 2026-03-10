@@ -50,8 +50,10 @@ export default function Sidebar() {
             const mine = await dataService.getMyParticipants(user.uid);
             const player = mine?.[0];
             if (player?.id) {
-                router.push(`/players/${player.id}`);
+                // Si ya tiene ficha, vamos al formulario de edición (rellenado)
+                router.push(`/players/register?edit=${player.id}`);
             } else {
+                // Si no tiene ficha, vamos al registro inicial
                 router.push('/players/register?mis-datos=1');
             }
         } catch (e: unknown) {
@@ -227,10 +229,10 @@ export default function Sidebar() {
                                     </Link>
                                 )}
                                 <button
-                                    onClick={() => {
-                                        logout();
+                                    onClick={async () => {
+                                        await logout();
                                         setIsOpen(false);
-                                        router.push('/');
+                                        router.replace('/login');
                                     }}
                                     className="w-full flex items-center gap-3 py-3 px-4 rounded-2xl bg-red-500/5 text-red-500 hover:bg-red-500/10 transition-all group border border-red-500/10"
                                 >
