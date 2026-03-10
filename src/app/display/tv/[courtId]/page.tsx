@@ -97,8 +97,10 @@ export default function TVCourtDisplayPage({ params }: { params: Promise<{ court
             }
 
             // Fetch all active media as fallback
-            const { data: media } = await supabase.from('media_content').select('*').eq('activa', true);
-            setAllMedia(media || []);
+            if (supabase) {
+                const { data: media } = await supabase.from('media_content').select('*').eq('activa', true);
+                setAllMedia(media || []);
+            }
         };
         initDisplay();
 
