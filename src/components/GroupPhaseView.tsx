@@ -44,6 +44,7 @@ interface GroupFixtureMatch {
     sets?: { t1: number; t2: number };
     games?: { t1: number; t2: number };
     scheduledTime?: any;
+    time?: any;
     court?: string | number;
     stage: string;
 }
