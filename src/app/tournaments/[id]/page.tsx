@@ -29,7 +29,8 @@ import {
     Camera,
     Trash2,
     Download,
-    Zap
+    Zap,
+    FileText
 } from 'lucide-react';
 import Link from 'next/link';
 import { MatchStatus, TournamentType, ScheduleConfig } from '@/types/tournament';
