@@ -327,6 +327,9 @@ export default function MasterGeneratorPage() {
         QUINTA: '5ª Cat.',
         SEXTA: '6ª Cat.',
         SEPTIMA: '7ª Cat.',
+        MAS_40: '+40',
+        FEM_40: '+40',
+        MIX_40: '+40',
         MAS_45: '+45',
         MAS_50: '+50',
         SUMA_7: 'Suma 7',
@@ -344,6 +347,9 @@ export default function MasterGeneratorPage() {
         [TournamentCategory.QUINTA]: 5,
         [TournamentCategory.SEXTA]: 6,
         [TournamentCategory.SEPTIMA]: 7,
+        [TournamentCategory.MAS_40]: 7.1,
+        [TournamentCategory.FEM_40]: 7.2,
+        [TournamentCategory.MIX_40]: 7.3,
         [TournamentCategory.MAS_45]: 8,
         [TournamentCategory.MAS_50]: 9,
         [TournamentCategory.SUMA_7]: 10,
@@ -1642,7 +1648,11 @@ export default function MasterGeneratorPage() {
                                                     TournamentCategory.PRIMERA, TournamentCategory.SEGUNDA,
                                                     TournamentCategory.TERCERA, TournamentCategory.CUARTA,
                                                     TournamentCategory.QUINTA, TournamentCategory.SEXTA,
-                                                    TournamentCategory.SEPTIMA, TournamentCategory.MAS_45,
+                                                    TournamentCategory.SEPTIMA, 
+                                                    activeGender === 'MALE' ? TournamentCategory.MAS_40 : 
+                                                    activeGender === 'FEMALE' ? TournamentCategory.FEM_40 : 
+                                                    TournamentCategory.MIX_40,
+                                                    TournamentCategory.MAS_45,
                                                     TournamentCategory.MAS_50, TournamentCategory.SUMA_7,
                                                     TournamentCategory.SUMA_8, TournamentCategory.SUMA_9,
                                                     TournamentCategory.SUMA_10, TournamentCategory.SUMA_11

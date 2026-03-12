@@ -1,0 +1,53 @@
+﻿Checking matches for tournament: 51ad6434-1c68-4706-a31f-5da35399ca2c
+Found matches count: 7
+Found LIVE match: {
+  "id": "m-f669ksaul-3-mmjomtwi",
+  "tournament_id": "51ad6434-1c68-4706-a31f-5da35399ca2c",
+  "data": {
+    "stage": "GROUP_STAGE",
+    "team1": {
+      "id": "team-f669ksaul-2",
+      "p1": {
+        "id": "p1-f669ksaul-2",
+        "name": "Jugador 13"
+      },
+      "p2": {
+        "id": "p2-f669ksaul-2",
+        "name": "Jugador 14"
+      }
+    },
+    "team2": {
+      "id": "team-f669ksaul-5",
+      "p1": {
+        "id": "p1-f669ksaul-5",
+        "name": "Jugador 15"
+      },
+      "p2": {
+        "id": "p2-f669ksaul-5",
+        "name": "Jugador 16"
+      }
+    },
+    "status": "LIVE",
+    "isFinal": false,
+    "category": "SEXTA",
+    "courtName": "Pista 1",
+    "playerIds": [
+      "p1-f669ksaul-2",
+      "p2-f669ksaul-2",
+      "p1-f669ksaul-5",
+      "p2-f669ksaul-5"
+    ],
+    "roundName": "Fase de Grupos",
+    "team1Name": "Jugador 13 / Jugador 14",
+    "team2Name": "Jugador 15 / Jugador 16",
+    "categoryId": "f669ksaul",
+    "courtIndex": 0,
+    "isKnockout": false,
+    "team1Index": 7,
+    "team2Index": 8,
+    "categoryName": "FEMALE - SEXTA",
+    "scheduledTime": "2026-03-14T20:10:00.000Z"
+  },
+  "created_at": "2026-03-09T21:17:35.704+00:00",
+  "updated_at": "2026-03-11T10:47:12.45+00:00"
+}

@@ -1,0 +1,88 @@
+{
+  "media": [
+    {
+      "id": "1910ad11-a9ea-4096-a309-529583a865ad",
+      "tipo": "video_file",
+      "url": "https://cecwrpmoitxhfynpqhkc.supabase.co/storage/v1/object/public/patrocinantes/1773102254718-1073cd00-ccef-4dc2-b4a8-24d5b621fc4b.MP4",
+      "nombre_sponsor": "Padel",
+      "duracion_segundos": null,
+      "nombre": "1073cd00-ccef-4dc2-b4a8-24d5b621fc4b.MP4",
+      "created_at": "2026-03-10T00:24:17.44827+00:00",
+      "updated_at": "2026-03-10T00:25:53.402048+00:00"
+    },
+    {
+      "id": "ce0d1864-1f2b-4457-a610-99e8d442dd88",
+      "tipo": "video_file",
+      "url": "https://cecwrpmoitxhfynpqhkc.supabase.co/storage/v1/object/public/patrocinantes/1772918442109-1c419f4b-a7e7-488c-8b91-08dddbba98f4.MP4",
+      "nombre_sponsor": "Ciro",
+      "duracion_segundos": null,
+      "nombre": "1c419f4b-a7e7-488c-8b91-08dddbba98f4.MP4",
+      "created_at": "2026-03-07T21:20:50.022157+00:00",
+      "updated_at": "2026-03-10T00:26:03.303211+00:00"
+    },
+    {
+      "id": "e0a4ab3f-27bb-45b1-81e3-41570e1ced10",
+      "tipo": "imagen",
+      "url": "https://cecwrpmoitxhfynpqhkc.supabase.co/storage/v1/object/public/patrocinantes/1772919085523-2d3fb581-83f4-4ccb-a9c6-4aa22c58a9ff.jpg",
+      "nombre_sponsor": "Carlos V y Luis V",
+      "duracion_segundos": null,
+      "nombre": "2d3fb581-83f4-4ccb-a9c6-4aa22c58a9ff.jpg",
+      "created_at": "2026-03-07T21:31:26.507051+00:00",
+      "updated_at": "2026-03-10T00:26:27.604634+00:00"
+    }
+  ],
+  "screens": [
+    {
+      "id": "b403f957-6922-40a7-9a4d-41a621136153",
+      "nombre": "PISTA 1",
+      "ubicacion": null,
+      "activa": true,
+      "created_at": "2026-03-07T21:53:49.090354+00:00",
+      "updated_at": "2026-03-07T21:53:49.090354+00:00"
+    },
+    {
+      "id": "6807c898-3608-406d-bb11-a4bbefb33d57",
+      "nombre": "Pista 2",
+      "ubicacion": null,
+      "activa": true,
+      "created_at": "2026-03-07T22:26:46.42399+00:00",
+      "updated_at": "2026-03-07T22:26:46.42399+00:00"
+    },
+    {
+      "id": "8844b163-7eba-401b-a810-73b727df4c75",
+      "nombre": "Cancha 1",
+      "ubicacion": null,
+      "activa": true,
+      "created_at": "2026-03-10T00:10:48.277542+00:00",
+      "updated_at": "2026-03-10T00:10:48.277542+00:00"
+    },
+    {
+      "id": "91073e47-6793-4769-ae3c-b82c341cce14",
+      "nombre": "Cancha 2",
+      "ubicacion": null,
+      "activa": true,
+      "created_at": "2026-03-10T00:10:48.845001+00:00",
+      "updated_at": "2026-03-10T00:10:48.845001+00:00"
+    },
+    {
+      "id": "c2e9b08e-491d-4d0f-a6c6-52660e21ca27",
+      "nombre": "Cancha 3",
+      "ubicacion": null,
+      "activa": true,
+      "created_at": "2026-03-10T00:10:49.131105+00:00",
+      "updated_at": "2026-03-10T00:10:49.131105+00:00"
+    }
+  ],
+  "estado": [
+    {
+      "pantalla_id": "b403f957-6922-40a7-9a4d-41a621136153",
+      "media_content_id": "e0a4ab3f-27bb-45b1-81e3-41570e1ced10",
+      "updated_at": "2026-03-07T21:55:05.847399+00:00"
+    },
+    {
+      "pantalla_id": "6807c898-3608-406d-bb11-a4bbefb33d57",
+      "media_content_id": "ce0d1864-1f2b-4457-a610-99e8d442dd88",
+      "updated_at": "2026-03-08T02:37:38.477808+00:00"
+    }
+  ]
+}

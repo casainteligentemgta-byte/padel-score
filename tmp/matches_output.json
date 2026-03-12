@@ -1,0 +1,159 @@
+﻿[
+  {
+    "id": "m-f669ksaul-3-mmjomtwi",
+    "tournament_id": "51ad6434-1c68-4706-a31f-5da35399ca2c",
+    "data": {
+      "stage": "GROUP_STAGE",
+      "team1": {
+        "id": "team-f669ksaul-2",
+        "p1": {
+          "id": "p1-f669ksaul-2",
+          "name": "Jugador 13"
+        },
+        "p2": {
+          "id": "p2-f669ksaul-2",
+          "name": "Jugador 14"
+        }
+      },
+      "team2": {
+        "id": "team-f669ksaul-5",
+        "p1": {
+          "id": "p1-f669ksaul-5",
+          "name": "Jugador 15"
+        },
+        "p2": {
+          "id": "p2-f669ksaul-5",
+          "name": "Jugador 16"
+        }
+      },
+      "status": "LIVE",
+      "isFinal": false,
+      "category": "SEXTA",
+      "courtName": "Pista 1",
+      "playerIds": [
+        "p1-f669ksaul-2",
+        "p2-f669ksaul-2",
+        "p1-f669ksaul-5",
+        "p2-f669ksaul-5"
+      ],
+      "roundName": "Fase de Grupos",
+      "team1Name": "Jugador 13 / Jugador 14",
+      "team2Name": "Jugador 15 / Jugador 16",
+      "categoryId": "f669ksaul",
+      "courtIndex": 0,
+      "isKnockout": false,
+      "team1Index": 7,
+      "team2Index": 8,
+      "categoryName": "FEMALE - SEXTA",
+      "scheduledTime": "2026-03-14T20:10:00.000Z"
+    },
+    "created_at": "2026-03-09T21:17:35.704+00:00",
+    "updated_at": "2026-03-11T10:47:12.45+00:00"
+  },
+  {
+    "id": "m-f669ksaul-2-mmjomtwi",
+    "tournament_id": "51ad6434-1c68-4706-a31f-5da35399ca2c",
+    "data": {
+      "stage": "GROUP_STAGE",
+      "team1": {
+        "id": "team-f669ksaul-0",
+        "p1": {
+          "id": "p1-f669ksaul-0",
+          "name": "Jugador 9"
+        },
+        "p2": {
+          "id": "p2-f669ksaul-0",
+          "name": "Jugador 10"
+        }
+      },
+      "team2": {
+        "id": "team-f669ksaul-6",
+        "p1": {
+          "id": "p1-f669ksaul-6",
+          "name": "Jugador 11"
+        },
+        "p2": {
+          "id": "p2-f669ksaul-6",
+          "name": "Jugador 12"
+        }
+      },
+      "status": "LIVE",
+      "isFinal": false,
+      "category": "SEXTA",
+      "courtName": "Pista 3",
+      "playerIds": [
+        "p1-f669ksaul-0",
+        "p2-f669ksaul-0",
+        "p1-f669ksaul-6",
+        "p2-f669ksaul-6"
+      ],
+      "roundName": "Fase de Grupos",
+      "startedAt": "2026-03-09T23:33:52.491Z",
+      "team1Name": "Jugador 9 / Jugador 10",
+      "team2Name": "Jugador 11 / Jugador 12",
+      "categoryId": "f669ksaul",
+      "courtIndex": 2,
+      "isKnockout": false,
+      "team1Index": 5,
+      "team2Index": 6,
+      "categoryName": "FEMALE - SEXTA",
+      "scheduledTime": "2026-03-14T19:00:00.000Z",
+      "actualStartTime": "2026-03-09T23:33:52.491Z"
+    },
+    "created_at": "2026-03-09T21:17:35.704+00:00",
+    "updated_at": "2026-03-09T23:33:52.706+00:00"
+  },
+  {
+    "id": "m-htmiebnul-0-mmjomuyi",
+    "tournament_id": "f2d283a8-0698-4532-848b-fef56e55aa02",
+    "data": {
+      "stage": "GROUP_STAGE",
+      "team1": {
+        "id": "team-htmiebnul-1",
+        "p1": {
+          "id": "p1-htmiebnul-1",
+          "name": "Jugador 1"
+        },
+        "p2": {
+          "id": "p2-htmiebnul-1",
+          "name": "Jugador 2"
+        }
+      },
+      "team2": {
+        "id": "team-htmiebnul-6",
+        "p1": {
+          "id": "p1-htmiebnul-6",
+          "name": "Jugador 3"
+        },
+        "p2": {
+          "id": "p2-htmiebnul-6",
+          "name": "Jugador 4"
+        }
+      },
+      "status": "LIVE",
+      "isFinal": false,
+      "category": "MAS_45",
+      "courtName": "Pista 2",
+      "playerIds": [
+        "p1-htmiebnul-1",
+        "p2-htmiebnul-1",
+        "p1-htmiebnul-6",
+        "p2-htmiebnul-6"
+      ],
+      "roundName": "Fase de Grupos",
+      "startedAt": "2026-03-09T21:21:21.180Z",
+      "team1Name": "Jugador 1 / Jugador 2",
+      "team2Name": "Jugador 3 / Jugador 4",
+      "categoryId": "htmiebnul",
+      "courtIndex": 1,
+      "isKnockout": false,
+      "team1Index": 1,
+      "team2Index": 2,
+      "categoryName": "MALE - MAS_45",
+      "scheduledTime": "2026-03-14T20:10:00.000Z",
+      "actualStartTime": "2026-03-09T21:21:21.180Z"
+    },
+    "created_at": "2026-03-09T21:17:36.393+00:00",
+    "updated_at": "2026-03-09T21:21:21.418+00:00"
+  }
+]
