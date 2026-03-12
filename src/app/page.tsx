@@ -39,10 +39,14 @@ export default function HomePage() {
     });
 
     useEffect(() => {
-        if (!authLoading && !profileLoading && user) {
-            router.replace(isAdmin ? '/admin' : '/hub');
+        if (!authLoading && user) {
+            if (isAdmin) {
+                router.replace('/admin');
+            } else if (!profileLoading) {
+                router.replace('/hub');
+            }
         }
-    }, [authLoading, profileLoading, user, isAdmin, router]);
+    }, [authLoading, user, profileLoading, isAdmin, router]);
 
     const handleGoogleSignIn = async () => {
         setLoading(true);
@@ -147,41 +151,41 @@ export default function HomePage() {
                         </h1>
                     </motion.div>
                     <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">
-                        {clubName || 'Smart Padel Experience'}
+                        {clubName || 'PADEL EXPERIENCE'}
                     </p>
                 </div>
 
                 {/* Auth Card Container - Now Transparent to remove 'rectangulo blanco' perception */}
                 <div className="w-full">
                     <div className="p-0">
-                        {/* Selector Tab - Text Only Style */}
-                        <div className="flex justify-center gap-10 mb-12 border-b border-white/5 pb-2">
+                        {/* Selector Tab - Glowing Text Style */}
+                        <div className="flex justify-center gap-12 mb-12 border-b border-white/5 pb-4">
                             <button
                                 onClick={() => { setIsLogin(true); setError(null); }}
-                                className="relative pb-2 bg-transparent border-none outline-none cursor-pointer"
+                                className="relative bg-transparent border-none outline-none cursor-pointer group"
                             >
-                                <span className={`text-sm font-bold tracking-widest uppercase transition-all duration-300 ${isLogin ? 'text-padel-primary' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                                <span className={`text-base font-black tracking-[0.2em] uppercase transition-all duration-500 ${isLogin ? 'text-padel-primary drop-shadow-[0_0_12px_rgba(204,255,0,0.7)]' : 'text-zinc-600 group-hover:text-white'}`}>
                                     Entrar
                                 </span>
                                 {isLogin && (
                                     <motion.div
                                         layoutId="activeTabUnderline"
-                                        className="absolute bottom-[-1px] left-0 right-0 h-[2.5px] bg-padel-primary"
+                                        className="absolute bottom-[-16px] left-0 right-0 h-[3px] bg-padel-primary shadow-[0_0_20px_rgba(204,255,0,0.6)]"
                                         transition={{ type: "spring", stiffness: 350, damping: 30 }}
                                     />
                                 )}
                             </button>
                             <button
                                 onClick={() => { setIsLogin(false); setError(null); }}
-                                className="relative pb-2 bg-transparent border-none outline-none cursor-pointer"
+                                className="relative bg-transparent border-none outline-none cursor-pointer group"
                             >
-                                <span className={`text-sm font-bold tracking-widest uppercase transition-all duration-300 ${!isLogin ? 'text-padel-primary' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                                <span className={`text-base font-black tracking-[0.2em] uppercase transition-all duration-500 ${!isLogin ? 'text-padel-primary drop-shadow-[0_0_12px_rgba(204,255,0,0.7)]' : 'text-zinc-600 group-hover:text-white'}`}>
                                     Registro
                                 </span>
                                 {!isLogin && (
                                     <motion.div
                                         layoutId="activeTabUnderline"
-                                        className="absolute bottom-[-1px] left-0 right-0 h-[2.5px] bg-padel-primary"
+                                        className="absolute bottom-[-16px] left-0 right-0 h-[3px] bg-padel-primary shadow-[0_0_20px_rgba(204,255,0,0.6)]"
                                         transition={{ type: "spring", stiffness: 350, damping: 30 }}
                                     />
                                 )}
@@ -268,48 +272,42 @@ export default function HomePage() {
                             <button
                                 disabled={loading}
                                 type="submit"
-                                className="w-full h-16 bg-padel-primary text-black rounded-full font-black uppercase text-sm hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_15px_30px_rgba(204,255,0,0.1)] flex items-center justify-center gap-3 disabled:opacity-50 mt-6 group"
+                                className="w-full py-6 bg-transparent text-padel-primary font-black uppercase text-lg transition-all flex items-center justify-center disabled:opacity-50 mt-8 group relative outline-none border-none cursor-pointer"
                             >
-                                {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : (
-                                    <>
-                                        <span>{isLogin ? 'ENTRAR AHORA' : 'CREAR CUENTA PADEL'}</span>
-                                        <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                                    </>
-                                )}
+                                <div className={`transition-all duration-300 ${loading ? 'opacity-50' : 'group-hover:scale-110 group-active:scale-95 drop-shadow-[0_0_15px_rgba(204,255,0,0.8)] focus:drop-shadow-[0_0_20px_rgba(204,255,0,1)]'}`}>
+                                    {loading ? (
+                                        <RefreshCw className="w-6 h-6 animate-spin" />
+                                    ) : (
+                                        <span className="tracking-[0.2em]">{isLogin ? 'ENTRAR AHORA' : 'CREAR CUENTA'}</span>
+                                    )}
+                                </div>
+                                <div className="absolute inset-x-0 bottom-0 h-[2px] bg-padel-primary/40 scale-x-0 group-hover:scale-x-50 group-focus:scale-x-100 transition-transform duration-500 shadow-[0_0_15px_#ccff00]" />
                             </button>
-                        </form>
 
-                        <div className="mt-8 space-y-6">
                             {isLogin && (
-                                <div className="flex justify-center">
+                                <div className="flex justify-center mt-4">
                                     <button
+                                        type="button"
                                         onClick={handleForgotPassword}
-                                        className="text-[10px] font-bold text-white/40 hover:text-white uppercase tracking-widest transition-colors bg-[#050505] border-none p-0 outline-none"
+                                        className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-[0.2em] transition-colors bg-transparent border-none p-0 outline-none cursor-pointer"
                                     >
-                                        ¿Olvidaste tu contraseña?
+                                        ¿No recuerdas la contraseña?
                                     </button>
                                 </div>
                             )}
+                        </form>
 
-                            <button
-                                onClick={handleGoogleSignIn}
-                                className="w-full h-16 bg-transparent border border-white/5 text-zinc-400 rounded-full font-bold text-sm hover:bg-white/[0.02] hover:text-white hover:border-white/20 transition-all flex items-center justify-center gap-4 group"
-                            >
-                                <Chrome className="w-5 h-5 text-white/40 group-hover:text-white transition-colors" />
-                                CONTINUAR CON GOOGLE
-                            </button>
-                        </div>
                     </div>
                 </div>
 
-                {/* Footer Controls */}
+                {/* Footer Controls (Simplificado / Oculto) */}
                 <div className="mt-16 flex flex-col items-center">
                     <button
                         onClick={() => {
                             enableDevMode();
                             router.push('/tournaments');
                         }}
-                        className="flex items-center gap-2 text-[9px] font-bold text-white/10 hover:text-white/40 uppercase tracking-[0.4em] transition-all bg-[#050505] border-none p-0 outline-none"
+                        className="flex items-center gap-2 text-[9px] font-bold text-white/5 hover:text-white/20 uppercase tracking-[0.4em] transition-all bg-transparent border-none p-0 outline-none"
                     >
                         <Zap className="w-3 h-3" /> Sandbox Mode
                     </button>

@@ -61,10 +61,7 @@ export const MatchList: React.FC<MatchListProps> = ({
                         </span>
                     </div>
 
-                    <div
-                        className="grid gap-2"
-                        style={{ gridTemplateColumns: numSlotsPorComenzar > 0 ? `repeat(${numSlotsPorComenzar}, minmax(0, 1fr))` : '1fr' }}
-                    >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                         {nextUpMatches.map((match, rank) => (
                             <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact gameNumber={rank + 1} matchNumber={allMatches.indexOf(match) + 1} />
                         ))}
@@ -91,45 +88,158 @@ export const MatchList: React.FC<MatchListProps> = ({
                         </span>
                     </div>
 
-                    <div
-                        className="grid gap-2"
-                        style={{ gridTemplateColumns: `repeat(${numCanchas}, minmax(0, 1fr))` }}
-                    >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                         {effectiveLiveMatches.map((match, rank) => (
                             <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact matchNumber={allMatches.indexOf(match) + 1} />
                         ))}
                         {effectiveLiveMatches.length < numCanchas && (
-                            Array.from({ length: numCanchas - effectiveLiveMatches.length }).map((_, i) => (
+                            Array.from({ length: Math.min(6, numCanchas - effectiveLiveMatches.length) }).map((_, i) => (
                                 <PlaceholderMatchCard key={`live-pad-${i}`} rank={effectiveLiveMatches.length + i} mode="live" />
+                            ))
+                        )}
+                    </div>
+                </motion.div>
+            ) : activeTab === MatchStatus.FINISHED ? (
+                <motion.div
+                    key="finished-view"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="space-y-4"
+                >
+                    <div className="flex items-center gap-3 px-1 pb-1">
+                        <div className="flex items-center gap-2">
+                            <Trophy className="w-3.5 h-3.5 text-gray-400" />
+                            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400">
+                                Resultados Finales
+                            </span>
+                        </div>
+                        <div className="flex-1 h-px bg-white/5" />
+                        <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
+                            {filteredMatches.length} partido{filteredMatches.length !== 1 ? 's' : ''} concluido{filteredMatches.length !== 1 ? 's' : ''}
+                        </span>
+                    </div>
+
+                    <div className="space-y-3">
+                        {filteredMatches.length === 0 ? (
+                            <div className="py-24 text-center space-y-4">
+                                <Trophy className="w-16 h-16 text-white/5 mx-auto" />
+                                <p className="text-gray-600 text-xs uppercase font-bold tracking-widest">No hay partidos finalizados aún</p>
+                            </div>
+                        ) : (
+                            [...filteredMatches].reverse().map((match, idx) => (
+                                <MatchCard
+                                    key={match.id ?? idx}
+                                    match={match}
+                                    idx={idx}
+                                    matchNumber={allMatches.indexOf(match) + 1}
+                                    isEffectivelyLive={effectiveLiveIds.has(match.id)}
+                                    isNextUp={nextUpIds.has(match.id)}
+                                />
                             ))
                         )}
                     </div>
                 </motion.div>
             ) : (
                 <motion.div
-                    key="list-view"
+                    key="all-view"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="space-y-3"
+                    className="space-y-10"
                 >
-                    {filteredMatches.length === 0 ? (
-                        <div className="py-24 text-center space-y-4">
-                            <Trophy className="w-16 h-16 text-white/5 mx-auto" />
-                            <p className="text-gray-600 text-xs uppercase font-bold tracking-widest">No hay partidos en esta sección</p>
+                    {/* 1. SECCIÓN EN VIVO */}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3 px-1">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
+                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">En Curso</span>
+                            </div>
+                            <div className="flex-1 h-px bg-emerald-500/10" />
+                            <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
+                                {allMatches.filter(m => m.status === MatchStatus.LIVE).length} en vivo
+                            </span>
                         </div>
-                    ) : (
-                        filteredMatches.map((match, idx) => (
-                            <MatchCard
-                                key={match.id ?? idx}
-                                match={match}
-                                idx={idx}
-                                matchNumber={allMatches.indexOf(match) + 1}
-                                isEffectivelyLive={effectiveLiveIds.has(match.id)}
-                                isNextUp={nextUpIds.has(match.id)}
-                            />
-                        ))
-                    )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {allMatches.filter(m => m.status === MatchStatus.LIVE).map((m, idx) => (
+                                <NextMatchCard key={m.id} match={m} rank={idx} compact matchNumber={allMatches.indexOf(m) + 1} />
+                            ))}
+                            {allMatches.filter(m => m.status === MatchStatus.LIVE).length === 0 && (
+                                <div className="py-10 text-center border border-dashed border-white/5 rounded-[2rem] opacity-20">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Sin partidos en curso</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 2. SECCIÓN PENDIENTES (PRÓXIMOS Y COLA) */}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3 px-1">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse shadow-[0_0_8px_#facc15]" />
+                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-yellow-400">Próximos y en Espera</span>
+                            </div>
+                            <div className="flex-1 h-px bg-yellow-400/10" />
+                            <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
+                                {allMatches.filter(m => m.status === MatchStatus.PENDING).length} por jugar
+                            </span>
+                        </div>
+
+                        {/* Sub-bloque: Siguientes Salidas (Tarjetas Compactas Destacadas) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {nextUpMatches.map((m, idx) => (
+                                <NextMatchCard key={m.id} match={m} rank={idx} compact gameNumber={idx + 1} matchNumber={allMatches.indexOf(m) + 1} />
+                            ))}
+                        </div>
+
+                        {/* Sub-bloque: Resto de la jornada (Lista estándar) */}
+                        <div className="space-y-3 pt-2">
+                            {allMatches
+                                .filter(m => m.status === MatchStatus.PENDING && !nextUpIds.has(m.id))
+                                .map((m, idx) => (
+                                    <MatchCard
+                                        key={m.id}
+                                        match={m}
+                                        idx={idx}
+                                        matchNumber={allMatches.indexOf(m) + 1}
+                                        isEffectivelyLive={false}
+                                        isNextUp={false}
+                                    />
+                                ))}
+                        </div>
+                    </div>
+
+                    {/* 3. SECCIÓN FINALIZADOS */}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3 px-1">
+                            <div className="flex items-center gap-2">
+                                <Trophy className="w-3.5 h-3.5 text-gray-500" />
+                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Resultados</span>
+                            </div>
+                            <div className="flex-1 h-px bg-white/5" />
+                        </div>
+                        <div className="space-y-3">
+                            {allMatches.filter(m => m.status === MatchStatus.FINISHED).length === 0 ? (
+                                <div className="py-10 text-center border border-dashed border-white/5 rounded-[2rem] opacity-20">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Aún no hay resultados</p>
+                                </div>
+                            ) : (
+                                [...allMatches]
+                                    .filter(m => m.status === MatchStatus.FINISHED)
+                                    .reverse()
+                                    .map((m, idx) => (
+                                        <MatchCard
+                                            key={m.id}
+                                            match={m}
+                                            idx={idx}
+                                            matchNumber={allMatches.indexOf(m) + 1}
+                                            isEffectivelyLive={false}
+                                            isNextUp={false}
+                                        />
+                                    ))
+                            )}
+                        </div>
+                    </div>
                     {(activeTab === 'all' || activeTab === MatchStatus.FINISHED) && (() => {
                         const firstT = Object.values(tournaments)[0];
                         const generalContent = firstT?.rules?.content ?? '';

@@ -375,12 +375,15 @@ export class MasterScheduleEngine {
         };
 
         for (const team of teams) {
-            if (!team.p1) team.p1 = { id: `auto_${cat.category}_${playerCounter}`, name: getSimulatedName(cat.gender, playerCounter++) };
-            if (!hasRealName(team.p1.name)) {
+            if (!team.p1) {
+                team.p1 = { id: `auto_${cat.category}_${playerCounter}`, name: getSimulatedName(cat.gender, playerCounter++) };
+            } else if (!hasRealName(team.p1.name)) {
                 team.p1.name = getSimulatedName(cat.gender, playerCounter++);
             }
-            if (!team.p2) team.p2 = { id: `auto_${cat.category}_${playerCounter}`, name: getSimulatedName(cat.gender, playerCounter++) };
-            if (!hasRealName(team.p2.name)) {
+
+            if (!team.p2) {
+                team.p2 = { id: `auto_${cat.category}_${playerCounter}`, name: getSimulatedName(cat.gender, playerCounter++) };
+            } else if (!hasRealName(team.p2.name)) {
                 team.p2.name = getSimulatedName(cat.gender, playerCounter++);
             }
         }
@@ -448,12 +451,16 @@ export class MasterScheduleEngine {
             const knockoutTeams: any[] = [];
             const gNames = groups.map((_, i) => String.fromCharCode(65 + i));
 
-            // 1. Recolectar todos los clasificados TBD (Ej: 1°A, 2°A, 1°B, 2°B...)
+            // 1. Recolectar clasificados reales según disponibilidad en el grupo
             for (let i = 0; i < groups.length; i++) {
-                for (let rank = 1; rank <= advanceCount; rank++) {
+                const teamsInGroup = groups[i].length;
+                // Solo clasificar hasta el máximo disponible en el grupo o el advanceCount
+                const actualAdvance = Math.min(teamsInGroup, advanceCount);
+
+                for (let rank = 1; rank <= actualAdvance; rank++) {
                     knockoutTeams.push({
                         p1: { id: `tbd_${rank}_${gNames[i]}_p1`, name: `${rank}° Grupo ${gNames[i]}` },
-                        p2: { id: `tbd_${rank}_${gNames[i]}_p2`, name: '' },
+                        p2: { id: `tbd_${rank}_${gNames[i]}_p2`, name: `(TBD)` },
                         isTBD: true,
                         teamLabel: `${rank}° Grupo ${gNames[i]}`,
                     });
@@ -469,19 +476,34 @@ export class MasterScheduleEngine {
             } else if (nK <= 4) {
                 // Semifinales y Final
                 // Cruce tradicional si son 2 grupos de 2 clasificados: 1A vs 2B, 1B vs 2A
-                if (groups.length === 2 && advanceCount === 2) {
+                if (groups.length === 2 && advanceCount === 2 && knockoutTeams.length === 4) {
                     result.push({ team1: knockoutTeams[0], team2: knockoutTeams[3], roundName: 'SEMIFINAL', isKnockout: true, isFinal: false }); // 1A vs 2B
                     result.push({ team1: knockoutTeams[2], team2: knockoutTeams[1], roundName: 'SEMIFINAL', isKnockout: true, isFinal: false }); // 1B vs 2A
                 } else {
+                    // Si no están los 4 (ej: 3 equipos), emparejar los que hay
                     for (let i = 0; i < nK; i += 2) {
                         if (knockoutTeams[i + 1]) {
                             result.push({ team1: knockoutTeams[i], team2: knockoutTeams[i + 1], roundName: 'SEMIFINAL', isKnockout: true, isFinal: false });
+                        } else {
+                            // Si sobra 1, darle BYE (pasa directo a la final o se agenda solo)
+                            // Por ahora, solo lo logueamos o lo agendamos contra un TBD
+                            console.log('[Pairings] Team with BYE:', knockoutTeams[i].teamLabel);
                         }
                     }
                 }
                 result.push({
-                    team1: { p1: { id: 'tbd_sf1', name: 'Gan. SF1' }, isTBD: true, teamLabel: 'Ganador SF1' },
-                    team2: { p1: { id: 'tbd_sf2', name: 'Gan. SF2' }, isTBD: true, teamLabel: 'Ganador SF2' },
+                    team1: {
+                        p1: { id: 'tbd_sf1_p1', name: 'Gan. SF1' },
+                        p2: { id: 'tbd_sf1_p2', name: '(TBD)' },
+                        isTBD: true,
+                        teamLabel: 'Ganador SF1'
+                    },
+                    team2: {
+                        p1: { id: 'tbd_sf2_p1', name: 'Gan. SF2' },
+                        p2: { id: 'tbd_sf2_p2', name: '(TBD)' },
+                        isTBD: true,
+                        teamLabel: 'Ganador SF2'
+                    },
                     roundName: 'FINAL', isKnockout: true, isFinal: true
                 });
             } else if (nK <= 8) {
@@ -493,19 +515,29 @@ export class MasterScheduleEngine {
                 }
                 // SFs genéricas
                 result.push({
-                    team1: { p1: { id: 'tbd_c1', name: 'Gan. C1' }, p2: { id: 'tbd_c1_p2', name: '' }, isTBD: true, teamLabel: 'Ganador C1' },
-                    team2: { p1: { id: 'tbd_c2', name: 'Gan. C2' }, p2: { id: 'tbd_c2_p2', name: '' }, isTBD: true, teamLabel: 'Ganador C2' },
+                    team1: { p1: { id: 'tbd_c1', name: 'Gan. C1' }, p2: { id: 'tbd_c1_p2', name: '(TBD)' }, isTBD: true, teamLabel: 'Ganador C1' },
+                    team2: { p1: { id: 'tbd_c2', name: 'Gan. C2' }, p2: { id: 'tbd_c2_p2', name: '(TBD)' }, isTBD: true, teamLabel: 'Ganador C2' },
                     roundName: 'SEMIFINAL', isKnockout: true, isFinal: false
                 });
                 result.push({
-                    team1: { p1: { id: 'tbd_c3', name: 'Gan. C3' }, p2: { id: 'tbd_c3_p2', name: '' }, isTBD: true, teamLabel: 'Ganador C3' },
-                    team2: { p1: { id: 'tbd_c4', name: 'Gan. C4' }, p2: { id: 'tbd_c4_p2', name: '' }, isTBD: true, teamLabel: 'Ganador C3' },
+                    team1: { p1: { id: 'tbd_c3', name: 'Gan. C3' }, p2: { id: 'tbd_c3_p2', name: '(TBD)' }, isTBD: true, teamLabel: 'Ganador C3' },
+                    team2: { p1: { id: 'tbd_c4', name: 'Gan. C4' }, p2: { id: 'tbd_c4_p2', name: '(TBD)' }, isTBD: true, teamLabel: 'Ganador C4' },
                     roundName: 'SEMIFINAL', isKnockout: true, isFinal: false
                 });
                 // Final
                 result.push({
-                    team1: { p1: { id: 'tbd_sf1', name: 'Gan. SF1' }, isTBD: true, teamLabel: 'Ganador SF1' },
-                    team2: { p1: { id: 'tbd_sf2', name: 'Gan. SF2' }, isTBD: true, teamLabel: 'Ganador SF2' },
+                    team1: {
+                        p1: { id: 'tbd_sf1_p1', name: 'Gan. SF1' },
+                        p2: { id: 'tbd_sf1_p2', name: '(TBD)' },
+                        isTBD: true,
+                        teamLabel: 'Ganador SF1'
+                    },
+                    team2: {
+                        p1: { id: 'tbd_sf2_p1', name: 'Gan. SF2' },
+                        p2: { id: 'tbd_sf2_p2', name: '(TBD)' },
+                        isTBD: true,
+                        teamLabel: 'Ganador SF2'
+                    },
                     roundName: 'FINAL', isKnockout: true, isFinal: true
                 });
             }

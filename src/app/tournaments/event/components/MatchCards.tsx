@@ -6,8 +6,7 @@ import { motion } from 'framer-motion';
 import {
     Trophy, Gamepad2, Monitor, Camera, Tv
 } from 'lucide-react';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { dataService } from '@/lib/dataService';
 import { MatchStatus } from '@/types/tournament';
 import {
     resolveTeamNames, formatHHMM, formatCategory, formatGender,
@@ -47,15 +46,15 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
 
     const rankBg = isLive
         ? [
-            'bg-emerald-500/10 border-emerald-500/30',
-            'bg-emerald-500/10 border-emerald-500/25',
+            'bg-emerald-500/10 border-emerald-500/30 shadow-[0_4px_24px_rgba(16,185,129,0.1)]',
+            'bg-emerald-500/5 border-emerald-500/25',
             'bg-emerald-500/5 border-emerald-500/20',
             'bg-emerald-500/5 border-emerald-500/15',
             'bg-emerald-500/5 border-emerald-500/10',
             'bg-emerald-500/5 border-emerald-500/10',
         ]
         : [
-            'bg-[#ccff00]/10 border-[#ccff00]/30',
+            'bg-yellow-400/10 border-yellow-400/30 shadow-[0_4px_24px_rgba(250,204,21,0.08)]',
             'bg-white/5 border-white/15',
             'bg-white/[0.03] border-white/10',
             'bg-white/[0.02] border-white/[0.07]',
@@ -136,7 +135,21 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                 </div>
 
                 {/* Action Dock */}
-                <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40">
+                <div className={`grid ${(!isLive && match._tournamentId) ? 'grid-cols-5' : 'grid-cols-4'} gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40 overflow-hidden`}>
+                    {!isLive && match._tournamentId && (
+                        <button
+                            onClick={async () => {
+                                if (!confirm('¿Comenzar este partido ahora?')) return;
+                                try {
+                                    await dataService.updateMatch(match._tournamentId, match.id, { status: MatchStatus.LIVE });
+                                } catch (err) { console.error(err); }
+                            }}
+                            className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00] text-black hover:bg-white transition-all active:scale-95"
+                        >
+                            <Gamepad2 className="w-3.5 h-3.5" />
+                            <span className="text-[6px] font-black uppercase tracking-tight">Comenzar</span>
+                        </button>
+                    )}
                     <Link
                         href={controlHref}
                         className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
@@ -280,18 +293,24 @@ export function MatchCard({ match, idx, isNextUp, isEffectivelyLive, matchNumber
         if (!confirm('¿Terminar este partido ahora?')) return;
         setEnding(true);
         try {
-            const tournRef = doc(db, 'tournaments', match._tournamentId);
-            const snap = await getDoc(tournRef);
-            if (!snap.exists()) throw new Error('Torneo no encontrado');
-            const data = snap.data();
-            const matches: any[] = data.matches ?? [];
-            const updated = matches.map((m: any) =>
-                m.id === match.id ? { ...m, status: MatchStatus.FINISHED } : m
-            );
-            await updateDoc(tournRef, { matches: updated });
+            await dataService.updateMatch(match._tournamentId, match.id, { status: MatchStatus.FINISHED });
         } catch (e) {
             console.error('[endMatch]', e);
-            alert('Error al terminar el partido. Revisa la consola.');
+            alert('Error al terminar el partido.');
+        } finally {
+            setEnding(false);
+        }
+    };
+
+    const startMatch = async () => {
+        if (!match._tournamentId) return;
+        if (!confirm('¿Comenzar este partido ahora?')) return;
+        setEnding(true);
+        try {
+            await dataService.updateMatch(match._tournamentId, match.id, { status: MatchStatus.LIVE });
+        } catch (e) {
+            console.error('[startMatch]', e);
+            alert('Error al comenzar el partido.');
         } finally {
             setEnding(false);
         }

@@ -22,8 +22,14 @@ import BouncingBall from '@/components/BouncingBall';
 import InvitationManager from '@/components/InvitationManager';
 
 export default function HubPage() {
-    const { user, profile, logout, loading: authLoading } = useAuth();
+    const { user, profile, logout, loading: authLoading, isAdmin } = useAuth();
     const router = useRouter();
+
+    useEffect(() => {
+        if (!authLoading && isAdmin) {
+            router.replace('/admin');
+        }
+    }, [authLoading, isAdmin, router]);
 
     const handlePlayerClick = async () => {
         if (!user?.uid) {
@@ -35,11 +41,11 @@ export default function HubPage() {
             const mine = await dataService.getMyParticipants(user.uid);
             const player = mine?.[0];
             if (player?.id) {
-                // Si ya tiene ficha, vamos al formulario de edición (rellenado)
-                router.push(`/players/register?edit=${player.id}`);
+                // Si ya tiene ficha, vamos a MI PERFIL
+                router.push('/mi-cuenta');
             } else {
                 // Si no tiene ficha, vamos al registro inicial
-                router.push('/players/register?mis-datos=1');
+                router.push('/players/register');
             }
         } catch (e) {
             console.error('HubPage: error loading player profile', e);

@@ -492,6 +492,19 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
         }
     };
 
+    const handleProfileClick = async () => {
+        if (!user?.uid) {
+            router.push('/login');
+            return;
+        }
+        const participants = await dataService.getMyParticipants(user.uid);
+        if (participants.length > 0) {
+            router.push('/mi-cuenta');
+        } else {
+            router.push('/players/register');
+        }
+    };
+
     if (authLoading || loading) {
         return (
             <div className="ipad-screen-container bg-[#0a0a0a] text-white flex items-center justify-center">
@@ -584,9 +597,12 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                                     <p className="text-gray-400 text-sm mb-4">
                                         Para inscribirte, necesitamos tu <strong>sexo</strong> y <strong>fecha de nacimiento</strong>. Así solo verás categorías que correspondan a tu perfil (edad y género).
                                     </p>
-                                    <Link href="/players/register?mis-datos=1" className="inline-block px-5 py-3 rounded-2xl bg-[#ccff00] text-black font-black text-sm uppercase">
+                                    <button
+                                        onClick={handleProfileClick}
+                                        className="inline-block px-5 py-3 rounded-2xl bg-[#ccff00] text-black font-black text-sm uppercase"
+                                    >
                                         Ir a Mis datos / Registrar jugador
-                                    </Link>
+                                    </button>
                                     <Link href={`/tournaments/${tournamentId}`} className="block mt-3 text-[#ccff00] text-sm font-bold">
                                         Volver al torneo
                                     </Link>

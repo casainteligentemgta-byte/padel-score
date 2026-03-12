@@ -185,81 +185,12 @@ export default function MiCuentaPage() {
             <div className="flex items-center gap-3 mb-8 flex-shrink-0 pl-20 md:pl-24 pr-4 pt-6">
                 <BouncingBall size={28} />
                 <div>
-                    <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white">Mis datos</h1>
+                    <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white">Mi perfil</h1>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Datos de tu cuenta y ficha de jugador</p>
                 </div>
             </div>
             <main className="ipad-scroll-area pl-20 md:pl-24 pr-4 pb-12">
                 <div className="max-w-2xl mx-auto space-y-8">
-                    {/* Tarjeta de cuenta (correo, rol) */}
-                    <div className="bg-[#111] border border-white/10 rounded-3xl overflow-hidden shadow-xl">
-                        <div className="p-6 md:p-8 space-y-6">
-                            <div className="flex items-center gap-4 p-4 rounded-2xl bg-padel-primary/10 border border-padel-primary/20">
-                                <div className="w-14 h-14 rounded-2xl bg-padel-primary/20 flex items-center justify-center flex-shrink-0">
-                                    <User className="w-7 h-7 text-padel-primary" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <p className="font-black uppercase tracking-wider text-white truncate">{profile?.name || user.displayName || 'Usuario'}</p>
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Cuenta</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3 py-3 border-b border-white/5">
-                                <Mail className="w-5 h-5 text-gray-500 flex-shrink-0" />
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Email</p>
-                                    <p className="text-sm font-bold text-white truncate">{user.email || profile?.email || '—'}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3 py-3 border-b border-white/5">
-                                <Shield className="w-5 h-5 text-gray-500 flex-shrink-0" />
-                                <div>
-                                    <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Rol</p>
-                                    <p className="text-sm font-bold text-white">{roleLabel}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-[#1a1a1a] border border-white/5">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-[#ccff00]/10 flex items-center justify-center">
-                                        <Shield className="w-5 h-5 text-[#ccff00]" />
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Código de Jugador</p>
-                                        <p className="text-lg font-mono font-black text-[#ccff00] tracking-[0.2em]">{profile?.uniqueCode || '——'}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => {
-                                            if (profile?.uniqueCode) {
-                                                navigator.clipboard.writeText(profile.uniqueCode);
-                                                setCopied(true);
-                                                setTimeout(() => setCopied(false), 2000);
-                                            }
-                                        }}
-                                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-[#ccff00] transition-all flex items-center gap-2"
-                                        title="Copiar código"
-                                    >
-                                        {copied ? <Check className="w-4 h-4 text-[#ccff00]" /> : <Copy className="w-4 h-4" />}
-                                        <span className="text-[10px] font-black uppercase tracking-widest">
-                                            {copied ? 'Copiado' : 'Copiar'}
-                                        </span>
-                                    </button>
-                                </div>
-                            </div>
-                            <p className="text-[10px] text-gray-600 pt-2">ID: {user.uid}</p>
-                        </div>
-                        <div className="px-6 md:px-8 pb-6">
-                            <button
-                                type="button"
-                                onClick={openEdit}
-                                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-padel-primary text-black font-black text-xs uppercase tracking-widest hover:bg-padel-primary/90 transition-all active:scale-[0.98]"
-                            >
-                                <Edit3 className="w-4 h-4" />
-                                Modificar datos de la cuenta
-                            </button>
-                        </div>
-                    </div>
-
                     {/* SECCIÓN DE INVITACIONES PENDIENTES */}
                     {!loadingInvs && invitations.length > 0 && (
                         <div className="space-y-4">
@@ -366,6 +297,17 @@ export default function MiCuentaPage() {
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-white/5 pt-4 mt-2">
+                                    {/* Identificación */}
+                                    <div className="space-y-3">
+                                        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
+                                            <Shield className="w-4 h-4" /> Identificación
+                                        </p>
+                                        <div className="text-xs text-gray-300 space-y-1">
+                                            <p><span className="font-bold text-white">DNI / Cédula:</span> {player.dni || '—'}</p>
+                                            <p><span className="font-bold text-white">Fecha de nacimiento:</span> {formatDate(player.birthDate)}</p>
+                                        </div>
+                                    </div>
+
                                     {/* Tallas */}
                                     <div className="space-y-3">
                                         <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
@@ -407,41 +349,7 @@ export default function MiCuentaPage() {
                                         </div>
                                     </div>
 
-                                    {/* Código de Vinculación */}
-                                    {profile?.uniqueCode && (
-                                        <div className="space-y-3">
-                                            <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                                                <Users className="w-4 h-4" /> Código de Pareja
-                                            </p>
-                                            <div className="bg-padel-primary/5 border border-padel-primary/10 p-4 rounded-2xl flex items-center justify-between group/code">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[7px] font-black text-gray-600 uppercase tracking-widest mb-1">TU CÓDIGO ÚNICO</span>
-                                                    <span className="text-xl font-mono font-black tracking-widest text-padel-primary italic">{profile.uniqueCode}</span>
-                                                </div>
-                                                <button
-                                                    onClick={() => {
-                                                        navigator.clipboard.writeText(profile.uniqueCode);
-                                                        setCopied(true);
-                                                        setTimeout(() => setCopied(false), 2000);
-                                                    }}
-                                                    className={`p-2.5 rounded-xl transition-all ${copied ? 'bg-padel-primary text-black' : 'bg-white/5 text-gray-500 hover:bg-white/10 hover:text-white'}`}
-                                                >
-                                                    {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Identificación */}
-                                    <div className="space-y-3">
-                                        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                                            <Shield className="w-4 h-4" /> Identificación
-                                        </p>
-                                        <div className="text-xs text-gray-300 space-y-1">
-                                            <p><span className="font-bold text-white">DNI / Cédula:</span> {player.dni || '—'}</p>
-                                            <p><span className="font-bold text-white">Fecha de nacimiento:</span> {formatDate(player.birthDate)}</p>
-                                        </div>
-                                    </div>
+                                    {/* Código de Vinculación oculto por solicitud del usuario */}
                                 </div>
                             </div>
                         </div>
@@ -463,19 +371,22 @@ export default function MiCuentaPage() {
                             </button>
                         </div>
                     )}
-                    {/* Botón de Cerrar Sesión */}
-                    <div className="pt-8">
-                        <button
-                            onClick={async () => {
-                                await logout();
-                                router.replace('/login');
-                            }}
-                            className="w-full flex items-center justify-center gap-3 py-4 rounded-3xl bg-red-500/10 text-red-500 font-black uppercase italic tracking-widest border border-red-500/20 hover:bg-red-500/20 transition-all active:scale-[0.98]"
-                        >
-                            <LogOut className="w-5 h-5" />
-                            Finalizar Sesión
-                        </button>
-                    </div>
+
+                    {/* Tarjeta de cuenta (correo, rol) oculta por solicitud del usuario */}
+                </div>
+
+                {/* Botón de Cerrar Sesión */}
+                <div className="pt-8">
+                    <button
+                        onClick={async () => {
+                            await logout();
+                            router.replace('/login');
+                        }}
+                        className="w-full flex items-center justify-center gap-3 py-4 rounded-3xl bg-red-500/10 text-red-500 font-black uppercase italic tracking-widest border border-red-500/20 hover:bg-red-500/20 transition-all active:scale-[0.98]"
+                    >
+                        <LogOut className="w-5 h-5" />
+                        Finalizar Sesión
+                    </button>
                 </div>
             </main>
 

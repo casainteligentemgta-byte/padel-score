@@ -2,7 +2,16 @@ import { getSupabaseClient } from './supabase/client';
 
 const supabase = () => {
     const c = getSupabaseClient();
-    if (!c) throw new Error('Supabase no configurado. Añade NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en .env.local');
+    if (!c) {
+        const urlMissing = !process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const keyMissing = !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        let details = '';
+        if (urlMissing) details += ' (Falta URL)';
+        if (keyMissing) details += ' (Falta Anon Key)';
+        if (!urlMissing && !keyMissing && typeof window === 'undefined') details += ' (Error Server-Side)';
+
+        throw new Error(`Supabase no configurado${details}. Asegúrate de reiniciar el servidor tras editar .env.local`);
+    }
     return c;
 };
 
@@ -278,6 +287,19 @@ export const dataService = {
         const { data, error } = await supabase().from('participants').select('*').eq('id', id).single();
         if (error || !data) return null;
         return { id: data.id, ...data.data, ownerId: data.owner_id, createdAt: data.created_at, updatedAt: data.updated_at };
+    },
+
+    async checkParticipantExistence(field: string, value: string, excludeId?: string) {
+        const { data, error } = await supabase()
+            .from('participants')
+            .select('id')
+            .eq(`data->>${field}`, value);
+        if (error) throw error;
+        if (!data || data.length === 0) return false;
+        if (excludeId) {
+            return data.some(p => p.id !== excludeId);
+        }
+        return data.length > 0;
     },
 
     async getPlayerStats(playerId: string) {
@@ -579,6 +601,27 @@ export const dataService = {
             tournament_name: inv.tournaments?.data?.name || 'Torneo Sin Nombre',
             inviter_name: inv.player_a?.name || 'Jugador'
         }));
+    },
+
+    async getAllRegistrationCounts(): Promise<Record<string, number>> {
+        const { data, error } = await supabase()
+            .from('teams')
+            .select('tournament_id, status, expires_at');
+
+        if (error) throw error;
+
+        const counts: Record<string, number> = {};
+        const now = new Date();
+        (data || []).forEach(t => {
+            const isAccepted = t.status === 'accepted';
+            const isPendingValid = t.status === 'pending' && (!t.expires_at || new Date(t.expires_at) > now);
+
+            if (isAccepted || isPendingValid) {
+                counts[t.tournament_id] = (counts[t.tournament_id] || 0) + 1;
+            }
+        });
+
+        return counts;
     },
 
     async respondToInvitation(teamId: string, status: 'accepted' | 'rejected') {

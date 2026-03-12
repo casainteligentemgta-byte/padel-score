@@ -30,8 +30,9 @@ const COMPLEXES = [
     { name: 'Tibisay', courts: 3 },
     { name: 'Sun Sol Costa Azul', courts: 4 },
     { name: 'Food Kart', courts: 3 },
-    { name: 'Elite', courts: 4 },
     { name: 'Bodeguero', courts: 3 },
+    { name: 'Elite', courts: 4 },
+    { name: 'PADEL EXPERIENCE', courts: 3 },
     { name: 'Sun Sol Pedro Gonzalez', courts: 2 },
     { name: 'Playa el Agua', courts: 3 },
 ];
@@ -118,7 +119,7 @@ export default function BoardsModulePage() {
                                     placeholder="BUSCAR CLUB..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-xs font-bold uppercase tracking-widest outline-none focus:border-padel-primary/50 transition-all placeholder:text-gray-800"
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-xs font-bold text-white uppercase tracking-widest outline-none focus:border-padel-primary/50 transition-all placeholder:text-gray-800"
                                 />
                             </div>
 

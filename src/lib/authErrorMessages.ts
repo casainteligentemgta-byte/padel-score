@@ -30,7 +30,7 @@ export function getAuthErrorMessage(err: any): string {
     return 'Error de red. Comprueba tu conexión.';
   }
   if (msg.includes('Supabase') && msg.includes('configurado')) {
-    return 'Error de configuración del sistema (Supabase).';
+    return msg; // Show the detailed error from dataService or client
   }
 
   return msg ? `Error: ${msg}` : 'Error en la autenticación. Intenta de nuevo.';

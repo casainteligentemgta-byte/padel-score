@@ -112,7 +112,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
 
     return (
         <div className="ipad-screen-container bg-[#080808] text-white font-outfit relative overflow-hidden">
-            <Sidebar />
+            {/* Sidebar removed to omit from this screen as per user request */}
 
             {/* Back Button Fixed Below Menu */}
             <button
@@ -129,7 +129,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
             <div className="ipad-scroll-area !pr-0">
                 {/* Header Section - Modern and Glassy */}
                 <header className="sticky top-0 z-[60] bg-[#080808]/40 backdrop-blur-xl border-b border-white/5">
-                    <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between ml-20 md:ml-24">
+                    <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="hidden sm:flex flex-col">
                                 <h1 className="text-sm font-black italic uppercase tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.4)]">

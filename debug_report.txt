@@ -1,0 +1,16 @@
+--- PAIRINGS REPORT (GroupSize 3, 4 Teams) ---
+Match 1 [Fase de Grupos]: #1 vs #2
+  P1: Real P1 / Real P2
+  P2: Real P3 / Real P4
+Match 2 [Fase de Grupos]: #1 vs #3
+  P1: Real P1 / Real P2
+  P2: Real P5 / Real P6
+Match 3 [Fase de Grupos]: #2 vs #3
+  P1: Real P3 / Real P4
+  P2: Real P5 / Real P6
+Match 4 [SEMIFINAL]: #undefined vs #undefined
+  P1: 1° Grupo A / MISSING
+  P2: 2° Grupo A / MISSING
+Match 5 [FINAL]: #undefined vs #undefined
+  P1: Gan. SF1 / MISSING
+  P2: Gan. SF2 / MISSING

@@ -48,7 +48,7 @@ export default function AdminHubPage() {
 
     const adminSections = [
         {
-            title: "Gestión de Jugadores",
+            title: "Jugadores",
             desc: "Administración de usuarios y niveles",
             icon: Users,
             href: "/admin/users",
@@ -57,25 +57,25 @@ export default function AdminHubPage() {
             iconColor: "text-padel-primary"
         },
         {
-            title: "Ajustes del Club",
-            desc: "Configuración general y parámetros",
-            icon: Settings2,
-            href: "/admin/settings",
-            color: "from-orange-500/20 to-orange-500/5",
-            borderColor: "border-orange-500/30",
-            iconColor: "text-orange-400"
-        },
-        {
-            title: "Torneos y Eventos",
+            title: "Torneos",
             desc: "Generador de fixtures y categorías",
             icon: Trophy,
-            href: "/admin/tournaments",
+            href: "/tournaments",
             color: "from-blue-500/20 to-blue-500/5",
             borderColor: "border-blue-500/30",
             iconColor: "text-blue-400"
         },
         {
-            title: "Publicidad y Ads",
+            title: "Boards & Marcadores",
+            desc: "Visualización en pantallas del club",
+            icon: Layout,
+            href: "/admin/boards",
+            color: "from-rose-500/20 to-rose-500/5",
+            borderColor: "border-rose-500/30",
+            iconColor: "text-rose-400"
+        },
+        {
+            title: "Publicidad y ADS",
             desc: "Banners y patrocinadores activos",
             icon: Smartphone,
             href: "/admin/publicidad",
@@ -93,15 +93,6 @@ export default function AdminHubPage() {
             iconColor: "text-emerald-400"
         },
         {
-            title: "Boards & Marcadores",
-            desc: "Visualización en pantallas del club",
-            icon: Layout,
-            href: "/admin/boards",
-            color: "from-rose-500/20 to-rose-500/5",
-            borderColor: "border-rose-500/30",
-            iconColor: "text-rose-400"
-        },
-        {
             title: "Agentes AI Pro",
             desc: "Inteligencia artificial para tu club",
             icon: Brain,
@@ -109,6 +100,15 @@ export default function AdminHubPage() {
             color: "from-pink-500/20 to-pink-500/5",
             borderColor: "border-pink-500/30",
             iconColor: "text-pink-400"
+        },
+        {
+            title: "Ajustes del Club",
+            desc: "Configuración general y parámetros",
+            icon: Settings2,
+            href: "/admin/settings",
+            color: "from-orange-500/20 to-orange-500/5",
+            borderColor: "border-orange-500/30",
+            iconColor: "text-orange-400"
         }
     ];
 
@@ -137,10 +137,7 @@ export default function AdminHubPage() {
 
 
                     <div className="flex items-center gap-3 sm:gap-6">
-                        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full border border-white/10 group focus-within:border-padel-primary/30 transition-all">
-                            <Search className="w-3 h-3 text-gray-500 group-focus-within:text-padel-primary" />
-                            <input type="text" placeholder="Buscar..." className="bg-transparent border-none outline-none text-[10px] font-bold uppercase tracking-wider text-white placeholder:text-gray-700 w-24 sm:w-32" />
-                        </div>
+                        {/* Buscador removido a petición del usuario */}
 
                         <div className="flex items-center gap-3 sm:gap-4 border-l border-white/10 pl-4 sm:pl-6">
                             <div className="text-right">
@@ -170,11 +167,11 @@ export default function AdminHubPage() {
                 <div className="px-4 sm:px-6 py-2 sm:py-4 max-w-7xl mx-auto">
 
                     {/* Welcome Card & Overview */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 sm:gap-3 mb-2 sm:mb-4">
+                    <div className="mb-2 sm:mb-4">
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="md:col-span-2 relative h-24 sm:h-32 lg:h-40 rounded-[1rem] sm:rounded-[1.5rem] overflow-hidden group shadow-2xl"
+                            className="relative h-28 sm:h-36 lg:h-44 rounded-2xl sm:rounded-3xl overflow-hidden group shadow-2xl"
                         >
                             <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/30 via-padel-primary/5 to-transparent z-10" />
                             <img
@@ -183,7 +180,7 @@ export default function AdminHubPage() {
                                 alt="Padel court"
                             />
                             <div className="absolute inset-0 bg-black/40 z-0" />
-                            <div className="relative z-20 p-4 sm:p-8 h-full flex flex-col justify-end">
+                            <div className="relative z-20 p-6 sm:p-10 h-full flex flex-col justify-end">
                                 <motion.div
                                     initial={{ opacity: 0, x: -20 }}
                                     animate={{ opacity: 1, x: 0 }}
@@ -195,54 +192,16 @@ export default function AdminHubPage() {
                                     <p className="text-[8px] sm:text-[9px] lg:text-xs font-bold uppercase tracking-widest text-padel-primary/80 mb-2 sm:mb-4 max-w-md">
                                         Gestión profesional de marcadores, categorías e inscripciones en tiempo real.
                                     </p>
-                                    <button onClick={() => router.push('/admin/tournaments')} className="inline-flex items-center gap-2 bg-white text-black px-2 sm:px-4 py-1 sm:py-2 rounded-lg font-black uppercase italic text-[7px] sm:text-[9px] shadow-xl hover:bg-padel-primary transition-colors">
-                                        Gestionar Torneos <Activity className="w-2 h-2 sm:w-3 h-3 animate-pulse" />
+                                    <button onClick={() => router.push('/admin/master-generator')} className="inline-flex items-center gap-2 bg-white text-black px-4 py-2 rounded-lg font-black uppercase italic text-[8px] sm:text-[10px] shadow-xl hover:bg-padel-primary transition-colors">
+                                        Generar Torneos <Activity className="w-3 h-3 animate-pulse" />
                                     </button>
                                 </motion.div>
                             </div>
                         </motion.div>
-
-                        <div className="md:col-span-2 grid grid-cols-2 gap-2 sm:gap-3">
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: 0.4 }}
-                                className="bg-white/[0.03] border border-white/10 rounded-[1rem] sm:rounded-[1.5rem] p-2 sm:p-3 flex flex-col justify-between hover:bg-white/[0.05] transition-all group"
-                            >
-                                <div className="flex justify-between items-start">
-                                    <div className="w-6 h-6 sm:w-8 sm:h-8 lg:w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-                                        <PieChart className="w-5 h-5" />
-                                    </div>
-                                    <ChevronRight className="w-4 h-4 text-gray-700 group-hover:text-white group-hover:translate-x-1 transition-all" />
-                                </div>
-                                <div>
-                                    <h4 className="text-[7px] font-black uppercase tracking-widest text-gray-500">Estado General</h4>
-                                    <p className="text-sm sm:text-lg font-black uppercase italic leading-none">Sistema <span className="text-emerald-400">Activo</span></p>
-                                </div>
-                            </motion.div>
-
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: 0.5 }}
-                                className="bg-white/[0.03] border border-white/10 rounded-[1rem] sm:rounded-[1.5rem] p-2 sm:p-3 flex flex-col justify-between hover:bg-white/[0.05] transition-all group"
-                            >
-                                <div className="flex justify-between items-start mb-1 sm:mb-4">
-                                    <div className="w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-lg sm:rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400">
-                                        <Activity className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5" />
-                                    </div>
-                                    <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4 text-gray-700 group-hover:text-white group-hover:translate-x-1 transition-all" />
-                                </div>
-                                <div>
-                                    <h4 className="text-[7px] font-black uppercase tracking-widest text-gray-500">Alertas</h4>
-                                    <p className="text-sm sm:text-lg font-black uppercase italic leading-none">0 <span className="text-blue-400 text-[8px]">Novedades</span></p>
-                                </div>
-                            </motion.div>
-                        </div>
                     </div>
 
                     {/* Navigation Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3">
                         {adminSections.map((section, idx) => (
                             <motion.div
                                 key={section.title}
@@ -252,30 +211,44 @@ export default function AdminHubPage() {
                             >
                                 <Link
                                     href={section.href}
-                                    className={`block group relative h-24 sm:h-28 lg:h-32 bg-gradient-to-br ${section.color} border ${section.borderColor} rounded-[1rem] sm:rounded-[1.2rem] p-2 sm:p-3 lg:p-4 hover:scale-[1.02] transition-all duration-500 shadow-xl overflow-hidden`}
+                                    className={`block group relative h-16 sm:h-20 lg:h-22 bg-gradient-to-br ${section.color} border ${section.borderColor} rounded-xl p-2 sm:p-3 hover:scale-[1.02] transition-all duration-500 shadow-md overflow-hidden flex flex-col justify-between`}
                                 >
-                                    {/* Decorator */}
-                                    <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-15 transition-opacity">
-                                        <section.icon size={80} className="sm:size-100 lg:size-120" />
+                                    {/* Decorator - Minimalist opacity */}
+                                    <div className="absolute -right-2 -bottom-2 opacity-[0.02] group-hover:opacity-[0.05] transition-opacity">
+                                        <section.icon size={60} className="sm:size-70 lg:size-80" />
                                     </div>
 
-                                    <div className="relative z-10 flex flex-col h-full">
-                                        <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center mb-2 sm:mb-4 bg-black/40 border border-white/5 ${section.iconColor}`}>
-                                            <section.icon className="w-4 h-4 sm:w-5 sm:h-5" />
+                                    <div className="relative z-10 flex flex-col h-full justify-between">
+                                        <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center bg-black/40 border border-white/5 ${section.iconColor}`}>
+                                            <section.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                                         </div>
 
-                                        <h3 className="text-[10px] sm:text-[12px] lg:text-base font-black uppercase tracking-widest mb-0.5 sm:mb-1 flex items-center gap-2">
-                                            {section.title}
-                                            <ChevronRight className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-                                        </h3>
-
-                                        <p className="text-[7px] sm:text-[9px] font-bold uppercase tracking-widest text-gray-500 group-hover:text-gray-300 transition-colors italic leading-tight line-clamp-1">
-                                            {section.desc}
-                                        </p>
+                                        <div className="mt-auto">
+                                            <h3 className="text-[10px] sm:text-[11px] lg:text-[13px] font-black uppercase tracking-wider text-white flex items-center gap-1.5">
+                                                {section.title}
+                                                <ChevronRight className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                                            </h3>
+                                        </div>
                                     </div>
                                 </Link>
                             </motion.div>
                         ))}
+                    </div>
+
+                    {/* Logout Button - Moved up and styled in Ferrari Red */}
+                    <div className="mt-8 flex justify-center">
+                        <button
+                            onClick={async () => {
+                                await logout();
+                                router.replace('/login');
+                            }}
+                            className="flex items-center gap-2 group transition-all hover:scale-105 active:scale-95 bg-transparent border-none outline-none cursor-pointer"
+                        >
+                            <LogOut className="w-4 h-4 text-[#FF2800]" />
+                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#FF2800] italic drop-shadow-[0_0_8px_rgba(255,40,0,0.3)]">
+                                Finalizar Sesión Administrativa
+                            </span>
+                        </button>
                     </div>
 
                     {/* Quick Access Footer */}
@@ -298,22 +271,6 @@ export default function AdminHubPage() {
                             <span className="text-[10px] font-black uppercase tracking-[0.3em]">Supabase Identity Core</span>
                         </div>
                     </motion.div>
-
-                    {/* Secondary Logout Button */}
-                    <div className="mt-12 mb-8 flex justify-center">
-                        <button
-                            onClick={async () => {
-                                await logout();
-                                router.replace('/login');
-                            }}
-                            className="flex items-center gap-3 px-8 py-4 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/30 rounded-2xl transition-all group"
-                        >
-                            <LogOut className="w-5 h-5 text-gray-500 group-hover:text-red-500 transition-colors" />
-                            <span className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 group-hover:text-white transition-colors">
-                                Finalizar Sesión Administrativa
-                            </span>
-                        </button>
-                    </div>
                 </div>
             </main>
 

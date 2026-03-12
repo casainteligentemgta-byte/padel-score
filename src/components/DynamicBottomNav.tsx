@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/lib/AuthContext';
 import { useRTDBRole } from '@/lib/useRTDBRole';
+import { dataService } from '@/lib/dataService';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -55,9 +56,31 @@ export function DynamicBottomNav() {
         navItems = [
             { href: '/', label: 'Inicio', icon: Home },
             { href: '/tournaments', label: 'Torneos', icon: Trophy },
-            { href: '/profile', label: 'Perfil', icon: User },
+            { href: '/mi-cuenta', label: 'Perfil', icon: User },
         ];
     }
+
+    const handleNavClick = async (href: string) => {
+        if (href === '/mi-cuenta') {
+            if (!user?.uid) {
+                router.push('/login');
+                return;
+            }
+            try {
+                const mine = await dataService.getMyParticipants(user.uid);
+                if (mine && mine.length > 0) {
+                    router.push('/mi-cuenta');
+                } else {
+                    router.push('/players/register');
+                }
+            } catch (error) {
+                console.error('Error checking participant:', error);
+                router.push('/players/register');
+            }
+        } else {
+            router.push(href);
+        }
+    };
 
     return (
         <nav className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-4 pointer-events-none">
@@ -73,7 +96,7 @@ export function DynamicBottomNav() {
                         return (
                             <button
                                 key={href}
-                                onClick={() => router.push(href)}
+                                onClick={() => handleNavClick(href)}
                                 className={`flex-1 flex flex-col items-center gap-1.5 py-3.5 px-2 transition-all relative group ${isActive ? 'text-padel-primary' : 'text-gray-600 hover:text-gray-400'}`}
                             >
                                 {/* Indicador activo */}

@@ -29,7 +29,7 @@ import {
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { useAppSettings } from '@/lib/AppSettingsContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { getCanchaLabel } from '@/lib/markerCanchas';
 import { dataService } from '@/lib/dataService';
 import BouncingBall from '@/components/BouncingBall';
@@ -39,6 +39,7 @@ export default function Sidebar() {
     const { logout, isAdmin, markerCanchas, user } = useAuth();
     const { appTitle, clubName } = useAppSettings();
     const router = useRouter();
+    const pathname = usePathname();
 
     const handleMisDatosClick = async () => {
         setIsOpen(false);
@@ -50,11 +51,11 @@ export default function Sidebar() {
             const mine = await dataService.getMyParticipants(user.uid);
             const player = mine?.[0];
             if (player?.id) {
-                // Si ya tiene ficha, vamos al formulario de edición (rellenado)
-                router.push(`/players/register?edit=${player.id}`);
+                // Si ya tiene ficha, vamos a MI PERFIL
+                router.push('/mi-cuenta');
             } else {
                 // Si no tiene ficha, vamos al registro inicial
-                router.push('/players/register?mis-datos=1');
+                router.push('/players/register');
             }
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -71,7 +72,6 @@ export default function Sidebar() {
     ];
 
     const adminItems = [
-        { name: 'Generador Maestro', href: '/admin/master-generator', icon: Sparkles },
         { name: 'Control de Gastos', href: '/expenses', icon: DollarSign },
         { name: 'Validación de pagos', href: '/admin/validacion-pagos', icon: Receipt },
         { name: 'Agentes AI', href: '/agents', icon: Brain },
@@ -83,8 +83,6 @@ export default function Sidebar() {
         { name: 'Inicio', href: '/', icon: Home },
         ...(isAdmin ? [{ name: 'Live', href: '/live', icon: Radio }] : []),
         ...(markerCanchas?.length > 0 ? markerCanchas.map((c) => ({ name: `Marcador ${getCanchaLabel(c)}`, href: `/marker/${c}`, icon: Crosshair })) : []),
-        { name: 'Privacidad', href: '/politica-privacidad', icon: ShieldCheck },
-        { name: 'Términos', href: '/terminos-inscripcion', icon: FileText },
     ];
 
     return (
@@ -128,7 +126,7 @@ export default function Sidebar() {
                                         </h2>
                                     </div>
                                     <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest pl-9">
-                                        {clubName || 'Smart Padel Experience'}
+                                        {clubName || 'PADEL EXPERIENCE'}
                                     </p>
                                 </div>
                                 <button
@@ -178,21 +176,39 @@ export default function Sidebar() {
 
                             {/* Navigation Lists */}
                             <div className="px-8 flex-1 overflow-y-auto no-scrollbar space-y-8 pb-8 relative z-10">
-                                {/* Other Nav */}
-                                <div className="space-y-1">
-                                    {otherItems.map((item) => (
-                                        <Link
-                                            key={item.name}
-                                            href={item.href}
-                                            onClick={() => setIsOpen(false)}
-                                            className="flex items-center gap-3 py-3 px-4 rounded-2xl text-zinc-500 hover:text-white hover:bg-white/[0.03] transition-all group"
-                                        >
-                                            <item.icon className="w-4 h-4 text-zinc-600 group-hover:text-padel-primary transition-colors" />
-                                            <span className="text-xs font-black uppercase italic tracking-tight">{item.name}</span>
-                                            <ChevronRight className="ml-auto w-4 h-4 text-zinc-800 group-hover:text-padel-primary/40 group-hover:translate-x-1 transition-all" />
-                                        </Link>
-                                    ))}
-                                </div>
+                                {/* Other Nav - Hide on registration page per user request */}
+                                {pathname !== '/players/register' && (
+                                    <div className="space-y-1">
+                                        {otherItems.map((item) => {
+                                            const isHomeTransparent = item.name === 'Inicio' && (
+                                                pathname === '/hub' ||
+                                                pathname === '/mi-cuenta' ||
+                                                pathname.startsWith('/players')
+                                            );
+
+                                            return (
+                                                <Link
+                                                    key={item.name}
+                                                    href={item.href}
+                                                    onClick={() => setIsOpen(false)}
+                                                    className={`flex items-center gap-3 py-3 px-4 rounded-2xl transition-all group ${isHomeTransparent
+                                                        ? 'opacity-0 pointer-events-none'
+                                                        : 'text-zinc-500 hover:text-white hover:bg-white/[0.03]'
+                                                        }`}
+                                                >
+                                                    <item.icon className={`w-4 h-4 transition-colors ${isHomeTransparent ? 'text-transparent' : 'text-zinc-600 group-hover:text-padel-primary'
+                                                        }`} />
+                                                    <span className="text-xs font-black uppercase italic tracking-tight">
+                                                        {item.name}
+                                                    </span>
+                                                    {!isHomeTransparent && (
+                                                        <ChevronRight className="ml-auto w-4 h-4 text-zinc-800 group-hover:text-padel-primary/40 group-hover:translate-x-1 transition-all" />
+                                                    )}
+                                                </Link>
+                                            );
+                                        })}
+                                    </div>
+                                )}
 
                                 {/* Admin Section */}
                                 {isAdmin && (

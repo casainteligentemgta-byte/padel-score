@@ -49,8 +49,12 @@ export default function LoginPage() {
     });
 
     useEffect(() => {
-        if (!authLoading && user && !profileLoading) {
-            router.replace(isAdmin ? '/admin' : '/hub');
+        if (!authLoading && user) {
+            if (isAdmin) {
+                router.replace('/admin');
+            } else if (!profileLoading) {
+                router.replace('/hub');
+            }
         }
     }, [authLoading, user, profileLoading, isAdmin, router]);
 
@@ -184,27 +188,37 @@ export default function LoginPage() {
                     <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-padel-primary/30 to-transparent" />
 
                     <div className="p-8 sm:p-10">
-                        {/* Selector Tab */}
-                        <div className="flex bg-black/40 p-1.5 rounded-2xl mb-8 border border-white/5 relative h-14">
-                            <motion.div
-                                layout
-                                className="absolute inset-1.5 bg-padel-primary rounded-xl"
-                                initial={false}
-                                animate={{ x: isLogin ? 0 : '100%' }}
-                                style={{ width: 'calc(50% - 6px)' }}
-                                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                            />
+                        {/* Selector Tab - Glowing Text Style */}
+                        <div className="flex justify-center gap-12 mb-12 border-b border-white/5 pb-4">
                             <button
                                 onClick={() => { setIsLogin(true); setError(null); }}
-                                className={`flex-1 relative z-10 font-black uppercase text-[10px] tracking-widest transition-colors duration-300 ${isLogin ? 'text-black' : 'text-gray-500 hover:text-white'}`}
+                                className="relative bg-transparent border-none outline-none cursor-pointer group"
                             >
-                                Login
+                                <span className={`text-base font-black tracking-[0.2em] uppercase transition-all duration-500 ${isLogin ? 'text-padel-primary drop-shadow-[0_0_12px_rgba(204,255,0,0.7)]' : 'text-zinc-600 group-hover:text-white'}`}>
+                                    Entrar
+                                </span>
+                                {isLogin && (
+                                    <motion.div
+                                        layoutId="activeTabUnderline"
+                                        className="absolute bottom-[-16px] left-0 right-0 h-[3px] bg-padel-primary shadow-[0_0_20px_rgba(204,255,0,0.6)]"
+                                        transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                                    />
+                                )}
                             </button>
                             <button
                                 onClick={() => { setIsLogin(false); setError(null); }}
-                                className={`flex-1 relative z-10 font-black uppercase text-[10px] tracking-widest transition-colors duration-300 ${!isLogin ? 'text-black' : 'text-gray-500 hover:text-white'}`}
+                                className="relative bg-transparent border-none outline-none cursor-pointer group"
                             >
-                                Registro
+                                <span className={`text-base font-black tracking-[0.2em] uppercase transition-all duration-500 ${!isLogin ? 'text-padel-primary drop-shadow-[0_0_12px_rgba(204,255,0,0.7)]' : 'text-zinc-600 group-hover:text-white'}`}>
+                                    Registro
+                                </span>
+                                {!isLogin && (
+                                    <motion.div
+                                        layoutId="activeTabUnderline"
+                                        className="absolute bottom-[-16px] left-0 right-0 h-[3px] bg-padel-primary shadow-[0_0_20px_rgba(204,255,0,0.6)]"
+                                        transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                                    />
+                                )}
                             </button>
                         </div>
 
@@ -288,70 +302,45 @@ export default function LoginPage() {
                             <button
                                 disabled={loading}
                                 type="submit"
-                                className="w-full h-16 bg-padel-primary text-black rounded-2xl font-black uppercase italic text-sm hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_15px_30px_rgba(204,255,0,0.15)] flex items-center justify-center gap-3 disabled:opacity-50 mt-6 group overflow-hidden relative"
+                                className="w-full py-6 bg-transparent text-padel-primary font-black uppercase text-lg transition-all flex items-center justify-center disabled:opacity-50 mt-10 group relative outline-none border-none cursor-pointer"
                             >
-                                <motion.div className="relative z-10 flex items-center gap-2">
-                                    {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : (
-                                        <>
-                                            <span>{isLogin ? 'Entrar Ahora' : 'Crear Cuenta'}</span>
-                                            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                                        </>
+                                <div className={`transition-all duration-300 ${loading ? 'opacity-50' : 'group-hover:scale-110 group-active:scale-95 drop-shadow-[0_0_15px_rgba(204,255,0,0.8)] focus:drop-shadow-[0_0_20px_rgba(204,255,0,1)]'}`}>
+                                    {loading ? (
+                                        <RefreshCw className="w-6 h-6 animate-spin" />
+                                    ) : (
+                                        <span className="tracking-[0.2em]">{isLogin ? 'ENTRAR AHORA' : 'CREAR CUENTA'}</span>
                                     )}
-                                </motion.div>
-                                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-[85%] transition-transform duration-500" />
+                                </div>
+                                <div className="absolute inset-x-0 bottom-0 h-[2px] bg-padel-primary/40 scale-x-0 group-hover:scale-x-50 group-focus:scale-x-100 transition-transform duration-500 shadow-[0_0_15px_#ccff00]" />
                             </button>
+
+                            {isLogin && (
+                                <div className="flex justify-center mt-4">
+                                    <button
+                                        type="button"
+                                        onClick={handleForgotPassword}
+                                        className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-[0.2em] transition-colors bg-transparent border-none p-0 outline-none cursor-pointer"
+                                    >
+                                        ¿No recuerdas la contraseña?
+                                    </button>
+                                </div>
+                            )}
                         </form>
 
-                        <div className="relative my-10 text-center">
-                            <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-white/5" />
-                            </div>
-                            <span className="relative px-4 bg-zinc-900/60 inline-block text-[8px] font-black uppercase tracking-[0.4em] text-zinc-500">Alternativas</span>
-                        </div>
-
-                        <button
-                            onClick={handleGoogleSignIn}
-                            className="w-full h-16 bg-white/[0.03] border border-white/10 text-white rounded-2xl font-black uppercase italic text-xs hover:bg-white/[0.05] hover:border-white/20 transition-all flex items-center justify-center gap-4 group"
-                        >
-                            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <Chrome className="w-4 h-4" />
-                            </div>
-                            Google Workspace
-                        </button>
                     </div>
                 </motion.div>
 
-                {/* Footer Controls */}
+                {/* Footer Controls (Simplificado / Oculto) */}
                 <div className="mt-8 flex flex-col items-center gap-6">
-                    {isLogin && (
-                        <button
-                            onClick={handleForgotPassword}
-                            className="text-[9px] font-black text-zinc-500 hover:text-padel-primary uppercase tracking-[0.2em] transition-colors"
-                        >
-                            ¿No recuerdas la contraseña?
-                        </button>
-                    )}
-
-                    <div className="flex items-center gap-6">
-                        <button
-                            onClick={() => {
-                                enableDevMode();
-                                router.push('/tournaments');
-                            }}
-                            className="flex items-center gap-2 text-[9px] font-black text-padel-primary/30 hover:text-padel-primary uppercase tracking-[0.3em] transition-all"
-                        >
-                            <Zap className="w-3 h-3" /> Sandbox Node
-                        </button>
-
-                        <div className="w-[1px] h-3 bg-white/10" />
-
-                        <Link
-                            href="/"
-                            className="text-[9px] font-black text-zinc-600 hover:text-white uppercase tracking-[0.3em] transition-colors"
-                        >
-                            Inicio
-                        </Link>
-                    </div>
+                    <button
+                        onClick={() => {
+                            enableDevMode();
+                            router.push('/tournaments');
+                        }}
+                        className="flex items-center gap-2 text-[9px] font-black text-padel-primary/10 hover:text-padel-primary uppercase tracking-[0.3em] transition-all bg-transparent border-none p-0 outline-none"
+                    >
+                        <Zap className="w-3 h-3" /> Sandbox Node
+                    </button>
                 </div>
             </motion.div>
         </div>

@@ -129,17 +129,24 @@ export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
 
             {/* Stat pills */}
             <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar mb-1 flex-nowrap">
-                {liveCnt > 0 && (
-                    <span className="flex-shrink-0 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[9px] font-black uppercase tracking-widest animate-pulse">
-                        ● {liveCnt} En Vivo
+                <div className="flex-shrink-0 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_4px_#10b981]" />
+                    <span className="text-emerald-400 text-[9px] font-black uppercase tracking-widest">
+                        {liveCnt} En Vivo
                     </span>
-                )}
-                <span className="flex-shrink-0 px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500/25 text-yellow-400 text-[9px] font-black uppercase tracking-widest">
-                    {pendCnt} Por comenzar
-                </span>
-                <span className="flex-shrink-0 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-gray-500 text-[9px] font-black uppercase tracking-widest">
-                    {finCnt} Finalizados
-                </span>
+                </div>
+                <div className="flex-shrink-0 px-3 py-1.5 rounded-xl bg-yellow-500/10 border border-yellow-500/30 flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                    <span className="text-yellow-400 text-[9px] font-black uppercase tracking-widest">
+                        {pendCnt} Por comenzar
+                    </span>
+                </div>
+                <div className="flex-shrink-0 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-gray-600" />
+                    <span className="text-gray-500 text-[9px] font-black uppercase tracking-widest">
+                        {finCnt} Finalizados
+                    </span>
+                </div>
             </div>
         </div>
     );

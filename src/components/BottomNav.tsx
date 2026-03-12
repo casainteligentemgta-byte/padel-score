@@ -2,7 +2,9 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/AuthContext';
+import { dataService } from '@/lib/dataService';
 import {
     Home,
     Trophy,
@@ -14,6 +16,22 @@ import {
 
 export default function BottomNav() {
     const pathname = usePathname();
+    const router = useRouter();
+    const { user } = useAuth();
+
+    const handleNavClick = async (e: React.MouseEvent, href: string) => {
+        if (href === '/players/register') {
+            e.preventDefault();
+            if (user?.uid) {
+                const participants = await dataService.getMyParticipants(user.uid);
+                if (participants.length > 0) {
+                    router.push('/mi-cuenta');
+                    return;
+                }
+            }
+            router.push('/players/register');
+        }
+    };
 
     const tabs = [
         { name: 'Inicio', href: '/tournaments', icon: Home, match: '/tournaments' },
@@ -33,6 +51,7 @@ export default function BottomNav() {
                         <Link
                             key={tab.name}
                             href={tab.href}
+                            onClick={(e) => handleNavClick(e, tab.href)}
                             className={`flex flex-col items-center gap-1 transition-all ${isActive ? 'text-padel-primary scale-110' : 'text-gray-600 hover:text-gray-400'
                                 }`}
                         >

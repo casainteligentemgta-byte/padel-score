@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { dataService, type AdminSettings } from './dataService';
 
-const DEFAULTS = { appTitle: 'Smart Padel', clubName: 'Bodeguero' };
+const DEFAULTS = { appTitle: 'Smart Padel', clubName: 'PADEL EXPERIENCE' };
 
 type AppSettingsContextValue = {
     appTitle: string;

@@ -721,7 +721,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     // Esta es la fuente MÁS fiable (supera a courtNames que puede estar desactualizado)
     const _KNOWN: Record<string, number> = {
         'Margarita Padel': 6, 'Tibisay': 3, 'Sun Sol Costa Azul': 4,
-        'Food Kart': 3, 'Elite': 4, 'Bodeguero': 3,
+        'Food Kart': 3, 'Elite': 4, 'PADEL EXPERIENCE': 3,
         'Sun Sol Pedro Gonzalez': 2, 'Playa el Agua': 3,
     };
 
@@ -775,7 +775,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     // Clave compuesta estable aunque el ID sea undefined (matches se regeneran en cada render)
     const _mkKey = (p: any) => `${_toMin(p.scheduledTime)}_${_courtNum(p)}`;
 
-    // Por Comenzar: mostrar exactamente los partidos que caben en las pistas disponibles (ej: 3 en Bodeguero)
+    // Por Comenzar: mostrar exactamente los partidos que caben en las pistas disponibles (ej: 3 en PADEL EXPERIENCE)
     const _nextUpKeys = new Set(_pending.slice(0, _numCanchas).map(_mkKey));
 
     // En Vivo: un solo partido por pista (no puede haber dos en vivo en la misma pista)
@@ -1831,37 +1831,39 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
 
                                                                 {/* Nav bar fijo abajo: Control, Pizarra, Cámaras, ADS — Por Comenzar y En Vivo */}
                                                                 {(activeTab === 'Por Comenzar' || activeTab === 'En Vivo') && (
-                                                                    <nav className="shrink-0 grid grid-cols-4 border-t border-white/[0.12] bg-black/70 py-2.5">
-                                                                        <Link
-                                                                            href={match?.id ? `/tournaments/${id}/score/${match.id}` : `/tournaments/${id}/control`}
-                                                                            className="flex flex-col items-center justify-center gap-1 py-1.5 text-gray-400 hover:text-padel-primary hover:bg-white/[0.08] transition-all active:scale-95 border-r border-white/10"
-                                                                        >
-                                                                            <Zap className="w-4 h-4" />
-                                                                            <span className="text-[8px] font-black uppercase tracking-widest">Control</span>
-                                                                        </Link>
-                                                                        <Link
-                                                                            href={id && match?.id ? `/tournaments/${id}/display/${match.id}` : id ? `/tournaments/${id}/monitor` : '#'}
-                                                                            target={id ? '_blank' : undefined}
-                                                                            className="flex flex-col items-center justify-center gap-1 py-1.5 text-gray-400 hover:text-white hover:bg-white/[0.08] transition-all active:scale-95 border-r border-white/10"
-                                                                        >
-                                                                            <Monitor className="w-4 h-4" />
-                                                                            <span className="text-[8px] font-black uppercase tracking-widest">Pizarra</span>
-                                                                        </Link>
-                                                                        <Link
-                                                                            href={id ? `/tournaments/${id}/control/broadcasting` : '#'}
-                                                                            className="flex flex-col items-center justify-center gap-1 py-1.5 text-gray-400 hover:text-orange-400 hover:bg-white/[0.08] transition-all active:scale-95 border-r border-white/10"
-                                                                        >
-                                                                            <Camera className="w-4 h-4" />
-                                                                            <span className="text-[8px] font-black uppercase tracking-widest">Cámaras</span>
-                                                                        </Link>
-                                                                        <Link
-                                                                            href={id ? `/tournaments/${id}/control/ads` : '#'}
-                                                                            className="flex flex-col items-center justify-center gap-1 py-1.5 text-gray-400 hover:text-yellow-400 hover:bg-white/[0.08] transition-all active:scale-95"
-                                                                        >
-                                                                            <Tv className="w-4 h-4" />
-                                                                            <span className="text-[8px] font-black uppercase tracking-widest">ADS</span>
-                                                                        </Link>
-                                                                    </nav>
+                                                                    <div className="px-2 pb-2 shrink-0">
+                                                                        <nav className="grid grid-cols-4 border border-white/5 bg-white/5 backdrop-blur-md py-1.5 rounded-xl shadow-lg">
+                                                                            <Link
+                                                                                href={match?.id ? `/tournaments/${id}/score/${match.id}` : `/tournaments/${id}/control`}
+                                                                                className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-padel-primary transition-all active:scale-90 border-r border-white/5"
+                                                                            >
+                                                                                <Zap className="w-3.5 h-3.5" />
+                                                                                <span className="text-[7px] font-black uppercase tracking-widest leading-none">Control</span>
+                                                                            </Link>
+                                                                            <Link
+                                                                                href={id && match?.id ? `/tournaments/${id}/display/${match.id}` : id ? `/tournaments/${id}/monitor` : '#'}
+                                                                                target={id ? '_blank' : undefined}
+                                                                                className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-white transition-all active:scale-90 border-r border-white/5"
+                                                                            >
+                                                                                <Monitor className="w-3.5 h-3.5" />
+                                                                                <span className="text-[7px] font-black uppercase tracking-widest leading-none">Pizarra</span>
+                                                                            </Link>
+                                                                            <Link
+                                                                                href={id ? `/tournaments/${id}/control/broadcasting` : '#'}
+                                                                                className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-orange-400 transition-all active:scale-90 border-r border-white/5"
+                                                                            >
+                                                                                <Camera className="w-3.5 h-3.5" />
+                                                                                <span className="text-[7px] font-black uppercase tracking-widest leading-none">Cámaras</span>
+                                                                            </Link>
+                                                                            <Link
+                                                                                href={id ? `/tournaments/${id}/control/ads` : '#'}
+                                                                                className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-yellow-400 transition-all active:scale-90"
+                                                                            >
+                                                                                <Tv className="w-3.5 h-3.5" />
+                                                                                <span className="text-[7px] font-black uppercase tracking-widest leading-none">ADS</span>
+                                                                            </Link>
+                                                                        </nav>
+                                                                    </div>
                                                                 )}
                                                             </div>
                                                         </div>

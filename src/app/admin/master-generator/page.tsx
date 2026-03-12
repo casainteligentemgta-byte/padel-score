@@ -116,9 +116,9 @@ const COMPLEXES = [
     { name: 'Margarita Padel', courts: 6 },
     { name: 'Tibisay', courts: 3 },
     { name: 'Sun Sol Costa Azul', courts: 4 },
-    { name: 'Food Kart', courts: 3 },
+    { name: 'PADEL EXPERIENCE', courts: 3 },
     { name: 'Elite', courts: 4 },
-    { name: 'Bodeguero', courts: 3 },
+    { name: 'PADEL EXPERIENCE', courts: 3 },
     { name: 'Sun Sol Pedro Gonzalez', courts: 2 },
     { name: 'Playa el Agua', courts: 3 },
 ];
@@ -634,7 +634,7 @@ export default function MasterGeneratorPage() {
                     });
 
                     const tournamentToSave = {
-                        name: `${eventData.tournamentName} - ${cat.category} ${catLabels[cat.gender]}`,
+                        name: `${eventData.tournamentName} - ${catLevelLabels[cat.category] || cat.category} ${catLabels[cat.gender]}`,
                         type: cat.type ?? TournamentType.ROUND_ROBIN,
                         category: cat.category,
                         gender: cat.gender,
@@ -655,6 +655,7 @@ export default function MasterGeneratorPage() {
                         scoringSystem: cat.goldenPoint ? 'GOLDEN_POINT' : 'TRADITIONAL',
                         tieBreakType: cat.setFormat === 'SUPER_TIE_BREAK' ? 'STB' : 'TB',
                         inscriptionPrice: cat.inscriptionPrice ?? 0,
+                        maxTeams: cat.numTeams, // Añadimos el cupo máximo
                         status: 'Programado',
                         ...(eventData.sponsorLogoUrl?.trim() && {
                             broadcastingSettings: {
@@ -953,75 +954,37 @@ export default function MasterGeneratorPage() {
                             >
                                 {/* ── Category Configuration Content ── */}
                                 <div className="space-y-4">
-                                    {/* ── Row 1: Parejas + Grupos ── */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {/* Número de Parejas */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                <Users className="w-3 h-3 text-padel-primary" /> Número de Parejas
-                                            </label>
-                                            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
-                                                {[4, 6, 8, 10, 12, 14, 16].map(n => (
-                                                    <button
-                                                        key={n}
-                                                        type="button"
-                                                        onClick={() => setPendingNumTeams(n)}
-                                                        className={`min-h-[40px] rounded-lg text-xs font-black transition-all select-none touch-manipulation active:scale-[0.98] ${pendingNumTeams === n ? 'bg-padel-primary text-black shadow-md' : 'bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}
-                                                    >
-                                                        {n}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            <div className="flex items-center gap-3 bg-black/40 border border-zinc-800 rounded-xl px-4 py-2">
+                                    {/* ── Row 1: Número de Parejas ── */}
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                            <Users className="w-3 h-3 text-padel-primary" /> Número de Parejas
+                                        </label>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {[4, 6, 8, 10, 12, 14, 16, 20, 24, 32].map(n => (
                                                 <button
+                                                    key={n}
                                                     type="button"
-                                                    onClick={() => setPendingNumTeams(t => Math.max(2, t - 1))}
-                                                    className="min-w-[40px] min-h-[40px] rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-lg text-white transition-all active:scale-95 select-none touch-manipulation"
-                                                >−</button>
-                                                <div className="flex-1 text-center">
-                                                    <span className="text-xl font-black text-padel-primary">{pendingNumTeams}</span>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setPendingNumTeams(t => Math.min(64, t + 1))}
-                                                    className="min-w-[40px] min-h-[40px] rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-lg text-white transition-all active:scale-95 select-none touch-manipulation"
-                                                >+</button>
-                                            </div>
+                                                    onClick={() => setPendingNumTeams(n)}
+                                                    className={`min-h-[40px] px-3 rounded-lg text-xs font-black transition-all select-none touch-manipulation active:scale-[0.98] ${pendingNumTeams === n ? 'bg-padel-primary text-black shadow-md' : 'bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}
+                                                >
+                                                    {n}
+                                                </button>
+                                            ))}
                                         </div>
-
-                                        {/* Equipos por Grupo */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                <Layers className="w-3 h-3 text-padel-primary" /> Equipos por Grupo
-                                            </label>
-                                            <div className="grid grid-cols-2 gap-2 h-full max-h-[105px]">
-                                                {[
-                                                    { size: 3, desc: 'Torneo corto' },
-                                                    { size: 4, desc: 'Formato estándar' }
-                                                ].map(({ size, desc }) => {
-                                                    const isSelected = pendingGroupSize === size;
-                                                    return (
-                                                        <button
-                                                            key={size}
-                                                            type="button"
-                                                            onClick={() => setPendingGroupSize(size as 3 | 4)}
-                                                            className={`relative flex flex-col items-center justify-center p-2 rounded-xl border transition-all select-none touch-manipulation active:scale-[0.98] ${isSelected
-                                                                ? 'border-padel-primary bg-padel-primary/10'
-                                                                : 'border-zinc-800 bg-black/30 hover:border-zinc-700'
-                                                                }`}
-                                                        >
-                                                            <div className={`text-xl font-black italic leading-none ${isSelected ? 'text-padel-primary' : 'text-zinc-500'}`}>{size}</div>
-                                                            <p className={`text-[8px] font-black uppercase tracking-wider mt-1 ${isSelected ? 'text-white' : 'text-zinc-600'}`}>parejas</p>
-                                                            <p className={`text-[7px] font-bold italic mt-0.5 ${isSelected ? 'text-padel-primary/70' : 'text-zinc-700'}`}>{desc}</p>
-                                                            {isSelected && (
-                                                                <div className="absolute top-1 right-1 w-3 h-3 rounded-full bg-padel-primary flex items-center justify-center">
-                                                                    <Check className="w-2 h-2 text-black" strokeWidth={4} />
-                                                                </div>
-                                                            )}
-                                                        </button>
-                                                    );
-                                                })}
+                                        <div className="flex items-center gap-3 bg-black/40 border border-zinc-800 rounded-xl px-4 py-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setPendingNumTeams(t => Math.max(2, t - 1))}
+                                                className="min-w-[40px] min-h-[40px] rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-lg text-white transition-all active:scale-95 select-none touch-manipulation"
+                                            >−</button>
+                                            <div className="flex-1 text-center">
+                                                <span className="text-xl font-black text-padel-primary">{pendingNumTeams}</span>
                                             </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPendingNumTeams(t => Math.min(64, t + 1))}
+                                                className="min-w-[40px] min-h-[40px] rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-lg text-white transition-all active:scale-95 select-none touch-manipulation"
+                                            >+</button>
                                         </div>
                                     </div>
 
@@ -1075,111 +1038,138 @@ export default function MasterGeneratorPage() {
                                         </div>
                                     </div>
 
-                                    {/* ── Row 3: Opciones Condicionales ── */}
+                                    {/* ── SECCIÓN DE OPCIONES DINÁMICAS ── */}
                                     <AnimatePresence mode="wait">
+                                        {/* 1. AMERICANO / DUPLA FIJA: Objetivo de Puntos y Precio */}
                                         {(pendingTournamentType === 'AMERICANO' || pendingTournamentType === 'DUPLA_FIJA') && (
                                             <motion.div
-                                                key="points-goal"
+                                                key="americano-options"
                                                 initial={{ opacity: 0, y: 10 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 exit={{ opacity: 0, y: -10 }}
-                                                className="space-y-2"
+                                                className="space-y-4"
                                             >
-                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                    <Trophy className="w-3 h-3 text-yellow-400" /> A cuántos puntos
-                                                </label>
-                                                <div className="grid grid-cols-6 gap-2">
-                                                    {[4, 8, 12, 16, 20, 24].map(pts => {
-                                                        const isSelected = pendingPointsGoal === pts;
-                                                        return (
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                        <Trophy className="w-3 h-3 text-yellow-400" /> Objetivo de Puntos
+                                                    </label>
+                                                    <div className="grid grid-cols-6 gap-2">
+                                                        {[4, 8, 12, 16, 20, 24].map(pts => (
                                                             <button
                                                                 key={pts}
                                                                 type="button"
                                                                 onClick={() => setPendingPointsGoal(pts)}
-                                                                className={`min-h-[44px] py-2 rounded-xl border-2 font-black italic text-xs uppercase tracking-wider transition-all select-none touch-manipulation active:scale-[0.98] ${isSelected
-                                                                    ? 'bg-padel-primary border-padel-primary text-black'
-                                                                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600'
-                                                                    }`}
+                                                                className={`min-h-[44px] py-2 rounded-xl border-2 font-black italic text-xs transition-all active:scale-[0.98] ${pendingPointsGoal === pts ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600'}`}
                                                             >
-                                                                {pts} pt
+                                                                {pts}
                                                             </button>
-                                                        );
-                                                    })}
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* Precio de Inscripción */}
+                                                <div className="space-y-2 pt-2 border-t border-zinc-900/50">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                        <DollarSign className="w-3 h-3 text-emerald-400" /> Precio de Inscripción
+                                                    </label>
+                                                    <div className="relative group">
+                                                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-padel-primary transition-colors" />
+                                                        <input
+                                                            type="number"
+                                                            value={pendingPrice}
+                                                            onChange={(e) => setPendingPrice(Number(e.target.value) || 0)}
+                                                            placeholder="0.00"
+                                                            className="w-full bg-black/40 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-black italic text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
+                                                        />
+                                                    </div>
                                                 </div>
                                             </motion.div>
                                         )}
 
-                                        {pendingTournamentType === 'ROUND_ROBIN' && (
+                                        {/* 2. FORMATOS ESTÁNDAR (RR, Directa, Combinado, Cuadro) */}
+                                        {['ROUND_ROBIN', 'ELIMINACION_DIRECTA', 'COMBINADO', 'CUADRO_CONSOLACION'].includes(pendingTournamentType) && (
                                             <motion.div
-                                                key="rr-format"
+                                                key="standard-options"
                                                 initial={{ opacity: 0, y: 10 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 exit={{ opacity: 0, y: -10 }}
-                                                className="space-y-2"
+                                                className="space-y-5"
                                             >
-                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                    <Layout className="w-3 h-3 text-blue-400" /> Formato de Partido
-                                                </label>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    {([
-                                                        { val: 'ONE_SET_6' as const, label: '1 Set (6)' },
-                                                        { val: 'ONE_SET_9' as const, label: '1 Set (9)' },
-                                                        { val: 'TWO_SHORT_SETS' as const, label: '2 set cortos (4) + STB' },
-                                                        { val: 'TWO_NORMAL_SETS' as const, label: '2 set (6) + STB' },
-                                                    ]).map(opt => {
-                                                        const isSelected = pendingRRFormat === opt.val;
-                                                        return (
-                                                            <button
-                                                                key={opt.val}
-                                                                type="button"
-                                                                onClick={() => setPendingRRFormat(opt.val)}
-                                                                className={`min-h-[44px] py-2 px-3 rounded-xl border-2 font-black italic text-[10px] uppercase tracking-tighter transition-all select-none touch-manipulation active:scale-[0.98] ${isSelected
-                                                                    ? 'bg-padel-primary border-padel-primary text-black'
-                                                                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600'
-                                                                    }`}
-                                                            >
-                                                                {opt.label}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </motion.div>
-                                        )}
+                                                {/* A. Configuración de Grupos (solo RR / Combinado) */}
+                                                {(pendingTournamentType === 'ROUND_ROBIN' || pendingTournamentType === 'COMBINADO') && (
+                                                    <div className="grid grid-cols-2 gap-4 pb-2 border-b border-zinc-900/50">
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                                <Layers className="w-3 h-3 text-padel-primary" /> Tamaño de Grupos
+                                                            </label>
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                {[3, 4].map(size => (
+                                                                    <button
+                                                                        key={size}
+                                                                        type="button"
+                                                                        onClick={() => setPendingGroupSize(size as 3 | 4)}
+                                                                        className={`min-h-[36px] rounded-lg border font-black text-[10px] transition-all ${pendingGroupSize === size ? 'bg-padel-primary border-padel-primary text-black' : 'bg-black/30 border-zinc-800 text-zinc-500'}`}
+                                                                    >
+                                                                        {size} Parejas
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                                <Trophy className="w-3 h-3 text-padel-primary" /> Pasan por grupo
+                                                            </label>
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                {[1, 2].map(n => (
+                                                                    <button
+                                                                        key={n}
+                                                                        type="button"
+                                                                        onClick={() => setPendingAdvanceCount(n as 1 | 2)}
+                                                                        className={`min-h-[36px] rounded-lg border font-black text-[10px] transition-all ${pendingAdvanceCount === n ? 'bg-padel-primary border-padel-primary text-black' : 'bg-black/30 border-zinc-800 text-zinc-500'}`}
+                                                                    >
+                                                                        {n === 1 ? 'Solo 1º' : '1º y 2º'}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
 
-                                        {(pendingTournamentType === 'ROUND_ROBIN' || pendingTournamentType === 'COMBINADO') && (
-                                            <motion.div
-                                                key="advance-count"
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                exit={{ opacity: 0, y: -10 }}
-                                                className="space-y-2"
-                                            >
-                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                    <Trophy className="w-3 h-3 text-padel-primary" /> Pasan por grupo
-                                                </label>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    {[
-                                                        { val: 1 as const, label: 'Solo 1º de Grupo' },
-                                                        { val: 2 as const, label: '1º y 2º de Grupo' },
-                                                    ].map(opt => {
-                                                        const isSelected = pendingAdvanceCount === opt.val;
-                                                        return (
-                                                            <button
-                                                                key={opt.val}
-                                                                type="button"
-                                                                onClick={() => setPendingAdvanceCount(opt.val)}
-                                                                className={`min-h-[44px] py-2 px-3 rounded-xl border-2 font-black italic text-[10px] uppercase tracking-tighter transition-all select-none touch-manipulation active:scale-[0.98] ${isSelected
-                                                                    ? 'bg-padel-primary border-padel-primary text-black'
-                                                                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600'
-                                                                    }`}
-                                                            >
-                                                                {opt.label}
-                                                            </button>
-                                                        );
-                                                    })}
+                                                {/* B. Formato de Partido (A cuántos games) */}
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                        <Layout className="w-3 h-3 text-blue-400" /> A cuántos games es el partido
+                                                    </label>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {[
+                                                            { val: 'ONE_SET_6', label: 'Set Normal (6 juegos)' },
+                                                            { val: 'ONE_SET_9', label: 'Set Largo (9 juegos)' },
+                                                            { val: 'TWO_SHORT_SETS', label: '2 Sets Cortos (4) + STB' },
+                                                            { val: 'TWO_NORMAL_SETS', label: '2 Sets Largos (6) + STB' },
+                                                        ].map(opt => {
+                                                            const isSelected = pendingTournamentType === 'CUADRO_CONSOLACION'
+                                                                ? pendingConsolacionMatchFormat === opt.val
+                                                                : pendingRRFormat === opt.val;
+                                                            return (
+                                                                <button
+                                                                    key={opt.val}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        if (pendingTournamentType === 'CUADRO_CONSOLACION') setPendingConsolacionMatchFormat(opt.val as any);
+                                                                        else setPendingRRFormat(opt.val as any);
+                                                                    }}
+                                                                    className={`min-h-[44px] px-3 rounded-xl border-2 font-black italic text-[9px] uppercase transition-all active:scale-[0.98] ${isSelected ? 'bg-padel-primary border-padel-primary text-black' : 'bg-black/30 border-zinc-800 text-zinc-500'}`}
+                                                                >
+                                                                    {opt.label}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
-                                                {pendingTournamentType === 'ROUND_ROBIN' && pendingAdvanceCount === 2 && (
-                                                    <div className="space-y-1">
+
+                                                {/* C. Clasificación rápida */}
+                                                {(pendingTournamentType === 'ROUND_ROBIN' || pendingTournamentType === 'COMBINADO') && pendingAdvanceCount === 2 && (
+                                                    <div className="bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/50">
                                                         <label className="flex items-center gap-2.5 cursor-pointer group">
                                                             <input
                                                                 type="checkbox"
@@ -1187,125 +1177,71 @@ export default function MasterGeneratorPage() {
                                                                 onChange={(e) => setPendingQuickQualification(e.target.checked)}
                                                                 className="w-4 h-4 rounded border-2 border-zinc-600 bg-zinc-900 text-padel-primary focus:ring-padel-primary/50"
                                                             />
-                                                            <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 group-hover:text-zinc-300">2 juegos garantizados</span>
+                                                            <span className="text-[10px] font-black uppercase tracking-wider text-zinc-300 group-hover:text-white transition-colors">Clasificación rápida (mín. 2 partidos)</span>
                                                         </label>
-                                                        <p className="text-[9px] text-zinc-500 pl-6 leading-tight">Clasificación rápida: cada competidor juega 2 partidos en fase de grupos; clasifican 1º y 2º de cada grupo a semifinales.</p>
                                                     </div>
                                                 )}
+
+                                                {/* D. Sistema de Puntuación y Desempate */}
+                                                <div className="grid grid-cols-2 gap-4 pt-2">
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Sistema de Puntuación</label>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPendingGolden(true)}
+                                                                className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${pendingGolden ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
+                                                            >
+                                                                Punto de Oro
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPendingGolden(false)}
+                                                                className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${!pendingGolden ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
+                                                            >
+                                                                Tradicional
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Método de Desempate</label>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPendingSetFormat('TIE_BREAK')}
+                                                                className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${pendingSetFormat === 'TIE_BREAK' ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
+                                                            >
+                                                                TB (7 pts)
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPendingSetFormat('SUPER_TIE_BREAK')}
+                                                                className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${pendingSetFormat === 'SUPER_TIE_BREAK' ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
+                                                            >
+                                                                STB (10 pts)
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* E. Precio de Inscripción */}
+                                                <div className="space-y-2 pt-2">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                        <DollarSign className="w-3 h-3 text-emerald-400" /> Precio de Inscripción
+                                                    </label>
+                                                    <div className="relative group">
+                                                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-padel-primary transition-colors" />
+                                                        <input
+                                                            type="number"
+                                                            value={pendingPrice}
+                                                            onChange={(e) => setPendingPrice(Number(e.target.value) || 0)}
+                                                            placeholder="0.00"
+                                                            className="w-full bg-black/40 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-black italic text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
+                                                        />
+                                                    </div>
+                                                </div>
                                             </motion.div>
                                         )}
-
-                                        {pendingTournamentType === 'CUADRO_CONSOLACION' && (
-                                            <motion.div
-                                                key="consolacion-options"
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                exit={{ opacity: 0, y: -10 }}
-                                                className="space-y-2"
-                                            >
-                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                    <Layout className="w-3 h-3 text-emerald-400" /> Formato de puntuación (Punto de Oro en todos)
-                                                </label>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setPendingConsolacionMatchFormat('ONE_SET_9')}
-                                                        className={`min-h-[48px] py-2 px-3 rounded-xl border-2 font-black italic text-[10px] uppercase tracking-tighter transition-all select-none touch-manipulation active:scale-[0.98] ${pendingConsolacionMatchFormat === 'ONE_SET_9'
-                                                            ? 'bg-padel-primary border-padel-primary text-black'
-                                                            : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600'}`}
-                                                    >
-                                                        Set largo a 9 (50 min)
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setPendingConsolacionMatchFormat('TWO_SHORT_SETS')}
-                                                        className={`min-h-[48px] py-2 px-3 rounded-xl border-2 font-black italic text-[10px] uppercase tracking-tighter transition-all select-none touch-manipulation active:scale-[0.98] ${pendingConsolacionMatchFormat === 'TWO_SHORT_SETS'
-                                                            ? 'bg-padel-primary border-padel-primary text-black'
-                                                            : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600'}`}
-                                                    >
-                                                        2 sets + STB (60 min)
-                                                    </button>
-                                                </div>
-                                                <p className="text-[9px] text-zinc-500 font-bold">Quien pierde en R1 del cuadro principal pasa a Consolación → mínimo 2 partidos por pareja.</p>
-                                            </motion.div>
-                                        )}
-
-                                        {pendingTournamentType === 'ELIMINACION_DIRECTA' && (
-                                            <motion.div
-                                                key="knockout-info"
-                                                initial={{ opacity: 0, scale: 0.95 }}
-                                                animate={{ opacity: 1, scale: 1 }}
-                                                exit={{ opacity: 0, scale: 0.95 }}
-                                                className="flex items-center gap-4 bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4"
-                                            >
-                                                <div className="w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 border-orange-500 bg-orange-500/10">
-                                                    <FormatIcons.ELIMINATORIO className="w-6 h-6 text-orange-500" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] font-black uppercase text-zinc-400">Eliminación Directa</p>
-                                                    <p className="text-[9px] text-zinc-600 font-bold uppercase tracking-widest">Llaves automáticas generadas</p>
-                                                </div>
-                                            </motion.div>
-                                        )}
-
-                                        {/* ── Punto de Oro & Tie-Break ── */}
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Sistema de Puntuación</label>
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setPendingGolden(true)}
-                                                        className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${pendingGolden ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
-                                                    >
-                                                        Punto de Oro
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setPendingGolden(false)}
-                                                        className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${!pendingGolden ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
-                                                    >
-                                                        Deuce / Tradicional
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Tipo de Desempate</label>
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setPendingSetFormat('TIE_BREAK')}
-                                                        className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${pendingSetFormat === 'TIE_BREAK' ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
-                                                    >
-                                                        TB (7 pts)
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setPendingSetFormat('SUPER_TIE_BREAK')}
-                                                        className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${pendingSetFormat === 'SUPER_TIE_BREAK' ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
-                                                    >
-                                                        STB (10 pts)
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* ── Precio de Inscripción ── */}
-                                        <div className="pt-2 border-t border-zinc-800/50 mt-2 space-y-2">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                <DollarSign className="w-3 h-3 text-emerald-400" /> Precio de Inscripción
-                                            </label>
-                                            <div className="relative group">
-                                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-padel-primary transition-colors" />
-                                                <input
-                                                    type="number"
-                                                    value={pendingPrice}
-                                                    onChange={(e) => setPendingPrice(Number(e.target.value) || 0)}
-                                                    placeholder="0.00"
-                                                    className="w-full bg-black/40 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-black italic text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
-                                                />
-                                            </div>
-                                        </div>
                                     </AnimatePresence>
                                 </div>
                             </motion.div>
@@ -1969,8 +1905,8 @@ export default function MasterGeneratorPage() {
                                                 <div className="space-y-1">
                                                     {eventData.categories.map((c, i) => (
                                                         <div key={c.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-black/20">
-                                                            <span className="font-bold text-zinc-300">{c.gender === 'MALE' ? '♂' : c.gender === 'FEMALE' ? '♀' : '🚻'} {c.category}</span>
-                                                            <span className="text-padel-primary font-black">{c.teams?.length || c.numTeams} parejas · {calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION, (c as any).advanceCount)} partidos</span>
+                                                            <span className="font-bold text-zinc-300">{c.gender === 'MALE' ? '♂' : c.gender === 'FEMALE' ? '♀' : '🚻'} {catLevelLabels[c.category] || c.category}</span>
+                                                            <span className="text-padel-primary font-black">{c.teams?.length || c.numTeams} parejas por inscribirse · {calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION, (c as any).advanceCount)} partidos</span>
                                                         </div>
                                                     ))}
                                                 </div>

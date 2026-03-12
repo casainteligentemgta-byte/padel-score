@@ -192,6 +192,25 @@ function RegistrationFormContent() {
 
         setLoading(true);
         try {
+            // Uniqueness validation
+            if (formData.email) {
+                const emailExists = await dataService.checkParticipantExistence('email', formData.email.toLowerCase(), editId || undefined);
+                if (emailExists) {
+                    alert('Este email ya está registrado con otro jugador.');
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            if (formData.dni) {
+                const dniExists = await dataService.checkParticipantExistence('dni', formData.dni, editId || undefined);
+                if (dniExists) {
+                    alert('Esta cédula ya está registrada con otro jugador.');
+                    setLoading(false);
+                    return;
+                }
+            }
+
             console.log('[Registration] Intentando guardar con:', { userId: user.uid, editId });
 
             if (editId) {
@@ -262,14 +281,14 @@ function RegistrationFormContent() {
 
     return (
         <div className="ipad-screen-container bg-[#080808] text-white font-outfit relative overflow-hidden">
-            <Sidebar />
+            {/* Sidebar removed to omit from this screen as per user request */}
 
             {/* Background Decorative Elements */}
             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-padel-primary/5 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2 pointer-events-none" />
             <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-blue-500/5 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2 pointer-events-none" />
 
             <div ref={scrollAreaRef} className="ipad-scroll-area !pr-0">
-                <header className="sticky top-0 z-50 bg-[#080808]/90 backdrop-blur-xl border-b border-white/5 ml-20 md:ml-24">
+                <header className="sticky top-0 z-50 bg-[#080808]/90 backdrop-blur-xl border-b border-white/5">
                     <div className="max-w-md mx-auto px-6 py-2 flex items-center justify-between">
                         <button
                             onClick={() => router.back()}
@@ -399,16 +418,17 @@ function RegistrationFormContent() {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div className="space-y-1">
-                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Cédula</label>
-                                        <input
-                                            type="text"
-                                            placeholder="V-00.000.000"
-                                            className="w-full bg-zinc-950 border border-white/20 rounded-xl px-4 py-3 text-xs font-bold focus:border-padel-primary focus:bg-black outline-none transition-all text-white placeholder:text-zinc-600"
-                                            value={formData.dni}
-                                            onChange={e => updateField('dni', e.target.value)}
-                                        />
+                                    <div className="flex justify-between items-center pl-1">
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest">Cédula</label>
+                                        <span className="text-[7px] text-zinc-600 italic font-bold">Teclea "E" para Extranjero o "V" para Venezolano</span>
                                     </div>
+                                    <input
+                                        type="text"
+                                        placeholder="V-00.000.000"
+                                        className="w-full bg-zinc-950 border border-white/20 rounded-xl px-4 py-3 text-xs font-bold focus:border-padel-primary focus:bg-black outline-none transition-all text-white placeholder:text-zinc-600"
+                                        value={formData.dni}
+                                        onChange={e => updateField('dni', e.target.value)}
+                                    />
                                     <div className="space-y-1">
                                         <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Fecha de Nacimiento</label>
                                         <input

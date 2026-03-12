@@ -161,7 +161,7 @@ export default function NewTournamentPage() {
         { name: 'Sun Sol Costa Azul', courts: 4 },
         { name: 'Food Kart', courts: 3 },
         { name: 'Elite', courts: 4 },
-        { name: 'Bodeguero', courts: 3 },
+        { name: 'PADEL EXPERIENCE', courts: 3 },
         { name: 'Sun Sol Pedro Gonzalez', courts: 2 },
         { name: 'Playa el Agua', courts: 3 },
     ];

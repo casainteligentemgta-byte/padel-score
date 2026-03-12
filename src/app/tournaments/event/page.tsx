@@ -7,8 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     RefreshCw, Trophy, ArrowLeft, Tv, FileText, Share2, Calendar, Clock
 } from 'lucide-react';
-import { onSnapshot, doc, updateDoc, collection } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { dataService } from '@/lib/dataService';
 import { useAuth } from '@/lib/AuthContext';
 import { MatchStatus } from '@/types/tournament';
 import jsPDF from 'jspdf';
@@ -120,7 +119,7 @@ function EventView() {
         setShowShareModal(false);
     };
 
-    // Subscribe to all tournaments and their matches in parallel via onSnapshot
+    // Subscribe to all tournaments and their matches in parallel via dataService
     useEffect(() => {
         if (tournamentIds.length === 0) { setLoading(false); return; }
 
@@ -131,27 +130,26 @@ function EventView() {
             loaded[tid] = false;
 
             // 1. Suscripción al Torneo (Metadatos)
-            const tRef = doc(db, 'tournaments', tid);
-            const unsubT = onSnapshot(tRef, snap => {
-                setTournaments(prev => {
-                    const next = { ...prev };
-                    if (snap.exists()) {
-                        const existing = next[tid] || {};
-                        next[tid] = { ...existing, id: tid, ...snap.data() };
-                    } else {
+            const unsubT = dataService.subscribeToTournament(tid, (tourneyData) => {
+                if (!tourneyData) {
+                    setTournaments(prev => {
+                        const next = { ...prev };
                         delete next[tid];
-                    }
-                    return next;
-                });
+                        return next;
+                    });
+                } else {
+                    setTournaments(prev => ({
+                        ...prev,
+                        [tid]: { ...(prev[tid] || {}), ...tourneyData, id: tid }
+                    }));
+                }
                 loaded[tid] = true;
                 if (Object.values(loaded).every(Boolean)) setLoading(false);
             });
             unsubs.push(unsubT);
 
-            // 2. Suscripción a la Sub-colección de Partidos
-            const mRef = collection(db, 'tournaments', tid, 'matches');
-            const unsubM = onSnapshot(mRef, snap => {
-                const tournamentMatches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            // 2. Suscripción a los Partidos
+            const unsubM = dataService.subscribeToMatches(tid, (tournamentMatches) => {
                 setTournaments(prev => ({
                     ...prev,
                     [tid]: { ...(prev[tid] || {}), id: tid, matches: tournamentMatches }
@@ -267,13 +265,15 @@ function EventView() {
     const handleSaveSponsor = async () => {
         setSavingSponsor(true);
         try {
-            await Promise.all(tournamentIds.map(tid =>
-                updateDoc(doc(db, 'tournaments', tid), {
+            await Promise.all(tournamentIds.map(tid => {
+                const existing = tournaments[tid] || {};
+                return dataService.updateTournament(tid, {
+                    ...existing,
                     sponsorLogoUrl: sponsorLogoDraft || null,
                     sponsorName: sponsorNameDraft || null,
                     sponsorLink: sponsorLinkDraft || null,
-                })
-            ));
+                });
+            }));
             setIsSponsorEditOpen(false);
         } catch (e) {
             console.error('[saveSponsor]', e);
@@ -288,12 +288,17 @@ function EventView() {
         try {
             const first = Object.values(tournaments)[0];
             const manuals = first?.rules?.manuals ?? [];
-            await Promise.all(tournamentIds.map(tid =>
-                updateDoc(doc(db, 'tournaments', tid), {
-                    'rules.content': eventRulesDraft,
-                    'rules.manuals': manuals
-                })
-            ));
+            await Promise.all(tournamentIds.map(tid => {
+                const existing = tournaments[tid] || {};
+                return dataService.updateTournament(tid, {
+                    ...existing,
+                    rules: {
+                        ...(existing.rules || {}),
+                        content: eventRulesDraft,
+                        manuals: manuals
+                    }
+                });
+            }));
             setIsEventRulesEditOpen(false);
         } catch (e) {
             console.error(e);
