@@ -18,12 +18,13 @@ import {
     Trophy,
     Search
 } from 'lucide-react';
-import Sidebar from '@/components/Sidebar';
+
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
+import BouncingBall from '@/components/BouncingBall';
 
 const COMPLEXES = [
     { name: 'Margarita Padel', courts: 6 },
@@ -64,22 +65,17 @@ export default function BoardsModulePage() {
 
     return (
         <div className="ipad-screen-container bg-[#080808] text-white font-outfit relative">
-            <Sidebar />
-
-            <div className="ipad-scroll-area p-8 md:p-12 pl-24 md:pl-32">
-                <Link
-                    href="/"
-                    className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-6 text-sm font-bold uppercase tracking-widest"
-                >
-                    <ChevronLeft className="w-5 h-5" />
-                    Atrás
-                </Link>
+            <div className="ipad-scroll-area p-8 md:p-12">
                 <header className="mb-12">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="p-3 bg-padel-primary/20 rounded-2xl border border-padel-primary/30">
-                            <Layout className="w-6 h-6 text-padel-primary" />
-                        </div>
-                        <h4 className="text-padel-primary font-black uppercase tracking-[0.3em] text-[10px] italic decoration-2">Centro de Control</h4>
+                    <div className="flex items-center gap-2 mb-4">
+                        <Link
+                            href="/admin"
+                            className="text-gray-500 hover:text-padel-primary transition-colors mr-1"
+                        >
+                            <ChevronLeft className="w-7 h-7" />
+                        </Link>
+                        <BouncingBall size={24} />
+                        <h4 className="text-padel-primary font-black uppercase tracking-[0.3em] text-[10px] italic decoration-2 ml-1">Centro de Control</h4>
                     </div>
                     <div className="flex flex-col md:flex-row justify-between items-end gap-6">
                         <div>

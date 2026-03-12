@@ -3,8 +3,9 @@
         ".read": false,
         ".write": false,
         "canchas": {
+            ".indexOn": ["estado"],
             "$cancha_id": {
-                ".read": "auth != null && (root.child('usuarios_roles').child(auth.uid).child('rol').val() === 'admin' || root.child('usuarios_roles').child(auth.uid).child('rol').val() === 'marker' || data.child('estado').val() === 'en_vivo')",
+                ".read": "data.child('estado').val() === 'en_vivo' || (auth != null && (root.child('usuarios_roles').child(auth.uid).child('rol').val() === 'admin' || root.child('usuarios_roles').child(auth.uid).child('rol').val() === 'marker'))",
                 ".write": "auth != null && (root.child('usuarios_roles').child(auth.uid).child('rol').val() === 'admin' || (root.child('usuarios_roles').child(auth.uid).child('rol').val() === 'marker' && root.child('usuarios_roles').child(auth.uid).child('cancha_asignada').val() === $cancha_id))"
             }
         },

@@ -265,15 +265,16 @@ export default function MasterGeneratorPage() {
         } catch (error: any) {
             console.error('Error uploading logo:', error);
             const msg = (error?.message || String(error)).toLowerCase();
-            if (msg.includes('configurado') || msg.includes('supabase')) {
-                alert('Supabase no está configurado. Revisa .env.local (NEXT_PUBLIC_SUPABASE_URL y ANON_KEY).');
-            } else if (msg.includes('row-level security') || msg.includes('rls') || msg.includes('policy')) {
-                alert('Storage bloqueado por políticas RLS. En Supabase: Storage → bucket "patrocinantes" → Policies → New policy: permite INSERT y SELECT para el bucket "patrocinantes". Instrucciones y SQL en docs/STORAGE_PATROCINANTES.md. Mientras tanto puedes pegar la URL del logo en el campo de texto.');
+            
+            if (msg.includes('row-level security') || msg.includes('rls') || msg.includes('policy') || msg.includes('new row violates row-level security policy')) {
+                alert('Storage bloqueado por políticas RLS. En Supabase: Storage → bucket "patrocinantes" → Policies → New policy: permite INSERT y SELECT para el bucket "patrocinantes". Mientras tanto puedes pegar la URL del logo en el campo de texto.');
             } else if (msg.includes('bucket') || msg.includes('not found') || msg.includes('storage')) {
                 const bucket = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET?.trim() ? process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET : 'public';
-                alert(`Bucket "${bucket}" no encontrado. Comprueba en Supabase → Storage que exista un bucket con ese nombre exacto (minúsculas) y "Public bucket" activado. O pega la URL del logo en el campo de texto.`);
+                alert(`Bucket "${bucket}" no encontrado. Comprueba en Supabase → Storage que exista un bucket con ese nombre exacto (minúsculas) y "Public bucket" activado.`);
+            } else if (msg.includes('configurado') || msg.includes('falta url') || msg.includes('falta anon key')) {
+                alert('Supabase no está configurado localmente. Revisa el archivo .env.local.');
             } else {
-                alert('Error al subir el logo. Inténtalo de nuevo o pega la URL del logo en el campo de texto.');
+                alert(`Error al subir el logo: ${error?.message || 'Error desconocido'}. Revisa la consola para más detalles o pega directamente una URL.`);
             }
         } finally {
             setIsUploadingLogo(false);

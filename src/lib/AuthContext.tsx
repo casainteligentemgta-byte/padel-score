@@ -196,14 +196,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const signInWithEmail = async (email: string, pass: string) => {
-        if (!supabase) throw new Error('Supabase no está configurado. Revisa .env.local (NEXT_PUBLIC_SUPABASE_*).');
+        if (!supabase) {
+            const urlExists = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const keyExists = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+            throw new Error(`Supabase no está configurado. URL:${urlExists} Key:${keyExists}. Revisa .env.local y reinicia el servidor de desarrollo.`);
+        }
         const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
         if (error) throw error;
         if (data.user) await fetchProfile(data.user.id, { email: data.user.email ?? undefined, name: (data.user.user_metadata?.full_name as string) || (data.user.user_metadata?.name as string) });
     };
 
     const signUpWithEmail = async (email: string, pass: string, name: string) => {
-        if (!supabase) throw new Error('Supabase no está configurado. Revisa .env.local (NEXT_PUBLIC_SUPABASE_*).');
+        if (!supabase) {
+            const urlExists = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const keyExists = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+            throw new Error(`Supabase no está configurado. URL:${urlExists} Key:${keyExists}. Revisa .env.local y reinicia el servidor de desarrollo.`);
+        }
         const { data, error } = await supabase.auth.signUp({
             email,
             password: pass,

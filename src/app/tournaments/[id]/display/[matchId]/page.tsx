@@ -11,6 +11,22 @@ import { doc, onSnapshot, collection } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
 import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, Layers, ImageIcon, Play, Eye, Users } from 'lucide-react';
+import { BouncingBall } from '@/components/BouncingBall';
+
+// Utility to detect if a media object or URL is a video
+const isVideoMedia = (media: any) => {
+    if (!media) return false;
+    // Handle string URL input
+    if (typeof media === 'string') {
+        return /\.(mp4|webm|mov|m4v|ogg|flv|3gp)(\?.*)?$/i.test(media.toLowerCase());
+    }
+    // Handle media object input
+    if (!media.url) return false;
+    const tipo = (media.tipo || '').toLowerCase();
+    if (tipo.includes('video')) return true;
+    const url = (media.url || '').toLowerCase();
+    return /\.(mp4|webm|mov|m4v|ogg|flv|3gp)(\?.*)?$/i.test(url);
+};
 
 // Simulated names for professional look
 const PRO_NAMES_MALE = [
@@ -127,7 +143,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
             lower.includes('pareja') ||
             lower.includes('equipo') ||
             lower.includes('player') ||
-            lower.includes('jugador')
+            (lower.includes('jugador') && !/\d/.test(lower))
         ) return null;
         return trimmed;
     };
@@ -139,8 +155,10 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const [sponsorCarouselIdx, setSponsorCarouselIdx] = useState(0);
     const [hubMedia, setHubMedia] = useState<any>(null);
     const [hubCarousel, setHubCarousel] = useState<any>(null);
-    const [hubLibraryImages, setHubLibraryImages] = useState<any[]>([]);
-    const [hubLibraryIdx, setHubLibraryIdx] = useState(0);
+    const [hubLibraryVids, setHubLibraryVids] = useState<any[]>([]);
+    const [hubLibraryImgs, setHubLibraryImgs] = useState<any[]>([]);
+    const [hubLibraryVidIdx, setHubLibraryVidIdx] = useState(0);
+    const [hubLibraryImgIdx, setHubLibraryImgIdx] = useState(0);
 
     // ── Carrusel de Patrocinadores desde Supabase ───────────────────────
     useEffect(() => {
@@ -174,6 +192,9 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const [tickerTexto, setTickerTexto] = useState('');
     const [tickerActivo, setTickerActivo] = useState(false);
     const [tickerVelocidad, setTickerVelocidad] = useState(30);
+
+    // Ticker desde Supabase (Tira Informativa TV)
+    const [supabaseTickerMessages, setSupabaseTickerMessages] = useState<any[]>([]);
 
     // Estilo del reloj y del cronómetro
     const [relojOcasion, setRelojOcasion] = useState<string>('default');
@@ -213,13 +234,16 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
 
     // 5. Obtener TODA la biblioteca de imágenes activa para el carrusel automático
     const fetchAllImages = async (sb: any) => {
-        const { data } = await sb
-            .from('media_content')
-            .select('*')
-            .eq('tipo', 'imagen')
-            .eq('activa', true)
-            .order('created_at', { ascending: false });
-        if (data) setHubLibraryImages(data);
+        const { data } = await sb.from('media_content').select('*').order('created_at', { ascending: false });
+        
+        if (data) {
+            const filtered = data.filter((item: any) => item.activa !== false);
+            // Split into vids and imgs
+            const vids = filtered.filter((i: any) => isVideoMedia(i));
+            const imgs = filtered.filter((i: any) => !isVideoMedia(i));
+            setHubLibraryVids(vids);
+            setHubLibraryImgs(imgs);
+        }
     };
 
     // ── Publicidad Hub: Sincronización con Supabase (Monitor Hub) ───────
@@ -249,6 +273,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                 let videoKey = '';
                 let carouselKey = '';
                 let screenFound = false;
+                let activeScreenId = null;
 
                 if (isMaster) {
                     videoKey = 'SYSTEM_MASTER_MEDIA_video';
@@ -263,6 +288,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
 
                     if (screens && screens.length > 0) {
                         const screenId = screens[0].id;
+                        activeScreenId = screenId;
                         videoKey = `${screenId}_video`;
                         carouselKey = `${screenId}_carousel`;
                         screenFound = true;
@@ -273,39 +299,75 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     // If no specific screen is found, reset hub selections but keep hubLibraryImages
                     setHubMedia(null);
                     setHubCarousel(null);
+                    // Fetch global ticker even if no screen is bound to the court
+                    const tickerData = await dataService.getTiraInformativa();
+                    setSupabaseTickerMessages(tickerData || []);
                     return;
                 }
 
                 // 2. Obtener lo que debe proyectar esta pantalla para ambos slots
+                // Buscamos: UUID_video, UUID_carousel AND the bare UUID as a fallback
                 const { data: statusData } = await supabase
                     .from('display_estado')
                     .select('pantalla_id, media_content_id')
-                    .in('pantalla_id', [videoKey, carouselKey]);
+                    .in('pantalla_id', [videoKey, carouselKey, activeScreenId].filter(Boolean));
 
                 if (!statusData || statusData.length === 0) {
                     setHubMedia(null);
                     setHubCarousel(null);
+                    // Try to fetch ticker anyway
+                    const tickerData = await dataService.getTiraInformativa(activeScreenId);
+                    setSupabaseTickerMessages(tickerData || []);
                     return;
                 }
 
-                const vidId = statusData.find((s: any) => s.pantalla_id === videoKey)?.media_content_id;
-                const carId = statusData.find((s: any) => s.pantalla_id === carouselKey)?.media_content_id;
+                // 3. Resolver el contenido según los keys
+                let vidId = statusData.find((s: any) => s.pantalla_id === videoKey)?.media_content_id;
+                let carId = statusData.find((s: any) => s.pantalla_id === carouselKey)?.media_content_id;
 
-                // 3. Obtener el contenido multimedia para video
+                // Fallback: If no suffix-specific record exists but a bare UUID record does, use it for video slot
+                if (!vidId && !carId) {
+                    const legacyRecord = statusData.find((s: any) => s.pantalla_id === activeScreenId);
+                    if (legacyRecord) {
+                        vidId = legacyRecord.media_content_id;
+                    }
+                }
+
+                // 4. Obtener contenidos
+                let fetchedVid: MediaContent | null = null;
+                let fetchedCar: MediaContent | null = null;
+
                 if (vidId) {
-                    const { data: vid } = await supabase.from('media_content').select('*').eq('id', vidId).maybeSingle();
-                    setHubMedia(vid);
-                } else {
-                    setHubMedia(null);
+                    const { data: v } = await supabase.from('media_content').select('*').eq('id', vidId).maybeSingle();
+                    fetchedVid = v;
+                }
+                if (carId) {
+                    const { data: c } = await supabase.from('media_content').select('*').eq('id', carId).maybeSingle();
+                    fetchedCar = c;
                 }
 
-                // 4. Obtener el contenido multimedia para carrusel
-                if (carId) {
-                    const { data: car } = await supabase.from('media_content').select('*').eq('id', carId).maybeSingle();
-                    setHubCarousel(car);
-                } else {
+                // Logic: Videos Left, Images Right
+                // If we have an image in vid slot and a video in car slot, swap them.
+                if (fetchedVid && !isVideoMedia(fetchedVid) && fetchedCar && isVideoMedia(fetchedCar)) {
+                    setHubMedia(fetchedCar);
+                    setHubCarousel(fetchedVid);
+                } else if (fetchedVid && !isVideoMedia(fetchedVid) && !fetchedCar) {
+                    // If only an image is assigned to the video slot, move it to carousel
+                    setHubMedia(null);
+                    setHubCarousel(fetchedVid);
+                } else if (fetchedCar && isVideoMedia(fetchedCar) && !fetchedVid) {
+                    // If only a video is assigned to the carousel slot, move it to video slot
+                    setHubMedia(fetchedCar);
                     setHubCarousel(null);
+                } else {
+                    // Regular assignment
+                    setHubMedia(fetchedVid);
+                    setHubCarousel(fetchedCar);
                 }
+
+                // 5. Obtener Tira Informativa de Supabase - Pasar pantallaId
+                const tickerData = await dataService.getTiraInformativa(activeScreenId);
+                setSupabaseTickerMessages(tickerData || []);
 
             } catch (err) {
                 console.error('Error fetching hub media:', err);
@@ -318,6 +380,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
             .channel('publicidad_changes')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'display_estado' }, fetchHubMedia)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'media_content' }, fetchHubMedia)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tira_informativa' }, fetchHubMedia)
             .subscribe();
 
         return () => {
@@ -325,18 +388,31 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         };
     }, [match?.court]); // Depend on match.court to re-run when court changes
 
-    // Rotación del carrusel automático de la biblioteca
+    // Rotación del carrusel automático de la biblioteca (VIDEOS - Izquierda)
     useEffect(() => {
-        if (hubLibraryImages.length <= 1) return;
-        const currentItem = hubLibraryImages[hubLibraryIdx % hubLibraryImages.length];
+        if (hubLibraryVids.length <= 1) return;
+        const currentItem = hubLibraryVids[hubLibraryVidIdx % hubLibraryVids.length];
         const duration = (currentItem?.duracion_segundos || 8) * 1000;
 
         const timeout = setTimeout(() => {
-            setHubLibraryIdx(prev => (prev + 1) % hubLibraryImages.length);
+            setHubLibraryVidIdx(prev => (prev + 1) % hubLibraryVids.length);
         }, duration);
 
         return () => clearTimeout(timeout);
-    }, [hubLibraryImages, hubLibraryIdx]);
+    }, [hubLibraryVids, hubLibraryVidIdx]);
+
+    // Rotación del carrusel automático de la biblioteca (IMÁGENES - Derecha)
+    useEffect(() => {
+        if (hubLibraryImgs.length <= 1) return;
+        const currentItem = hubLibraryImgs[hubLibraryImgIdx % hubLibraryImgs.length];
+        const duration = (currentItem?.duracion_segundos || 10) * 1000;
+
+        const timeout = setTimeout(() => {
+            setHubLibraryImgIdx(prev => (prev + 1) % hubLibraryImgs.length);
+        }, duration);
+
+        return () => clearTimeout(timeout);
+    }, [hubLibraryImgs, hubLibraryImgIdx]);
 
     // Settings
     const isFinal = match?.roundName?.toLowerCase().includes('final') || match?.roundName?.toLowerCase().includes('definición');
@@ -688,7 +764,25 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
 
     // ── Valores del marcador: preferir RTDB si hay marcador en vivo ──────────
     const lm = liveMarcador;
-    const modoPuntos: 'normal' | 'tiebreak' | 'super_tiebreak' = lm?.modo_puntos || (match?.matchFormat === 'SUPER_TIEBREAK' || match?.superTiebreak ? 'super_tiebreak' : (match?.matchFormat === 'TIEBREAK' || match?.tiebreak ? 'tiebreak' : 'normal'));
+
+    // Games en el set actual
+    const gamesT1 = lm ? (lm.games?.local ?? 0) : (match.games?.t1 ?? 0);
+    const gamesT2 = lm ? (lm.games?.visitante ?? 0) : (match.games?.t2 ?? 0);
+
+    // Sets ganados
+    const setsT1 = lm ? (lm.sets?.local ?? 0) : (match.sets?.t1 ?? 0);
+    const setsT2 = lm ? (lm.sets?.visitante ?? 0) : (match.sets?.t2 ?? 0);
+
+    // Set actual
+    const currentSet = setsT1 + setsT2 + 1;
+
+    const modoPuntos: 'normal' | 'tiebreak' | 'super_tiebreak' = lm?.modo_puntos ||
+        (match?.matchFormat === 'SUPER_TIEBREAK' || match?.superTiebreak || (currentSet === 3 && match?.matchFormat === 'SET_3_STB')
+            ? 'super_tiebreak'
+            : (match?.matchFormat === 'TIEBREAK' || match?.tiebreak || (gamesT1 === 6 && gamesT2 === 6)
+                ? 'tiebreak'
+                : 'normal'));
+
     const isTiebreak = modoPuntos === 'tiebreak';
     const isSTB = modoPuntos === 'super_tiebreak';
 
@@ -708,19 +802,10 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const tbT2 = lm ? Number(lm.puntos?.visitante ?? 0) : (match.tiebreakScore?.t2 ?? (Number(ptsT2Raw) || 0));
     const stbT1 = lm ? Number(lm.puntos?.local ?? 0) : (match.superTiebreakScore?.t1 ?? (Number(ptsT1Raw) || 0));
     const stbT2 = lm ? Number(lm.puntos?.visitante ?? 0) : (match.superTiebreakScore?.t2 ?? (Number(ptsT2Raw) || 0));
+
+    // Lógica Híbrida: si es tiebreak o supertiebreak, mostrar puntos numéricos. Si no, notación tenis.
     const ptsT1 = isSTB ? String(stbT1) : isTiebreak ? String(tbT1) : toTennis(ptsT1Raw);
     const ptsT2 = isSTB ? String(stbT2) : isTiebreak ? String(tbT2) : toTennis(ptsT2Raw);
-
-    // Sets ganados
-    const setsT1 = lm ? (lm.sets?.local ?? 0) : (match.sets?.t1 ?? 0);
-    const setsT2 = lm ? (lm.sets?.visitante ?? 0) : (match.sets?.t2 ?? 0);
-
-    // Games en el set actual
-    const gamesT1 = lm ? (lm.games?.local ?? 0) : (match.games?.t1 ?? 0);
-    const gamesT2 = lm ? (lm.games?.visitante ?? 0) : (match.games?.t2 ?? 0);
-
-    // Set actual (para columnas S1/S2/S3 — solo visible de Firestore)
-    const currentSet = setsT1 + setsT2 + 1;
 
     // Set boxes helper (solo Set 1 y Set 2; STB se ve en el game actual)
     const SetBoxes = ({ team }: { team: 1 | 2 }) => (
@@ -905,7 +990,6 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                         padding: '0.5vw 1.2vw',
                                         minWidth: 'fit-content'
                                     }}>
-
                                     <div className="flex flex-col items-center w-full">
                                         <DisplayClockTime className="font-black italic tracking-tighter leading-none"
                                             style={{
@@ -934,127 +1018,137 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
 
                         {/* ══════════════ MARCADOR / PIZARRA (30%) ══════════════ */}
                         <div
-                            className="flex-shrink-0 border border-white/8 bg-white/[0.025] overflow-hidden flex flex-col mb-[0.5vh]"
-                            style={{ height: '30vh', borderRadius: 'clamp(12px,1.6vw,26px)' }}
+                            className="flex-shrink-0 border border-white/10 bg-black/60 overflow-hidden flex flex-col mb-[0.8vh] relative shadow-2xl"
+                            style={{ height: '30.5vh', borderRadius: 'clamp(12px,1.6vw,26px)' }}
                         >
-                            {/* Column headers */}
-                            <div className="flex items-center border-b border-white/[0.05] bg-white/[0.02] h-[15%]">
+                            {/* Match Title Bar (FINAL - TOURNAMENT NAME) */}
+                            <div className="h-[20%] flex items-center justify-center bg-black relative border-b border-white/[0.05]">
+                                <div className="absolute bottom-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#ccff00] to-transparent opacity-50" />
+                                <h2 className="font-black italic uppercase tracking-[0.2em] text-white flex items-center gap-4" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>
+                                    <span style={{ color: primaryColor }}>{match.roundName || 'Partido'}</span>
+                                    {tournament?.nombre && (
+                                        <span>{tournament.nombre}</span>
+                                    )}
+                                </h2>
+                            </div>
+
+                            {/* Column headers (Names -> S1 -> S2 -> G -> PTS) */}
+                            <div className="flex items-center border-b border-white/[0.1] bg-black/40 h-[10%] px-6">
                                 <div className="flex-1" />
-                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '8%', backgroundColor: 'rgba(255,255,255,0.06)' }}>
-                                    <span className="font-black uppercase tracking-widest text-white/50" style={{ fontSize: 'clamp(7px,0.8vw,12px)' }}>PTS</span>
-                                </div>
-                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '7%', backgroundColor: `${primaryColor}10` }}>
-                                    <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(7px,0.8vw,12px)', color: primaryColor }}>G</span>
-                                </div>
                                 {[1, 2].map(s => (
-                                    <div key={s} className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '7%' }}>
-                                        <span className="font-black uppercase tracking-widest text-gray-600" style={{ fontSize: 'clamp(7px,0.8vw,12px)' }}>S{s}</span>
+                                    <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full" style={{ width: '8%' }}>
+                                        <span className="font-black uppercase tracking-widest text-white/40" style={{ fontSize: 'clamp(7px,0.8vw,12px)' }}>SET {s}</span>
                                     </div>
                                 ))}
+                                <div className="flex items-center justify-center border-l border-white/[0.15] h-full" style={{ width: '12%', backgroundColor: `${primaryColor}20` }}>
+                                    <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(7px,0.8vw,12px)', color: primaryColor }}>GAME:</span>
+                                </div>
                             </div>
 
                             {/* Team 1 row */}
-                            <div className="flex-1 flex items-center relative border-b border-white/[0.05] overflow-hidden">
-                                <div className="flex-1 flex items-center h-full px-6 gap-4">
-                                    <div className="flex flex-col flex-1 min-w-0" style={{ gap: '0.2vh' }}>
-                                        <div className="flex items-center gap-3">
-                                            <AnimatePresence>
-                                                {(lm?.saque?.equipo === 1 || match.server?.team === 1) && (
-                                                    <motion.span initial={{ opacity: 0, scale: 0.5, x: -10 }} animate={{ opacity: 1, scale: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
-                                                        style={{ fontSize: '1.5vh', marginRight: '-0.5vw' }}>🎾</motion.span>
-                                                )}
-                                            </AnimatePresence>
-                                            <img src={match.t1p1Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t1p1)}&background=222&color=fff`}
-                                                className="rounded-full flex-shrink-0 object-cover border border-white/10"
-                                                style={{ width: '4.5vh', height: '4.5vh' }} />
-                                            <div className="flex items-center gap-2 min-w-0">
-                                                <p className="font-black italic uppercase tracking-tighter text-white truncate" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>
-                                                    {processDisplayName(lm?.equipo_1?.nombre) || match.t1p1}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3 text-white/60">
-                                            <img src={match.t1p2Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t1p2)}&background=222&color=fff`}
-                                                className="rounded-full flex-shrink-0 object-cover border border-white/10 opacity-60"
-                                                style={{ width: '4.5vh', height: '4.5vh' }} />
-                                            <p className="font-black italic uppercase tracking-tighter truncate" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>
-                                                {processDisplayName(match.t1p2) || ''}
-                                            </p>
-                                        </div>
+                            <div className="flex-1 flex items-center relative border-b border-white/[0.1] overflow-hidden">
+                                <div className="flex-1 flex flex-col justify-center h-full px-6 relative">
+                                    <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden shadow-2xl">
+                                        <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
+                                        <p className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(18px,3.5vh,44px)', lineHeight: 1.0 }}>
+                                            <span className="flex items-center">
+                                                <AnimatePresence>
+                                                    {( (lm?.saque?.equipo === 1 && lm?.saque?.jugador === 1) || (match.server?.team === 1 && match.server?.player === 1) ) && (
+                                                        <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
+                                                            className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
+                                                            <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                                {processDisplayName(match.t1p1) || match.t1p1}
+                                            </span>
+                                            <span className="text-white/30 mx-3">/</span>
+                                            <span className="flex items-center">
+                                                <AnimatePresence>
+                                                    {( (lm?.saque?.equipo === 1 && lm?.saque?.jugador === 2) || (match.server?.team === 1 && match.server?.player === 2) ) && (
+                                                        <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
+                                                            className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
+                                                            <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                                {processDisplayName(match.t1p2) || match.t1p2}
+                                            </span>
+                                        </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full bg-white/[0.04]" style={{ width: '8%' }}>
-                                    <motion.span key={ptsT1} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-                                        className="font-black italic text-white" style={{ fontSize: 'clamp(28px,8vh,80px)' }}>{ptsT1}</motion.span>
-                                </div>
-                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '7%', backgroundColor: `${primaryColor}12` }}>
-                                    <motion.span key={gamesT1} animate={{ scale: [1.2, 1] }} className="font-black italic" style={{ fontSize: 'clamp(20px,6vh,60px)', color: primaryColor }}>{gamesT1}</motion.span>
-                                </div>
+                                {/* Sets History */}
                                 {[1, 2].map((s: number) => {
-                                    const val = (s < currentSet) ? (match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? 0) : (s === currentSet ? (match.games?.t1 ?? '') : '');
+                                    const val = (s < currentSet) ? (match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? 0) : '';
                                     return (
-                                        <div key={s} className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '7%', background: s === currentSet ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
-                                            <span className={`font-black italic ${s === currentSet ? 'text-white' : 'text-white/30'}`} style={{ fontSize: 'clamp(18px,5vh,55px)' }}>{val}</span>
+                                        <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full" style={{ width: '8%' }}>
+                                            <span className="font-black italic text-white" style={{ fontSize: 'clamp(28px,6vh,65px)' }}>{val}</span>
                                         </div>
                                     );
                                 })}
+                                {/* Game Points */}
+                                <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ width: '12%', backgroundColor: `${primaryColor}40` }}>
+                                    <motion.span key={ptsT1} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                                        className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(32px,9vh,95px)' }}>{ptsT1}</motion.span>
+                                </div>
                             </div>
 
                             {/* Team 2 row */}
                             <div className="flex-1 flex items-center relative overflow-hidden">
-                                <div className="flex-1 flex items-center h-full px-6 gap-4">
-                                    <div className="flex flex-col flex-1 min-w-0" style={{ gap: '0.2vh' }}>
-                                        <div className="flex items-center gap-3">
-                                            <AnimatePresence>
-                                                {(lm?.saque?.equipo === 2 || match.server?.team === 2) && (
-                                                    <motion.span initial={{ opacity: 0, scale: 0.5, x: -10 }} animate={{ opacity: 1, scale: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
-                                                        style={{ fontSize: '1.5vh', marginRight: '-0.5vw' }}>🎾</motion.span>
-                                                )}
-                                            </AnimatePresence>
-                                            <img src={match.t2p1Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t2p1)}&background=222&color=fff`}
-                                                className="rounded-full flex-shrink-0 object-cover border border-white/10"
-                                                style={{ width: '4.5vh', height: '4.5vh' }} />
-                                            <div className="flex items-center gap-2 min-w-0">
-                                                <p className="font-black italic uppercase tracking-tighter text-white truncate" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>
-                                                    {processDisplayName(lm?.equipo_2?.nombre) || match.t2p1}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3 text-white/60">
-                                            <img src={match.t2p2Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t2p2)}&background=222&color=fff`}
-                                                className="rounded-full flex-shrink-0 object-cover border border-white/10 opacity-60"
-                                                style={{ width: '4.5vh', height: '4.5vh' }} />
-                                            <p className="font-black italic uppercase tracking-tighter truncate" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>
-                                                {processDisplayName(match.t2p2) || ''}
-                                            </p>
-                                        </div>
+                                <div className="flex-1 flex flex-col justify-center h-full px-6 relative">
+                                    <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden">
+                                        <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
+                                        <p className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(18px,3.5vh,44px)', lineHeight: 1.0 }}>
+                                            <span className="flex items-center">
+                                                <AnimatePresence>
+                                                    {( (lm?.saque?.equipo === 2 && lm?.saque?.jugador === 1) || (match.server?.team === 2 && match.server?.player === 1) ) && (
+                                                        <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
+                                                            className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
+                                                            <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                                {processDisplayName(match.t2p1) || match.t2p1}
+                                            </span>
+                                            <span className="text-white/30 mx-3">/</span>
+                                            <span className="flex items-center">
+                                                <AnimatePresence>
+                                                    {( (lm?.saque?.equipo === 2 && lm?.saque?.jugador === 2) || (match.server?.team === 2 && match.server?.player === 2) ) && (
+                                                        <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
+                                                            className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
+                                                            <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                                {processDisplayName(match.t2p2) || match.t2p2}
+                                            </span>
+                                        </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full bg-white/[0.04]" style={{ width: '8%' }}>
-                                    <motion.span key={ptsT2} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-                                        className="font-black italic text-white" style={{ fontSize: 'clamp(28px,8vh,80px)' }}>{ptsT2}</motion.span>
-                                </div>
-                                <div className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '7%', backgroundColor: `${primaryColor}12` }}>
-                                    <motion.span key={gamesT2} animate={{ scale: [1.2, 1] }} className="font-black italic" style={{ fontSize: 'clamp(20px,6vh,60px)', color: primaryColor }}>{gamesT2}</motion.span>
-                                </div>
+                                {/* Sets History */}
                                 {[1, 2].map((s: number) => {
-                                    const val = (s < currentSet) ? (match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? 0) : (s === currentSet ? (match.games?.t2 ?? '') : '');
+                                    const val = (s < currentSet) ? (match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? 0) : '';
                                     return (
-                                        <div key={s} className="flex items-center justify-center border-l border-white/[0.05] h-full" style={{ width: '7%', background: s === currentSet ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
-                                            <span className={`font-black italic ${s === currentSet ? 'text-white' : 'text-white/30'}`} style={{ fontSize: 'clamp(18px,5vh,55px)' }}>{val}</span>
+                                        <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full" style={{ width: '8%' }}>
+                                            <span className="font-black italic text-white" style={{ fontSize: 'clamp(28px,6vh,65px)' }}>{val}</span>
                                         </div>
                                     );
                                 })}
+                                {/* Game Points */}
+                                <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ width: '12%', backgroundColor: `${primaryColor}40` }}>
+                                    <motion.span key={ptsT2} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                                        className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(32px,9vh,95px)' }}>{ptsT2}</motion.span>
+                                </div>
                             </div>
                         </div>
 
                         {/* ══════════════ PUBLICIDAD (50%) ══════════════ */}
                         <div
-                            className="flex-shrink-0 grid grid-cols-2 gap-2 mb-[0.5vh]"
+                            className="flex-shrink-0 flex flex-row gap-2 mb-[1vh] px-6"
                             style={{ height: '49vh' }}
                         >
-                            {/* Video Ad / Hub Media */}
-                            <div className="border border-white/8 bg-white/[0.02] relative overflow-hidden rounded-3xl">
+                            {/* Video Ad / Hub Media (takes the left half) */}
+                            <div className="w-1/2 border border-white/8 bg-white/[0.02] relative overflow-hidden rounded-3xl">
                                 <AnimatePresence mode="wait">
                                     {hubMedia ? (
                                         hubMedia.tipo === 'url_web' ? (
@@ -1067,7 +1161,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                                 className="w-full h-full border-none pointer-events-none"
                                                 loading="lazy"
                                             />
-                                        ) : hubMedia.tipo.includes('video') ? (
+                                        ) : isVideoMedia(hubMedia) ? (
                                             <motion.video
                                                 key={hubMedia.url}
                                                 src={hubMedia.url}
@@ -1090,9 +1184,27 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                                 className="w-full h-full object-contain p-4"
                                             />
                                         )
+                                    ) : hubLibraryVids.length > 0 ? (
+                                        (() => {
+                                            const currentVid = hubLibraryVids[hubLibraryVidIdx % hubLibraryVids.length];
+                                            return (
+                                                <motion.video
+                                                    key={currentVid.url}
+                                                    src={currentVid.url}
+                                                    autoPlay
+                                                    muted
+                                                    loop
+                                                    playsInline
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    exit={{ opacity: 0 }}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            );
+                                        })()
                                     ) : adBanner.isVisible && adBanner.currentImageUrl ? (
-                                        adBanner.currentImageUrl.match(/\.(mp4|webm|mov|m4v)(\?|$)/i) ? (
-                                            <motion.video key={adBanner.currentImageUrl} src={adBanner.currentImageUrl} autoPlay muted loop initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full object-cover" />
+                                        isVideoMedia(adBanner.currentImageUrl) ? (
+                                            <motion.video key={adBanner.currentImageUrl} src={adBanner.currentImageUrl} autoPlay muted loop playsInline initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full object-cover" />
                                         ) : (
                                             <motion.img key={adBanner.currentImageUrl} src={adBanner.currentImageUrl} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full object-contain p-4" />
                                         )
@@ -1103,29 +1215,10 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                         </div>
                                     )}
 
-                                    {/* Professional Overlay */}
-                                    {hubMedia && (
-                                        <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                                            className="absolute bottom-4 left-4 z-20 px-3 py-1.5 bg-black/60 backdrop-blur-md border border-white/10 rounded-xl flex items-center gap-2">
-                                            <div className="w-10 h-10 rounded-lg bg-black/40 flex items-center justify-center border border-white/5 overflow-hidden">
-                                                {hubMedia.tipo.includes('video') ? (
-                                                    <Video size={14} className="text-padel-primary" />
-                                                ) : hubMedia.tipo === 'imagen' ? (
-                                                    <img src={hubMedia.url} className="w-full h-full object-cover" alt="" />
-                                                ) : hubMedia.tipo === 'url_web' ? (
-                                                    <ExternalLink size={14} className="text-orange-400" />
-                                                ) : (
-                                                    <Layers size={14} className="text-purple-400" />
-                                                )}
-                                            </div>
-                                            <span className="text-[9px] font-black uppercase text-white tracking-widest italic">{hubMedia.nombre_sponsor || 'Publicidad'}</span>
-                                        </motion.div>
-                                    )}
                                 </AnimatePresence>
                             </div>
-
-                            {/* Carousel Ad (Supabase / Hub) */}
-                            <div className="border border-white/8 bg-white/[0.02] relative overflow-hidden rounded-3xl">
+                            {/* Carousel Ad / Sponsors (takes the right half) */}
+                            <div className="w-1/2 border border-white/10 bg-white/[0.03] relative overflow-hidden rounded-2xl">
                                 <AnimatePresence mode="wait">
                                     {hubCarousel ? (
                                         hubCarousel.tipo === 'url_web' ? (
@@ -1138,7 +1231,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                                 className="w-full h-full border-none pointer-events-none"
                                                 loading="lazy"
                                             />
-                                        ) : hubCarousel.tipo.includes('video') ? (
+                                        ) : isVideoMedia(hubCarousel) ? (
                                             <motion.video
                                                 key={hubCarousel.url}
                                                 src={hubCarousel.url}
@@ -1158,58 +1251,64 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                                 initial={{ opacity: 0 }}
                                                 animate={{ opacity: 1 }}
                                                 exit={{ opacity: 0 }}
+                                                className="w-full h-full object-contain p-4"
                                             />
                                         )
-                                    ) : hubLibraryImages.length > 0 ? (
-                                        <motion.img
-                                            key={hubLibraryImages[hubLibraryIdx % hubLibraryImages.length]?.url}
-                                            src={hubLibraryImages[hubLibraryIdx % hubLibraryImages.length]?.url}
-                                            initial={{ opacity: 0, x: 20 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            exit={{ opacity: 0, x: -20 }}
-                                            transition={{ duration: 0.5 }}
-                                            className="w-full h-full object-contain p-4"
-                                        />
-                                    ) : sponsorCarousel.length > 0 ? (
-                                        <motion.img
-                                            key={sponsorCarousel[sponsorCarouselIdx % sponsorCarousel.length]?.url}
-                                            src={sponsorCarousel[sponsorCarouselIdx % sponsorCarousel.length]?.url}
-                                            initial={{ opacity: 0, x: 20 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            exit={{ opacity: 0, x: -20 }}
-                                            transition={{ duration: 0.5, ease: 'easeOut' }}
-                                            className="w-full h-full object-contain p-4"
-                                        />
+                                    ) : hubLibraryImgs.length > 0 ? (
+                                        (() => {
+                                            const currentImg = hubLibraryImgs[hubLibraryImgIdx % hubLibraryImgs.length];
+                                            return (
+                                                <motion.img
+                                                    key={currentImg.url}
+                                                    src={currentImg.url}
+                                                    initial={{ opacity: 0, x: 20 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    exit={{ opacity: 0, x: -20 }}
+                                                    transition={{ duration: 0.5 }}
+                                                    className="w-full h-full object-contain p-4"
+                                                />
+                                            );
+                                        })()
                                     ) : (
                                         <div className="flex flex-col items-center justify-center h-full opacity-20">
-                                            <Star className="w-12 h-12 mb-2" style={{ color: primaryColor }} />
-                                            <span className="font-black italic uppercase tracking-widest text-[10px]">Patrocinadores Hub</span>
+                                            <Megaphone className="w-12 h-12 mb-2" style={{ color: primaryColor }} />
+                                            <span className="font-black italic uppercase tracking-widest text-[10px]">Carrusel de Imágenes Hub</span>
                                         </div>
                                     )}
 
-                                    {/* Professional Overlay */}
-                                    {(hubCarousel || hubLibraryImages.length > 0) && (
-                                        <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
-                                            className="absolute bottom-4 right-4 z-20 px-3 py-1.5 bg-black/60 backdrop-blur-md border border-white/10 rounded-xl flex items-center gap-2">
-                                            <ImageIcon size={10} className="text-blue-400" />
-                                            <span className="text-[9px] font-black uppercase text-white tracking-widest italic">
-                                                {hubCarousel ? (hubCarousel.nombre_sponsor || 'Sponsor') : (hubLibraryImages[hubLibraryIdx % hubLibraryImages.length]?.nombre_sponsor || 'Padel Hub')}
-                                            </span>
-                                        </motion.div>
-                                    )}
                                 </AnimatePresence>
                             </div>
                         </div>
 
                         {/* ══════════════ FOOTER BAR (10%) ══════════════ */}
                         <div
-                            className="flex-shrink-0 overflow-hidden border-t border-white/10 bg-black/40 backdrop-blur-md relative"
+                            className="flex-shrink-0 overflow-hidden border-t border-white/10 bg-black/40 backdrop-blur-md relative flex items-center"
                             style={{
                                 height: '9.5vh',
                                 borderRadius: 'clamp(10px,1.2vw,18px) clamp(10px,1.2vw,18px) 0 0',
                             }}>
-                            <div className="flex items-center justify-center h-full opacity-30">
-                                <span className="font-black italic uppercase tracking-[0.5em] text-[10px]">Padel Smart TV • Pro Scoreboard</span>
+                            <div className="w-full overflow-hidden relative py-2">
+                                <div className="flex whitespace-nowrap animate-marquee">
+                                    {(supabaseTickerMessages.length > 0 ? supabaseTickerMessages : [{ mensaje: 'tira informativa TV a la espera de contenido.' }]).map((msg: any, idx: number) => (
+                                        <div key={idx} className="flex items-center px-12">
+                                            <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
+                                            <span className="text-3xl font-black italic uppercase tracking-widest text-white">
+                                                {msg.mensaje || msg.texto}
+                                            </span>
+                                            <Star className="w-5 h-5 text-padel-primary ml-16 fill-padel-primary/20" />
+                                        </div>
+                                    ))}
+                                    {/* Duplicate for infinite scroll */}
+                                    {(supabaseTickerMessages.length > 0 ? supabaseTickerMessages : [{ mensaje: 'tira informativa TV a la espera de contenido.' }]).map((msg: any, idx: number) => (
+                                        <div key={`dup-${idx}`} className="flex items-center px-12">
+                                            <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
+                                            <span className="text-3xl font-black italic uppercase tracking-widest text-white">
+                                                {msg.mensaje || msg.texto}
+                                            </span>
+                                            <Star className="w-5 h-5 text-padel-primary ml-16 fill-padel-primary/20" />
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
 
@@ -1243,8 +1342,8 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     /* ══════════════ AD MODE ══════════════ */
                     <motion.div key="ad" initial={{ opacity: 0, scale: 1.1 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
                         className="h-full w-full bg-black flex items-center justify-center relative">
-                        {adMedia[currentAdIdx]?.endsWith('.mp4') ? (
-                            <video src={adMedia[currentAdIdx]} autoPlay muted loop className="w-full h-full object-cover" />
+                        {adMedia[currentAdIdx] && /\.(mp4|webm|mov|m4v)(\?|$)/i.test(adMedia[currentAdIdx]) ? (
+                            <video src={adMedia[currentAdIdx]} autoPlay muted loop playsInline className="w-full h-full object-cover" />
                         ) : adMedia[currentAdIdx] ? (
                             <img src={adMedia[currentAdIdx]} className="w-full h-full object-contain p-12 lg:p-32" />
                         ) : (
@@ -1255,11 +1354,20 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     <Megaphone className="w-24 h-24 text-padel-primary filter drop-shadow-[0_0_20px_rgba(204,255,0,0.5)]" />
                                 </motion.div>
                                 <div className="space-y-4">
-                                    <h1 className="text-8xl font-black italic uppercase tracking-tighter text-white leading-none">
-                                        Espacio <span className="text-padel-primary">Publicitario</span><br />
-                                        <span className="text-5xl opacity-40">Disponible</span>
-                                    </h1>
-                                    <p className="text-2xl font-bold uppercase tracking-[0.5em] text-[#fb923c] animate-pulse">
+                                    <div className="relative mb-12 flex justify-center scale-75 lg:scale-100">
+                                        <div className="absolute -inset-20 bg-padel-primary/10 blur-[100px] rounded-full animate-pulse" />
+                                        <h1 className="text-8xl font-black italic uppercase tracking-tighter flex items-center gap-6 relative z-10 leading-none">
+                                            <span className="text-padel-primary drop-shadow-[0_0_50px_rgba(204,255,0,0.3)]">SMART</span>
+                                            <div className="mb-4">
+                                                <BouncingBall size={80} />
+                                            </div>
+                                            <span className="text-white">PADEL</span>
+                                        </h1>
+                                    </div>
+                                    <h2 className="text-5xl font-black italic uppercase tracking-tighter text-white leading-none opacity-40">
+                                        Espacio <span className="text-padel-primary opacity-100">Publicitario</span> Disponible
+                                    </h2>
+                                    <p className="text-xl font-bold uppercase tracking-[0.5em] text-[#fb923c] animate-pulse">
                                         Tu marca aquí • Padel Smart TV
                                     </p>
                                 </div>
@@ -1284,10 +1392,6 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
                 .font-outfit { font-family: 'Outfit', sans-serif; }
                 body { background: black; margin: 0; padding: 0; }
-                @keyframes ticker-scroll {
-                    0%   { transform: translateX(0); }
-                    100% { transform: translateX(-50%); }
-                }
             `}</style>
         </div>
     );

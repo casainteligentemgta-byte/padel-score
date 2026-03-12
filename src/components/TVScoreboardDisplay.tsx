@@ -16,6 +16,7 @@ import {
     Calendar
 } from 'lucide-react';
 import SponsorCarousel from './publicidad/SponsorCarousel';
+import { BouncingBall } from '@/components/BouncingBall';
 
 interface TVScoreboardDisplayProps {
     playerA1?: string;
@@ -347,14 +348,23 @@ export default function TVScoreboardDisplay({
                                 className="w-full h-full object-cover"
                             />
                         ) : (
-                            <div className="flex flex-col items-center gap-8">
-                                <div className="w-48 h-48 rounded-full border-4 border-padel-primary/20 flex items-center justify-center relative">
-                                    <Tv size={80} className="text-padel-primary/40" />
-                                    <motion.div animate={{ rotate: 360 }} transition={{ duration: 8, repeat: Infinity, ease: "linear" }} className="absolute -inset-4 border-t-4 border-padel-primary rounded-full" />
+                            <div className="flex flex-col items-center gap-12">
+                                <div className="relative">
+                                    <div className="absolute -inset-20 bg-padel-primary/10 blur-[100px] rounded-full animate-pulse" />
+                                    <h1 className="text-[120px] font-black italic uppercase tracking-tighter flex items-center gap-10 relative z-10">
+                                        <span className="text-padel-primary drop-shadow-[0_0_50px_rgba(204,255,0,0.3)]">SMART</span>
+                                        <div className="mb-8">
+                                            <BouncingBall size={100} />
+                                        </div>
+                                        <span className="text-white">PADEL</span>
+                                    </h1>
                                 </div>
-                                <div className="text-center space-y-2">
-                                    <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white">SMART PADEL PRO SYSTEM</h2>
-                                    <p className="text-gray-500 font-black uppercase tracking-[0.4em] text-xs italic">A la espera de contenido publicitario...</p>
+                                <div className="text-center space-y-4 relative z-10">
+                                    <h2 className="text-3xl font-black italic uppercase tracking-[0.3em] text-white/40">PRO SYSTEM</h2>
+                                    <div className="h-1 w-24 bg-padel-primary/30 mx-auto rounded-full" />
+                                    <p className="text-padel-primary/60 font-black uppercase tracking-[0.5em] text-sm italic animate-pulse">
+                                        Esperando Contenido Publicitario
+                                    </p>
                                 </div>
                             </div>
                         )}
@@ -390,7 +400,7 @@ export default function TVScoreboardDisplay({
                     )) : (
                         <div className="flex items-center gap-4 mx-8">
                             <div className="w-2 h-2 rounded-full bg-padel-primary" />
-                            <span className="text-xl font-black italic uppercase tracking-widest text-white/20">SMART PADEL PRO TV • EL MEJOR PADEL DEL MUNDO • BIENVENIDOS</span>
+                            <span className="text-2xl font-black italic uppercase tracking-[0.3em] text-padel-primary/40">tira informativa TV a la espera de contenido.</span>
                         </div>
                     )}
                     {/* Duplicate for seamless loop */}
@@ -402,7 +412,7 @@ export default function TVScoreboardDisplay({
                     )) : (
                         <div className="flex items-center gap-4 mx-8">
                             <div className="w-2 h-2 rounded-full bg-padel-primary" />
-                            <span className="text-xl font-black italic uppercase tracking-widest text-white/20">SMART PADEL PRO TV • EL MEJOR PADEL DEL MUNDO • BIENVENIDOS</span>
+                            <span className="text-2xl font-black italic uppercase tracking-[0.3em] text-padel-primary/40">tira informativa TV a la espera de contenido.</span>
                         </div>
                     )}
                 </div>

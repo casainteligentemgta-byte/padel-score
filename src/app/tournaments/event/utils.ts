@@ -23,9 +23,17 @@ export const formatDisplayName = (name: string): string => {
     if (!name) return '';
     const parts = name.trim().split(/\s+/);
     if (parts.length < 2) return name;
+
+    // Si la segunda parte es un número (ej. Jugador 13), no abreviar
+    if (/^\d+$/.test(parts[1])) return name;
+
+    // Si es "Jugador X", no abreviar
+    if (parts[0].toLowerCase() === 'jugador') return name;
+
     // Tomar primer nombre y la inicial del primer apellido/segundo nombre
     return `${parts[0]} ${parts[1].charAt(0).toUpperCase()}.`;
 };
+
 
 /**
  * Resuelve los nombres de jugadores de un equipo.
@@ -97,8 +105,9 @@ export const formatGender = (g?: string): string => {
 };
 
 export const STATUS_COLORS: Record<string, string> = {
-    [MatchStatus.LIVE]: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300 shadow-[0_4px_20px_rgba(16,185,129,0.1)]',
-    [MatchStatus.FINISHED]: 'bg-[#0f0f0f] border-white/5 text-gray-600 grayscale-[0.8] opacity-60',
+    [MatchStatus.LIVE]: 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/20',
+    [MatchStatus.FINISHED]: 'bg-white/[0.02] border-white/10 text-gray-500 grayscale-[0.5] opacity-80',
+    [MatchStatus.PENDING]: 'bg-yellow-400/5 border-yellow-400/30 text-yellow-200/80',
 };
 
 export const PENDING_NEXT_COLORS = 'bg-yellow-400/10 border-yellow-400/40 text-yellow-200 shadow-[0_4px_20px_rgba(250,204,21,0.05)]';

@@ -1163,8 +1163,6 @@ export default function AdsManagement({ params }: { params: Promise<{ id: string
             <style jsx global>{`
                 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
                 .font-outfit { font-family: 'Outfit', sans-serif; }
-                @keyframes marquee { 0%{ transform: translateX(0) } 100%{ transform: translateX(-50%) } }
-                .animate-marquee { animation: marquee 18s linear infinite; }
             `}</style>
         </div>
     );

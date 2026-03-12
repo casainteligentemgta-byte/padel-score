@@ -127,7 +127,7 @@ export default function TVKioskPage() {
                         </motion.div>
 
                         <h1 className="text-7xl font-black italic uppercase tracking-tighter mb-4">
-                            SISTEMA <span className="text-padel-primary">PADEL SCORE</span>
+                            SISTEMA
                         </h1>
                         <p className="text-2xl font-bold text-gray-500 uppercase tracking-[0.5em] mb-12">
                             Esperando partidos en vivo
@@ -186,95 +186,91 @@ export default function TVKioskPage() {
 
                         {/* Main Match Graphics */}
                         <div className="flex-1 flex flex-col justify-center relative z-10">
-                            <div className="grid grid-cols-12 items-center gap-4">
+                            <div className="grid grid-cols-12 items-center gap-12">
                                 {/* Team 1 Name */}
-                                <div className="col-span-4 text-right">
+                                <div className="col-span-5 text-right min-w-0 pr-24">
                                     <motion.h3
                                         key={liveMatch.t1Name}
-                                        initial={{ x: -50, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
-                                        className="text-6xl lg:text-8xl font-black italic uppercase tracking-tighter leading-none"
+                                        initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
+                                        className="text-5xl lg:text-[4.5vw] font-black italic uppercase tracking-tighter leading-[0.95] truncate drop-shadow-2xl"
                                     >
                                         {liveMatch.t1Name.split(' / ').map((name: string, i: number) => (
-                                            <span key={i} className={i === 1 ? 'block' : ''} style={i === 1 ? { color: liveMatch.primaryColor } : {}}>{name}{i === 0 ? ' ' : ''}</span>
+                                            <span key={i} className="block" style={i === 1 ? { color: liveMatch.primaryColor, opacity: 0.8 } : {}}>{name}</span>
                                         ))}
                                     </motion.h3>
                                 </div>
 
-                                {/* SCORE CENTER */}
-                                <div className="col-span-4 flex flex-col items-center justify-center p-8">
-                                    <div className="bg-black/80 border-4 border-white/10 rounded-[4rem] p-10 flex flex-col items-center justify-center shadow-[0_50px_100px_rgba(0,0,0,0.6)] w-full relative overflow-hidden">
-                                        {/* Point indicator Glow */}
-                                        <div className="absolute inset-x-0 top-0 h-1 bg-padel-primary opacity-30 shadow-[0_0_20px_#ccff00]" />
-
-                                        <div className="flex items-center gap-12 mb-6">
-                                            <AnimatePresence mode="wait">
-                                                <motion.span key={liveMatch.points?.t1} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                                                    className="text-[12rem] lg:text-[16rem] font-black italic leading-none tabular-nums text-white tracking-tighter"
-                                                >
-                                                    {liveMatch.points?.t1 || '0'}
-                                                </motion.span>
-                                            </AnimatePresence>
-                                            <span className="text-8xl font-black italic opacity-20 text-white">:</span>
-                                            <AnimatePresence mode="wait">
-                                                <motion.span key={liveMatch.points?.t2} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                                                    className="text-[12rem] lg:text-[16rem] font-black italic leading-none tabular-nums text-white tracking-tighter"
-                                                >
-                                                    {liveMatch.points?.t2 || '0'}
-                                                </motion.span>
-                                            </AnimatePresence>
+                                {/* Score Section */}
+                                <div className="col-span-2 flex flex-col items-center justify-center">
+                                    <div className="bg-white/10 backdrop-blur-2xl border border-white/20 rounded-[2.5rem] p-8 flex items-center justify-center gap-10 min-w-[280px] shadow-2xl relative overflow-hidden">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
+                                        <div className="text-center relative z-10">
+                                            <div className="text-7xl lg:text-9xl font-black italic tracking-tighter text-white drop-shadow-2xl leading-none">
+                                                {liveMatch.score.split('-')[0]}
+                                            </div>
                                         </div>
-
-                                        {/* Set Summary */}
-                                        <div className="flex gap-4">
-                                            {[1, 2, 3].map(setNum => {
-                                                const currentSet = (liveMatch.sets?.t1 || 0) + (liveMatch.sets?.t2 || 0) + 1;
-                                                return (
-                                                    <div key={setNum} className={`px-6 py-3 rounded-2xl border-2 transition-all flex flex-col items-center ${setNum === currentSet ? 'bg-padel-primary/20 border-padel-primary' : 'bg-white/5 border-white/5 opacity-30'}`}>
-                                                        <span className="text-[10px] font-black uppercase mb-1">SET {setNum}</span>
-                                                        <div className="flex gap-3 text-2xl font-black">
-                                                            <span>{liveMatch.games_sets?.[setNum - 1]?.t1 || (setNum === currentSet ? liveMatch.games?.t1 : 0) || 0}</span>
-                                                            <span className="opacity-30">-</span>
-                                                            <span>{liveMatch.games_sets?.[setNum - 1]?.t2 || (setNum === currentSet ? liveMatch.games?.t2 : 0) || 0}</span>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
+                                        <div className="h-24 w-[3px] bg-padel-primary rotate-12 relative z-10" />
+                                        <div className="text-center relative z-10">
+                                            <div className="text-7xl lg:text-9xl font-black italic tracking-tighter text-white drop-shadow-2xl leading-none">
+                                                {liveMatch.score.split('-')[1]}
+                                            </div>
                                         </div>
                                     </div>
-
-                                    {/* Serve / Punto de Oro */}
-                                    <div className="mt-8 flex items-center gap-20">
-                                        <motion.div animate={liveMatch.server?.team === 1 ? { scale: [1, 1.5, 1], opacity: 1 } : { opacity: 0.1 }} transition={{ repeat: Infinity, duration: 1 }} className="w-8 h-8 rounded-full shadow-[0_0_40px_rgba(204,255,0,0.8)]" style={{ backgroundColor: liveMatch.primaryColor }} />
-                                        <div className="text-padel-primary font-black uppercase text-xs tracking-[0.5em] italic">Servicio</div>
-                                        <motion.div animate={liveMatch.server?.team === 2 ? { scale: [1, 1.5, 1], opacity: 1 } : { opacity: 0.1 }} transition={{ repeat: Infinity, duration: 1 }} className="w-8 h-8 rounded-full shadow-[0_0_40px_rgba(204,255,0,0.8)]" style={{ backgroundColor: liveMatch.primaryColor }} />
+                                    <div className="mt-8 px-8 py-2 bg-padel-primary text-black rounded-full shadow-[0_0_40px_rgba(204,255,0,0.3)] transform -rotate-1">
+                                        <span className="text-sm font-black uppercase tracking-[0.3em]">Marcador</span>
                                     </div>
                                 </div>
 
                                 {/* Team 2 Name */}
-                                <div className="col-span-4 text-left">
+                                <div className="col-span-5 text-left min-w-0 pl-24">
                                     <motion.h3
                                         key={liveMatch.t2Name}
-                                        initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
-                                        className="text-6xl lg:text-8xl font-black italic uppercase tracking-tighter leading-none"
+                                        initial={{ x: 100, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
+                                        className="text-5xl lg:text-[4.5vw] font-black italic uppercase tracking-tighter leading-[0.95] truncate drop-shadow-2xl"
                                     >
                                         {liveMatch.t2Name.split(' / ').map((name: string, i: number) => (
-                                            <span key={i} className={i === 1 ? 'block' : ''} style={i === 1 ? { color: liveMatch.primaryColor } : {}}>{name}{i === 0 ? ' ' : ''}</span>
+                                            <span key={i} className="block" style={i === 1 ? { color: liveMatch.primaryColor, opacity: 0.8 } : {}}>{name}</span>
                                         ))}
                                     </motion.h3>
                                 </div>
                             </div>
+
+                            {/* Set Summary & Serve Info */}
+                            <div className="mt-20 flex items-center justify-between">
+                                <div className="flex gap-6">
+                                    {[1, 2, 3].map(setNum => {
+                                        const currentSet = (liveMatch.sets?.t1 || 0) + (liveMatch.sets?.t2 || 0) + 1;
+                                        return (
+                                            <div key={setNum} className={`px-8 py-5 rounded-2xl border-2 transition-all flex flex-col items-center min-w-[140px] shadow-xl ${setNum === currentSet ? 'bg-padel-primary/20 border-padel-primary' : 'bg-white/5 border-white/5 opacity-30 blur-[1px]'}`}>
+                                                <span className="text-[10px] font-black uppercase tracking-[0.2em] mb-2 opacity-60">Set {setNum}</span>
+                                                <div className="flex gap-4 text-4xl font-black italic">
+                                                    <span>{liveMatch.games_sets?.[setNum - 1]?.t1 || (setNum === currentSet ? liveMatch.games?.t1 : 0) || 0}</span>
+                                                    <span className="text-padel-primary opacity-50">:</span>
+                                                    <span>{liveMatch.games_sets?.[setNum - 1]?.t2 || (setNum === currentSet ? liveMatch.games?.t2 : 0) || 0}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <div className="flex items-center gap-10 bg-white/5 border border-white/10 px-12 py-6 rounded-[3rem] backdrop-blur-xl shadow-2xl">
+                                    <motion.div animate={liveMatch.server?.team === 1 ? { scale: [1, 1.4, 1], opacity: 1, filter: 'brightness(1.5)' } : { opacity: 0.1 }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-12 h-12 rounded-full shadow-[0_0_50px_rgba(204,255,0,0.5)]" style={{ backgroundColor: liveMatch.primaryColor }} />
+                                    <div className="text-padel-primary font-black uppercase text-sm tracking-[0.5em] italic opacity-80">Servicio</div>
+                                    <motion.div animate={liveMatch.server?.team === 2 ? { scale: [1, 1.4, 1], opacity: 1, filter: 'brightness(1.5)' } : { opacity: 0.1 }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-12 h-12 rounded-full shadow-[0_0_50px_rgba(204,255,0,0.5)]" style={{ backgroundColor: liveMatch.primaryColor }} />
+                                </div>
+                            </div>
                         </div>
 
-                        {/* News Ticker / Footer Branding */}
-                        <div className="h-28 bg-white/5 -mx-16 -mb-16 border-t border-white/10 flex items-center overflow-hidden">
-                            <div className="flex items-center gap-16 animate-tv-ticker whitespace-nowrap px-16">
-                                <Zap className="w-8 h-8 text-padel-primary" />
-                                <span className="text-4xl font-black italic uppercase italic tracking-widest">{liveMatch.bannerText}</span>
-                                <div className="w-3 h-3 bg-padel-primary rounded-full" />
-                                <span className="text-4xl font-black italic uppercase italic tracking-widest text-gray-500">SÍGUENOS EN @PADELSMART.IO</span>
-                                <div className="w-3 h-3 bg-padel-primary rounded-full" />
-                                <span className="text-4xl font-black italic uppercase italic tracking-widest text-padel-primary">EL MEJOR PADEL DEL CARIBE</span>
-                                <Zap className="w-8 h-8 text-padel-primary" />
+                        {/* Footer Ticker */}
+                        <div className="h-32 bg-white/5 -mx-16 -mb-16 border-t border-white/10 flex items-center overflow-hidden relative z-20 backdrop-blur-sm">
+                            <div className="flex items-center gap-20 animate-tv-ticker whitespace-nowrap px-16">
+                                <Zap className="w-8 h-8 text-padel-primary fill-padel-primary" />
+                                <span className="text-5xl font-black italic uppercase tracking-widest">{liveMatch.bannerText}</span>
+                                <div className="w-4 h-4 bg-padel-primary rounded-full shadow-[0_0_20px_#ccff00]" />
+                                <span className="text-5xl font-black italic uppercase tracking-widest text-white/30">SÍGUENOS EN @PADELSMART.IO</span>
+                                <div className="w-4 h-4 bg-padel-primary rounded-full shadow-[0_0_20px_#ccff00]" />
+                                <span className="text-5xl font-black italic uppercase tracking-widest text-padel-primary">EL MEJOR PADEL DEL CARIBE</span>
+                                <Zap className="w-8 h-8 text-padel-primary fill-padel-primary" />
                             </div>
                         </div>
                     </motion.div>
@@ -291,6 +287,6 @@ export default function TVKioskPage() {
                 }
                 body { overflow: hidden; background: black; }
             `}</style>
-        </div>
+        </div >
     );
 }

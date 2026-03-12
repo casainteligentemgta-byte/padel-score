@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { MatchStatus } from '@/types/tournament';
 import { requireRole } from '@/lib/authServerSupabase';
-import { validateMatchBody, validateMatchId } from '@/lib/apiValidation';
+import { validateMatchBody, validateMatchId, sanitizeString } from '@/lib/apiValidation';
 
 export async function PATCH(
     req: Request,
@@ -29,7 +29,7 @@ export async function PATCH(
             where: { id },
             data: {
                 status: status as any,
-                score,
+                score: sanitizeString(score),
                 actualStartTime: actualStartTime ? new Date(actualStartTime) : undefined,
                 actualEndTime: actualEndTime ? new Date(actualEndTime) : undefined,
             },

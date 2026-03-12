@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './supabase/client';
+import { sanitizeString } from './apiValidation';
 
 const supabase = () => {
     const c = getSupabaseClient();
@@ -61,14 +62,35 @@ export type InscriptionData = {
     partnerName?: string;
 };
 
+function sanitizeObject(obj: any): any {
+    if (obj == null || typeof obj !== 'object') return obj;
+    const result: any = Array.isArray(obj) ? [] : {};
+    for (const key in obj) {
+        if (typeof obj[key] === 'string') {
+            result[key] = sanitizeString(obj[key]);
+        } else if (typeof obj[key] === 'object') {
+            result[key] = sanitizeObject(obj[key]);
+        } else {
+            result[key] = obj[key];
+        }
+    }
+    return result;
+}
+
 export const dataService = {
     // Media & Ticker Management
-    async getTiraInformativa() {
-        const { data, error } = await supabase()
+    async getTiraInformativa(pantallaId?: string | null) {
+        let query = supabase()
             .from('tira_informativa')
             .select('*')
-            .eq('activo', true)
-            .order('orden', { ascending: true });
+            .eq('activo', true);
+
+        if (pantallaId) {
+            // Incluir mensajes específicos de la pantalla O mensajes globales (null)
+            query = query.or(`pantalla_id.eq.${pantallaId},pantalla_id.is.null`);
+        }
+
+        const { data, error } = await query.order('orden', { ascending: true });
         if (error) throw error;
         return data || [];
     },
@@ -225,9 +247,10 @@ export const dataService = {
     },
 
     async addExpense(data: any, ownerId: string) {
+        const sanitized = sanitizeObject(data);
         const { data: row, error } = await supabase()
             .from('expenses')
-            .insert({ owner_id: ownerId, data, created_at: now(), updated_at: now() })
+            .insert({ owner_id: ownerId, data: sanitized, created_at: now(), updated_at: now() })
             .select('id')
             .single();
         if (error) throw error;
@@ -245,9 +268,10 @@ export const dataService = {
     },
 
     async addParticipant(data: any, ownerId: string) {
+        const sanitized = sanitizeObject(data);
         const { data: row, error } = await supabase()
             .from('participants')
-            .insert({ owner_id: ownerId, data, created_at: now(), updated_at: now() })
+            .insert({ owner_id: ownerId, data: sanitized, created_at: now(), updated_at: now() })
             .select('id')
             .single();
         if (error) throw error;
@@ -680,9 +704,10 @@ export const dataService = {
     },
 
     async createAd(data: any, ownerId: string) {
+        const sanitized = sanitizeObject(data);
         const { data: row, error } = await supabase()
             .from('ads')
-            .insert({ owner_id: ownerId, data, created_at: now(), updated_at: now() })
+            .insert({ owner_id: ownerId, data: sanitized, created_at: now(), updated_at: now() })
             .select('id')
             .single();
         if (error) throw error;
@@ -752,9 +777,9 @@ export const dataService = {
         const c = getSupabaseClient();
         if (!c) return;
         await c.from('admin_settings').update({
-            app_title: data.appTitle,
-            club_name: data.clubName,
-            timezone: data.timezone,
+            app_title: sanitizeString(data.appTitle),
+            club_name: sanitizeString(data.clubName),
+            timezone: sanitizeString(data.timezone),
             updated_at: now(),
         }).eq('id', 1);
     },
@@ -765,17 +790,17 @@ export const dataService = {
             .insert({
                 owner_id: ownerId,
                 tournament_id: data.tournamentId || null,
-                tournament_name: data.tournamentName,
-                category_key: data.categoryKey,
+                tournament_name: sanitizeString(data.tournamentName),
+                category_key: sanitizeString(data.categoryKey),
                 category_price: data.categoryPrice,
-                participant_name: data.participantName,
-                participant_email: data.participantEmail,
+                participant_name: sanitizeString(data.participantName),
+                participant_email: sanitizeString(data.participantEmail),
                 participant_id: data.participantId,
                 amount_extracted: data.amountExtracted,
                 receipt_url: data.receiptUrl,
                 payment_status: data.paymentStatus ?? 'pending',
-                alert_message: data.alertMessage,
-                data: {
+                alert_message: sanitizeString(data.alertMessage),
+                data: sanitizeObject({
                     paymentMethod: data.paymentMethod,
                     paymentDate: data.paymentDate,
                     paymentBank: data.paymentBank,
@@ -783,7 +808,7 @@ export const dataService = {
                     paymentReference: data.paymentReference,
                     partnerId: data.partnerId,
                     partnerName: data.partnerName,
-                },
+                }),
                 created_at: now(),
                 updated_at: now(),
             })

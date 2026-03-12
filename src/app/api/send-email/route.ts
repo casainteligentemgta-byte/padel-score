@@ -1,7 +1,12 @@
 import { Resend } from 'resend';
 import { NextResponse } from 'next/server';
+import { validateEmailBody, sanitizeString } from '@/lib/apiValidation';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 export async function POST(request: Request) {
+  if (!checkRateLimit(request)) {
+    return NextResponse.json({ error: 'Límite de envíos excedido. Intenta más tarde.' }, { status: 429 });
+  }
   const apiKey = process.env.RESEND_API_KEY;
 
   if (!apiKey) {
@@ -12,7 +17,23 @@ export async function POST(request: Request) {
   const resend = new Resend(apiKey);
 
   try {
-    const { type, data } = await request.json();
+    const body = await request.json();
+    const validation = validateEmailBody(body);
+    if (validation.error) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    const { type, data: rawData } = body;
+
+    // Sanitizar datos para evitar inyección de HTML o scripts en el email
+    const data: any = {};
+    for (const key in rawData) {
+      if (typeof rawData[key] === 'string') {
+        data[key] = sanitizeString(rawData[key]);
+      } else {
+        data[key] = rawData[key];
+      }
+    }
 
     let subject = '';
     let html = '';

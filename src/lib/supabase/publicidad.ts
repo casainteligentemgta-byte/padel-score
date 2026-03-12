@@ -42,6 +42,7 @@ export interface TiraInformativa {
   mensaje: string;
   activo: boolean;
   orden: number;
+  pantalla_id?: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -182,7 +182,7 @@ export default function PreMatchControl({ params }: { params: Promise<{ id: stri
         : `/tournaments/${id}/control`;
     const scoreHref = `/tournaments/${id}/score/${match?.id || matchId}`;
     const broadcastingHref = `/tournaments/${id}/control/broadcasting`;
-    const adsHref = `/tournaments/${id}/control/ads`;
+    const adsHref = `/admin/publicidad`;
 
     // ── Loading / error ────────────────────────────────────────────────────
     if (loading) return (

@@ -31,7 +31,9 @@ import {
   ExternalLink,
   Search,
   Clock,
-  Download
+  Download,
+  Star,
+  Megaphone
 } from 'lucide-react';
 
 const isVideoFile = (f: File) => f.type.startsWith('video/');
@@ -309,16 +311,17 @@ export default function AdminPublicidad() {
     }
   };
 
-  const syncAllScreens = async (mediaId: string | null) => {
+  const syncAllScreens = async (mediaId: string | null, type?: MediaTipo) => {
     if (!supabase || !mediaId) return;
     setSyncing(true);
+    const slot = type === 'imagen' ? 'carousel' : 'video';
     try {
       await supabase.from('display_estado').upsert(
-        pantallas.map(p => ({ pantalla_id: `${p.id}_video`, media_content_id: mediaId })),
+        pantallas.map(p => ({ pantalla_id: `${p.id}_${slot}`, media_content_id: mediaId })),
         { onConflict: 'pantalla_id' }
       );
       const newMap = { ...displayEstado };
-      pantallas.forEach(p => newMap[`${p.id}_video`] = mediaId);
+      pantallas.forEach(p => newMap[`${p.id}_${slot}`] = mediaId);
       setDisplayEstado(newMap);
     } catch (e: any) {
       setError('Error al sincronizar todas las pantallas');
@@ -334,6 +337,7 @@ export default function AdminPublicidad() {
         mensaje: nuevoMensaje.trim(),
         activo: true,
         orden: tiraList.length,
+        pantalla_id: null,
       });
       setNuevoMensaje('');
       await fetchTira();
@@ -349,6 +353,26 @@ export default function AdminPublicidad() {
       await fetchTira();
     } catch (e: any) {
       setError(e?.message || 'Error al eliminar');
+    }
+  };
+
+  const updateTiraOrden = async (id: string, nuevoOrden: number) => {
+    if (!supabase) return;
+    try {
+      await supabase.from('tira_informativa').update({ orden: nuevoOrden }).eq('id', id);
+      await fetchTira();
+    } catch (e: any) {
+      setError('Error al actualizar orden');
+    }
+  };
+
+  const updateTiraPantalla = async (id: string, pantallaId: string | null) => {
+    if (!supabase) return;
+    try {
+      await supabase.from('tira_informativa').update({ pantalla_id: pantallaId }).eq('id', id);
+      await fetchTira();
+    } catch (e: any) {
+      setError('Error al actualizar pantalla de la tira');
     }
   };
 
@@ -382,90 +406,127 @@ export default function AdminPublicidad() {
     }
   };
 
+  const isMediaAssignedToScreen = (mediaId: string, pantallaId: string, type: MediaTipo) => {
+    const slot = type === 'imagen' ? 'carousel' : 'video';
+    const key = `${pantallaId}_${slot}`;
+    // Check for suffixed key OR legacy bare key (if video slot)
+    return displayEstado[key] === mediaId || (slot === 'video' && displayEstado[pantallaId] === mediaId);
+  };
+
+  const areAllScreensAssigned = (mediaId: string, type: MediaTipo) => {
+    if (pantallas.length === 0) return false;
+    return pantallas.every(p => isMediaAssignedToScreen(mediaId, p.id, type));
+  };
+
   const renderTable = (items: MediaContent[], accentClass: string) => (
     <div className="overflow-hidden bg-black/20 border border-white/5 rounded-[2rem]">
       <div className="max-h-[350px] overflow-y-auto custom-scroll">
         <table className="w-full text-left border-collapse">
           <thead className="sticky top-0 bg-[#0c0c0c] z-10">
-            <tr className="border-b border-white/5">
-              <th className="px-6 py-5 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Contenido</th>
-              <th className="px-6 py-5 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center">Emisión</th>
-              <th className="px-6 py-5 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center">Tiempo (s)</th>
-              <th className="px-6 py-5 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center">Borrar</th>
-              <th className="px-6 py-5 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center">Descargar</th>
-              <th className="px-6 py-5 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center">Vista</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/[0.03]">
-            <AnimatePresence>
-              {items.map((item) => (
-                <motion.tr
-                  key={item.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className={`group hover:bg-white/[0.02] transition-colors ${!item.activa ? 'opacity-40 grayscale-[0.5]' : ''}`}
-                >
-                  <td className="px-6 py-5">
-                    <div className="flex items-center gap-4">
-                      <div className="w-8 h-8 rounded-lg bg-black/40 flex items-center justify-center border border-white/5">
-                        {item.tipo.includes('video') ? <Video size={14} className="text-padel-primary" /> : item.tipo === 'imagen' ? <ImageIcon size={14} className="text-blue-400" /> : item.tipo === 'url_web' ? <ExternalLink size={14} className="text-orange-400" /> : <Layers size={14} className="text-purple-400" />}
+                <tr className="border-b border-white/5">
+                  <th className="px-3 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 w-[110px]">Contenido</th>
+                  <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-[110px]">Asignar</th>
+                  <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-[45px]">Emisión</th>
+                  <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-[55px]">Tiempo</th>
+                  <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-8"></th>
+                  <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-8"></th>
+                  <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-8"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/[0.03]">
+                <AnimatePresence>
+                  {items.map((item) => (
+                    <motion.tr
+                      key={item.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className={`group hover:bg-white/[0.02] transition-colors ${item.activa === false ? 'opacity-40 grayscale-[0.5]' : ''}`}
+                    >
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="shrink-0 w-6 h-6 rounded-lg bg-black/40 flex items-center justify-center border border-white/5">
+                          {item.tipo.includes('video') ? <Video size={10} className="text-padel-primary" /> : item.tipo === 'imagen' ? <ImageIcon size={10} className="text-blue-400" /> : item.tipo === 'url_web' ? <ExternalLink size={10} className="text-orange-400" /> : <Layers size={10} className="text-purple-400" />}
+                        </div>
+                        <input
+                          type="text"
+                          defaultValue={item.nombre_sponsor || item.nombre || 'Sin título'}
+                          onBlur={(e) => updateMediaName(item.id, e.target.value)}
+                          className={`bg-transparent border-none outline-none text-[9px] font-black uppercase tracking-tight italic text-white focus:${accentClass} group-hover:text-padel-primary transition-colors truncate w-full max-w-[90px]`}
+                        />
                       </div>
-                      <input
-                        type="text"
-                        defaultValue={item.nombre_sponsor || item.nombre || 'Sin título'}
-                        onBlur={(e) => updateMediaName(item.id, e.target.value)}
-                        className={`bg-transparent border-none outline-none text-xs font-black uppercase tracking-tight italic text-white focus:${accentClass} group-hover:text-padel-primary transition-colors truncate max-w-[300px]`}
-                      />
-                    </div>
-                  </td>
-                  <td className="px-6 py-5 text-center">
+                    </td>
+                    <td className="px-2 py-3 text-center">
+                      <div className="flex flex-wrap items-center justify-center gap-1 max-w-[110px] mx-auto">
+                        <button
+                          onClick={() => syncAllScreens(item.id, item.tipo)}
+                          className={`flex items-center justify-center shrink-0 w-7 h-7 rounded-lg border transition-all duration-300 ${areAllScreensAssigned(item.id, item.tipo) ? 'bg-padel-primary text-black border-padel-primary shadow-[0_0_8px_rgba(204,255,0,0.3)]' : 'bg-white/5 text-white/20 border-white/5 hover:border-white/10'}`}
+                          title="Todas las pantallas"
+                        >
+                          <span className="text-[10px] font-black uppercase tracking-tight">T</span>
+                        </button>
+                        {pantallas.map((p, idx) => {
+                          const isAssigned = isMediaAssignedToScreen(item.id, p.id, item.tipo);
+                          const num = (p.nombre.match(/\d+/) || [idx + 1])[0];
+                          return (
+                            <button
+                              key={`${item.id}-${p.id}`}
+                              onClick={() => setPantallaContenido(p.id, item.id, item.tipo === 'imagen' ? 'carousel' : 'video')}
+                              className={`flex items-center justify-center shrink-0 w-7 h-7 rounded-lg border transition-all duration-300 ${isAssigned ? 'bg-orange-500 text-white border-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.3)]' : 'bg-white/5 text-white/20 border-white/5 hover:border-white/10'}`}
+                              title={p.nombre}
+                            >
+                              <span className="text-[10px] font-black uppercase tracking-tight">{num}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </td>
+                  <td className="px-2 py-3 text-center">
                     <button
                       onClick={() => toggleMediaSelection(item.id, !!item.activa)}
-                      className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none ${item.activa ? 'bg-padel-primary/40' : 'bg-white/10'}`}
+                      className={`relative inline-flex h-3.5 w-7 items-center rounded-full transition-colors focus:outline-none ${item.activa !== false ? 'bg-padel-primary/40' : 'bg-white/10'}`}
                     >
                       <span
-                        className={`${item.activa ? 'translate-x-5 bg-padel-primary' : 'translate-x-1 bg-gray-500'
-                          } inline-block h-3 w-3 transform rounded-full transition-transform`}
+                        className={`${item.activa !== false ? 'translate-x-3.5 bg-padel-primary' : 'translate-x-0.5 bg-gray-500'
+                          } inline-block h-2.5 w-2.5 transform rounded-full transition-transform`}
                       />
                     </button>
                   </td>
-                  <td className="px-6 py-5 text-center">
-                    <div className="flex items-center justify-center gap-2">
+                  <td className="px-2 py-3 text-center">
+                    <div className="flex items-center justify-center gap-1.5">
                       <input
                         type="number"
                         min="1"
                         max="300"
                         defaultValue={item.duracion_segundos || 10}
                         onBlur={(e) => updateMediaDuration(item.id, parseInt(e.target.value) || 10)}
-                        className="w-16 bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] font-black text-center text-white outline-none focus:border-white/20"
+                        className="w-10 bg-black/40 border border-white/10 rounded-lg px-1 py-1 text-[8px] font-black text-center text-white outline-none focus:border-white/20"
                       />
-                      <Clock size={12} className="opacity-20" />
                     </div>
                   </td>
-                  <td className="px-6 py-5 text-center">
+                  <td className="px-1 py-3 text-center">
                     <button
                       onClick={() => deleteMedia(item.id)}
-                      className="p-2 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                      className="p-1 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={12} />
                     </button>
                   </td>
-                  <td className="px-6 py-5 text-center">
+                  <td className="px-1 py-3 text-center">
                     <button
                       onClick={() => handleDownload(item.url, (item.nombre_sponsor || item.nombre) || '')}
-                      className="p-2 opacity-40 hover:opacity-100 hover:bg-white/5 rounded-xl transition-all text-white"
+                      className="p-1 opacity-40 hover:opacity-100 hover:bg-white/5 rounded-lg transition-all text-white"
                       title="Descargar archivo"
                     >
-                      <Download size={16} />
+                      <Download size={12} />
                     </button>
                   </td>
-                  <td className="px-6 py-5 text-center">
+                  <td className="px-1 py-3 text-center">
                     <button
                       onClick={() => setPreviewUrl(item.url)}
-                      className={`p-2 ${accentClass} opacity-40 hover:opacity-100 hover:bg-white/5 rounded-xl transition-all`}
+                      className={`p-1 ${accentClass} opacity-40 hover:opacity-100 hover:bg-white/5 rounded-lg transition-all`}
                     >
-                      {item.tipo.includes('video') ? <Play size={16} fill="currentColor" /> : <Eye size={16} />}
+                      {item.tipo.includes('video') ? <Play size={12} fill="currentColor" /> : <Eye size={12} />}
                     </button>
                   </td>
                 </motion.tr>
@@ -473,7 +534,7 @@ export default function AdminPublicidad() {
             </AnimatePresence>
             {items.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-8 py-20 text-center opacity-20 italic font-bold uppercase text-[10px] tracking-widest">
+                <td colSpan={7} className="px-8 py-20 text-center opacity-20 italic font-bold uppercase text-[10px] tracking-widest">
                   No hay archivos en esta categoría
                 </td>
               </tr>
@@ -497,7 +558,7 @@ export default function AdminPublicidad() {
   return (
     <div className="min-h-screen bg-[#050505] text-white flex font-outfit selection:bg-padel-primary selection:text-black">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto px-8 py-10 relative">
+      <main className="flex-1 overflow-y-auto px-4 py-8 relative">
         {/* Ambient background */}
         <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-30">
           <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-padel-primary/10 blur-[130px] rounded-full animate-pulse" />
@@ -531,7 +592,7 @@ export default function AdminPublicidad() {
           </motion.div>
         )}
 
-        <div className="max-w-5xl space-y-8 relative z-10">
+        <div className="max-w-6xl space-y-8 relative z-10 mx-auto">
 
           {/* LIBRARY SECTIONS */}
           <div className="space-y-8">
@@ -689,42 +750,130 @@ export default function AdminPublicidad() {
 
             {/* MARQUEE SECTION */}
             <section className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8">
-              <h2 className="text-xl font-black uppercase italic mb-6">Tira <span className="text-padel-primary">Informativa</span></h2>
-              <div className="flex gap-4 mb-8">
-                <input
-                  type="text"
-                  placeholder="ESCRIBIR MENSAJE PARA SCROLL..."
-                  value={nuevoMensaje}
-                  onChange={(e) => setNuevoMensaje(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addMensajeTira()}
-                  className="flex-1 bg-black/40 border border-white/5 rounded-2xl px-6 py-4 outline-none focus:border-padel-primary/30 transition-all font-bold text-xs uppercase"
-                />
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-2xl font-black uppercase italic tracking-tighter tracking-widest">
+                    Tira <span className="text-padel-primary">Informativa</span>
+                  </h2>
+                  <p className="text-[8px] font-bold text-white/30 uppercase tracking-widest mt-1">Gestión de noticias y anuncios en scroll</p>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-padel-primary/10 flex items-center justify-center border border-padel-primary/20">
+                  <Megaphone className="w-6 h-6 text-padel-primary" />
+                </div>
+              </div>
+
+              <div className="flex gap-4 mb-10 group">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    placeholder="Escribe una noticia o anuncio importante..."
+                    value={nuevoMensaje}
+                    onChange={(e) => setNuevoMensaje(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addMensajeTira()}
+                    className="w-full bg-black/40 border border-white/5 rounded-2xl px-8 py-5 outline-none focus:border-padel-primary/50 transition-all font-black text-xs uppercase text-white placeholder:text-white/10 shadow-inner"
+                  />
+                  <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-20 group-focus-within:opacity-100 transition-opacity">
+                    <Plus className="w-4 h-4 text-padel-primary" />
+                  </div>
+                </div>
                 <button
                   onClick={addMensajeTira}
                   disabled={!nuevoMensaje.trim()}
-                  className="px-6 bg-padel-primary text-black rounded-2xl font-black uppercase italic text-xs hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+                  className="px-10 bg-padel-primary text-black rounded-2xl font-black uppercase italic text-xs hover:scale-105 active:scale-95 transition-all disabled:opacity-30 disabled:grayscale shadow-[0_0_20px_rgba(204,255,0,0.1)]"
                 >
                   Agregar
                 </button>
               </div>
 
-              <div className="space-y-3">
-                {tiraList.map((t) => (
-                  <motion.div
-                    key={t.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/10 transition-all"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-2 h-2 rounded-full bg-padel-primary animate-pulse" />
-                      <span className="text-xs font-bold uppercase tracking-tight">{t.mensaje}</span>
+              {/* Live Preview */}
+              {tiraList.length > 0 && (
+                <div className="mb-10 p-1 bg-gradient-to-r from-padel-primary/20 via-transparent to-padel-primary/20 rounded-xl overflow-hidden">
+                  <div className="bg-black/60 py-3 overflow-hidden relative">
+                    <div className="flex whitespace-nowrap animate-marquee">
+                      {tiraList.map((t, idx) => (
+                        <div key={t.id} className="flex items-center px-8">
+                          <Star className="w-3 h-3 text-padel-primary mr-3 fill-padel-primary/20" />
+                          <span className="text-[10px] font-black italic uppercase tracking-widest text-white/80">{t.mensaje}</span>
+                        </div>
+                      ))}
+                      {/* Duplicate for loop */}
+                      {tiraList.map((t, idx) => (
+                        <div key={`dup-${t.id}`} className="flex items-center px-8">
+                          <Star className="w-3 h-3 text-padel-primary mr-3 fill-padel-primary/20" />
+                          <span className="text-[10px] font-black italic uppercase tracking-widest text-white/80">{t.mensaje}</span>
+                        </div>
+                      ))}
                     </div>
-                    <button onClick={() => deleteTira(t.id)} className="text-red-500 p-2 hover:bg-red-500/10 rounded-xl transition-all">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </motion.div>
-                ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-3">
+                <AnimatePresence mode="popLayout">
+                  {tiraList.map((t, index) => (
+                    <motion.div
+                      key={t.id}
+                      layout
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      className="group flex items-center justify-between p-5 bg-black/40 border border-white/5 rounded-2xl hover:border-white/10 transition-all"
+                    >
+                      <div className="flex items-center gap-5">
+                        <div className="flex flex-col gap-1">
+                          <button
+                            onClick={() => index > 0 && updateTiraOrden(t.id, index - 1)}
+                            disabled={index === 0}
+                            className="p-1 hover:text-padel-primary disabled:opacity-0 transition-colors"
+                          >
+                            <ChevronRight className="w-3 h-3 -rotate-90" />
+                          </button>
+                          <button
+                            onClick={() => index < tiraList.length - 1 && updateTiraOrden(t.id, index + 1)}
+                            disabled={index === tiraList.length - 1}
+                            className="p-1 hover:text-padel-primary disabled:opacity-0 transition-colors"
+                          >
+                            <ChevronRight className="w-3 h-3 rotate-90" />
+                          </button>
+                        </div>
+                        <div className="w-2 h-2 rounded-full bg-padel-primary group-hover:shadow-[0_0_10px_rgba(204,255,0,0.5)] transition-shadow" />
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[11px] font-black uppercase tracking-tight text-white/90 group-hover:text-white transition-colors">{t.mensaje}</span>
+                          <div className="flex flex-wrap items-center gap-1.5 max-w-[300px] md:max-w-none pb-1">
+                            <button
+                              onClick={() => updateTiraPantalla(t.id, null)}
+                              className={`flex items-center shrink-0 gap-1.5 px-3 py-1.5 rounded-xl border transition-all duration-300 ${!t.pantalla_id ? 'bg-padel-primary text-black border-padel-primary shadow-[0_0_15px_rgba(204,255,0,0.4)] scale-105' : 'bg-white/5 text-white/20 border-white/5 hover:border-white/10 hover:text-white/40'}`}
+                            >
+                              <Zap size={10} className={!t.pantalla_id ? 'text-black animate-pulse' : 'text-gray-600'} />
+                              <span className="text-[8px] font-black uppercase tracking-tight">Todas</span>
+                            </button>
+                            {pantallas.map(p => (
+                              <button
+                                key={`${t.id}-${p.id}`}
+                                onClick={() => updateTiraPantalla(t.id, p.id)}
+                                className={`flex items-center shrink-0 gap-1.5 px-3 py-1.5 rounded-xl border transition-all duration-300 ${t.pantalla_id === p.id ? 'bg-orange-500 text-white border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.4)] scale-105' : 'bg-white/5 text-white/20 border-white/5 hover:border-white/10 hover:text-white/40'}`}
+                              >
+                                <Monitor size={10} className={t.pantalla_id === p.id ? 'text-white animate-pulse' : 'text-gray-600'} />
+                                <span className="text-[8px] font-black uppercase tracking-tight whitespace-nowrap">{p.nombre}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => deleteTira(t.id)}
+                        className="p-3 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+                {tiraList.length === 0 && (
+                  <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[2rem] opacity-20 italic font-black uppercase text-[9px] tracking-[0.3em]">
+                    No hay mensajes activos en la tira
+                  </div>
+                )}
               </div>
             </section>
 

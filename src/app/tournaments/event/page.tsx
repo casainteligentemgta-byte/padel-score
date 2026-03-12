@@ -240,12 +240,16 @@ function EventView() {
         return 1;
     })();
 
-    const allPending = allMatches.filter(m => m.status === MatchStatus.PENDING);
+    const isMatchLive = (status: any) => status === 'LIVE' || status === 'IN_PROGRESS' || status === 'STARTED';
+    const isMatchPending = (status: any) => status === 'PENDING' || !status;
+    const isMatchFinished = (status: any) => status === 'FINISHED' || status === 'COMPLETED';
+
+    const allPending = allMatches.filter(m => isMatchPending(m.status));
     const numSlotsPorComenzar = Math.min(numCanchas, allPending.length);
     const nextUpMatches = allPending.slice(0, numSlotsPorComenzar);
 
     const effectiveLiveMatches = allMatches
-        .filter(m => m.status === MatchStatus.LIVE)
+        .filter(m => isMatchLive(m.status))
         .sort((a, b) => Number(a.court ?? 99) - Number(b.court ?? 99))
         .slice(0, numCanchas);
 
@@ -259,6 +263,9 @@ function EventView() {
     const filtered = allMatches.filter(m => {
         if (activeTab === 'all') return true;
         if (activeTab === 'groups' || activeTab === 'rules') return false;
+        if (activeTab === 'live') return isMatchLive(m.status);
+        if (activeTab === MatchStatus.PENDING) return isMatchPending(m.status);
+        if (activeTab === MatchStatus.FINISHED) return isMatchFinished(m.status);
         return m.status === activeTab;
     });
 
@@ -282,6 +289,12 @@ function EventView() {
             setSavingSponsor(false);
         }
     };
+
+    const handleUploadSponsorLogo = async (file: File) => {
+        const path = `logos/${Date.now()}_${file.name}`;
+        return await dataService.uploadFile(file, path, 'patrocinantes');
+    };
+
 
     const handleSaveEventRules = async () => {
         setSavingEventRules(true);
@@ -414,8 +427,10 @@ function EventView() {
                 linkDraft={sponsorLinkDraft}
                 setLinkDraft={setSponsorLinkDraft}
                 onSave={handleSaveSponsor}
+                onUpload={handleUploadSponsorLogo}
                 saving={savingSponsor}
             />
+
 
             <RulesModal
                 isOpen={isEventRulesEditOpen}

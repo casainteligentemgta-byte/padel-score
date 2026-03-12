@@ -3,12 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
-import { Trophy, Calendar, MapPin, ChevronRight, Plus, RefreshCw, LogOut, Trash2, User } from 'lucide-react';
+import { Trophy, Calendar, MapPin, ChevronRight, ChevronLeft, Plus, RefreshCw, LogOut, Trash2, User } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import LoginButton from '@/components/LoginButton';
 
-import Sidebar from '@/components/Sidebar';
 import { BouncingBall } from '@/components/BouncingBall';
 import { formatDate } from '@/lib/formatters';
 
@@ -72,13 +71,16 @@ export default function MyTournamentsPage() {
 
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
-            <Sidebar />
-
-            {/* ── Header compacto ── */}
-            <div className="flex items-center justify-between gap-3 mb-2 flex-shrink-0 pl-20 md:pl-24 pr-4">
-                <div className="flex items-center gap-3">
+            <div className="pt-8 px-6 md:px-12 flex items-center justify-between gap-3 mb-2 flex-shrink-0">
+                <div className="flex items-center gap-2">
+                    <Link
+                        href="/admin"
+                        className="text-gray-500 hover:text-padel-primary transition-colors mr-1"
+                    >
+                        <ChevronLeft className="w-7 h-7" />
+                    </Link>
                     <BouncingBall size={28} />
-                    <div>
+                    <div className="ml-1">
                         <h1 className="title-page leading-none">
                             <span className="text-padel-primary">Torneos</span>
                         </h1>

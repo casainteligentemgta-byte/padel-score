@@ -86,10 +86,10 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         else if (tab === 'por-comenzar') setActiveTab('Por Comenzar');
     }, [searchParams]);
 
-    // En Vivo oculto para no admin/propietario: si estaban en En Vivo, pasar a Por Comenzar
+    // En Vivo visible para todos
     useEffect(() => {
-        if (!canManageTournament && activeTab === 'En Vivo') setActiveTab('Por Comenzar');
-    }, [canManageTournament, activeTab]);
+        // No longer forcing redirect to 'Por Comenzar' for non-admins
+    }, [activeTab]);
 
     // We allow guests to view the dashboard
     useEffect(() => {
@@ -703,8 +703,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     // Reglas solo en evento (event page), no por categoría
     const deduped = [...new Set(tabs)];
     const uniqueTabs = deduped;
-    // En Vivo solo visible para administradores y propietarios del torneo
-    const visibleTabs = canManageTournament ? uniqueTabs : uniqueTabs.filter(t => t !== 'En Vivo');
+    const visibleTabs = uniqueTabs;
 
     // ── Pre-compute "Por Comenzar" data ONCE (fuera del .filter) ─────────────
     const _toMsT = (v: any): number => {
@@ -1856,7 +1855,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                                 <span className="text-[7px] font-black uppercase tracking-widest leading-none">Cámaras</span>
                                                                             </Link>
                                                                             <Link
-                                                                                href={id ? `/tournaments/${id}/control/ads` : '#'}
+                                                                                href={`/admin/publicidad`}
                                                                                 className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-yellow-400 transition-all active:scale-90"
                                                                             >
                                                                                 <Tv className="w-3.5 h-3.5" />

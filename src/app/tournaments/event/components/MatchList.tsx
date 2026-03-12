@@ -161,10 +161,10 @@ export const MatchList: React.FC<MatchListProps> = ({
                             </span>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {allMatches.filter(m => m.status === MatchStatus.LIVE).map((m, idx) => (
+                            {allMatches.filter(m => m.status === 'LIVE' || m.status === 'IN_PROGRESS' || m.status === 'STARTED').map((m, idx) => (
                                 <NextMatchCard key={m.id} match={m} rank={idx} compact matchNumber={allMatches.indexOf(m) + 1} />
                             ))}
-                            {allMatches.filter(m => m.status === MatchStatus.LIVE).length === 0 && (
+                            {allMatches.filter(m => m.status === 'LIVE' || m.status === 'IN_PROGRESS' || m.status === 'STARTED').length === 0 && (
                                 <div className="py-10 text-center border border-dashed border-white/5 rounded-[2rem] opacity-20">
                                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Sin partidos en curso</p>
                                 </div>
@@ -219,13 +219,13 @@ export const MatchList: React.FC<MatchListProps> = ({
                             <div className="flex-1 h-px bg-white/5" />
                         </div>
                         <div className="space-y-3">
-                            {allMatches.filter(m => m.status === MatchStatus.FINISHED).length === 0 ? (
+                            {allMatches.filter(m => m.status === 'FINISHED' || m.status === 'COMPLETED').length === 0 ? (
                                 <div className="py-10 text-center border border-dashed border-white/5 rounded-[2rem] opacity-20">
                                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Aún no hay resultados</p>
                                 </div>
                             ) : (
                                 [...allMatches]
-                                    .filter(m => m.status === MatchStatus.FINISHED)
+                                    .filter(m => m.status === 'FINISHED' || m.status === 'COMPLETED')
                                     .reverse()
                                     .map((m, idx) => (
                                         <MatchCard

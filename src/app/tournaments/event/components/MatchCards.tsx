@@ -75,7 +75,7 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
         ? `/tournaments/${match._tournamentId}/display/${match.id}`
         : `/tournaments/${match._tournamentId}/control`;
     const camasHref = `/tournaments/${match._tournamentId}/control/broadcasting`;
-    const adsHref = `/tournaments/${match._tournamentId}/control/broadcasting`;
+    const adsHref = `/admin/publicidad`;
 
     if (compact) {
         return (
@@ -124,15 +124,18 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                 </div>
 
                 {/* Jugadores compactos */}
-                <div className="px-2 py-2 flex-1 flex flex-col gap-1 bg-[#ccff00]/5 border-y-2 border-[#ccff00]/30">
+                <div className="px-2 py-2 flex-1 flex flex-col gap-1 bg-[#ccff00]/5 border-y-2 border-[#ccff00]/30 justify-center">
                     <div className="text-center">
-                        <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t1p1}</p>
+                        <p className="text-[10px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t1p1}</p>
+                        {t1p2 && <p className="text-[8px] font-bold text-[#ccff00]/70 uppercase tracking-tighter truncate">{t1p2}</p>}
                     </div>
-                    <div className="text-[8px] font-black text-[#ccff00]/70 text-center italic leading-none">vs</div>
+                    <div className="text-[8px] font-black text-[#ccff00]/40 text-center italic leading-none my-0.5">vs</div>
                     <div className="text-center">
-                        <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t2p1}</p>
+                        <p className="text-[10px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t2p1}</p>
+                        {t2p2 && <p className="text-[8px] font-bold text-[#ccff00]/70 uppercase tracking-tighter truncate">{t2p2}</p>}
                     </div>
                 </div>
+
 
                 {/* Action Dock */}
                 <div className={`grid ${(!isLive && match._tournamentId) ? 'grid-cols-5' : 'grid-cols-4'} gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40 overflow-hidden`}>

@@ -8,9 +8,9 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export function getAuthErrorMessage(err: any): string {
-  if (!err) return 'Ocurrió un error inesperado.';
+  if (!err) return 'Ocurrió un error inesperado (no payload).';
 
-  const msg: string = err?.message || err?.error_description || (typeof err === 'string' ? err : '');
+  const msg: string = err?.message || err?.error_description || err?.msg || (typeof err === 'string' ? err : JSON.stringify(err));
 
   if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
     return ERROR_MESSAGES['Invalid login credentials'];
@@ -25,13 +25,6 @@ export function getAuthErrorMessage(err: any): string {
     return ERROR_MESSAGES['Password should be at least 6 characters'];
   }
 
-  // Errores de red o configuración
-  if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
-    return 'Error de red. Comprueba tu conexión.';
-  }
-  if (msg.includes('Supabase') && msg.includes('configurado')) {
-    return msg; // Show the detailed error from dataService or client
-  }
-
-  return msg ? `Error: ${msg}` : 'Error en la autenticación. Intenta de nuevo.';
+  // To debug exactly what NEXT is reading/failing on:
+  return `Raw Auth Error: ${msg}`;
 }
