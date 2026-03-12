@@ -115,6 +115,12 @@ const COLORS = [
 const COMPLEXES = [
     { name: 'Food Kart', courts: 3 },
     { name: 'El Bodeguero', courts: 3 },
+    { name: 'Margarita Padel', courts: 6 },
+    { name: 'Tibisay', courts: 3 },
+    { name: 'Sun Sol Costa Azul', courts: 4 },
+    { name: 'Elite', courts: 4 },
+    { name: 'Sun Sol Pedro Gonzalez', courts: 2 },
+    { name: 'Playa el Agua', courts: 3 },
 ];
 
 // ── Estado inicial limpio del Generador Maestro ─────────────────────────

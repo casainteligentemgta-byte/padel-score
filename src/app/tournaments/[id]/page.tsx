@@ -448,7 +448,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         if (!tournament) return null;
         const pdf = new jsPDF();
         const tournamentName = tournament.name || 'Torneo de Padel';
-        const complexName = tournament.complexName || 'Food Kart';
+        const complexName = tournament.complexName || 'Margarita Padel';
         const category = formatCat(tournament.category);
         const gender = tournament.gender ? formatGender(tournament.gender) : '';
 
