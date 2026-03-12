@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
 import { AppSettingsProvider } from "@/lib/AppSettingsContext";
@@ -7,6 +7,20 @@ import RootErrorBoundary from "./RootErrorBoundary";
 export const metadata: Metadata = {
     title: "Smart Padel | Tournament Manager",
     description: "La plataforma inteligente para gestionar torneos de pádel.",
+    manifest: "/manifest.json",
+    appleWebApp: {
+        capable: true,
+        statusBarStyle: "black-translucent",
+        title: "Padel Score",
+    },
+};
+
+export const viewport: Viewport = {
+    themeColor: "#0a0a0a",
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
 };
 
 export default function RootLayout({
