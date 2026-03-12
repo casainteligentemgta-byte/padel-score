@@ -126,7 +126,7 @@ export default function Sidebar() {
                                         </h2>
                                     </div>
                                     <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest pl-9">
-                                        {clubName || 'PADEL EXPERIENCE'}
+                                        {clubName || 'El Bodeguero'}
                                     </p>
                                 </div>
                                 <button

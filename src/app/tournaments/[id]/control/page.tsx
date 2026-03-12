@@ -63,7 +63,7 @@ function formatGender(gender: string | undefined): string {
 
 const CAT_LEVEL_LABELS: Record<string, string> = {
     PRIMERA: '1ª', SEGUNDA: '2ª', TERCERA: '3ª', CUARTA: '4ª', QUINTA: '5ª', SEXTA: '6ª', SEPTIMA: '7ª',
-    MAS_45: '+45', MAS_50: '+50',
+    MAS_40: '+40', FEM_40: '+40', MIX_40: '+40', MAS_45: '+45', MAS_50: '+50',
     SUMA_7: 'Suma 7', SUMA_8: 'Suma 8', SUMA_9: 'Suma 9', SUMA_10: 'Suma 10', SUMA_11: 'Suma 11',
 };
 function formatCategoryLevel(cat: string | undefined): string {
@@ -149,7 +149,6 @@ function MiniDock({
         <div className="grid grid-cols-5 border-t border-white/[0.06] rounded-b-2xl overflow-hidden">
             <Link
                 href={`/tournaments/${tournamentId}/score/${match.id}`}
-                onClick={() => !isLive && onStartMatch(match.id)}
                 className={`flex flex-col items-center justify-center gap-1.5 py-3.5 transition-all active:scale-95 border-r border-white/[0.05]
                     ${isLive
                         ? 'bg-padel-primary/10 text-padel-primary hover:bg-padel-primary/20'

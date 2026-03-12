@@ -5,10 +5,13 @@ import Link from 'next/link';
 import {
     ArrowLeft, Tv, FileText, Share2, Calendar, Clock
 } from 'lucide-react';
+import { formatCategory, formatGender } from '../utils';
 
 interface TournamentHeaderProps {
     eventName: string;
     complexName?: string;
+    category?: string;
+    gender?: string;
     eventDate: any;
     allMatchesCount: number;
     liveCnt: number;
@@ -26,6 +29,8 @@ interface TournamentHeaderProps {
 export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
     eventName,
     complexName,
+    category,
+    gender,
     eventDate,
     allMatchesCount,
     liveCnt,
@@ -81,6 +86,13 @@ export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
                         <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mt-1 truncate">
                             {complexName}
                         </p>
+                    )}
+                    {(category || gender) && (
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-black uppercase italic tracking-widest text-[#ccff00]/90">
+                            {category && <span>{formatCategory(category)}</span>}
+                            {category && gender && <span className="text-white/30">•</span>}
+                            {gender && <span>{formatGender(gender)}</span>}
+                        </div>
                     )}
                     {eventDate && (
                         <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mt-0.5 flex items-center gap-1">

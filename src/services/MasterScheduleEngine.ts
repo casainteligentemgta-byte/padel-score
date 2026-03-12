@@ -136,7 +136,7 @@ export class MasterScheduleEngine {
         const KNOCKOUT_PRIORITY: Record<string, number> = {
             SEPTIMA: 1, SEXTA: 2, QUINTA: 3, CUARTA: 4, TERCERA: 5, SEGUNDA: 6, PRIMERA: 7,
             SUMA_7: 8, SUMA_8: 9, SUMA_9: 10, SUMA_10: 11, SUMA_11: 12,
-            MAS_45: 13, MAS_50: 14, MIXED: 15, MALE: 16, FEMALE: 17,
+            MAS_40: 12.5, FEM_40: 12.6, MIX_40: 12.7, MAS_45: 13, MAS_50: 14, MIXED: 15, MALE: 16, FEMALE: 17,
         };
         const sortByKnockoutPriority = (matches: any[]): any[] =>
             [...matches].sort((a, b) => (KNOCKOUT_PRIORITY[a.category] ?? 99) - (KNOCKOUT_PRIORITY[b.category] ?? 99));

@@ -146,6 +146,9 @@ export default function NewTournamentPage() {
         { id: TournamentCategory.QUINTA, label: '5ª Categoría' },
         { id: TournamentCategory.SEXTA, label: '6ª Categoría' },
         { id: TournamentCategory.SEPTIMA, label: '7ª Categoría' },
+        { id: TournamentCategory.MAS_40, label: '+40 Masc.' },
+        { id: TournamentCategory.FEM_40, label: '+40 Fem.' },
+        { id: TournamentCategory.MIX_40, label: '+40 Mixto' },
         { id: TournamentCategory.MAS_45, label: '+45' },
         { id: TournamentCategory.MAS_50, label: '+50' },
         { id: TournamentCategory.SUMA_7, label: 'Suma 7' },
@@ -156,14 +159,8 @@ export default function NewTournamentPage() {
     ];
 
     const COMPLEXES = [
-        { name: 'Margarita Padel', courts: 6 },
-        { name: 'Tibisay', courts: 3 },
-        { name: 'Sun Sol Costa Azul', courts: 4 },
         { name: 'Food Kart', courts: 3 },
-        { name: 'Elite', courts: 4 },
-        { name: 'PADEL EXPERIENCE', courts: 3 },
-        { name: 'Sun Sol Pedro Gonzalez', courts: 2 },
-        { name: 'Playa el Agua', courts: 3 },
+        { name: 'El Bodeguero', courts: 3 },
     ];
 
     const generateTournament = async () => {

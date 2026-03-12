@@ -25,9 +25,8 @@ export function createClient(): SupabaseClient {
     return client;
 }
 
-/** Devuelve el cliente solo en el cliente y si las variables están configuradas (no lanza). */
+/** Devuelve el cliente y no lanza si las variables están configuradas. */
 export function getSupabaseClient(): SupabaseClient | null {
-    if (typeof window === 'undefined') return null;
     if (!supabaseUrl || !supabaseAnonKey) {
         return null;
     }

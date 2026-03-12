@@ -348,6 +348,8 @@ function EventView() {
                     return raw;
                 })()}
                 complexName={firstT?.complexName}
+                category={firstT?.category}
+                gender={firstT?.gender}
                 eventDate={firstT?.startDate}
                 allMatchesCount={allMatches.length}
                 liveCnt={liveCnt}

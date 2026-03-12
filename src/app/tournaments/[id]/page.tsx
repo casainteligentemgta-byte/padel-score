@@ -448,7 +448,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         if (!tournament) return null;
         const pdf = new jsPDF();
         const tournamentName = tournament.name || 'Torneo de Padel';
-        const complexName = tournament.complexName || 'Margarita Padel';
+        const complexName = tournament.complexName || 'Food Kart';
         const category = formatCat(tournament.category);
         const gender = tournament.gender ? formatGender(tournament.gender) : '';
 
@@ -675,7 +675,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
 
     // ── Etiquetas legibles para categorías ────────────────────────────────
     const CAT_LABEL: Record<string, string> = {
-        MAS_45: '+45', MAS_50: '+50',
+        MAS_40: '+40', FEM_40: '+40', MIX_40: '+40', MAS_45: '+45', MAS_50: '+50',
         SUMA_7: 'Suma 7', SUMA_8: 'Suma 8', SUMA_9: 'Suma 9',
         SUMA_10: 'Suma 10', SUMA_11: 'Suma 11',
         PRIMERA: '1ª Cat.', SEGUNDA: '2ª Cat.', TERCERA: '3ª Cat.',
@@ -720,7 +720,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     // Esta es la fuente MÁS fiable (supera a courtNames que puede estar desactualizado)
     const _KNOWN: Record<string, number> = {
         'Margarita Padel': 6, 'Tibisay': 3, 'Sun Sol Costa Azul': 4,
-        'Food Kart': 3, 'Elite': 4, 'PADEL EXPERIENCE': 3,
+        'Food Kart': 3, 'Elite': 4, 'El Bodeguero': 3,
         'Sun Sol Pedro Gonzalez': 2, 'Playa el Agua': 3,
     };
 
@@ -774,7 +774,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     // Clave compuesta estable aunque el ID sea undefined (matches se regeneran en cada render)
     const _mkKey = (p: any) => `${_toMin(p.scheduledTime)}_${_courtNum(p)}`;
 
-    // Por Comenzar: mostrar exactamente los partidos que caben en las pistas disponibles (ej: 3 en PADEL EXPERIENCE)
+    // Por Comenzar: mostrar exactamente los partidos que caben en las pistas disponibles (ej: 3 en El Bodeguero)
     const _nextUpKeys = new Set(_pending.slice(0, _numCanchas).map(_mkKey));
 
     // En Vivo: un solo partido por pista (no puede haber dos en vivo en la misma pista)
@@ -986,6 +986,13 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                 <h1 className="text-lg font-black uppercase italic tracking-tighter leading-tight">
                                     {tournament.name}
                                 </h1>
+                                {(tournament.category || tournament.gender) && (
+                                    <div className="flex items-center gap-1.5 mt-0.5 text-[11px] font-black uppercase italic tracking-widest text-padel-primary/90">
+                                        {tournament.category && <span>{formatCat(tournament.category)}</span>}
+                                        {tournament.category && tournament.gender && <span className="text-white/30">•</span>}
+                                        {tournament.gender && <span>{formatGender(tournament.gender)}</span>}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

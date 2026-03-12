@@ -75,6 +75,9 @@ export const resolveTeamNames = (team: any, teamName?: string): [string, string]
 
 // Mapeo legible de categorías
 const CAT_LABEL_MAP: Record<string, string> = {
+    MAS_40: '+40',
+    FEM_40: '+40',
+    MIX_40: '+40',
     MAS_45: '+45',
     MAS_50: '+50',
     SUMA_7: 'Suma 7',
@@ -129,7 +132,8 @@ export const TABS = [
 ];
 
 export const KNOWN_COMPLEXES: Record<string, number> = {
-    'PADEL EXPERIENCE': 3,
+    'El Bodeguero': 3,
+    'Food Kart': 3,
     'Hotel Tibisay': 2,
     'Tibisay Padel': 2,
     'Padel 360': 6

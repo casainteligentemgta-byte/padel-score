@@ -155,7 +155,7 @@ export default function AdminTournamentsPage() {
                 {(() => {
                     const groups: Record<string, any[]> = {};
                     filteredTournaments.forEach(t => {
-                        const key = `${t.startDate || 'no-date'}_${t.complexName || 'Margarita Padel'}`;
+                        const key = `${t.startDate || 'no-date'}_${t.complexName || 'Food Kart'}`;
                         if (!groups[key]) groups[key] = [];
                         groups[key].push(t);
                     });

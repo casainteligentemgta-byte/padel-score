@@ -334,8 +334,8 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                 }
 
                 // 4. Obtener contenidos
-                let fetchedVid: MediaContent | null = null;
-                let fetchedCar: MediaContent | null = null;
+                let fetchedVid: any | null = null;
+                let fetchedCar: any | null = null;
 
                 if (vidId) {
                     const { data: v } = await supabase.from('media_content').select('*').eq('id', vidId).maybeSingle();

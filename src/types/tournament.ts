@@ -24,6 +24,9 @@ export enum TournamentCategory {
     SEPTIMA = 'SEPTIMA',
 
     // Veteranos
+    MAS_40 = 'MAS_40',
+    FEM_40 = 'FEM_40',
+    MIX_40 = 'MIX_40',
     MAS_45 = 'MAS_45',
     MAS_50 = 'MAS_50',
 

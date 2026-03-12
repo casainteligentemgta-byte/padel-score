@@ -151,7 +151,7 @@ export default function HomePage() {
                         </h1>
                     </motion.div>
                     <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">
-                        {clubName || 'PADEL EXPERIENCE'}
+                        {clubName || 'El Bodeguero'}
                     </p>
                 </div>
 

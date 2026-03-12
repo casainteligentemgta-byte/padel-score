@@ -57,7 +57,7 @@ export const tournamentTypes = [
 
 export const tournamentCategories = [
     'MALE', 'FEMALE', 'MIXED', 'PRIMERA', 'SEGUNDA', 'TERCERA', 'CUARTA', 'QUINTA', 'SEXTA', 'SEPTIMA',
-    'MAS_45', 'MAS_50', 'SUMA_7', 'SUMA_8', 'SUMA_9', 'SUMA_10', 'SUMA_11'
+    'MAS_40', 'FEM_40', 'MIX_40', 'MAS_45', 'MAS_50', 'SUMA_7', 'SUMA_8', 'SUMA_9', 'SUMA_10', 'SUMA_11'
 ] as const;
 
 export const participantLevels = ['1.0', '1.5', '2.0', '2.5', '3.0', '3.5', '4.0', '4.5', '5.0', '5.5', '6.0', '7.0'] as const;

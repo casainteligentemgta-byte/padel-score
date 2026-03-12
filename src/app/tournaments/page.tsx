@@ -106,7 +106,7 @@ export default function MyTournamentsPage() {
                                 // Group tournaments by date and location
                                 const groups: { [key: string]: any[] } = {};
                                 tournaments.forEach(t => {
-                                    const key = `${t.startDate || 'no-date'}_${t.complexName || 'Margarita Padel'}`;
+                                    const key = `${t.startDate || 'no-date'}_${t.complexName || 'Food Kart'}`;
                                     if (!groups[key]) groups[key] = [];
                                     groups[key].push(t);
                                 });
@@ -142,7 +142,7 @@ export default function MyTournamentsPage() {
 
                                                 {/* Título */}
                                                 <h3 className="text-base font-black italic uppercase tracking-tighter mb-2 group-hover:text-padel-primary transition-colors leading-tight">
-                                                    {isGrouped ? `Torneo ${first.complexName || 'Margarita Padel'}` : first.name}
+                                                    {isGrouped ? `Torneo ${first.complexName || 'Food Kart'}` : first.name}
                                                 </h3>
 
                                                 {/* Meta info */}
@@ -153,7 +153,7 @@ export default function MyTournamentsPage() {
                                                     </div>
                                                     <div className="flex items-center gap-2 text-gray-500 text-[11px]">
                                                         <MapPin className="w-3 h-3 text-padel-primary flex-shrink-0" />
-                                                        <span>{first.complexName || 'Margarita Padel'}</span>
+                                                        <span>{first.complexName || 'Food Kart'}</span>
                                                     </div>
                                                 </div>
 

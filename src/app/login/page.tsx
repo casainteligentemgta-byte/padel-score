@@ -239,9 +239,11 @@ export default function LoginPage() {
                                                 required={!isLogin}
                                                 type="text"
                                                 placeholder="NOMBRE COMPLETO"
-                                                className="w-full h-16 bg-white/[0.03] border border-white/10 rounded-2xl pl-16 pr-6 text-sm outline-none focus:border-padel-primary/50 transition-all font-bold text-white placeholder:text-zinc-600 tracking-tight"
+                                                className="w-full h-16 bg-white/[0.03] border border-white/10 rounded-2xl pl-16 pr-6 text-sm outline-none focus:border-padel-primary/50 transition-all font-bold text-white placeholder:text-zinc-600 tracking-tight normal-case"
                                                 value={formData.name}
                                                 onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                                autoCapitalize="words"
+                                                autoCorrect="off"
                                             />
                                         </div>
                                     </motion.div>
@@ -256,9 +258,11 @@ export default function LoginPage() {
                                     required
                                     type="email"
                                     placeholder="EMAIL@DOMINIO.COM"
-                                    className="w-full h-16 bg-white/[0.03] border border-white/10 rounded-2xl pl-16 pr-6 text-sm outline-none focus:border-padel-primary/50 transition-all font-bold text-white placeholder:text-zinc-600 tracking-tight"
+                                    className="w-full h-16 bg-white/[0.03] border border-white/10 rounded-2xl pl-16 pr-6 text-sm outline-none focus:border-padel-primary/50 transition-all font-bold text-white placeholder:text-zinc-600 tracking-tight normal-case"
                                     value={formData.email}
                                     onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
                                 />
                             </div>
 
@@ -270,9 +274,11 @@ export default function LoginPage() {
                                     required
                                     type={showPassword ? 'text' : 'password'}
                                     placeholder="CONTRASEÑA"
-                                    className="w-full h-16 bg-white/[0.03] border border-white/10 rounded-2xl pl-16 pr-14 text-sm outline-none focus:border-padel-primary/50 transition-all font-bold text-white placeholder:text-zinc-600 tracking-tight"
+                                    className="w-full h-16 bg-white/[0.03] border border-white/10 rounded-2xl pl-16 pr-14 text-sm outline-none focus:border-padel-primary/50 transition-all font-bold text-white placeholder:text-zinc-600 tracking-tight normal-case"
                                     value={formData.password}
                                     onChange={e => setFormData({ ...formData, password: e.target.value })}
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
                                 />
                                 <button
                                     type="button"
