@@ -41,19 +41,6 @@ export interface MasterScheduleConfig {
 }
 
 
-const PRO_NAMES_MALE = [
-    "Alejandro Galán", "Juan Lebrón", "Agustín Tapia", "Arturo Coello",
-    "Franco Stupaczuk", "Martín Di Nenno", "Fede Chingotto", "Paquito Navarro",
-    "Fernando Belasteguín", "Sanyo Gutiérrez", "Momo González", "Alex Ruiz",
-    "Javi Garrido", "Mike Yanguas", "Coki Nieto", "Jon Sanz"
-];
-
-const PRO_NAMES_FEMALE = [
-    "Ariana Sánchez", "Paula Josemaría", "Gemma Triay", "Marta Ortega",
-    "Delfi Brea", "Bea González", "Claudia Jensen", "Jessica Castelló",
-    "Aranza Osoro", "Lucía Sainz", "Patty Llaguno", "Victoria Iglesias"
-];
-
 export class MasterScheduleEngine {
 
     static generateMasterSchedule(config: MasterScheduleConfig) {
@@ -367,24 +354,23 @@ export class MasterScheduleEngine {
         // REGLA: el contador arranca en 1 y nunca se repite dentro de la misma cat.
         let playerCounter = 1;
         const hasRealName = (name?: string) =>
-            !!name && name.trim() !== '' && !name.startsWith('TBD') && !name.startsWith('Jugador ');
-
-        const getSimulatedName = (gender: string, index: number) => {
-            const list = gender === 'FEMALE' ? PRO_NAMES_FEMALE : PRO_NAMES_MALE;
-            return list[index % list.length];
-        };
+            !!name && name.trim() !== '' && !name.startsWith('TBD') && !name.startsWith('Jugador');
 
         for (const team of teams) {
             if (!team.p1) {
-                team.p1 = { id: `auto_${cat.category}_${playerCounter}`, name: getSimulatedName(cat.gender, playerCounter++) };
+                team.p1 = { id: `auto_${cat.category}_${playerCounter}`, name: `Jugador ${playerCounter}` };
+                playerCounter++;
             } else if (!hasRealName(team.p1.name)) {
-                team.p1.name = getSimulatedName(cat.gender, playerCounter++);
+                team.p1.name = `Jugador ${playerCounter}`;
+                playerCounter++;
             }
 
             if (!team.p2) {
-                team.p2 = { id: `auto_${cat.category}_${playerCounter}`, name: getSimulatedName(cat.gender, playerCounter++) };
+                team.p2 = { id: `auto_${cat.category}_${playerCounter}`, name: `Jugador ${playerCounter}` };
+                playerCounter++;
             } else if (!hasRealName(team.p2.name)) {
-                team.p2.name = getSimulatedName(cat.gender, playerCounter++);
+                team.p2.name = `Jugador ${playerCounter}`;
+                playerCounter++;
             }
         }
 

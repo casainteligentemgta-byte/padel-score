@@ -41,7 +41,22 @@ export default function AdminValidacionPagosPage() {
 
     const handleUpdateStatus = async (id: string, status: 'paid' | 'alert' | 'pending', message: string | null = null) => {
         try {
+            const inscription = inscriptions.find(ins => ins.id === id);
             await dataService.updateInscription(id, { paymentStatus: status, alertMessage: message || undefined });
+            
+            if (status === 'paid' && inscription) {
+                try {
+                    await dataService.assignPlayersToTournament(
+                        inscription.tournamentId, 
+                        inscription.categoryKey, 
+                        inscription.participantName, 
+                        inscription.partnerName
+                    );
+                } catch (assignError) {
+                    console.error('[AssignPlayersError]:', assignError);
+                }
+            }
+
             setInscriptions(prev => prev.map(ins => ins.id === id ? { ...ins, paymentStatus: status, alertMessage: message } : ins));
             if (selectedInscription?.id === id) {
                 setSelectedInscription({ ...selectedInscription, paymentStatus: status, alertMessage: message });

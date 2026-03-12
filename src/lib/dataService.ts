@@ -232,6 +232,101 @@ export const dataService = {
         return { id };
     },
 
+    async assignPlayersToTournament(tournamentId: string, categoryKey: string, p1Name: string, p2Name?: string) {
+        const tournament = await this.getTournament(tournamentId);
+        if (!tournament) throw new Error('Tournament not found');
+
+        let targetTeamId: string | null = null;
+        let categoryUpdated = false;
+
+        let targetCategoryInfo: any = null;
+        if (tournament.inscriptionCategories) {
+            targetCategoryInfo = tournament.inscriptionCategories.find((c: any) => c.key === categoryKey);
+        }
+
+        const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+        const isMatchingCategory = (cat: any) => {
+            // Check direct match
+            if (cat.category === categoryKey || cat.id === categoryKey || `${cat.gender} - ${cat.category}` === categoryKey) return true;
+            
+            // Try to match inscription category name and gender
+            if (targetCategoryInfo && targetCategoryInfo.name) {
+                const normName = normalize(targetCategoryInfo.name);
+                const normCat = normalize(cat.category);
+                
+                const hasCategoryName = normName.includes(normCat) || normCat.includes(normName);
+                
+                let hasGender = true;
+                if (cat.gender) {
+                    if (cat.gender === 'MALE' && !normName.includes('masc') && targetCategoryInfo.gender !== 'MALE') hasGender = false;
+                    if (cat.gender === 'FEMALE' && !normName.includes('fem') && targetCategoryInfo.gender !== 'FEMALE') hasGender = false;
+                    if (cat.gender === 'MIXED' && !normName.includes('mix') && targetCategoryInfo.gender !== 'MIXED') hasGender = false;
+                }
+
+                if (hasCategoryName && hasGender) return true;
+            }
+            return false;
+        };
+
+        const updatedCategories = tournament.categories?.map((cat: any) => {
+            if (!categoryUpdated && isMatchingCategory(cat)) {
+                // Find first placeholder team
+                const placeholderTeamIdx = cat.teams?.findIndex((t: any) => 
+                    !t.p1?.name || t.p1.name.trim() === '' || t.p1.name.startsWith('TBD') || t.p1.name.startsWith('Jugador')
+                );
+
+                if (placeholderTeamIdx !== undefined && placeholderTeamIdx >= 0 && cat.teams) {
+                    const team = cat.teams[placeholderTeamIdx];
+                    targetTeamId = team.id;
+                    team.p1 = { ...team.p1, name: p1Name, id: `p1_${Date.now()}` };
+                    if (p2Name) {
+                        team.p2 = { ...team.p2, name: p2Name, id: `p2_${Date.now()}` };
+                    }
+                    cat.teams[placeholderTeamIdx] = team;
+                    categoryUpdated = true;
+                }
+            }
+            return cat;
+        });
+
+        if (categoryUpdated && targetTeamId) {
+            await this.updateTournament(tournamentId, { categories: updatedCategories });
+            
+            // Update matches
+            const matches = await this.getMatches(tournamentId);
+            for (const match of matches) {
+                let matchUpdated = false;
+                const updateData: any = {};
+
+                if (match?.team1?.id === targetTeamId) {
+                    updateData.team1 = { 
+                        ...match.team1, 
+                        p1: { ...match.team1.p1, name: p1Name },
+                        p2: p2Name ? { ...match.team1.p2, name: p2Name } : match.team1.p2
+                    };
+                    updateData.team1Name = p2Name ? `${p1Name} / ${p2Name}` : p1Name;
+                    matchUpdated = true;
+                }
+
+                if (match?.team2?.id === targetTeamId) {
+                    updateData.team2 = { 
+                        ...match.team2, 
+                        p1: { ...match.team2.p1, name: p1Name },
+                        p2: p2Name ? { ...match.team2.p2, name: p2Name } : match.team2.p2
+                    };
+                    updateData.team2Name = p2Name ? `${p1Name} / ${p2Name}` : p1Name;
+                    matchUpdated = true;
+                }
+
+                if (matchUpdated) {
+                    await this.updateMatch(tournamentId, match.id, updateData);
+                }
+            }
+        }
+        return targetTeamId;
+    },
+
     async migrateTournamentMatches(tournamentId: string, legacyMatches: any[]) {
         const db = supabase();
         for (const m of legacyMatches) {
