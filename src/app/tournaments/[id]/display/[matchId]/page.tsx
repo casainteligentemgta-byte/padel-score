@@ -232,6 +232,39 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         };
     }, []);
 
+    // ── Marcador en Vivo desde RTDB ─────────────────────────────────────
+    useEffect(() => {
+        if (!rtdb || !match) return;
+        const courtNum = Number(match.court ?? (match.courtIndex != null ? (match.courtIndex as number) + 1 : 0));
+        if (!courtNum) return;
+
+        const canchaId = `cancha_${courtNum}`;
+        const marcRef = ref(rtdb, `canchas/${canchaId}/marcador`);
+        
+        let timeout: NodeJS.Timeout;
+
+        const connectMarcador = () => {
+            const unsub = onValue(marcRef, (snap) => {
+                if (snap.exists()) {
+                    setLiveMarcador(snap.val());
+                } else {
+                    setLiveMarcador(null);
+                }
+            }, (error) => {
+                console.error("❌ Error listener RTDB:", error);
+                timeout = setTimeout(connectMarcador, 5000);
+            });
+            return unsub;
+        };
+
+        const unsubscribe = connectMarcador();
+
+        return () => {
+            if (typeof unsubscribe === 'function') unsubscribe();
+            clearTimeout(timeout);
+        };
+    }, [match?.court, match?.courtIndex]);
+
     // 5. Obtener TODA la biblioteca de imágenes activa para el carrusel automático
     const fetchAllImages = async (sb: any) => {
         const { data } = await sb.from('media_content').select('*').order('created_at', { ascending: false });
@@ -1387,6 +1420,25 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Botón Fullscreen forzado para Firestick (y trigger para autoplay de video) */}
+            <button 
+                onClick={() => {
+                    if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen().catch(err => {
+                            console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+                        });
+                    } else {
+                        document.exitFullscreen();
+                    }
+                }}
+                className="absolute bottom-2 right-2 z-[9999] opacity-0 hover:opacity-100 focus:opacity-100 transition-opacity p-3 backdrop-blur-md bg-black/50 rounded-xl border border-white/20"
+                title="Pantalla Completa"
+            >
+                <div className="w-5 h-5 text-white/50 hover:text-white flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" /></svg>
+                </div>
+            </button>
 
             <style jsx global>{`
                 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');

@@ -228,6 +228,48 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         return () => clearInterval(interval);
     }, [isMedicalTimeout]);
 
+    // ── Sincronizar estado completo a RTDB automáticamente (Ultra-rápido para Firestick) ──
+    useEffect(() => {
+        if (!rtdb || !matchCourt || match?.status !== MatchStatus.LIVE) return;
+        
+        const canchaId = `cancha_${matchCourt}`;
+        const marcRef = ref(rtdb, `canchas/${canchaId}/marcador`);
+        
+        const isStb = match.superTiebreak || match.matchFormat === 'SUPER_TIEBREAK';
+        const isTb = match.isTiebreak;
+
+        update(marcRef, {
+            puntos: {
+                local: match.points?.t1 || '0',
+                visitante: match.points?.t2 || '0'
+            },
+            games: {
+                local: match.games?.t1 || 0,
+                visitante: match.games?.t2 || 0
+            },
+            sets: {
+                local: match.sets?.t1 || 0,
+                visitante: match.sets?.t2 || 0
+            },
+            saque: {
+                equipo: match.server?.team || 1,
+                jugador: match.server?.player || 1
+            },
+            modo_puntos: isStb ? 'super_tiebreak' : (isTb ? 'tiebreak' : 'normal'),
+            ts: Date.now()
+        }).catch(err => console.error('[RTDB Sync Error]:', err));
+    }, [
+        match?.points,
+        match?.games,
+        match?.sets,
+        match?.server,
+        match?.isTiebreak,
+        match?.superTiebreak,
+        match?.matchFormat,
+        matchCourt,
+        match?.status
+    ]);
+
     const formatDuration = (seconds: number) => {
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);

@@ -3,10 +3,10 @@
     "short_name": "PadelScore",
     "description": "Smart platform to manage Padel tournaments.",
     "start_url": "/",
-    "display": "standalone",
+    "display": "fullscreen",
     "background_color": "#0a0a0a",
     "theme_color": "#0a0a0a",
-    "orientation": "portrait-primary",
+    "orientation": "landscape",
     "icons": [
       {
         "src": "/padel_hero-192.png", 
