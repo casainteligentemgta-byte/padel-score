@@ -1009,6 +1009,36 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                             </button>
                         )}
 
+                        {canManageTournament && (
+                            <button
+                                type="button"
+                                onClick={async (e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (!tournament) return;
+                                    const nextStatus = (tournament.registrationStatus || 'open') === 'open' ? 'closed' : 'open';
+                                    try {
+                                        await dataService.updateTournament(id, {
+                                            ...tournament,
+                                            registrationStatus: nextStatus,
+                                            updatedAt: new Date().toISOString()
+                                        });
+                                        setTournament((prev: any) => prev ? { ...prev, registrationStatus: nextStatus } : prev);
+                                    } catch (err) {
+                                        console.error('Error toggling registration status:', err);
+                                        alert('No se pudo actualizar el estado de inscripciones.');
+                                    }
+                                }}
+                                className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${
+                                    (tournament?.registrationStatus || 'open') === 'open'
+                                        ? 'bg-red-500/10 border-red-500/40 text-red-400 hover:bg-red-500/20'
+                                        : 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20'
+                                }`}
+                            >
+                                {(tournament?.registrationStatus || 'open') === 'open' ? 'Cerrar Inscripciones' : 'Abrir Inscripciones'}
+                            </button>
+                        )}
+
                         <button
                             type="button"
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsShareModalOpen(true); }}

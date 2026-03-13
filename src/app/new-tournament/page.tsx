@@ -56,6 +56,8 @@ const INITIAL_DATA = {
     }[],
     /** Categorías para que los jugadores se inscriban desde la app (varias categorías, evita choques de horario). ageMin/ageMax opcionales; maxSlots = cupo por categoría. */
     inscriptionCategories: [] as { key: string; name: string; price: number; gender?: 'MALE' | 'FEMALE' | 'MIXED'; ageMin?: number; ageMax?: number; maxSlots?: number }[],
+    /** Estado de inscripciones: open | closed */
+    registrationStatus: 'open' as 'open' | 'closed',
 };
 
 export default function NewTournamentPage() {
@@ -532,6 +534,7 @@ export default function NewTournamentPage() {
                     : null,
                 status: 'En Curso',
                 inscriptionCategories: defaultInscriptionCategories,
+                registrationStatus: 'open',
             };
 
             console.log('[NewTournament] Saving to Firestore...');

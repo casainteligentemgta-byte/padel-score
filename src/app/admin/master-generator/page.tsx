@@ -663,6 +663,7 @@ export default function MasterGeneratorPage() {
                         tieBreakType: cat.setFormat === 'SUPER_TIE_BREAK' ? 'STB' : 'TB',
                         inscriptionPrice: cat.inscriptionPrice ?? 0,
                         maxTeams: cat.numTeams, // Añadimos el cupo máximo
+                        registrationStatus: 'open',
                         status: 'Programado',
                         ...(eventData.sponsorLogoUrl?.trim() && {
                             broadcastingSettings: {

@@ -78,9 +78,17 @@ export async function POST(request: Request) {
       `;
     }
 
+    const recipients: string[] = ['casainteligentemgta@gmail.com'];
+    if (type === 'NEW_PLAYER' && data.email) {
+      recipients.push(data.email);
+    }
+    if (type === 'NEW_INSCRIPTION' && data.participantEmail) {
+      recipients.push(data.participantEmail);
+    }
+
     const { error } = await resend.emails.send({
       from: 'Smart Padel Pro <notifications@resend.dev>',
-      to: ['casainteligentemgta@gmail.com'],
+      to: recipients,
       subject: subject,
       html: html,
     });

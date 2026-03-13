@@ -137,7 +137,8 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
     const [availableMethods, setAvailableMethods] = useState<any[]>([]);
 
     const todayStr = new Date().toISOString().split('T')[0];
-    const inscriptionClosed = tournament?.startDate && tournament.startDate <= todayStr;
+    const registrationStatus = tournament?.registrationStatus || 'open';
+    const inscriptionClosed = (tournament?.startDate && tournament.startDate <= todayStr) || registrationStatus === 'closed';
 
     // Partner search state
     const [partnerCode, setPartnerCode] = useState<string>('');
@@ -342,7 +343,7 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
         // Llave maestra de pruebas: permite continuar el flujo sin validar jugador real
         if (partnerCode === '999999') {
             setFoundPartner({
-                id: 'dummy-partner',
+                id: null,
                 name: 'Compañero Demo',
                 email: 'demo@smartpadel.local',
             });
@@ -427,7 +428,8 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
             const participantName = profile?.name || user.displayName || user.email || 'Jugador';
             const participantEmail = user.email || undefined;
             const myParticipants = await dataService.getMyParticipants(user.uid);
-            const participantId = myParticipants?.[0]?.id ?? undefined;
+            const participantRecord = myParticipants?.[0];
+            const participantId = participantRecord?.id ?? undefined;
 
             for (const key of selectedCategories) {
                 const cat = categories.find((c) => c.key === key);
@@ -443,7 +445,7 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                         participantName,
                         participantEmail,
                         participantId,
-                        paymentStatus: 'pending',
+                        paymentStatus: cat.price > 0 ? 'pending' : 'paid',
                         paymentMethod: paymentData.method,
                         paymentBank: paymentData.bank,
                         paymentDate: paymentData.date,
@@ -456,8 +458,36 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                     user.uid
                 );
 
-                // Also create a team record/invitation
-                if (currentPartner) {
+                // Sincronizar equipos del torneo (rellenar siguiente slot libre con nombres reales)
+                if (participantId) {
+                    const participantInfo = {
+                        id: participantId,
+                        name: participantRecord?.name || participantName,
+                        lastName: participantRecord?.lastName || '',
+                    };
+
+                    let partnerInfo: { id: string; name: string; lastName?: string } | null = null;
+                    if (currentPartner && currentPartner.id) {
+                        partnerInfo = {
+                            id: currentPartner.id,
+                            name: currentPartner.name,
+                            lastName: (currentPartner as any).lastName || '',
+                        };
+                    }
+
+                    try {
+                        await dataService.syncTeamsFromInscription(
+                            tournamentId,
+                            participantInfo,
+                            partnerInfo
+                        );
+                    } catch (syncErr) {
+                        console.error('Error syncing teams from inscription:', syncErr);
+                    }
+                }
+
+                // Also create a team record/invitation (solo si el compañero tiene id real)
+                if (currentPartner && currentPartner.id) {
                     const inv = await dataService.createTeamInvitation(
                         tournamentId,
                         cat.key,
@@ -482,18 +512,19 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                 await fetch('/api/send-email', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        type: 'NEW_INSCRIPTION',
-                        data: {
-                            participantName: profile?.name || user.displayName || user.email || 'Jugador',
-                            tournamentName: tournament.name,
-                            categoryName: selectedCatNames,
-                            amount: paymentData.amount || '0',
-                            paymentMethod: paymentData.method || 'No especificado',
-                            paymentReference: paymentData.reference || 'N/A',
-                            receiptUrl: paymentData.receiptUrl || undefined
-                        }
-                    })
+                        body: JSON.stringify({
+                            type: 'NEW_INSCRIPTION',
+                            data: {
+                                participantName: profile?.name || user.displayName || user.email || 'Jugador',
+                                participantEmail: user.email || undefined,
+                                tournamentName: tournament.name,
+                                categoryName: selectedCatNames,
+                                amount: paymentData.amount || '0',
+                                paymentMethod: paymentData.method || 'No especificado',
+                                paymentReference: paymentData.reference || 'N/A',
+                                receiptUrl: paymentData.receiptUrl || undefined
+                            }
+                        })
                 });
             } catch (emailError) {
                 console.error('Error sending inscription notification email:', emailError);

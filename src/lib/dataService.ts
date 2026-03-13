@@ -913,6 +913,63 @@ export const dataService = {
         return { id: row.id };
     },
 
+    /**
+     * Sincroniza automáticamente los equipos (teams) de un torneo a partir de una inscripción.
+     * Reemplaza el siguiente slot libre (placeholder "Jugador X") con los nombres reales del jugador/pareja.
+     */
+    async syncTeamsFromInscription(
+        tournamentId: string,
+        participant: { id: string; name: string; lastName?: string },
+        partner?: { id: string; name: string; lastName?: string } | null,
+    ) {
+        const tournament = await this.getTournament(tournamentId);
+        if (!tournament) return;
+
+        const teams = Array.isArray(tournament.teams) ? [...tournament.teams] : [];
+        if (teams.length === 0) return;
+
+        const isPlaceholderPlayer = (p: any) =>
+            !!p &&
+            typeof p.name === 'string' &&
+            p.name.toLowerCase().startsWith('jugador ');
+
+        // Buscar el primer equipo cuyo p1 siga siendo un placeholder
+        let slotIndex = teams.findIndex(team => !team.p1 || isPlaceholderPlayer(team.p1));
+        if (slotIndex === -1) {
+            // Si no hay placeholders, no hacemos nada para no sobreescribir equipos ya definidos
+            return;
+        }
+
+        const fullName = `${participant.name} ${participant.lastName || ''}`.trim();
+        const partnerFullName = partner
+            ? `${partner.name} ${partner.lastName || ''}`.trim()
+            : '';
+
+        const team = teams[slotIndex] || {};
+
+        const updatedTeam: any = {
+            ...team,
+            p1: {
+                id: participant.id,
+                name: fullName || participant.name,
+            },
+            p2: partner
+                ? {
+                    id: partner.id,
+                    name: partnerFullName || partner.name,
+                }
+                : team.p2,
+        };
+
+        teams[slotIndex] = updatedTeam;
+
+        await this.updateTournament(tournamentId, {
+            ...tournament,
+            teams,
+            updatedAt: now(),
+        });
+    },
+
     async getInscriptionsByTournament(tournamentId: string) {
         const { data, error } = await supabase()
             .from('inscriptions')

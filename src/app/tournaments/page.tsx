@@ -199,7 +199,8 @@ export default function MyTournamentsPage() {
                                                         const isOwnerOfT = t.ownerId === user?.uid;
                                                         const todayStr = new Date().toISOString().split('T')[0];
                                                         const isStarted = t.startDate && t.startDate <= todayStr;
-                                                        const showInscribirme = user && !isAdmin && !isOwnerOfT && !isStarted;
+                                                        const registrationStatus = t.registrationStatus || 'open';
+                                                        const showInscribirme = user && !isAdmin && !isOwnerOfT && !isStarted && registrationStatus === 'open';
                                                         return (
                                                             <div key={t.id} className="flex items-center justify-between gap-2 px-3 py-2 bg-white/5 hover:bg-padel-primary/10 rounded-xl border border-white/5 hover:border-padel-primary/30 transition-all group/btn">
                                                                 <Link href={`/tournaments/${t.id}`} className="flex items-center gap-2 min-w-0 flex-1">
