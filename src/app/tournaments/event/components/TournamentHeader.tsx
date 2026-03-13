@@ -3,8 +3,9 @@
 import React from 'react';
 import Link from 'next/link';
 import {
-    ArrowLeft, Tv, FileText, Share2, Calendar, Clock
+    Tv, FileText, Share2, Calendar, Clock
 } from 'lucide-react';
+import { BackButton } from '@/components/BackButton';
 import { formatCategory, formatGender } from '../utils';
 
 interface TournamentHeaderProps {
@@ -47,10 +48,7 @@ export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
     return (
         <div className="flex-shrink-0 bg-[#0a0a0a] border-b border-white/[0.08] px-3 sm:px-4 pt-5 pb-4 w-full">
             <div className="flex items-center gap-3 mb-4">
-                <Link href="/tournaments"
-                    className="w-10 h-10 rounded-full bg-padel-primary/10 hover:bg-padel-primary/20 flex items-center justify-center transition-all active:scale-95 border border-padel-primary/20 flex-shrink-0">
-                    <ArrowLeft className="w-5 h-5 text-padel-primary stroke-[3px]" />
-                </Link>
+                <BackButton href="/tournaments" className="flex-shrink-0" />
 
                 {/* ── Patrocinador configurable ── */}
                 <div className="flex-shrink-0 flex flex-col items-center" title="Patrocinador del evento">

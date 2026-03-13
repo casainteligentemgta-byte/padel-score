@@ -125,112 +125,50 @@ export default function Sidebar() {
                                             SMART <span className="text-padel-primary">PADEL</span>
                                         </h2>
                                     </div>
-                                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest pl-9">
-                                        {clubName || 'El Bodeguero'}
-                                    </p>
+                                    {clubName && (
+                                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest pl-9">
+                                            {clubName}
+                                        </p>
+                                    )}
                                 </div>
                                 <button
                                     onClick={() => setIsOpen(false)}
-                                    className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/10 transition-all"
+                                    className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/10 transition-all"
                                 >
-                                    <X className="w-5 h-5" />
+                                    <X className="w-4 h-4" />
                                 </button>
                             </div>
 
-
-                            {/* Main Hub Grid */}
-                            <div className="px-8 mb-8 relative z-10">
-                                <p className="text-[10px] font-black uppercase text-zinc-600 tracking-[0.3em] mb-4 flex items-center gap-2">
-                                    <LayoutGrid className="w-3 h-3 text-padel-primary" /> Mi Panel
-                                </p>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {hubItems.map((item) => (
-                                        <button
-                                            key={item.name}
-                                            disabled={item.disabled}
-                                            onClick={() => {
-                                                if (item.onClick) item.onClick();
-                                                else if (item.href) {
-                                                    setIsOpen(false);
-                                                    router.push(item.href);
-                                                }
-                                            }}
-                                            className={`relative group h-28 p-4 rounded-3xl flex flex-col items-center justify-center gap-3 transition-all border ${item.disabled
-                                                ? 'bg-zinc-900/40 border-white/5 opacity-40 grayscale cursor-not-allowed'
-                                                : 'bg-zinc-900/60 border-white/5 hover:border-padel-primary/30 hover:bg-zinc-800'
-                                                }`}
-                                        >
-                                            <div className={`p-3 rounded-2xl transition-transform group-hover:scale-110 ${item.bg} ${item.color}`}>
-                                                <item.icon className="w-6 h-6" />
-                                            </div>
-                                            <span className="text-[11px] font-black uppercase tracking-wider text-zinc-400 group-hover:text-white transition-colors italic">
-                                                {item.name}
-                                            </span>
-                                            {item.disabled && (
-                                                <span className="absolute top-2 right-2 text-[8px] font-black uppercase text-zinc-600">Soon</span>
-                                            )}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Navigation Lists */}
-                            <div className="px-8 flex-1 overflow-y-auto no-scrollbar space-y-8 pb-8 relative z-10">
-                                {/* Other Nav - Hide on registration page per user request */}
-                                {pathname !== '/players/register' && (
-                                    <div className="space-y-1">
-                                        {otherItems.map((item) => {
-                                            const isHomeTransparent = item.name === 'Inicio' && (
-                                                pathname === '/hub' ||
-                                                pathname === '/mi-cuenta' ||
-                                                pathname.startsWith('/players')
-                                            );
-
-                                            return (
-                                                <Link
-                                                    key={item.name}
-                                                    href={item.href}
-                                                    onClick={() => setIsOpen(false)}
-                                                    className={`flex items-center gap-3 py-3 px-4 rounded-2xl transition-all group ${isHomeTransparent
-                                                        ? 'opacity-0 pointer-events-none'
-                                                        : 'text-zinc-500 hover:text-white hover:bg-white/[0.03]'
-                                                        }`}
-                                                >
-                                                    <item.icon className={`w-4 h-4 transition-colors ${isHomeTransparent ? 'text-transparent' : 'text-zinc-600 group-hover:text-padel-primary'
-                                                        }`} />
-                                                    <span className="text-xs font-black uppercase italic tracking-tight">
-                                                        {item.name}
-                                                    </span>
-                                                    {!isHomeTransparent && (
-                                                        <ChevronRight className="ml-auto w-4 h-4 text-zinc-800 group-hover:text-padel-primary/40 group-hover:translate-x-1 transition-all" />
-                                                    )}
-                                                </Link>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-
-                                {/* Admin Section */}
-                                {isAdmin && (
-                                    <div className="pt-4">
-                                        <p className="text-[10px] font-black uppercase text-padel-primary tracking-[0.3em] mb-4 ml-4">Consola Admin</p>
-                                        <div className="space-y-1">
-                                            {adminItems.map((item) => (
-                                                <Link
-                                                    key={item.name}
-                                                    href={item.href}
-                                                    onClick={() => setIsOpen(false)}
-                                                    className="flex items-center gap-3 py-3 px-4 rounded-2xl text-zinc-500 hover:text-white hover:bg-padel-primary/5 transition-all group"
-                                                >
-                                                    <item.icon className="w-4 h-4 text-zinc-600 group-hover:text-padel-primary transition-colors" />
-                                                    <span className="text-xs font-black uppercase italic tracking-tight">{item.name}</span>
-                                                    <ChevronRight className="ml-auto w-4 h-4 text-zinc-800 group-hover:text-padel-primary/40 group-hover:translate-x-1 transition-all" />
-                                                </Link>
-                                            ))}
+                            {/* Acciones principales: Perfil, Torneos, Ranking, Wallet */}
+                            <div className="px-8 mb-6 space-y-2 relative z-10">
+                                {hubItems.map((item) => (
+                                    <button
+                                        key={item.name}
+                                        disabled={item.disabled}
+                                        onClick={() => {
+                                            if (item.onClick) item.onClick();
+                                            else if (item.href) {
+                                                setIsOpen(false);
+                                                router.push(item.href);
+                                            }
+                                        }}
+                                        className={`w-full flex items-center gap-3 py-3 px-4 rounded-2xl text-xs font-black uppercase tracking-tight transition-all border ${item.disabled
+                                            ? 'bg-zinc-900/40 border-white/5 opacity-40 grayscale cursor-not-allowed'
+                                            : 'bg-zinc-900/60 border-white/5 hover:border-padel-primary/30 hover:bg-zinc-800'
+                                            }`}
+                                    >
+                                        <div className={`p-2 rounded-xl ${item.bg} ${item.color}`}>
+                                            <item.icon className="w-4 h-4" />
                                         </div>
-                                    </div>
-                                )}
+                                        <span className="text-zinc-300 italic">
+                                            {item.name}
+                                        </span>
+                                    </button>
+                                ))}
                             </div>
+
+                            {/* Navigation Lists oculto por petición del usuario */}
+                            <div className="px-8 flex-1 pb-8 relative z-10" />
 
                             {/* Footer Section */}
                             <div className="p-8 border-t border-white/5 bg-black/40 backdrop-blur-3xl space-y-4 relative z-10">

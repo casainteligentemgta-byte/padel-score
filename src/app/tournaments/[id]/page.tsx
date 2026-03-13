@@ -42,6 +42,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import GroupPhaseView from '@/components/GroupPhaseView';
 import TournamentPhaseManager from '@/components/TournamentPhaseManager';
 import Sidebar from '@/components/Sidebar';
+import { BackButton } from '@/components/BackButton';
 import AutoShrinkName from '@/components/AutoShrinkName';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -979,9 +980,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                 <div className="max-w-4xl mx-auto px-6 pt-6 pb-4 flex justify-between items-center">
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-3 ml-12 md:ml-0">
-                            <Link href="/tournaments" className="w-10 h-10 flex items-center justify-center rounded-full bg-padel-primary/10 hover:bg-padel-primary/20 transition-all active:scale-95 border border-padel-primary/20">
-                                <ArrowLeft className="w-5 h-5 text-padel-primary stroke-[3px]" />
-                            </Link>
+                            <BackButton href="/tournaments" />
                             <div>
                                 <h1 className="text-lg font-black uppercase italic tracking-tighter leading-tight">
                                     {tournament.name}

@@ -4,7 +4,6 @@ import React, { useState, useRef, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    ArrowLeft,
     Camera,
     User,
     Instagram,
@@ -22,12 +21,13 @@ import {
     Star,
     Target,
     Award,
-    CheckCircle2
+    CircleDot
 } from 'lucide-react';
 import { dataService } from '@/lib/dataService';
 import { useAuth } from '@/lib/AuthContext';
 import { formatDNI } from '@/lib/formatters';
 import Sidebar from '@/components/Sidebar';
+import { BackButton } from '@/components/BackButton';
 
 function RegistrationFormContent() {
     const router = useRouter();
@@ -290,12 +290,7 @@ function RegistrationFormContent() {
             <div ref={scrollAreaRef} className="ipad-scroll-area !pr-0">
                 <header className="sticky top-0 z-50 bg-[#080808]/90 backdrop-blur-xl border-b border-white/5">
                     <div className="max-w-md mx-auto px-6 py-2 flex items-center justify-between">
-                        <button
-                            onClick={() => router.back()}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 transition-all active:scale-95 group"
-                        >
-                            <ArrowLeft className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white" />
-                        </button>
+                        <BackButton className="w-8 h-8 rounded-lg border-white/5" />
                         <div className="flex-1 flex flex-col items-center justify-center">
                             <h1 className="text-base font-black italic uppercase tracking-tighter text-center text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.5)]">
                                 {editId ? (
@@ -688,11 +683,26 @@ function RegistrationFormContent() {
                                         onChange={e => setAcceptedTerms(e.target.checked)}
                                     />
                                     <div className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center bg-padel-primary border-padel-primary shadow-lg ${acceptedTerms ? 'shadow-padel-primary/40 scale-110' : 'shadow-padel-primary/10 opacity-90'}`}>
-                                        {acceptedTerms && <CheckCircle2 className="w-4 h-4 text-black" strokeWidth={4} />}
+                                        {acceptedTerms && <CircleDot className="w-4 h-4 text-black" strokeWidth={3} />}
                                     </div>
                                 </div>
-                                <div className="flex-1 text-[7.8px] font-black uppercase text-white tracking-[-0.04em] leading-[1] text-justify">
-                                    DECLARO HABER LEÍDO, COMPRENDIDO Y ACEPTADO LOS <button type="button" onClick={(e) => { e.stopPropagation(); setShowTermsModal(true); }} className="bg-transparent p-0 border-none inline text-white font-black underline transition-all uppercase">TÉRMINOS Y CONDICIONES</button> Y LA <button type="button" onClick={(e) => { e.stopPropagation(); setShowTermsModal(true); }} className="bg-transparent p-0 border-none inline text-white font-black underline transition-all uppercase">POLÍTICA DE PRIVACIDAD</button>
+                                <div className="flex-1 text-[9px] font-medium text-white tracking-tight leading-snug text-justify">
+                                    Declaro haber leído, comprendido y aceptado los{' '}
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setShowTermsModal(true); }}
+                                        className="bg-transparent p-0 border-none inline text-white font-bold underline transition-all"
+                                    >
+                                        Términos y Condiciones
+                                    </button>{' '}
+                                    y la{' '}
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setShowTermsModal(true); }}
+                                        className="bg-transparent p-0 border-none inline text-white font-bold underline transition-all"
+                                    >
+                                        Política de Privacidad
+                                    </button>
                                 </div>
                             </label>
                         </div>

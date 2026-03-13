@@ -4,7 +4,7 @@ import { useState, useEffect, use } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Camera, Plus, X, Wifi, WifiOff, Tv, Radio, Monitor,
-    Play, Square, RefreshCw, ArrowLeft, Megaphone, Video,
+    Play, Square, RefreshCw, Megaphone, Video,
     Eye, EyeOff, LayoutGrid, Maximize2, Settings, Save,
     Trash2, ExternalLink, Volume2, VolumeX, Activity,
     Shield, Zap, Globe, Gauge, AlertTriangle, MonitorPlay,
@@ -15,6 +15,7 @@ import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { useAuth } from '@/lib/AuthContext';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
+import { BackButton } from '@/components/BackButton';
 import { MatchStatus } from '@/types/tournament';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -487,10 +488,7 @@ export default function BroadcastingPage({ params }: { params: Promise<{ id: str
                 {/* ── HEADER ─────────────────────────────────────────────── */}
                 <header className="flex-shrink-0 flex items-center justify-between px-4 lg:px-6 py-4 border-b border-white/[0.04] bg-black/20">
                     <div className="flex items-center gap-4">
-                        <Link href={`/tournaments/${id}/control`}
-                            className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:border-white/20 transition-all">
-                            <ArrowLeft className="w-4 h-4" />
-                        </Link>
+                        <BackButton href={`/tournaments/${id}/control`} className="rounded-2xl" />
                         <div className="p-3 bg-orange-500/10 rounded-2xl border border-orange-500/20 shadow-[0_0_20px_rgba(249,115,22,0.05)]">
                             <Radio className="w-6 h-6 text-orange-400" />
                         </div>

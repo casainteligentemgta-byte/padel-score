@@ -19,7 +19,8 @@ import {
     Check,
     CalendarDays,
     Users,
-    LogOut
+    LogOut,
+    ChevronLeft
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
@@ -181,9 +182,16 @@ export default function MiCuentaPage() {
 
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
-            <Sidebar />
-            <div className="flex items-center gap-3 mb-8 flex-shrink-0 pl-20 md:pl-24 pr-4 pt-6">
-                <BouncingBall size={28} />
+            <div className="flex items-center gap-3 mb-8 flex-shrink-0 pl-6 md:pl-10 pr-4 pt-6">
+                <button
+                    type="button"
+                    onClick={() => router.back()}
+                    className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
+                    aria-label="Volver"
+                >
+                    <ChevronLeft className="w-4 h-4 text-gray-300" />
+                </button>
+                <BouncingBall size={26} />
                 <div>
                     <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white">Mi perfil</h1>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Datos de tu cuenta y ficha de jugador</p>
@@ -264,16 +272,25 @@ export default function MiCuentaPage() {
                                                 <User className="w-7 h-7 text-gray-600" />
                                             )}
                                         </div>
-                                        <div className="min-w-0">
-                                            <p className="font-black uppercase tracking-wider text-white truncate">
-                                                {player.name} {player.lastName}
-                                            </p>
-                                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 flex flex-wrap items-center gap-2">
-                                                <span>Ficha de jugador</span>
-                                                <span className="text-padel-primary/40">•</span>
-                                                <span>{player.dni || 'S/DNI'}</span>
-                                                <span className="text-padel-primary/40">•</span>
-                                                <span className="text-padel-primary">{player.gender === 'FEMALE' ? 'FEM' : 'MASC'}</span>
+                                        <div className="min-w-0 flex flex-col justify-center">
+                                            <div className="flex items-center gap-2 leading-tight">
+                                                <p className="font-black uppercase tracking-wider text-white truncate">
+                                                    {player.name} {player.lastName}
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => router.push(`/players/register?edit=${player.id}`)}
+                                                    className="p-1 rounded-full bg-white/5 hover:bg-padel-primary hover:text-black text-gray-400 transition-colors flex-shrink-0"
+                                                    title="Modificar ficha de jugador"
+                                                >
+                                                    <Edit3 className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 flex flex-wrap items-center gap-2 leading-tight">
+                                                <span>Posición:</span>
+                                                <span className="text-padel-primary">
+                                                    {player.position || 'Drive / Revés'}
+                                                </span>
                                             </p>
                                         </div>
                                     </div>
@@ -313,10 +330,16 @@ export default function MiCuentaPage() {
                                         <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
                                             <Shirt className="w-4 h-4" /> Tallas
                                         </p>
-                                        <div className="text-xs text-gray-300 space-y-1">
-                                            <p><span className="font-bold text-white">Franela:</span> {player.suitSize || '—'}</p>
-                                            <p><span className="font-bold text-white">Short:</span> {player.shortSize || '—'}</p>
-                                            <p className="flex items-center gap-1">
+                                        <div className="text-xs text-gray-300 space-y-1.5">
+                                            <p className="flex items-center gap-1 leading-tight">
+                                                <Shirt className="w-3 h-3 text-gray-500" />
+                                                <span><span className="font-bold text-white">Franela:</span> {player.suitSize || '—'}</span>
+                                            </p>
+                                            <p className="flex items-center gap-1 leading-tight">
+                                                <Shirt className="w-3 h-3 text-gray-500" />
+                                                <span><span className="font-bold text-white">Short:</span> {player.shortSize || '—'}</span>
+                                            </p>
+                                            <p className="flex items-center gap-1 leading-tight">
                                                 <Footprints className="w-3 h-3 text-gray-500" />
                                                 <span><span className="font-bold text-white">Calzado:</span> {player.shoeSize || '—'}</span>
                                             </p>

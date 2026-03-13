@@ -13,7 +13,8 @@ import {
     ChevronRight,
     Zap,
     Eye,
-    EyeOff
+    EyeOff,
+    Shield
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { isValidEmail, isValidPassword } from '@/lib/authValidators';
@@ -150,9 +151,12 @@ export default function HomePage() {
                             SMART <span className="text-padel-primary">PADEL</span>
                         </h1>
                     </motion.div>
-                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">
-                        {clubName || 'El Bodeguero'}
-                    </p>
+                    <div className="mt-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] text-white/90">
+                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-padel-primary text-black">
+                            <Shield className="w-3 h-3" />
+                        </span>
+                        <span>Smart Padel Experience</span>
+                    </div>
                 </div>
 
                 {/* Auth Card Container - Now Transparent to remove 'rectangulo blanco' perception */}

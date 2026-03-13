@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import Sidebar from '@/components/Sidebar';
+import { BackButton } from '@/components/BackButton';
 import PaymentInfo from '@/components/PaymentInfo';
 import {
     ArrowLeft,
@@ -134,6 +135,9 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
     });
     const [uploading, setUploading] = useState(false);
     const [availableMethods, setAvailableMethods] = useState<any[]>([]);
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const inscriptionClosed = tournament?.startDate && tournament.startDate <= todayStr;
 
     // Partner search state
     const [partnerCode, setPartnerCode] = useState<string>('');
@@ -335,6 +339,17 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
             return;
         }
 
+        // Llave maestra de pruebas: permite continuar el flujo sin validar jugador real
+        if (partnerCode === '999999') {
+            setFoundPartner({
+                id: 'dummy-partner',
+                name: 'Compañero Demo',
+                email: 'demo@smartpadel.local',
+            });
+            setPartnerError(null);
+            return;
+        }
+
         setSearchingPartner(true);
         setPartnerError(null);
         setFoundPartner(null);
@@ -521,12 +536,7 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
             <div className="ipad-scroll-area pl-20 md:pl-24 pr-4 pb-24">
                 <header className="sticky top-0 z-50 bg-[#0a0a0a]/90 backdrop-blur border-b border-white/10 py-4">
                     <div className="max-w-md mx-auto px-4 flex items-center justify-between">
-                        <Link
-                            href={`/tournaments/${tournamentId}`}
-                            className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10"
-                        >
-                            <ArrowLeft className="w-5 h-5" />
-                        </Link>
+                        <BackButton href={`/tournaments/${tournamentId}`} />
                         <h1 className="text-lg font-black italic uppercase tracking-tighter">Inscribirme</h1>
                         <div className="w-10" />
                     </div>
@@ -543,6 +553,20 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                             <Link
                                 href={`/tournaments/${tournamentId}`}
                                 className="inline-block px-6 py-3 bg-[#ccff00] text-black font-black rounded-2xl uppercase text-sm"
+                            >
+                                Volver al torneo
+                            </Link>
+                        </div>
+                    ) : inscriptionClosed ? (
+                        <div className="rounded-3xl bg-white/5 border border-white/10 p-8 text-center space-y-4">
+                            <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
+                            <h2 className="text-lg font-black uppercase">Inscripciones cerradas</h2>
+                            <p className="text-sm text-gray-400">
+                                Este torneo ya no admite nuevas inscripciones. El botón de inscripción solo está disponible hasta un día antes del inicio del evento.
+                            </p>
+                            <Link
+                                href={`/tournaments/${tournamentId}`}
+                                className="inline-block mt-4 px-6 py-3 bg-[#ccff00] text-black font-black rounded-2xl uppercase text-sm"
                             >
                                 Volver al torneo
                             </Link>

@@ -13,7 +13,8 @@ import {
     LogOut,
     Home,
     Shield,
-    FileText
+    FileText,
+    Wallet
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
@@ -82,9 +83,9 @@ export default function HubPage() {
             href: '/ranking'
         },
         {
-            name: 'Comunidad',
-            subtitle: 'BUSCAR JUGADORES',
-            icon: Users,
+            name: 'Wallet',
+            subtitle: 'PRÓXIMAMENTE',
+            icon: Wallet,
             color: 'text-emerald-400',
             bg: 'bg-emerald-400/10',
             border: 'border-emerald-400/10',
@@ -184,7 +185,7 @@ export default function HubPage() {
                         <div className="flex justify-center mt-4 mb-12">
                             <button
                                 onClick={() => logout()}
-                                className="flex items-center gap-2 text-[#FF2800] font-black uppercase italic tracking-[0.2em] text-[10px] hover:scale-105 transition-all bg-transparent border-none outline-none"
+                                className="flex items-center gap-2 px-6 py-3 rounded-full bg-black text-[#FF2800] font-black uppercase italic tracking-[0.2em] text-[10px] hover:scale-105 transition-all border border-[#FF2800]/40"
                             >
                                 <LogOut className="w-3.5 h-3.5 text-[#FF2800]" />
                                 FINALIZAR SESIÓN

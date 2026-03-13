@@ -9,10 +9,11 @@ import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-    ArrowLeft, Play, Monitor, Camera, Tv,
+    Play, Monitor, Camera, Tv,
     ChevronRight, Radio, Zap,
     CheckCircle2, AlertCircle, RefreshCw
 } from 'lucide-react';
+import { BackButton } from '@/components/BackButton';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 const formatHHMM = (v: any) => {
@@ -209,12 +210,7 @@ export default function PreMatchControl({ params }: { params: Promise<{ id: stri
         <div className="min-h-screen bg-[#0a0a0a] text-white font-outfit flex flex-col">
             {/* ── Header ──────────────────────────────────────────────── */}
             <header className="flex-shrink-0 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/[0.07] px-4 py-3 flex items-center gap-3">
-                <button
-                    onClick={() => router.back()}
-                    className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors flex-shrink-0"
-                >
-                    <ArrowLeft className="w-4 h-4" />
-                </button>
+                <BackButton className="w-9 h-9" />
 
                 <div className="flex-1 min-w-0">
                     <h1 className="text-[13px] font-black uppercase italic tracking-tighter leading-none truncate">

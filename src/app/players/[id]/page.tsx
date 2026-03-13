@@ -8,7 +8,6 @@ import {
     Calendar,
     Settings,
     Edit2,
-    ArrowLeft,
     Phone,
     Instagram,
     Mail,
@@ -36,6 +35,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import Sidebar from '@/components/Sidebar';
+import { BackButton } from '@/components/BackButton';
 import BouncingBall from '@/components/BouncingBall';
 import { formatDate } from '@/lib/formatters';
 
@@ -115,12 +115,9 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
             {/* Sidebar removed to omit from this screen as per user request */}
 
             {/* Back Button Fixed Below Menu */}
-            <button
-                onClick={() => router.back()}
-                className="fixed top-24 left-6 z-[100] w-12 h-12 bg-zinc-900/60 backdrop-blur-xl border border-white/5 rounded-full flex items-center justify-center hover:bg-zinc-800 transition-all text-zinc-400 hover:text-white shadow-2xl"
-            >
-                <ArrowLeft className="w-5 h-5" />
-            </button>
+            <div className="fixed top-24 left-6 z-[100]">
+                <BackButton />
+            </div>
 
             {/* Background Decorative Elements */}
             <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-padel-primary/5 rounded-full blur-[140px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
