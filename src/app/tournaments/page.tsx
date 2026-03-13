@@ -69,6 +69,31 @@ export default function MyTournamentsPage() {
         );
     }
 
+    // Evita que las fechas de torneos (guardadas como ISO con zona) se muestren
+    // corridas al día anterior por huso horario.
+    const formatTournamentDate = (value: any): string => {
+        if (!value) return 'Sin fecha';
+
+        try {
+            if (typeof value === 'string') {
+                const base = value.includes('T') ? value.split('T')[0] : value;
+                const [year, month, day] = base.split('-').map(part => parseInt(part, 10));
+                if (!year || !month || !day) {
+                    return formatDate(value);
+                }
+                const date = new Date(year, month - 1, day);
+                return date.toLocaleDateString('es-VE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                });
+            }
+            return formatDate(value);
+        } catch {
+            return formatDate(value);
+        }
+    };
+
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
             <div className="pt-8 px-6 md:px-12 flex items-center justify-between gap-3 mb-2 flex-shrink-0">
@@ -149,7 +174,7 @@ export default function MyTournamentsPage() {
                                                 <div className="flex flex-col gap-1 mb-3">
                                                     <div className="flex items-center gap-2 text-gray-500 text-[11px]">
                                                         <Calendar className="w-3 h-3 text-padel-primary flex-shrink-0" />
-                                                        <span>{formatDate(first.startDate)}</span>
+                                                        <span>{formatTournamentDate(first.startDate)}</span>
                                                     </div>
                                                     <div className="flex items-center gap-2 text-gray-500 text-[11px]">
                                                         <MapPin className="w-3 h-3 text-padel-primary flex-shrink-0" />
