@@ -299,7 +299,7 @@ export const dataService = {
             return a === b || b.startsWith(a) || a.startsWith(b);
         };
         const p1NameMatches = (t: any) => nameMatches(t.p1?.name ?? '', p1Name);
-        const p2NameMatches = (t: any) => nameMatches(t.p1?.name ?? '', p2Name);
+        const p2NameMatches = (t: any) => nameMatches(t.p1?.name ?? '', p2Name ?? '');
 
         const updatedCategories = tournament.categories?.map((cat: any) => {
             // Si tenemos enlace por código (tournament_team_id), actualizar ese equipo en la categoría si existe
