@@ -3,10 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
+import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
+import { extractAmountFromReceipt } from '@/lib/ocrService';
 import Sidebar from '@/components/Sidebar';
 import { BouncingBall } from '@/components/BouncingBall';
 import {
-    Receipt, RefreshCw, AlertTriangle, CheckCircle, Clock, X, Eye, DollarSign, User, Trophy, Calendar, Filter
+    Receipt, RefreshCw, AlertTriangle, CheckCircle, Clock, X, Eye, DollarSign, User, Trophy, Calendar, Filter,
+    Zap, Loader2, Scan, ListChecks, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,6 +21,12 @@ export default function AdminValidacionPagosPage() {
     const [loading, setLoading] = useState(true);
     const [selectedInscription, setSelectedInscription] = useState<any>(null);
     const [filter, setFilter] = useState<'all' | 'pending' | 'paid' | 'alert'>('all');
+    const [autoVerifying, setAutoVerifying] = useState(false);
+    const [ocrLoading, setOcrLoading] = useState(false);
+    const [ocrResult, setOcrResult] = useState<{ amount: number | null; suggestion: 'paid' | 'alert' | 'pending'; message: string } | null>(null);
+    const [showReconcile, setShowReconcile] = useState(false);
+    const [referencesText, setReferencesText] = useState('');
+    const [reconcileLoading, setReconcileLoading] = useState(false);
 
     useEffect(() => {
         if (!authLoading && !isAdmin) router.push('/');
@@ -72,6 +81,123 @@ export default function AdminValidacionPagosPage() {
         return ins.paymentStatus === filter;
     });
 
+    const runAutoVerification = async () => {
+        const pending = inscriptions.filter(ins => ins.paymentStatus === 'pending');
+        if (pending.length === 0) {
+            alert('No hay inscripciones pendientes para verificar.');
+            return;
+        }
+        setAutoVerifying(true);
+        let updated = 0;
+        try {
+            for (const ins of pending) {
+                const amount = ins.paymentData?.paymentAmount != null ? Number(ins.paymentData.paymentAmount) : null;
+                const categoryPrice = ins.categoryPrice != null ? Number(ins.categoryPrice) : 0;
+                const result = validatePaymentAgainstCategoryPrice({
+                    amountExtracted: amount ?? undefined,
+                    categoryPrice,
+                });
+                if (result.paymentStatus === 'paid') {
+                    await dataService.updateInscription(ins.id, { paymentStatus: 'paid', alertMessage: null });
+                    try {
+                        await dataService.assignPlayersToTournament(
+                            ins.tournamentId,
+                            ins.categoryKey,
+                            ins.participantName,
+                            ins.partnerName
+                        );
+                    } catch {}
+                    updated++;
+                } else if (result.paymentStatus === 'alert' && result.alertMessage) {
+                    await dataService.updateInscription(ins.id, { paymentStatus: 'alert', alertMessage: result.alertMessage });
+                    updated++;
+                }
+            }
+            await loadInscriptions();
+            if (updated > 0) alert(`Verificación automática: ${updated} inscripción(es) actualizada(s).`);
+            else alert('Ninguna inscripción pendiente cumplió el criterio (monto = precio de categoría).');
+        } catch (e) {
+            console.error(e);
+            alert('Error al ejecutar la verificación automática.');
+        } finally {
+            setAutoVerifying(false);
+        }
+    };
+
+    const runOcrOnReceipt = async () => {
+        if (!selectedInscription?.receiptUrl) return;
+        setOcrLoading(true);
+        setOcrResult(null);
+        try {
+            const result = await extractAmountFromReceipt(selectedInscription.receiptUrl);
+            const categoryPrice = selectedInscription.categoryPrice != null ? Number(selectedInscription.categoryPrice) : 0;
+            const validation = validatePaymentAgainstCategoryPrice({
+                amountExtracted: result.amountExtracted ?? undefined,
+                categoryPrice,
+            });
+            setOcrResult({
+                amount: result.amountExtracted ?? null,
+                suggestion: validation.paymentStatus,
+                message: validation.alertMessage || (validation.paymentStatus === 'paid' ? 'Monto coincide con el precio de la categoría.' : ''),
+            });
+        } catch (e) {
+            console.error(e);
+            setOcrResult({ amount: null, suggestion: 'pending', message: 'No se pudo extraer el monto del comprobante.' });
+        } finally {
+            setOcrLoading(false);
+        }
+    };
+
+    const applyOcrSuggestion = () => {
+        if (!selectedInscription || !ocrResult || ocrResult.suggestion === 'pending') return;
+        handleUpdateStatus(selectedInscription.id, ocrResult.suggestion, ocrResult.suggestion === 'alert' ? ocrResult.message : null);
+        setOcrResult(null);
+    };
+
+    const normalizeRef = (s: string) => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    const runReconcileByReferences = async () => {
+        const lines = referencesText.split(/\n/).map(l => normalizeRef(l)).filter(Boolean);
+        if (lines.length === 0) {
+            alert('Pega al menos una referencia (una por línea).');
+            return;
+        }
+        const refSet = new Set(lines);
+        const pending = inscriptions.filter(ins => ins.paymentStatus === 'pending');
+        const toMark: typeof pending = [];
+        for (const ins of pending) {
+            const ref = ins.paymentData?.paymentReference;
+            if (ref && refSet.has(normalizeRef(ref))) toMark.push(ins);
+        }
+        if (toMark.length === 0) {
+            alert(`Ninguna inscripción pendiente coincide con las ${lines.length} referencia(s) pegada(s). Revisa que la referencia sea la que el jugador ingresó.`);
+            return;
+        }
+        setReconcileLoading(true);
+        try {
+            for (const ins of toMark) {
+                await dataService.updateInscription(ins.id, { paymentStatus: 'paid', alertMessage: null });
+                try {
+                    await dataService.assignPlayersToTournament(
+                        ins.tournamentId,
+                        ins.categoryKey,
+                        ins.participantName,
+                        ins.partnerName
+                    );
+                } catch {}
+            }
+            await loadInscriptions();
+            setReferencesText('');
+            setShowReconcile(false);
+            alert(`Conciliación: ${toMark.length} inscripción(es) marcada(s) como pagada(s).`);
+        } catch (e) {
+            console.error(e);
+            alert('Error al conciliar.');
+        } finally {
+            setReconcileLoading(false);
+        }
+    };
+
     if (!isAdmin) return null;
 
     return (
@@ -107,6 +233,22 @@ export default function AdminValidacionPagosPage() {
                             ))}
                         </div>
                         <button
+                            onClick={runAutoVerification}
+                            disabled={autoVerifying || loading || !inscriptions.some(ins => ins.paymentStatus === 'pending')}
+                            className="flex items-center gap-2 px-4 py-3 rounded-xl bg-padel-primary/20 border border-padel-primary/40 hover:bg-padel-primary/30 text-padel-primary transition-all disabled:opacity-50 disabled:pointer-events-none"
+                        >
+                            {autoVerifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                            <span className="text-[10px] font-black uppercase tracking-widest">Verificación automática</span>
+                        </button>
+                        <button
+                            onClick={() => setShowReconcile(!showReconcile)}
+                            className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/80 hover:text-white transition-all"
+                        >
+                            <ListChecks className="w-4 h-4" />
+                            <span className="text-[10px] font-black uppercase tracking-widest">Conciliar por referencias</span>
+                            {showReconcile ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                        <button
                             onClick={loadInscriptions}
                             className={`p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all ${loading ? 'animate-spin' : ''}`}
                         >
@@ -114,6 +256,29 @@ export default function AdminValidacionPagosPage() {
                         </button>
                     </div>
                 </header>
+
+                {/* Conciliar por referencias (Pago Móvil / transferencias) */}
+                {showReconcile && (
+                    <div className="mb-8 p-6 rounded-2xl bg-white/5 border border-white/10">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-white/50 mb-2">Pago Móvil / Transferencias</p>
+                        <p className="text-sm text-white/70 mb-3">Pega las referencias que ya aparecen en tu banco (una por línea). Se marcarán como pagadas las inscripciones pendientes cuya referencia coincida.</p>
+                        <textarea
+                            value={referencesText}
+                            onChange={e => setReferencesText(e.target.value)}
+                            placeholder="Ej.:&#10;REF123456&#10;789012&#10;PM-2024-001"
+                            rows={4}
+                            className="w-full bg-black/30 border border-white/10 rounded-xl p-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-padel-primary/50 resize-y mb-3"
+                        />
+                        <button
+                            onClick={runReconcileByReferences}
+                            disabled={reconcileLoading || !referencesText.trim()}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30 transition-all disabled:opacity-50"
+                        >
+                            {reconcileLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListChecks className="w-4 h-4" />}
+                            Marcar coincidencias como pagadas
+                        </button>
+                    </div>
+                )}
 
                 {/* Grid of Inscriptions */}
                 {loading ? (
@@ -180,6 +345,9 @@ export default function AdminValidacionPagosPage() {
                                                 <p className="text-sm font-black italic">{ins.paymentData?.paymentAmount || '—'}</p>
                                             </div>
                                             <p className="text-[9px] font-bold text-white/40 pl-5">{ins.paymentData?.paymentMethod || '—'}</p>
+                                            {ins.paymentData?.paymentReference && (
+                                                <p className="text-[9px] font-mono text-padel-primary/90 pl-5 truncate" title={ins.paymentData.paymentReference}>Ref: {ins.paymentData.paymentReference}</p>
+                                            )}
                                         </div>
                                     </div>
 
@@ -192,7 +360,7 @@ export default function AdminValidacionPagosPage() {
 
                                     <div className="flex items-center gap-3 pt-2">
                                         <button
-                                            onClick={() => setSelectedInscription(ins)}
+                                            onClick={() => { setOcrResult(null); setSelectedInscription(ins); }}
                                             className="grow flex items-center justify-center gap-2 h-10 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all font-black text-[10px] uppercase tracking-widest"
                                         >
                                             <Eye className="w-4 h-4" /> Revisar Comprobante
@@ -222,7 +390,7 @@ export default function AdminValidacionPagosPage() {
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            onClick={() => setSelectedInscription(null)}
+                            onClick={() => { setOcrResult(null); setSelectedInscription(null); }}
                             className="absolute inset-0 bg-black/90 backdrop-blur-xl"
                         />
                         <motion.div
@@ -264,7 +432,7 @@ export default function AdminValidacionPagosPage() {
                                             </h2>
                                             <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">ID: {selectedInscription.id.slice(0, 8)}</p>
                                         </div>
-                                        <button onClick={() => setSelectedInscription(null)} className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors">
+                                        <button onClick={() => { setOcrResult(null); setSelectedInscription(null); }} className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors">
                                             <X className="w-5 h-5 text-white/40" />
                                         </button>
                                     </div>
@@ -288,6 +456,41 @@ export default function AdminValidacionPagosPage() {
                                                 <p className="text-xs font-bold text-white">{selectedInscription.paymentData?.paymentBank || '—'}</p>
                                             </div>
                                         </div>
+
+                                        {/* OCR + verificación automática del comprobante */}
+                                        {selectedInscription.receiptUrl && (
+                                            <div className="p-4 bg-white/5 rounded-2xl border border-white/5 space-y-3">
+                                                <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">Verificación por comprobante</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={runOcrOnReceipt}
+                                                    disabled={ocrLoading}
+                                                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+                                                >
+                                                    {ocrLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scan className="w-4 h-4" />}
+                                                    Extraer monto del comprobante (OCR)
+                                                </button>
+                                                {ocrResult && (
+                                                    <div className="space-y-2 pt-2 border-t border-white/5">
+                                                        <p className="text-[10px] text-white/60">
+                                                            Monto detectado: <span className="font-bold text-white">{ocrResult.amount != null ? ocrResult.amount.toFixed(2) : '—'}</span>
+                                                            {ocrResult.suggestion === 'paid' && ' · Sugerencia: Pagado'}
+                                                            {ocrResult.suggestion === 'alert' && ' · Sugerencia: Alerta'}
+                                                        </p>
+                                                        {ocrResult.message && <p className="text-[9px] text-white/50">{ocrResult.message}</p>}
+                                                        {(ocrResult.suggestion === 'paid' || ocrResult.suggestion === 'alert') && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={applyOcrSuggestion}
+                                                                className={`w-full py-2 rounded-xl text-[10px] font-black uppercase ${ocrResult.suggestion === 'paid' ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-500 border border-amber-500/30'}`}
+                                                            >
+                                                                Aplicar sugerencia
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
 
                                         <div className="space-y-2">
                                             <p className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2">Acciones Rápidas</p>

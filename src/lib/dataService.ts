@@ -80,19 +80,30 @@ function sanitizeObject(obj: any): any {
 export const dataService = {
     // Media & Ticker Management
     async getTiraInformativa(pantallaId?: string | null) {
-        let query = supabase()
-            .from('tira_informativa')
-            .select('*')
-            .eq('activo', true);
+        const client = getSupabaseClient();
+        if (!client) return [];
 
-        if (pantallaId) {
-            // Incluir mensajes específicos de la pantalla O mensajes globales (null)
-            query = query.or(`pantalla_id.eq.${pantallaId},pantalla_id.is.null`);
+        try {
+            let query = client
+                .from('tira_informativa')
+                .select('*')
+                .eq('activo', true);
+
+            if (pantallaId) {
+                // Incluir mensajes específicos de la pantalla O mensajes globales (null)
+                query = query.or(`pantalla_id.eq.${pantallaId},pantalla_id.is.null`);
+            }
+
+            const { data, error } = await query.order('orden', { ascending: true });
+            if (error) {
+                console.warn('[dataService] getTiraInformativa error:', error.message);
+                return [];
+            }
+            return data || [];
+        } catch (e) {
+            console.warn('[dataService] getTiraInformativa exception:', e);
+            return [];
         }
-
-        const { data, error } = await query.order('orden', { ascending: true });
-        if (error) throw error;
-        return data || [];
     },
 
     async getPantallas() {
@@ -290,8 +301,30 @@ export const dataService = {
             return cat;
         });
 
+        // También sincronizamos el array raíz de teams usado por el dashboard/cuadros
+        let updatedTeams = tournament.teams;
+        if (tournament.teams && targetTeamId) {
+            updatedTeams = tournament.teams.map((team: any) => {
+                if (String(team.id) !== String(targetTeamId)) return team;
+                const next = { ...team };
+                next.p1 = { ...(team.p1 || {}), name: p1Name, id: team.p1?.id || `p1_${Date.now()}` };
+                if (p2Name) {
+                    next.p2 = { ...(team.p2 || {}), name: p2Name, id: team.p2?.id || `p2_${Date.now()}` };
+                }
+                return next;
+            });
+        }
+
         if (categoryUpdated && targetTeamId) {
-            await this.updateTournament(tournamentId, { categories: updatedCategories });
+            const payload: any = {
+                ...tournament,
+                categories: updatedCategories,
+            };
+            if (updatedTeams) {
+                payload.teams = updatedTeams;
+            }
+
+            await this.updateTournament(tournamentId, payload);
             
             // Update matches
             const matches = await this.getMatches(tournamentId);
@@ -754,7 +787,7 @@ export const dataService = {
             // Verificar si ha expirado antes de aceptar
             const { data: team, error: fetchError } = await supabase()
                 .from('teams')
-                .select('expires_at, status')
+                .select('id, expires_at, status, tournament_id, category, player_a_id, player_b_id')
                 .eq('id', teamId)
                 .single();
 
@@ -773,6 +806,48 @@ export const dataService = {
                 .update({ status: 'accepted', updated_at: now() })
                 .eq('id', teamId);
             if (error) throw error;
+
+            // Sincronizar nombres en el torneo (rellenar pareja completa en la categoría/grupo)
+            try {
+                if (team.tournament_id && team.category && team.player_a_id && team.player_b_id) {
+                    const db = supabase();
+                    const { data: profileA } = await db
+                        .from('profiles')
+                        .select('name')
+                        .eq('id', team.player_a_id)
+                        .single();
+                    const { data: profileB } = await db
+                        .from('profiles')
+                        .select('name')
+                        .eq('id', team.player_b_id)
+                        .single();
+
+                    const p1Name = (profileA?.name || '').trim() || 'Jugador A';
+                    const p2Name = (profileB?.name || '').trim() || 'Jugador B';
+
+                    await this.assignPlayersToTournament(
+                        team.tournament_id,
+                        team.category,
+                        p1Name,
+                        p2Name
+                    );
+
+                    // Notificar al Jugador A que la invitación fue aceptada
+                    try {
+                        await this.sendNotification({
+                            user_id: team.player_a_id,
+                            sender_id: team.player_b_id,
+                            team_id: team.id,
+                            type: 'tournament_invite_accepted',
+                            message: `Tu compañero ha aceptado la invitación en la categoría ${team.category}.`,
+                        });
+                    } catch (nError) {
+                        console.error('[dataService] Error sending acceptance notification:', nError);
+                    }
+                }
+            } catch (syncErr) {
+                console.error('[dataService] Error syncing accepted team into tournament groups:', syncErr);
+            }
         }
     },
 
@@ -1019,6 +1094,26 @@ export const dataService = {
         }));
     },
 
+    async getInscriptionById(id: string) {
+        const { data, error } = await supabase()
+            .from('inscriptions')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+        if (error) throw error;
+        if (!data) return null;
+        const r = data as any;
+        return {
+            id: r.id,
+            tournamentId: r.tournament_id,
+            tournamentName: r.tournament_name,
+            categoryKey: r.category_key,
+            participantName: r.participant_name,
+            partnerName: r.data?.partnerName ?? null,
+            paymentStatus: r.payment_status,
+        };
+    },
+
     async getInscriptionsWithAlerts() {
         const { data, error } = await supabase()
             .from('inscriptions')
@@ -1037,7 +1132,7 @@ export const dataService = {
     async updateInscription(id: string, data: Partial<InscriptionData>) {
         const upd: any = { updated_at: now() };
         if (data.paymentStatus != null) upd.payment_status = data.paymentStatus;
-        if (data.alertMessage != null) upd.alert_message = data.alertMessage;
+        if (data.alertMessage !== undefined) upd.alert_message = data.alertMessage ?? null;
         if (data.receiptUrl != null) upd.receipt_url = data.receiptUrl;
         const { error } = await supabase().from('inscriptions').update(upd).eq('id', id);
         if (error) throw error;

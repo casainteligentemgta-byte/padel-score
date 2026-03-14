@@ -31,15 +31,19 @@ export const useDisplayRealtime = (pantallaId: string | null) => {
         setContenido(null);
       }
 
-      const { data: tira } = await supabase
-        .from('tira_informativa')
-        .select('mensaje')
-        .eq('activo', true)
-        .order('orden', { ascending: true });
+      try {
+        const { data: tira, error } = await supabase
+          .from('tira_informativa')
+          .select('mensaje')
+          .eq('activo', true)
+          .order('orden', { ascending: true });
 
-      if (tira?.length) {
-        setTiraMensajes(tira.map((r: { mensaje: string }) => r.mensaje));
-      } else {
+        if (!error && tira?.length) {
+          setTiraMensajes(tira.map((r: { mensaje: string }) => r.mensaje));
+        } else {
+          setTiraMensajes([]);
+        }
+      } catch {
         setTiraMensajes([]);
       }
     };
@@ -78,14 +82,18 @@ export const useDisplayRealtime = (pantallaId: string | null) => {
           table: 'tira_informativa',
         },
         async () => {
-          const { data } = await supabase
-            .from('tira_informativa')
-            .select('mensaje')
-            .eq('activo', true)
-            .order('orden', { ascending: true });
-          if (data?.length) {
-            setTiraMensajes(data.map((r: { mensaje: string }) => r.mensaje));
-          } else {
+          try {
+            const { data } = await supabase
+              .from('tira_informativa')
+              .select('mensaje')
+              .eq('activo', true)
+              .order('orden', { ascending: true });
+            if (data?.length) {
+              setTiraMensajes(data.map((r: { mensaje: string }) => r.mensaje));
+            } else {
+              setTiraMensajes([]);
+            }
+          } catch {
             setTiraMensajes([]);
           }
         }

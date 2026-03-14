@@ -41,18 +41,31 @@ function PlayersListContent() {
 
     useEffect(() => {
         const loadPlayers = async () => {
-            if (user) {
-                try {
-                    // Si es admin, traemos TODOS los participantes del sistema
-                    const data = isAdmin
-                        ? await dataService.getAllParticipants()
-                        : await dataService.getMyParticipants(user.uid);
+            if (!user) return;
+            try {
+                if (isAdmin) {
+                    const res = await fetch('/api/participants');
+                    if (res.ok) {
+                        const data = await res.json();
+                        setPlayers(Array.isArray(data) ? data : []);
+                        setLoading(false);
+                        return;
+                    }
+                    if (res.status === 501) {
+                        const data = await dataService.getAllParticipants();
+                        setPlayers(data);
+                    } else {
+                        setPlayers([]);
+                    }
+                } else {
+                    const data = await dataService.getMyParticipants(user.uid);
                     setPlayers(data);
-                } catch (err) {
-                    console.error(err);
-                } finally {
-                    setLoading(false);
                 }
+            } catch (err) {
+                console.error(err);
+                setPlayers([]);
+            } finally {
+                setLoading(false);
             }
         };
         if (!authLoading && user) loadPlayers();

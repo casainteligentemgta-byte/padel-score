@@ -77,8 +77,13 @@ export default function TVCourtDisplayPage({ params }: { params: Promise<{ court
 
         // 2. Supabase Ticker Subscription
         const fetchTicker = async () => {
-            const data = await dataService.getTiraInformativa();
-            setTickerMessages(data);
+            try {
+                const data = await dataService.getTiraInformativa();
+                setTickerMessages(Array.isArray(data) ? data : []);
+            } catch (e) {
+                console.warn('[TV Display] Tira informativa:', e);
+                setTickerMessages([]);
+            }
         };
         fetchTicker();
 

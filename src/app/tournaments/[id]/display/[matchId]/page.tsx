@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import lottie from 'lottie-web';
 import { rtdb } from '@/lib/rtdb';
 import { dataService } from '@/lib/dataService';
 import { db } from '@/lib/firebase';
@@ -12,6 +13,23 @@ import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
 import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, Layers, ImageIcon, Play, Eye, Users } from 'lucide-react';
 import { BouncingBall } from '@/components/BouncingBall';
+
+// Lottie player para animaciones JSON (biblioteca de animaciones)
+function LottieAnimationOverlay({ url }: { url: string }) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!containerRef.current || !url) return;
+        const anim = lottie.loadAnimation({
+            container: containerRef.current,
+            renderer: 'svg',
+            loop: true,
+            autoplay: true,
+            path: url,
+        });
+        return () => anim.destroy();
+    }, [url]);
+    return <div ref={containerRef} className="w-full h-full min-h-[200px] max-w-[90vw] max-h-[90vh]" />;
+}
 
 // Utility to detect if a media object or URL is a video
 const isVideoMedia = (media: any) => {
@@ -333,8 +351,12 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     setHubMedia(null);
                     setHubCarousel(null);
                     // Fetch global ticker even if no screen is bound to the court
-                    const tickerData = await dataService.getTiraInformativa();
-                    setSupabaseTickerMessages(tickerData || []);
+                    try {
+                        const tickerData = await dataService.getTiraInformativa();
+                        setSupabaseTickerMessages(Array.isArray(tickerData) ? tickerData : []);
+                    } catch (_) {
+                        setSupabaseTickerMessages([]);
+                    }
                     return;
                 }
 
@@ -349,8 +371,12 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     setHubMedia(null);
                     setHubCarousel(null);
                     // Try to fetch ticker anyway
-                    const tickerData = await dataService.getTiraInformativa(activeScreenId);
-                    setSupabaseTickerMessages(tickerData || []);
+                    try {
+                        const tickerData = await dataService.getTiraInformativa(activeScreenId);
+                        setSupabaseTickerMessages(Array.isArray(tickerData) ? tickerData : []);
+                    } catch (_) {
+                        setSupabaseTickerMessages([]);
+                    }
                     return;
                 }
 
@@ -399,8 +425,12 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                 }
 
                 // 5. Obtener Tira Informativa de Supabase - Pasar pantallaId
-                const tickerData = await dataService.getTiraInformativa(activeScreenId);
-                setSupabaseTickerMessages(tickerData || []);
+                try {
+                    const tickerData = await dataService.getTiraInformativa(activeScreenId);
+                    setSupabaseTickerMessages(Array.isArray(tickerData) ? tickerData : []);
+                } catch (_) {
+                    setSupabaseTickerMessages([]);
+                }
 
             } catch (err) {
                 console.error('Error fetching hub media:', err);
@@ -1359,13 +1389,16 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                         const url = animacionActual.url || animacionesMarcador[animacionActual.id]?.url;
                                         if (!url) return null;
                                         const isVideo = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url);
+                                        const isLottie = /\.(json)(\?|$)/i.test(url) || url.toLowerCase().includes('lottie');
                                         const isImage = /\.(gif|webp|png|jpg|jpeg)(\?|$)/i.test(url);
 
                                         if (isVideo) {
                                             return <video src={url} autoPlay muted playsInline className="max-w-full max-h-full object-contain" />;
-                                        } else {
-                                            return <img src={url} alt="" className="max-w-full max-h-full object-contain" />;
                                         }
+                                        if (isLottie) {
+                                            return <LottieAnimationOverlay url={url} />;
+                                        }
+                                        return <img src={url} alt="" className="max-w-full max-h-full object-contain" />;
                                     })()}
                                 </motion.div>
                             )}

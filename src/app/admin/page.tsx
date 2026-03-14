@@ -96,7 +96,7 @@ export default function AdminHubPage() {
             title: "Agentes AI Pro",
             desc: "Inteligencia artificial para tu club",
             icon: Brain,
-            href: "/admin/agents",
+            href: "/agents",
             color: "from-pink-500/20 to-pink-500/5",
             borderColor: "border-pink-500/30",
             iconColor: "text-pink-400"

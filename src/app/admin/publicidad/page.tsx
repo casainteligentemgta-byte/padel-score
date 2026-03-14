@@ -5,6 +5,7 @@ import { useDropzone } from 'react-dropzone';
 import { createClient } from '@/lib/supabase/client';
 import { uploadToSupabase } from '@/lib/storage';
 import type { MediaContent, Pantalla, TiraInformativa, MediaTipo } from '@/lib/supabase/publicidad';
+import { setAnimacionMarcador } from '@/lib/rtdbService';
 import Sidebar from '@/components/Sidebar';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -68,6 +69,9 @@ export default function AdminPublicidad() {
   const [isMasterMode, setIsMasterMode] = useState(false);
   const [masterMediaId, setMasterMediaId] = useState<string | null>(null);
   const [masterCarouselId, setMasterCarouselId] = useState<string | null>(null);
+  const [syncingAnimToPizarra, setSyncingAnimToPizarra] = useState(false);
+  /** Asignación animación → botón del marker (1-12). 0 = sin asignar */
+  const [animacionBotones, setAnimacionBotones] = useState<Record<string, number>>({});
 
   const supabase = useMemo(() => {
     try {
@@ -93,9 +97,26 @@ export default function AdminPublicidad() {
   }, [supabase]);
 
   const fetchTira = useCallback(async () => {
-    if (!supabase) return;
-    const { data } = await supabase.from('tira_informativa').select('*').order('orden');
-    setTiraList((data as TiraInformativa[]) || []);
+    const res = await fetch('/api/tira-informativa');
+    if (res.ok) {
+      const data = await res.json();
+      setTiraList((data as TiraInformativa[]) || []);
+      setError(null);
+      return;
+    }
+    if (res.status === 501 && supabase) {
+      const { data, error } = await supabase.from('tira_informativa').select('*').order('orden', { ascending: true });
+      if (error) {
+        setError(`Tira: ${error.message}`);
+        setTiraList([]);
+        return;
+      }
+      setTiraList((data as TiraInformativa[]) || []);
+      return;
+    }
+    const body = await res.json().catch(() => ({}));
+    setError(`Tira: ${body?.error || res.statusText}`);
+    setTiraList([]);
   }, [supabase]);
 
   const fetchDisplayEstado = useCallback(async () => {
@@ -331,48 +352,124 @@ export default function AdminPublicidad() {
   };
 
   const addMensajeTira = async () => {
-    if (!supabase || !nuevoMensaje.trim()) return;
-    try {
-      await supabase.from('tira_informativa').insert({
-        mensaje: nuevoMensaje.trim(),
-        activo: true,
-        orden: tiraList.length,
-        pantalla_id: null,
-      });
+    if (!nuevoMensaje.trim()) return;
+    setError(null);
+    const payload = { mensaje: nuevoMensaje.trim(), activo: true, orden: tiraList.length, pantalla_id: null };
+    const res = await fetch('/api/tira-informativa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
       setNuevoMensaje('');
       await fetchTira();
-    } catch (e: any) {
-      setError(e?.message || 'Error al agregar mensaje');
+      return;
     }
+    if (res.status === 501 && supabase) {
+      const { error } = await supabase.from('tira_informativa').insert(payload);
+      if (error) {
+        setError(`No se guardó la tira: ${error.message}`);
+        return;
+      }
+      setNuevoMensaje('');
+      await fetchTira();
+      return;
+    }
+    const body = await res.json().catch(() => ({}));
+    setError(`No se guardó la tira: ${body?.error || res.statusText}`);
   };
 
   const deleteTira = async (id: string) => {
-    if (!supabase) return;
-    try {
-      await supabase.from('tira_informativa').delete().eq('id', id);
+    const res = await fetch(`/api/tira-informativa?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (res.ok) {
       await fetchTira();
-    } catch (e: any) {
-      setError(e?.message || 'Error al eliminar');
+      return;
     }
+    if (res.status === 501 && supabase) {
+      const { error } = await supabase.from('tira_informativa').delete().eq('id', id);
+      if (error) {
+        setError(error.message || 'Error al eliminar');
+        return;
+      }
+      await fetchTira();
+      return;
+    }
+    const body = await res.json().catch(() => ({}));
+    setError(body?.error || 'Error al eliminar');
   };
 
   const updateTiraOrden = async (id: string, nuevoOrden: number) => {
-    if (!supabase) return;
-    try {
-      await supabase.from('tira_informativa').update({ orden: nuevoOrden }).eq('id', id);
+    const res = await fetch('/api/tira-informativa', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, orden: nuevoOrden }),
+    });
+    if (res.ok) {
       await fetchTira();
-    } catch (e: any) {
-      setError('Error al actualizar orden');
+      return;
     }
+    if (res.status === 501 && supabase) {
+      const { error } = await supabase.from('tira_informativa').update({ orden: nuevoOrden }).eq('id', id);
+      if (error) {
+        setError('Error al actualizar orden');
+        return;
+      }
+      await fetchTira();
+      return;
+    }
+    setError('Error al actualizar orden');
   };
 
   const updateTiraPantalla = async (id: string, pantallaId: string | null) => {
-    if (!supabase) return;
-    try {
-      await supabase.from('tira_informativa').update({ pantalla_id: pantallaId }).eq('id', id);
+    const res = await fetch('/api/tira-informativa', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, pantalla_id: pantallaId }),
+    });
+    if (res.ok) {
       await fetchTira();
+      return;
+    }
+    if (res.status === 501 && supabase) {
+      const { error } = await supabase.from('tira_informativa').update({ pantalla_id: pantallaId }).eq('id', id);
+      if (error) {
+        setError('Error al actualizar pantalla de la tira');
+        return;
+      }
+      await fetchTira();
+      return;
+    }
+    setError('Error al actualizar pantalla de la tira');
+  };
+
+  const syncAnimacionesToPizarra = async () => {
+    const assigned = animaciones.filter(a => animacionBotones[a.id] >= 1 && animacionBotones[a.id] <= 12);
+    if (assigned.length === 0) {
+      setError('Asigna al menos una animación a un botón (1–12) del marcador.');
+      return;
+    }
+    setSyncingAnimToPizarra(true);
+    setError(null);
+    try {
+      const byButton: Record<number, MediaContent> = {};
+      assigned.forEach(a => { byButton[animacionBotones[a.id]] = a; });
+      for (let btn = 1; btn <= 12; btn++) {
+        const item = byButton[btn];
+        if (item) {
+          await setAnimacionMarcador(String(btn), {
+            nombre: (item.nombre_sponsor || item.nombre || `Botón ${btn}`).slice(0, 80),
+            url: item.url,
+          });
+        } else {
+          await setAnimacionMarcador(String(btn), null);
+        }
+      }
+      setError(null);
+      alert(`Sincronizado: ${assigned.length} animación(es) en los botones del marcador.`);
     } catch (e: any) {
-      setError('Error al actualizar pantalla de la tira');
+      setError(e?.message || 'Error al sincronizar con la pizarra. ¿Tienes Firebase RTDB configurado?');
+    } finally {
+      setSyncingAnimToPizarra(false);
     }
   };
 
@@ -424,7 +521,7 @@ export default function AdminPublicidad() {
         <table className="w-full text-left border-collapse">
           <thead className="sticky top-0 bg-[#0c0c0c] z-10">
                 <tr className="border-b border-white/5">
-                  <th className="px-3 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 w-[110px]">Contenido</th>
+                  <th className="px-3 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 min-w-[200px] w-[220px]">Contenido</th>
                   <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-[110px]">Asignar</th>
                   <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-[45px]">Emisión</th>
                   <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-[55px]">Tiempo</th>
@@ -443,8 +540,8 @@ export default function AdminPublicidad() {
                       exit={{ opacity: 0 }}
                       className={`group hover:bg-white/[0.02] transition-colors ${item.activa === false ? 'opacity-40 grayscale-[0.5]' : ''}`}
                     >
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-2">
+                    <td className="px-3 py-3 min-w-[220px]">
+                      <div className="flex items-center gap-2 min-w-0">
                         <div className="shrink-0 w-6 h-6 rounded-lg bg-black/40 flex items-center justify-center border border-white/5">
                           {item.tipo.includes('video') ? <Video size={10} className="text-padel-primary" /> : item.tipo === 'imagen' ? <ImageIcon size={10} className="text-blue-400" /> : item.tipo === 'url_web' ? <ExternalLink size={10} className="text-orange-400" /> : <Layers size={10} className="text-purple-400" />}
                         </div>
@@ -452,7 +549,7 @@ export default function AdminPublicidad() {
                           type="text"
                           defaultValue={item.nombre_sponsor || item.nombre || 'Sin título'}
                           onBlur={(e) => updateMediaName(item.id, e.target.value)}
-                          className={`bg-transparent border-none outline-none text-[9px] font-black uppercase tracking-tight italic text-white focus:${accentClass} group-hover:text-padel-primary transition-colors truncate w-full max-w-[90px]`}
+                          className={`bg-transparent border-none outline-none text-[9px] font-black uppercase tracking-tight italic text-white focus:${accentClass} group-hover:text-padel-primary transition-colors w-full min-w-0 max-w-[200px]`}
                         />
                       </div>
                     </td>
@@ -536,6 +633,146 @@ export default function AdminPublicidad() {
               <tr>
                 <td colSpan={7} className="px-8 py-20 text-center opacity-20 italic font-bold uppercase text-[10px] tracking-widest">
                   No hay archivos en esta categoría
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderAnimacionesTable = () => (
+    <div className="overflow-hidden bg-black/20 border border-white/5 rounded-[2rem]">
+      <div className="max-h-[350px] overflow-y-auto custom-scroll">
+        <table className="w-full text-left border-collapse">
+          <thead className="sticky top-0 bg-[#0c0c0c] z-10">
+            <tr className="border-b border-white/5">
+              <th className="px-3 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 min-w-[200px] w-[220px]">Contenido</th>
+              <th className="px-2 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-[100px]">Botón marker</th>
+              <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-[110px]">Asignar</th>
+              <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-[45px]">Emisión</th>
+              <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-[55px]">Tiempo</th>
+              <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-8"></th>
+              <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-8"></th>
+              <th className="px-1 py-3 text-[8px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-8"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/[0.03]">
+            <AnimatePresence>
+              {animaciones.map((item) => (
+                <motion.tr
+                  key={item.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className={`group hover:bg-white/[0.02] transition-colors ${item.activa === false ? 'opacity-40 grayscale-[0.5]' : ''}`}
+                >
+                  <td className="px-3 py-3 min-w-[220px]">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="shrink-0 w-6 h-6 rounded-lg bg-black/40 flex items-center justify-center border border-white/5">
+                        <Layers size={10} className="text-purple-400" />
+                      </div>
+                      <input
+                        type="text"
+                        defaultValue={item.nombre_sponsor || item.nombre || 'Sin título'}
+                        onBlur={(e) => updateMediaName(item.id, e.target.value)}
+                        className="bg-transparent border-none outline-none text-[9px] font-black uppercase tracking-tight italic text-white focus:text-purple-400 group-hover:text-padel-primary transition-colors w-full min-w-0 max-w-[200px]"
+                      />
+                    </div>
+                  </td>
+                  <td className="px-2 py-3 text-center">
+                    <select
+                      value={animacionBotones[item.id] || 0}
+                      onChange={(e) => setAnimacionBotones(prev => ({ ...prev, [item.id]: Number(e.target.value) }))}
+                      className="bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-[9px] font-black text-white outline-none focus:border-purple-400/50 w-full max-w-[90px]"
+                    >
+                      <option value={0}>—</option>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
+                        <option key={n} value={n}>Botón {n}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-2 py-3 text-center">
+                    <div className="flex flex-wrap items-center justify-center gap-1 max-w-[110px] mx-auto">
+                      <button
+                        onClick={() => syncAllScreens(item.id, item.tipo)}
+                        className={`flex items-center justify-center shrink-0 w-7 h-7 rounded-lg border transition-all duration-300 ${areAllScreensAssigned(item.id, item.tipo) ? 'bg-padel-primary text-black border-padel-primary shadow-[0_0_8px_rgba(204,255,0,0.3)]' : 'bg-white/5 text-white/20 border-white/5 hover:border-white/10'}`}
+                        title="Todas las pantallas"
+                      >
+                        <span className="text-[10px] font-black uppercase tracking-tight">T</span>
+                      </button>
+                      {pantallas.map((p, idx) => {
+                        const isAssigned = isMediaAssignedToScreen(item.id, p.id, item.tipo);
+                        const num = (p.nombre.match(/\d+/) || [idx + 1])[0];
+                        return (
+                          <button
+                            key={`${item.id}-${p.id}`}
+                            onClick={() => setPantallaContenido(p.id, item.id, item.tipo === 'imagen' ? 'carousel' : 'video')}
+                            className={`flex items-center justify-center shrink-0 w-7 h-7 rounded-lg border transition-all duration-300 ${isAssigned ? 'bg-orange-500 text-white border-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.3)]' : 'bg-white/5 text-white/20 border-white/5 hover:border-white/10'}`}
+                            title={p.nombre}
+                          >
+                            <span className="text-[10px] font-black uppercase tracking-tight">{num}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </td>
+                  <td className="px-2 py-3 text-center">
+                    <button
+                      onClick={() => toggleMediaSelection(item.id, !!item.activa)}
+                      className={`relative inline-flex h-3.5 w-7 items-center rounded-full transition-colors focus:outline-none ${item.activa !== false ? 'bg-padel-primary/40' : 'bg-white/10'}`}
+                    >
+                      <span
+                        className={`${item.activa !== false ? 'translate-x-3.5 bg-padel-primary' : 'translate-x-0.5 bg-gray-500'
+                          } inline-block h-2.5 w-2.5 transform rounded-full transition-transform`}
+                      />
+                    </button>
+                  </td>
+                  <td className="px-2 py-3 text-center">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <input
+                        type="number"
+                        min="1"
+                        max="300"
+                        defaultValue={item.duracion_segundos || 10}
+                        onBlur={(e) => updateMediaDuration(item.id, parseInt(e.target.value) || 10)}
+                        className="w-10 bg-black/40 border border-white/10 rounded-lg px-1 py-1 text-[8px] font-black text-center text-white outline-none focus:border-white/20"
+                      />
+                    </div>
+                  </td>
+                  <td className="px-1 py-3 text-center">
+                    <button
+                      onClick={() => deleteMedia(item.id)}
+                      className="p-1 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </td>
+                  <td className="px-1 py-3 text-center">
+                    <button
+                      onClick={() => handleDownload(item.url, (item.nombre_sponsor || item.nombre) || '')}
+                      className="p-1 opacity-40 hover:opacity-100 hover:bg-white/5 rounded-lg transition-all text-white"
+                      title="Descargar archivo"
+                    >
+                      <Download size={12} />
+                    </button>
+                  </td>
+                  <td className="px-1 py-3 text-center">
+                    <button
+                      onClick={() => setPreviewUrl(item.url)}
+                      className="p-1 text-purple-400 opacity-40 hover:opacity-100 hover:bg-white/5 rounded-lg transition-all"
+                    >
+                      <Eye size={12} />
+                    </button>
+                  </td>
+                </motion.tr>
+              ))}
+            </AnimatePresence>
+            {animaciones.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-8 py-20 text-center opacity-20 italic font-bold uppercase text-[10px] tracking-widest">
+                  No hay animaciones. Carga o vincula alguna arriba.
                 </td>
               </tr>
             )}
@@ -682,6 +919,15 @@ export default function AdminPublicidad() {
                 BIBLIOTECA DE <span className="text-purple-400">ANIMACIONES</span>
               </h2>
 
+              <div className="mb-6 p-5 rounded-2xl bg-white/[0.03] border border-white/10">
+                <p className="text-[10px] font-black uppercase tracking-widest text-purple-400/90 mb-2">Recomendaciones para que corran bien en la pizarra</p>
+                <ul className="text-[11px] text-white/80 space-y-1.5 list-disc list-inside">
+                  <li><strong>Formato:</strong> Lottie (.json) preferido — ligero y fluido. También MP4/WebM para vídeos cortos (&lt; 2–3 MB) o GIF/WebP (&lt; 1 MB).</li>
+                  <li><strong>Tamaño:</strong> Lottie &lt; 500 KB; vídeo &lt; 2–3 MB por clip; imagen/GIF &lt; 1 MB.</li>
+                  <li><strong>Resolución:</strong> 1920×1080 o 1280×720. Lottie escala solo.</li>
+                </ul>
+              </div>
+
               <div className="flex flex-wrap items-center gap-4 mb-10">
                 <div {...animDrop.getRootProps()} className="cursor-pointer">
                   <input {...animDrop.getInputProps()} />
@@ -711,9 +957,19 @@ export default function AdminPublicidad() {
                 >
                   Subir
                 </button>
-              </div>
 
-              {renderTable(animaciones, 'text-purple-400')}
+                <button
+                  onClick={syncAnimacionesToPizarra}
+                  disabled={syncingAnimToPizarra || animaciones.length === 0}
+                  className="flex items-center gap-2 px-6 py-3.5 bg-padel-primary/20 border border-padel-primary/40 text-padel-primary rounded-2xl font-black uppercase italic text-[10px] hover:bg-padel-primary/30 transition-all disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  {syncingAnimToPizarra ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                  Sincronizar con pizarra
+                </button>
+              </div>
+              <p className="text-[10px] text-white/50 mb-6">Asigna cada animación a un botón del marcador (1–12). Luego pulsa &quot;Sincronizar con pizarra&quot;. En el partido el marcador verá esos botones y al pulsar se mostrará la animación en la pizarra.</p>
+
+              {renderAnimacionesTable()}
             </section>
 
             {/* WEB URL SECTION */}

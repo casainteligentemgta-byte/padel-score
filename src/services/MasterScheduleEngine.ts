@@ -43,6 +43,11 @@ export interface MasterScheduleConfig {
 
 export class MasterScheduleEngine {
 
+    /**
+     * Genera el calendario de partidos del torneo.
+     * Regla de orden: primero se juegan todos los partidos de FASE DE GRUPOS;
+     * solo después se programan y juegan SEMIFINALES y FINAL.
+     */
     static generateMasterSchedule(config: MasterScheduleConfig) {
         const {
             startDate,
@@ -119,7 +124,9 @@ export class MasterScheduleEngine {
             return { matches: [], notScheduled: 0, totalMatches: 0 };
         }
 
-        // ── 2. Separar en cubos de fase (orden: Grupos → Principal → Consolación → SEMIFINAL/FINAL RR) ─────
+        // ── 2. REGLA OFICIAL: Primero fase de grupos, después semifinales y final ─────────────────────
+        // Los partidos se agendan en este orden estricto: ningún partido de semifinal/final se programa
+        // hasta que todos los de "Fase de Grupos" estén agendados.
         const KNOCKOUT_PRIORITY: Record<string, number> = {
             SEPTIMA: 1, SEXTA: 2, QUINTA: 3, CUARTA: 4, TERCERA: 5, SEGUNDA: 6, PRIMERA: 7,
             SUMA_7: 8, SUMA_8: 9, SUMA_9: 10, SUMA_10: 11, SUMA_11: 12,
@@ -128,6 +135,7 @@ export class MasterScheduleEngine {
         const sortByKnockoutPriority = (matches: any[]): any[] =>
             [...matches].sort((a, b) => (KNOCKOUT_PRIORITY[a.category] ?? 99) - (KNOCKOUT_PRIORITY[b.category] ?? 99));
 
+        // Orden fijo: grupos primero, luego eliminatorias (semifinales y final)
         const phaseOrder = [
             'Fase de Grupos',
             'Principal R1', 'Principal SF', 'Principal FINAL',

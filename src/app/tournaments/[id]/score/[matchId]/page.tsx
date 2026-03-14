@@ -1162,12 +1162,14 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     </div>
                 </div>
 
-                {/* Animaciones pizarra: botones debajo de los puntos del game (disparan en la pantalla de la pizarra) */}
+                {/* Animaciones pizarra: botones 1–12 (orden numérico) */}
                 {Object.keys(animacionesMarcador).length > 0 && (
                     <div className="w-full flex-[1_1_100%] flex flex-col gap-1 p-2 bg-black/30 border border-white/10 rounded-xl self-start">
                         <span className="text-[8px] font-black uppercase tracking-widest text-gray-500">Animaciones pizarra</span>
                         <div className="flex flex-wrap gap-1.5">
-                            {Object.entries(animacionesMarcador).map(([animId, a]) => (
+                            {Object.entries(animacionesMarcador)
+                                .sort((a, b) => Number(a[0]) - Number(b[0]))
+                                .map(([animId, a]) => (
                                 <motion.button
                                     key={animId}
                                     whileHover={{ scale: 1.05 }}

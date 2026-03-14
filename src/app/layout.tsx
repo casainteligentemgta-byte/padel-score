@@ -3,6 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
 import { AppSettingsProvider } from "@/lib/AppSettingsContext";
 import RootErrorBoundary from "./RootErrorBoundary";
+import { InstallAppBanner } from "@/components/InstallAppBanner";
 
 export const metadata: Metadata = {
     title: "Smart Padel | Tournament Manager",
@@ -12,6 +13,11 @@ export const metadata: Metadata = {
         capable: true,
         statusBarStyle: "black-translucent",
         title: "Padel Score",
+    },
+    other: {
+        "mobile-web-app-capable": "yes",
+        "apple-mobile-web-app-capable": "yes",
+        "apple-mobile-web-app-status-bar-style": "black-translucent",
     },
 };
 
@@ -38,6 +44,7 @@ export default function RootLayout({
                             <main className="min-h-screen" style={{ minHeight: "100vh" }}>
                                 {children}
                             </main>
+                            <InstallAppBanner />
                         </AppSettingsProvider>
                     </AuthProvider>
                 </RootErrorBoundary>

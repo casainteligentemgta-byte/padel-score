@@ -229,9 +229,9 @@ function RegistrationFormContent() {
                     status: 'Activo'
                 }, user.uid);
 
-                // --- EMAIL NOTIFICATION ---
+                // --- EMAIL NOTIFICATION (aviso al club) ---
                 try {
-                    await fetch('/api/send-email', {
+                    const emailRes = await fetch('/api/send-email', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -248,6 +248,10 @@ function RegistrationFormContent() {
                             }
                         })
                     });
+                    if (!emailRes.ok) {
+                        const err = await emailRes.json().catch(() => ({}));
+                        console.warn('Aviso por email no enviado:', err?.error || emailRes.statusText);
+                    }
                 } catch (emailError) {
                     console.error('Error sending notification email:', emailError);
                 }

@@ -8,9 +8,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Límite de envíos excedido. Intenta más tarde.' }, { status: 429 });
   }
   const apiKey = process.env.RESEND_API_KEY;
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'Smart Padel Pro <notifications@resend.dev>';
 
   if (!apiKey) {
-    console.error('RESEND_API_KEY is missing from environment variables');
+    console.error('[send-email] RESEND_API_KEY is missing from environment variables');
     return NextResponse.json({ error: 'Service configuration error' }, { status: 500 });
   }
 
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
     let html = '';
 
     if (type === 'NEW_PLAYER') {
+      const instagram = String(data.instagram || '').replace(/^@+/, '').trim();
       subject = `🎾 Nuevo Jugador Registrado: ${data.name} ${data.lastName}`;
       html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
@@ -49,7 +51,7 @@ export async function POST(request: Request) {
             <li><strong>DNI:</strong> ${data.dni}</li>
             <li><strong>WhatsApp:</strong> ${data.phone}</li>
             <li><strong>Email:</strong> ${data.email}</li>
-            <li><strong>Instagram:</strong> @${data.instagram}</li>
+            <li><strong>Instagram:</strong> ${instagram ? `@${instagram}` : '—'}</li>
             <li><strong>Nivel:</strong> Cat. ${data.level}</li>
             <li><strong>Posición:</strong> ${data.position}</li>
           </ul>
@@ -65,6 +67,7 @@ export async function POST(request: Request) {
           <p>Un jugador se ha inscrito en un torneo:</p>
           <ul style="list-style: none; padding: 0;">
             <li><strong>Jugador:</strong> ${data.participantName}</li>
+            ${data.participantEmail ? `<li><strong>Email:</strong> ${data.participantEmail}</li>` : ''}
             <li><strong>Torneo:</strong> ${data.tournamentName}</li>
             <li><strong>Categoría:</strong> ${data.categoryName}</li>
             <li><strong>Monto:</strong> $${data.amount}</li>
@@ -78,27 +81,22 @@ export async function POST(request: Request) {
       `;
     }
 
-    const recipients: string[] = ['casainteligentemgta@gmail.com'];
-    if (type === 'NEW_PLAYER' && data.email) {
-      recipients.push(data.email);
-    }
-    if (type === 'NEW_INSCRIPTION' && data.participantEmail) {
-      recipients.push(data.participantEmail);
-    }
-
     const { error } = await resend.emails.send({
-      from: 'Smart Padel Pro <notifications@resend.dev>',
-      to: recipients,
+      from: fromEmail,
+      // Por petición, siempre enviamos solo al email principal
+      to: ['casainteligentemgta@gmail.com'],
       subject: subject,
       html: html,
     });
 
     if (error) {
+      console.error('[send-email] Resend error:', error);
       return NextResponse.json({ error }, { status: 400 });
     }
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
+    console.error('[send-email] Unexpected error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

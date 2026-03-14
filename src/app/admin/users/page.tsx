@@ -41,10 +41,19 @@ export default function AdminUsersPage() {
 
     const loadUsers = async () => {
         try {
-            const data = await dataService.getAllParticipants();
-            setUsers(data);
+            const res = await fetch('/api/participants');
+            if (res.ok) {
+                const data = await res.json();
+                setUsers(Array.isArray(data) ? data : []);
+            } else if (res.status === 501) {
+                const data = await dataService.getAllParticipants();
+                setUsers(data);
+            } else {
+                setUsers([]);
+            }
         } catch (err) {
             console.error(err);
+            setUsers([]);
         } finally {
             setLoading(false);
         }

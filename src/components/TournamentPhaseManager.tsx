@@ -333,15 +333,19 @@ export default function TournamentPhaseManager({
     const [activeTab, setActiveTab] = useState<'groups' | 'bracket'>('groups');
     const [showResetWarning, setShowResetWarning] = useState(false);
 
-    // ── Phase detection ────────────────────────────────────────────────────
+    // ── Phase detection: regla = primero fase de grupos, después semifinales y final ───────────────────
     const groupMatches = useMemo(() => matches.filter(m =>
-        m.stage === 'GROUP_STAGE' || m.groupName != null
+        m.stage === 'GROUP_STAGE' ||
+        m.roundName === 'Fase de Grupos' ||
+        m.groupName != null
     ), [matches]);
 
     const eliminationMatches = useMemo(() => matches.filter(m =>
-        m.stage === 'SEMIFINAL' || m.stage === 'FINAL' ||
+        m.stage === 'SEMIFINAL' || m.stage === 'FINAL' || m.stage === 'MAIN_DRAW' ||
         m.isKnockout || m.isFinal ||
-        m.roundName === 'SEMIFINAL' || m.roundName === 'FINAL'
+        m.roundName === 'SEMIFINAL' || m.roundName === 'FINAL' ||
+        m.roundName === 'Principal SF' || m.roundName === 'Principal FINAL' ||
+        m.roundName === 'CUARTOS'
     ), [matches]);
 
     const finishedGroupMatches = groupMatches.filter(m => m.status === MatchStatus.FINISHED);

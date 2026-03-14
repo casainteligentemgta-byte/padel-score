@@ -156,6 +156,22 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
             const rawTeam = m[side];
             const rawName = side === 'team1' ? m.team1Name : m.team2Name;
 
+            // Si tenemos info más fresca en teamsRef (después de aceptar invitaciones),
+            // usamos siempre esos nombres y dejamos fotos/teléfonos del rawTeam si existen.
+            if (teamFromIdx) {
+                const p1Name = getPlayerName(teamFromIdx.p1, idx, 1);
+                const p2Name = getPlayerName(teamFromIdx.p2, idx, 2);
+                return {
+                    name: `${p1Name} / ${p2Name}`,
+                    p1Name,
+                    p2Name,
+                    photo1: rawTeam?.p1?.photo ?? teamFromIdx.p1?.photo ?? null,
+                    photo2: rawTeam?.p2?.photo ?? teamFromIdx.p2?.photo ?? null,
+                    phone1: rawTeam?.p1?.phone ?? teamFromIdx.p1?.phone ?? null,
+                    phone2: rawTeam?.p2?.phone ?? teamFromIdx.p2?.phone ?? null
+                };
+            }
+
             if (rawTeam && (rawTeam.teamLabel || rawTeam.p1 || rawTeam.p2)) {
                 const name = rawName || rawTeam.teamLabel || (rawTeam.p1?.name && rawTeam.p2?.name ? `${rawTeam.p1.name} / ${rawTeam.p2.name}` : '?');
                 return {
@@ -168,17 +184,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                     phone2: rawTeam.p2?.phone ?? null
                 };
             }
-            if (teamFromIdx) {
-                return {
-                    name: `${getPlayerName(teamFromIdx.p1, idx, 1)} / ${getPlayerName(teamFromIdx.p2, idx, 2)}`,
-                    p1Name: getPlayerName(teamFromIdx.p1, idx, 1),
-                    p2Name: getPlayerName(teamFromIdx.p2, idx, 2),
-                    photo1: teamFromIdx.p1?.photo ?? null,
-                    photo2: teamFromIdx.p2?.photo ?? null,
-                    phone1: teamFromIdx.p1?.phone ?? null,
-                    phone2: teamFromIdx.p2?.phone ?? null
-                };
-            }
+
             return {
                 name: (typeof idx === 'number' && idx <= 0) ? 'Por definir' : (rawName || 'Por definir'),
                 p1Name: null, p2Name: null, photo1: null, photo2: null, phone1: null, phone2: null

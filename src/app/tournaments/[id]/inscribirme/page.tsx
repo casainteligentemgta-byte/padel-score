@@ -1,13 +1,14 @@
 'use client';
 
 import { use, useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import Sidebar from '@/components/Sidebar';
 import { BackButton } from '@/components/BackButton';
 import PaymentInfo from '@/components/PaymentInfo';
+import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
 import {
     ArrowLeft,
     CheckCircle2,
@@ -115,6 +116,7 @@ const VENEZUELAN_BANKS = [
 export default function InscribirmePage({ params }: { params: Promise<{ id: string }> }) {
     const { id: tournamentId } = use(params);
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { user, profile, loading: authLoading } = useAuth();
     const [tournament, setTournament] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -148,6 +150,23 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
     const [showPartnerConfirm, setShowPartnerConfirm] = useState(false);
     const [pendingInvitation, setPendingInvitation] = useState<any | null>(null);
     const [timeLeft, setTimeLeft] = useState<string>('');
+
+    // Retorno de Mercado Pago (mp=success | failure | pending)
+    useEffect(() => {
+        const mp = searchParams.get('mp');
+        if (!mp) return;
+        if (mp === 'success') {
+            setSuccess(true);
+            router.replace(`/tournaments/${tournamentId}/inscribirme`, { scroll: false });
+        } else if (mp === 'failure') {
+            setError('El pago fue rechazado o cancelado. Tu inscripción quedó pendiente; puedes volver a intentar el pago desde Validación de pagos.');
+            router.replace(`/tournaments/${tournamentId}/inscribirme`, { scroll: false });
+        } else if (mp === 'pending') {
+            setSuccess(true);
+            setError(null);
+            router.replace(`/tournaments/${tournamentId}/inscribirme`, { scroll: false });
+        }
+    }, [searchParams, tournamentId, router]);
 
     // Auto-search partner when code is 6 chars
     useEffect(() => {
@@ -422,8 +441,16 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
             return;
         }
 
+        const needsRef = totalPrice > 0 && (paymentData.method === 'Pago Móvil' || paymentData.method === 'Transferencia Bancaria');
+        if (needsRef && !paymentData.reference?.trim()) {
+            setError('Indica la referencia o número de confirmación del pago (aparece en tu comprobante de Pago Móvil o transferencia).');
+            return;
+        }
+
         setError(null);
         setSubmitting(true);
+        const isMercadoPago = paymentData.method === 'Mercado Pago';
+
         try {
             const participantName = profile?.name || user.displayName || user.email || 'Jugador';
             const participantEmail = user.email || undefined;
@@ -431,12 +458,18 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
             const participantRecord = myParticipants?.[0];
             const participantId = participantRecord?.id ?? undefined;
 
+            const createdInscriptionIds: string[] = [];
+
             for (const key of selectedCategories) {
                 const cat = categories.find((c) => c.key === key);
                 if (!cat) continue;
 
-                // Add inscription
-                await dataService.addInscription(
+                const amountPaid = paymentData.amount ? parseFloat(String(paymentData.amount).replace(',', '.')) : undefined;
+                const verification = !isMercadoPago && cat.price > 0 && amountPaid != null
+                    ? validatePaymentAgainstCategoryPrice({ amountExtracted: amountPaid, categoryPrice: cat.price })
+                    : cat.price === 0 ? { paymentStatus: 'paid' as const, alertMessage: null } : { paymentStatus: 'pending' as const, alertMessage: null };
+
+                const { id: inscriptionId } = await dataService.addInscription(
                     {
                         tournamentId,
                         tournamentName: tournament.name,
@@ -445,11 +478,12 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                         participantName,
                         participantEmail,
                         participantId,
-                        paymentStatus: cat.price > 0 ? 'pending' : 'paid',
+                        paymentStatus: isMercadoPago ? 'pending' : (cat.price === 0 ? 'paid' : verification.paymentStatus),
+                        alertMessage: verification.alertMessage || undefined,
                         paymentMethod: paymentData.method,
                         paymentBank: paymentData.bank,
                         paymentDate: paymentData.date,
-                        paymentAmount: paymentData.amount ? parseFloat(paymentData.amount) : undefined,
+                        paymentAmount: amountPaid,
                         paymentReference: paymentData.reference,
                         receiptUrl: paymentData.receiptUrl || undefined,
                         partnerId: currentPartner?.id,
@@ -457,8 +491,11 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                     },
                     user.uid
                 );
+                createdInscriptionIds.push(inscriptionId);
 
-                // Sincronizar equipos del torneo (rellenar siguiente slot libre con nombres reales)
+                if (isMercadoPago) continue;
+
+                // Sincronizar equipos del torneo (solo si no es Mercado Pago; con MP el webhook lo hará al aprobar)
                 if (participantId) {
                     const participantInfo = {
                         id: participantId,
@@ -501,31 +538,67 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                 }
             }
 
-            // --- EMAIL NOTIFICATION ---
+            // --- Pago con Mercado Pago: redirigir al checkout ---
+            if (isMercadoPago && createdInscriptionIds.length > 0 && totalPrice > 0) {
+                try {
+                    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+                    const res = await fetch('/api/mercadopago/create-preference', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            inscriptionIds: createdInscriptionIds,
+                            amount: totalPrice,
+                            title: `Inscripción: ${tournament.name}`,
+                            payerEmail: participantEmail,
+                            tournamentId,
+                            baseUrl,
+                            successUrl: `${baseUrl}/tournaments/${tournamentId}/inscribirme?mp=success`,
+                            failureUrl: `${baseUrl}/tournaments/${tournamentId}/inscribirme?mp=failure`,
+                            pendingUrl: `${baseUrl}/tournaments/${tournamentId}/inscribirme?mp=pending`,
+                        }),
+                    });
+                    const data = await res.json();
+                    if (data.initPoint) {
+                        window.location.href = data.initPoint;
+                        return;
+                    }
+                    setError(data.error || 'No se pudo abrir el pago con Mercado Pago.');
+                } catch (mpErr: any) {
+                    setError(mpErr?.message || 'Error al conectar con Mercado Pago.');
+                } finally {
+                    setSubmitting(false);
+                }
+                return;
+            }
+
+            // --- EMAIL NOTIFICATION (aviso al club) ---
             try {
-                // Get all selected category names
                 const selectedCatNames = categories
                     .filter(c => selectedCategories.has(c.key))
                     .map(c => c.name)
                     .join(', ');
 
-                await fetch('/api/send-email', {
+                const emailRes = await fetch('/api/send-email', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            type: 'NEW_INSCRIPTION',
-                            data: {
-                                participantName: profile?.name || user.displayName || user.email || 'Jugador',
-                                participantEmail: user.email || undefined,
-                                tournamentName: tournament.name,
-                                categoryName: selectedCatNames,
-                                amount: paymentData.amount || '0',
-                                paymentMethod: paymentData.method || 'No especificado',
-                                paymentReference: paymentData.reference || 'N/A',
-                                receiptUrl: paymentData.receiptUrl || undefined
-                            }
-                        })
+                    body: JSON.stringify({
+                        type: 'NEW_INSCRIPTION',
+                        data: {
+                            participantName: profile?.name || user.displayName || user.email || 'Jugador',
+                            participantEmail: user.email || undefined,
+                            tournamentName: tournament.name,
+                            categoryName: selectedCatNames,
+                            amount: paymentData.amount || '0',
+                            paymentMethod: paymentData.method || 'No especificado',
+                            paymentReference: paymentData.reference || 'N/A',
+                            receiptUrl: paymentData.receiptUrl || undefined
+                        }
+                    })
                 });
+                if (!emailRes.ok) {
+                    const err = await emailRes.json().catch(() => ({}));
+                    console.warn('Aviso por email (inscripción) no enviado:', err?.error || emailRes.statusText);
+                }
             } catch (emailError) {
                 console.error('Error sending inscription notification email:', emailError);
             }
@@ -844,6 +917,7 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                                                                         <>
                                                                             <option value="Pago Móvil" className="bg-[#111]">Pago Móvil</option>
                                                                             <option value="Transferencia Bancaria" className="bg-[#111]">Transferencia Bancaria</option>
+                                                                            <option value="Mercado Pago" className="bg-[#111]">Mercado Pago</option>
                                                                             <option value="Zelle" className="bg-[#111]">Zelle</option>
                                                                         </>
                                                                     )}
@@ -916,7 +990,7 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                                                         </div>
 
                                                         <div className="space-y-2 md:col-span-2">
-                                                            <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Referencia / Confirmación</label>
+                                                            <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Referencia / Confirmación {(paymentData.method === 'Pago Móvil' || paymentData.method === 'Transferencia Bancaria') && totalPrice > 0 && <span className="text-amber-400">*</span>}</label>
                                                             <div className="relative">
                                                                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
                                                                     <Hash className="w-5 h-5" />
@@ -925,10 +999,13 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                                                                     type="text"
                                                                     value={paymentData.reference}
                                                                     onChange={(e) => setPaymentData({ ...paymentData, reference: e.target.value })}
-                                                                    placeholder="Número de referencia"
+                                                                    placeholder={(paymentData.method === 'Pago Móvil' || paymentData.method === 'Transferencia Bancaria') ? 'Ej.: REF123456 o el número del comprobante' : 'Número de referencia'}
                                                                     className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
                                                                 />
                                                             </div>
+                                                            {(paymentData.method === 'Pago Móvil' || paymentData.method === 'Transferencia Bancaria') && (
+                                                                <p className="text-[10px] text-white/50 mt-1">El club conciliará tu pago con esta referencia. Cópiala tal cual del comprobante.</p>
+                                                            )}
                                                         </div>
                                                     </div>
 

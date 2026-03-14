@@ -80,14 +80,24 @@ function EventView() {
         doc.setFontSize(10);
         doc.text(`PLANILLA DE JUEGOS - ${eventDate}`, 150, 14);
 
-        const tableData = allMatches.map(m => [
-            formatHHMM(m.scheduledTime),
-            `Pista ${m.court}`,
-            formatCategory(m._category),
-            m.team1.name,
-            m.team2.name,
-            m.status === MatchStatus.FINISHED ? `${m.score1} - ${m.score2}` : (m.status === MatchStatus.LIVE ? 'En Vivo' : 'Pendiente')
-        ]);
+        // Una fila por partido (todas las categorías): 3 categorías × 7 partidos = 21 filas. Solo se evitan duplicados reales (mismo torneo + mismo id).
+        const seenMatchKeys = new Set<string>();
+        const tableData: string[][] = [];
+        for (const m of allMatches) {
+            const matchKey = `${m._tournamentId ?? ''}_${m.id ?? m.matchId ?? ''}`;
+            if (seenMatchKeys.has(matchKey)) continue;
+            seenMatchKeys.add(matchKey);
+            const hora = formatHHMM(m.scheduledTime);
+            const pista = String(m.court ?? m.courtIndex ?? '-').trim();
+            tableData.push([
+                hora,
+                `Pista ${pista}`,
+                formatCategory(m._category),
+                m.team1?.name ?? '?',
+                m.team2?.name ?? '?',
+                m.status === MatchStatus.FINISHED ? `${m.score1 ?? 0} - ${m.score2 ?? 0}` : (m.status === MatchStatus.LIVE ? 'En Vivo' : 'Pendiente')
+            ]);
+        }
 
         autoTable(doc, {
             startY: 25,
@@ -122,6 +132,11 @@ function EventView() {
     // Subscribe to all tournaments and their matches in parallel via dataService
     useEffect(() => {
         if (tournamentIds.length === 0) { setLoading(false); return; }
+
+        // Reset al entrar (o al cambiar ids) para no mostrar 14 partidos de una visita anterior
+        setTournaments({});
+        setAllMatches([]);
+        setLoading(true);
 
         const loaded: Record<string, boolean> = {};
         const unsubs: (() => void)[] = [];
@@ -162,12 +177,19 @@ function EventView() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [idsParam]);
 
-    // Flatten + enrich all matches
+    // Flatten + enrich all matches (sin duplicados: un partido por torneo solo una vez)
     useEffect(() => {
         const flat: any[] = [];
-        Object.values(tournaments).forEach((t: any) => {
+        const seenKeys = new Set<string>();
+        // Solo torneos que pidió la URL, para no arrastrar datos viejos de otra visita
+        const tournamentsToList = Object.values(tournaments).filter((t: any) => t.id && tournamentIds.includes(t.id));
+        tournamentsToList.forEach((t: any) => {
             if (!t.matches) return;
             t.matches.forEach((m: any) => {
+                const matchKey = `${t.id}_${m.id ?? m.matchId ?? ''}`;
+                if (seenKeys.has(matchKey)) return;
+                seenKeys.add(matchKey);
+
                 let team1Obj: any = null;
                 let team2Obj: any = null;
 
@@ -193,13 +215,14 @@ function EventView() {
                 };
 
                 const genderValue = t.gender || (['MALE', 'FEMALE', 'MIXED'].includes(String(t.category)) ? t.category : undefined);
+                const court = m.court ?? (m.courtIndex !== undefined ? m.courtIndex + 1 : '-');
                 flat.push({
                     ...m,
                     _tournamentId: t.id,
                     _tournamentName: t.name,
                     _category: t.category,
                     _gender: genderValue,
-                    court: m.court ?? (m.courtIndex !== undefined ? m.courtIndex + 1 : '-'),
+                    court: typeof court === 'number' ? court : (Number(court) || court),
                     team1: buildTeam(team1Obj, m.team1Index, m.team1Name),
                     team2: buildTeam(team2Obj, m.team2Index, m.team2Name),
                     team1Name: m.team1Name,
@@ -211,11 +234,11 @@ function EventView() {
         flat.sort((a, b) => {
             const td = toMs(a.scheduledTime) - toMs(b.scheduledTime);
             if (td !== 0) return td;
-            return (a.courtIndex ?? 0) - (b.courtIndex ?? 0);
+            return (a.courtIndex ?? Number(a.court) ?? 0) - (b.courtIndex ?? Number(b.court) ?? 0);
         });
 
         setAllMatches(flat);
-    }, [tournaments]);
+    }, [tournaments, tournamentIds]);
 
     const numCanchas = (() => {
         const t = Object.values(tournaments)[0];
