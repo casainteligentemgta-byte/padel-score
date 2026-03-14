@@ -299,7 +299,7 @@ export const dataService = {
             return a === b || b.startsWith(a) || a.startsWith(b);
         };
         const p1NameMatches = (t: any) => nameMatches(t.p1?.name ?? '', p1Name);
-        const p2NameMatches = (t: any) => nameMatches(t.p1?.name ?? '', p2Name ?? '');
+        const p2NameMatches = (t: any) => nameMatches(t.p2?.name ?? '', p2Name ?? '');
 
         const updatedCategories = tournament.categories?.map((cat: any) => {
             // Si tenemos enlace por código (tournament_team_id), actualizar ese equipo en la categoría si existe
@@ -720,6 +720,21 @@ export const dataService = {
         return data;
     },
 
+    /** Obtiene nombre para mostrar: profiles.name o participants (data.name + data.lastName) por owner_id */
+    async getDisplayNameForUser(userId: string): Promise<string> {
+        const db = supabase();
+        const { data: profile } = await db.from('profiles').select('name').eq('id', userId).single();
+        const fromProfile = (profile?.name || '').trim();
+        if (fromProfile) return fromProfile;
+        const { data: participants } = await db.from('participants').select('data').eq('owner_id', userId).limit(1);
+        const d = participants?.[0]?.data as { name?: string; lastName?: string } | undefined;
+        if (d) {
+            const full = [d.name, d.lastName].filter(Boolean).join(' ').trim();
+            if (full) return full;
+        }
+        return '';
+    },
+
     async createTeamInvitation(
         tournamentId: string,
         category: string,
@@ -897,21 +912,9 @@ export const dataService = {
             // Sincronizar nombres en el torneo (rellenar pareja completa en la categoría/grupo)
             try {
                 if (team.tournament_id && team.category && team.player_a_id && team.player_b_id) {
-                    const db = supabase();
-                    const { data: profileA } = await db
-                        .from('profiles')
-                        .select('name')
-                        .eq('id', team.player_a_id)
-                        .single();
-                    const { data: profileB } = await db
-                        .from('profiles')
-                        .select('name')
-                        .eq('id', team.player_b_id)
-                        .single();
-
-                    const p1Name = (profileA?.name || '').trim() || 'Jugador A';
-                    const p2Name = (profileB?.name || '').trim() || 'Jugador B';
-                    const tournamentTeamIdHint = (team as any).tournament_team_id
+                    const p1Name = (await this.getDisplayNameForUser(team.player_a_id)) || 'Jugador A';
+                    const p2Name = (await this.getDisplayNameForUser(team.player_b_id)) || 'Jugador B';
+                    const tournamentTeamIdHint = (team as any).tournament_team_id != null && (team as any).tournament_team_id !== ''
                         ? String((team as any).tournament_team_id)
                         : undefined;
 
@@ -920,7 +923,7 @@ export const dataService = {
                         team.category,
                         p1Name,
                         p2Name,
-                        tournamentTeamIdHint,
+                        tournamentTeamIdHint ?? null,
                     );
 
                     // Notificar al Jugador A que la invitación fue aceptada
@@ -967,14 +970,13 @@ export const dataService = {
     async syncAcceptedTeamsToTournament(tournamentId: string): Promise<{ synced: number; errors: string[] }> {
         const { data: acceptedTeams, error } = await supabase()
             .from('teams')
-            .select('id, tournament_id, category, player_a_id, player_b_id')
+            .select('id, tournament_id, category, player_a_id, player_b_id, tournament_team_id')
             .eq('tournament_id', tournamentId)
             .eq('status', 'accepted');
 
         if (error) throw error;
         if (!acceptedTeams?.length) return { synced: 0, errors: [] };
 
-        const db = supabase();
         const errors: string[] = [];
         let synced = 0;
 
@@ -983,12 +985,11 @@ export const dataService = {
                 errors.push(`Equipo ${row.id}: faltan category o jugadores.`);
                 continue;
             }
-            const { data: profileA } = await db.from('profiles').select('name').eq('id', row.player_a_id).single();
-            const { data: profileB } = await db.from('profiles').select('name').eq('id', row.player_b_id).single();
-            const p1Name = (profileA?.name || '').trim() || 'Jugador A';
-            const p2Name = (profileB?.name || '').trim() || 'Jugador B';
+            const p1Name = (await this.getDisplayNameForUser(row.player_a_id)) || 'Jugador A';
+            const p2Name = (await this.getDisplayNameForUser(row.player_b_id)) || 'Jugador B';
+            const teamIdHint = (row as any).tournament_team_id != null ? String((row as any).tournament_team_id) : undefined;
             try {
-                await this.assignPlayersToTournament(tournamentId, row.category, p1Name, p2Name);
+                await this.assignPlayersToTournament(tournamentId, row.category, p1Name, p2Name, teamIdHint ?? null);
                 synced++;
             } catch (err: any) {
                 errors.push(`Equipo ${row.id} (${p1Name} / ${p2Name}): ${err?.message || String(err)}`);
