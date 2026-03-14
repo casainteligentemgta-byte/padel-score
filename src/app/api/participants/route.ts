@@ -20,10 +20,23 @@ export async function GET() {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  const list = (data || []).map((r: any) => ({
+  const rows = data || [];
+  const ownerIds = [...new Set(rows.map((r: any) => r.owner_id).filter(Boolean))];
+  let codeByOwner: Record<string, string> = {};
+  if (ownerIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, unique_code')
+      .in('id', ownerIds);
+    (profiles || []).forEach((p: any) => {
+      if (p.unique_code) codeByOwner[p.id] = p.unique_code;
+    });
+  }
+  const list = rows.map((r: any) => ({
     id: r.id,
     ownerId: r.owner_id,
     uid: r.owner_id,
+    uniqueCode: codeByOwner[r.owner_id] || null,
     ...(r.data || {}),
     createdAt: r.created_at,
     updatedAt: r.updated_at,

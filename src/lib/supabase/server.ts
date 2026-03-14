@@ -8,7 +8,7 @@ let serviceClient: SupabaseClient | null = null;
  */
 export function getSupabaseServiceClient(): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY)?.trim();
   if (!url || !key) return null;
   if (!serviceClient) {
     serviceClient = createClient(url, key);

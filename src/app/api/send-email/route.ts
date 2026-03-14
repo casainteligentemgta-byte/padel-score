@@ -2,6 +2,7 @@ import { Resend } from 'resend';
 import { NextResponse } from 'next/server';
 import { validateEmailBody, sanitizeString } from '@/lib/apiValidation';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { sendCEOMessage } from '@/lib/ceo-messenger';
 
 export async function POST(request: Request) {
   if (!checkRateLimit(request)) {
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
 
     if (type === 'NEW_PLAYER') {
       const instagram = String(data.instagram || '').replace(/^@+/, '').trim();
+      const fullName = [data.name, data.lastName].filter(Boolean).join(' ').trim() || 'Nuevo jugador';
       subject = `🎾 Nuevo Jugador Registrado: ${data.name} ${data.lastName}`;
       html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
@@ -59,6 +61,9 @@ export async function POST(request: Request) {
           <p style="font-size: 12px; color: #666; text-align: center;">Sistema de Notificaciones Smart Padel</p>
         </div>
       `;
+      // Aviso por WhatsApp (IA CEO) al mismo tiempo que el email
+      const whatsappMsg = `🎾 *Smart Padel – Nuevo jugador registrado*\n\n👤 ${fullName}\n📱 ${data.phone || '—'}\n📧 ${data.email || '—'}\n\nSe ha creado una nueva ficha en el sistema.`;
+      sendCEOMessage(whatsappMsg).catch((e) => console.warn('[send-email] WhatsApp CEO:', e?.message || e));
     } else if (type === 'NEW_INSCRIPTION') {
       subject = `🏆 Nueva Inscripción: ${data.participantName} en ${data.tournamentName}`;
       html = `
@@ -79,6 +84,9 @@ export async function POST(request: Request) {
           <p style="font-size: 12px; color: #666; text-align: center;">Sistema de Notificaciones Smart Padel</p>
         </div>
       `;
+      // Aviso por WhatsApp (IA CEO) en nueva inscripción
+      const whatsappInsc = `🏆 *Smart Padel – Nueva inscripción*\n\n👤 ${data.participantName || 'Jugador'}\n📋 ${data.tournamentName || 'Torneo'}\n📂 ${data.categoryName || '—'}\n\nInscripción registrada en el sistema.`;
+      sendCEOMessage(whatsappInsc).catch((e) => console.warn('[send-email] WhatsApp CEO:', e?.message || e));
     }
 
     const { error } = await resend.emails.send({

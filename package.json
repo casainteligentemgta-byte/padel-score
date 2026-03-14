@@ -11,7 +11,8 @@
     "dev:clean:webpack": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\" && next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "verify:ceo": "node scripts/verify-ceo.mjs"
   },
   "description": "",
   "dependencies": {
@@ -34,7 +35,8 @@
     "react-player": "^3.4.0",
     "resend": "^6.9.3",
     "tailwind-merge": "^3.5.0",
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "twilio": "^5.13.0"
   },
   "devDependencies": {
     "@types/node": "^25.3.0",

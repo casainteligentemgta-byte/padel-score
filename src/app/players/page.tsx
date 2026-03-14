@@ -5,7 +5,6 @@ import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import {
     Users,
-    UserPlus,
     Search,
     Trash2,
     ExternalLink,
@@ -181,19 +180,11 @@ function PlayersListContent() {
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
             <Sidebar />
 
-            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-3 flex-shrink-0 pl-24 md:pl-28">
-                <div>
-                    <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
-                        <span className="text-padel-primary">Jugadores</span>
-                    </h1>
-                    <p className="text-gray-500 mt-2 font-medium">Gestiona los perfiles y estadísticas de tus jugadores.</p>
-                </div>
-                <Link
-                    href="/players/register"
-                    className="bg-padel-primary text-black px-8 py-4 rounded-2xl font-black text-sm flex items-center gap-3 hover:scale-105 transition-transform uppercase italic"
-                >
-                    REGISTRAR NUEVO <UserPlus className="w-5 h-5" />
-                </Link>
+            <header className="mb-3 flex-shrink-0 pl-24 md:pl-28">
+                <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
+                    <span className="text-padel-primary">Jugadores</span>
+                </h1>
+                <p className="text-gray-500 mt-2 font-medium">Gestiona los perfiles y estadísticas de tus jugadores.</p>
             </header>
 
             <div className="mb-3 relative flex-shrink-0">
