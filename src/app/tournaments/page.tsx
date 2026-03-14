@@ -223,7 +223,9 @@ export default function MyTournamentsPage() {
                                                     {groupTournaments.map(t => {
                                                         const isOwnerOfT = t.ownerId === user?.uid;
                                                         const todayStr = new Date().toISOString().split('T')[0];
-                                                        const isStarted = t.startDate && t.startDate <= todayStr;
+                                                        const now = new Date();
+                                                        const is1600OrLater = now.getHours() > 16 || (now.getHours() === 16 && now.getMinutes() >= 0);
+                                                        const isStarted = t.startDate && (t.startDate < todayStr || (t.startDate === todayStr && is1600OrLater));
                                                         const registrationStatus = t.registrationStatus || 'open';
                                                         const showInscribirme = user && !isAdmin && !isOwnerOfT && !isStarted && registrationStatus === 'open';
                                                         return (

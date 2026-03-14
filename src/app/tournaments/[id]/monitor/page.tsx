@@ -259,6 +259,21 @@ function CourtCell({
     onClick: () => void;
 }) {
     const displayUrl = `/tournaments/${tournamentId}/display/${match.id}`;
+    const [assigning, setAssigning] = useState<number | null>(null);
+
+    const assignToCourt = async (courtNum: number, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setAssigning(courtNum);
+        try {
+            await fetch('/api/pizarra-cancha', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ courtNumber: courtNum, tournamentId, matchId: match.id }),
+            });
+        } finally {
+            setAssigning(null);
+        }
+    };
 
     return (
         <div className="relative w-full h-full bg-black overflow-hidden group cursor-pointer" onClick={onClick}>
@@ -271,24 +286,36 @@ function CourtCell({
                 sandbox="allow-scripts allow-same-origin"
             />
 
-            {/* Overlay top: badge de cancha + doble-clic para focus */}
-            <div className="absolute top-0 left-0 right-0 flex items-start justify-between p-3 pointer-events-none">
-                {/* Cancha badge */}
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/60 border border-white/10 backdrop-blur-md">
+            {/* Overlay top: badge + direcciones cortas (cancha 1/2/3) + ampliar */}
+            <div className="absolute top-0 left-0 right-0 flex items-start justify-between gap-2 p-3 pointer-events-none">
+                <div className="pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/60 border border-white/10 backdrop-blur-md">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_6px_red]" />
                     <span className="text-[10px] font-black uppercase tracking-widest text-white">
                         PISTA {match.court}
                     </span>
                 </div>
 
-                {/* Expand hint */}
-                {!isFocused && (
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 px-2 py-1.5 rounded-xl bg-black/60 border border-white/10 backdrop-blur-md">
-                        <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">
-                            ↗ Ampliar
-                        </span>
-                    </div>
-                )}
+                <div className="pointer-events-auto flex items-center gap-2">
+                    {!isFocused && [1, 2, 3].map((n) => (
+                        <button
+                            key={n}
+                            type="button"
+                            onClick={(e) => assignToCourt(n, e)}
+                            disabled={assigning !== null}
+                            className="px-2 py-1 rounded-lg bg-black/60 border border-white/10 text-[8px] font-bold uppercase text-white/70 hover:bg-[#ccff00]/20 hover:border-[#ccff00]/40 hover:text-[#ccff00] disabled:opacity-50 transition-colors"
+                            title={`Usar en cancha ${n} → www.smartpadel58.com/p/${n}`}
+                        >
+                            {assigning === n ? '…' : n}
+                        </button>
+                    ))}
+                    {!isFocused && (
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 px-2 py-1.5 rounded-xl bg-black/60 border border-white/10 backdrop-blur-md">
+                            <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">
+                                ↗ Ampliar
+                            </span>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Overlay bottom: nombres de equipos (siempre visible, pequeño) */}

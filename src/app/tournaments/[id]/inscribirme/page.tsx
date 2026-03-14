@@ -139,8 +139,10 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
     const [availableMethods, setAvailableMethods] = useState<any[]>([]);
 
     const todayStr = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const is1600OrLater = now.getHours() > 16 || (now.getHours() === 16 && now.getMinutes() >= 0);
     const registrationStatus = tournament?.registrationStatus || 'open';
-    const inscriptionClosed = (tournament?.startDate && tournament.startDate <= todayStr) || registrationStatus === 'closed';
+    const inscriptionClosed = registrationStatus === 'closed' || (tournament?.startDate && (tournament.startDate < todayStr || (tournament.startDate === todayStr && is1600OrLater)));
 
     // Partner search state
     const [partnerCode, setPartnerCode] = useState<string>('');
@@ -496,6 +498,8 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                 if (isMercadoPago) continue;
 
                 // Sincronizar equipos del torneo (solo si no es Mercado Pago; con MP el webhook lo hará al aprobar)
+                // Se guarda el id del equipo del torneo para enlazarlo con la invitación (código del compañero)
+                let tournamentTeamId: string | null = null;
                 if (participantId) {
                     const participantInfo = {
                         id: participantId,
@@ -513,7 +517,7 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                     }
 
                     try {
-                        await dataService.syncTeamsFromInscription(
+                        tournamentTeamId = await dataService.syncTeamsFromInscription(
                             tournamentId,
                             participantInfo,
                             partnerInfo
@@ -523,13 +527,14 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                     }
                 }
 
-                // Also create a team record/invitation (solo si el compañero tiene id real)
+                // Also create a team record/invitation (solo si el compañero tiene id real), enlazando el equipo del torneo
                 if (currentPartner && currentPartner.id) {
                     const inv = await dataService.createTeamInvitation(
                         tournamentId,
                         cat.key,
                         user.uid,
-                        currentPartner.id
+                        currentPartner.id,
+                        tournamentTeamId ?? undefined
                     );
                     setPendingInvitation({
                         ...inv,
@@ -666,7 +671,7 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                             <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
                             <h2 className="text-lg font-black uppercase">Inscripciones cerradas</h2>
                             <p className="text-sm text-gray-400">
-                                Este torneo ya no admite nuevas inscripciones. El botón de inscripción solo está disponible hasta un día antes del inicio del evento.
+                                Las inscripciones cierran a las 16:00 del día del evento. Ya no es posible inscribirse en este torneo.
                             </p>
                             <Link
                                 href={`/tournaments/${tournamentId}`}

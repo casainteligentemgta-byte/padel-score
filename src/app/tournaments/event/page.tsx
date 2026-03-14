@@ -25,6 +25,21 @@ import {
     formatCategory, formatHHMM, toMs, toMinute, TABS, KNOWN_COMPLEXES
 } from './utils';
 
+function getFaseLabel(match: any): string {
+    if (!match) return '';
+    if (match.stage === 'GROUP_STAGE') return 'Fase de grupos';
+    if (match.stage !== 'MAIN_DRAW') return 'Eliminatoria';
+    if (match.roundName) {
+        const name = String(match.roundName).toUpperCase();
+        if (name.includes('SEMIFINAL')) return 'Semifinales';
+        if (name.includes('CUARTOS')) return 'Cuartos';
+        if (name.includes('OCTAVOS') || name.includes('8VO')) return 'Octavos';
+        if (name.includes('FINAL') && !name.includes('SEMI') && !name.includes('CUARTOS') && !name.includes('OCTAVOS')) return 'Final';
+        return match.roundName;
+    }
+    return 'Eliminatoria';
+}
+
 // ── Main component (wrapped in Suspense below) ──────────────────────────────
 function EventView() {
     const searchParams = useSearchParams();
@@ -93,6 +108,7 @@ function EventView() {
                 hora,
                 `Pista ${pista}`,
                 formatCategory(m._category),
+                getFaseLabel(m),
                 m.team1?.name ?? '?',
                 m.team2?.name ?? '?',
                 m.status === MatchStatus.FINISHED ? `${m.score1 ?? 0} - ${m.score2 ?? 0}` : (m.status === MatchStatus.LIVE ? 'En Vivo' : 'Pendiente')
@@ -101,7 +117,7 @@ function EventView() {
 
         autoTable(doc, {
             startY: 25,
-            head: [['Hora', 'Pista', 'Categoría', 'Equipo 1', 'Equipo 2', 'Resultado']],
+            head: [['Hora', 'Pista', 'Categoría', 'Fase', 'Equipo 1', 'Equipo 2', 'Resultado']],
             body: tableData,
             styles: { fontSize: 8, font: 'helvetica', cellPadding: 4, valign: 'middle' },
             headStyles: { fillColor: [0, 0, 0], textColor: [204, 255, 0], fontStyle: 'bold', minCellHeight: 10 },

@@ -46,6 +46,7 @@ import { BackButton } from '@/components/BackButton';
 import AutoShrinkName from '@/components/AutoShrinkName';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { getAuthHeaders } from '@/lib/apiAuth';
 
 
 
@@ -71,6 +72,8 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [isSavingRules, setIsSavingRules] = useState(false);
     const [isMigrating, setIsMigrating] = useState(false);
+    const [syncAcceptedLoading, setSyncAcceptedLoading] = useState(false);
+    const [syncAcceptedMessage, setSyncAcceptedMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const isOwner = user && tournament && (
         tournament.ownerId === user.uid ||
@@ -490,7 +493,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         if (tableData.length > 0) {
             autoTable(pdf, {
                 startY: 45,
-                head: [['#', 'Hora', 'Pista', 'Equipo 1', 'Resultado', 'Equipo 2', 'Etapa']],
+                head: [['#', 'Hora', 'Pista', 'Equipo 1', 'Resultado', 'Equipo 2', 'Fase']],
                 body: tableData,
                 theme: 'striped',
                 headStyles: { fillColor: [204, 255, 0], textColor: [0, 0, 0], fontStyle: 'bold' },
@@ -1273,6 +1276,47 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                             <p className="text-[10px] text-gray-500">
                                                                 {okNoDuplicates && okTotal ? '✓ Cada equipo en un solo grupo. Total correcto.' : !okNoDuplicates ? '⚠ Un equipo aparece en más de un grupo.' : `⚠ Total equipos en grupos (${allIds.length}) no coincide con inscritos (${totalTeams}).`}
                                                             </p>
+                                                            {canManageTournament && (
+                                                                <div className="pt-3 border-t border-white/10">
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={syncAcceptedLoading}
+                                                                        onClick={async () => {
+                                                                            setSyncAcceptedMessage(null);
+                                                                            setSyncAcceptedLoading(true);
+                                                                            try {
+                                                                                const headers = await getAuthHeaders();
+                                                                                const res = await fetch(`/api/tournaments/${id}/sync-accepted-teams`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' } });
+                                                                                const data = await res.json().catch(() => ({}));
+                                                                                if (!res.ok) {
+                                                                                    setSyncAcceptedMessage({ type: 'error', text: data?.error || 'Error al sincronizar' });
+                                                                                    return;
+                                                                                }
+                                                                                const n = data.synced ?? 0;
+                                                                                const errs = data.errors ?? [];
+                                                                                if (errs.length > 0) {
+                                                                                    setSyncAcceptedMessage({ type: 'error', text: `${n} sincronizados. Errores: ${errs.slice(0, 2).join('; ')}${errs.length > 2 ? '...' : ''}` });
+                                                                                } else {
+                                                                                    setSyncAcceptedMessage({ type: 'success', text: n > 0 ? `Se sincronizaron ${n} pareja(s) en la grilla.` : 'No había parejas pendientes de sincronizar.' });
+                                                                                }
+                                                                            } catch (e: any) {
+                                                                                setSyncAcceptedMessage({ type: 'error', text: e?.message || 'Error de conexión' });
+                                                                            } finally {
+                                                                                setSyncAcceptedLoading(false);
+                                                                            }
+                                                                        }}
+                                                                        className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-padel-primary hover:text-padel-primary/90 disabled:opacity-50"
+                                                                    >
+                                                                        <RefreshCw className={`w-3.5 h-3.5 ${syncAcceptedLoading ? 'animate-spin' : ''}`} />
+                                                                        Sincronizar parejas aceptadas
+                                                                    </button>
+                                                                    {syncAcceptedMessage && (
+                                                                        <p className={`mt-2 text-[10px] ${syncAcceptedMessage.type === 'success' ? 'text-green-400' : 'text-amber-400'}`}>
+                                                                            {syncAcceptedMessage.text}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 );

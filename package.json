@@ -12,7 +12,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "verify:ceo": "node scripts/verify-ceo.mjs"
+    "verify:ceo": "node scripts/verify-ceo.mjs",
+    "open-inscriptions": "node scripts/open-tournament-inscriptions.mjs"
   },
   "description": "",
   "dependencies": {

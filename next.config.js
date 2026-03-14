@@ -10,6 +10,11 @@ const nextConfig = {
             },
         ],
     },
+    async redirects() {
+        return [
+            { source: '/p', destination: '/pizarra', permanent: false },
+        ];
+    },
     async rewrites() {
         return [
             {

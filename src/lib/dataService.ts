@@ -243,11 +243,18 @@ export const dataService = {
         return { id };
     },
 
-    async assignPlayersToTournament(tournamentId: string, categoryKey: string, p1Name: string, p2Name?: string) {
+    async assignPlayersToTournament(
+        tournamentId: string,
+        categoryKey: string,
+        p1Name: string,
+        p2Name?: string,
+        targetTeamIdHint?: string | null,
+    ) {
         const tournament = await this.getTournament(tournamentId);
         if (!tournament) throw new Error('Tournament not found');
 
-        let targetTeamId: string | null = null;
+        let targetTeamId: string | null =
+            targetTeamIdHint != null && targetTeamIdHint !== '' ? String(targetTeamIdHint) : null;
         let categoryUpdated = false;
 
         let targetCategoryInfo: any = null;
@@ -280,19 +287,54 @@ export const dataService = {
             return false;
         };
 
-        const updatedCategories = tournament.categories?.map((cat: any) => {
-            if (!categoryUpdated && isMatchingCategory(cat)) {
-                // Find first placeholder team
-                const placeholderTeamIdx = cat.teams?.findIndex((t: any) => 
-                    !t.p1?.name || t.p1.name.trim() === '' || t.p1.name.startsWith('TBD') || t.p1.name.startsWith('Jugador')
-                );
+        const isP1Placeholder = (t: any) =>
+            !t.p1?.name || t.p1.name.trim() === '' || t.p1.name.startsWith('TBD') || t.p1.name.startsWith('Jugador');
+        const isP2PlaceholderOrMissing = (t: any) =>
+            !t.p2?.name || t.p2.name.trim() === '' || t.p2.name.startsWith('TBD') || t.p2.name.startsWith('Jugador');
+        // Emparejar por nombre: exacto o uno contiene al otro (ej. "Carla Di Matteo" en perfil vs "Carla" en torneo)
+        const nameMatches = (storedName: string, assignedName: string) => {
+            const a = normalize((assignedName || '').trim());
+            const b = normalize((storedName || '').trim());
+            if (!a || !b) return false;
+            return a === b || b.startsWith(a) || a.startsWith(b);
+        };
+        const p1NameMatches = (t: any) => nameMatches(t.p1?.name ?? '', p1Name);
+        const p2NameMatches = (t: any) => nameMatches(t.p1?.name ?? '', p2Name);
 
-                if (placeholderTeamIdx !== undefined && placeholderTeamIdx >= 0 && cat.teams) {
+        const updatedCategories = tournament.categories?.map((cat: any) => {
+            // Si tenemos enlace por código (tournament_team_id), actualizar ese equipo en la categoría si existe
+            if (targetTeamId && cat.teams) {
+                const linkedIdx = cat.teams.findIndex((t: any) => String(t?.id) === String(targetTeamId));
+                if (linkedIdx >= 0) {
+                    const team = cat.teams[linkedIdx];
+                    team.p1 = { ...team.p1, name: p1Name, id: team.p1?.id || `p1_${Date.now()}` };
+                    if (p2Name) team.p2 = { ...(team.p2 || {}), name: p2Name, id: team.p2?.id || `p2_${Date.now()}` };
+                    cat.teams[linkedIdx] = team;
+                    categoryUpdated = true;
+                    return cat;
+                }
+            }
+            if (!categoryUpdated && isMatchingCategory(cat)) {
+                // 1) Invitación aceptada: buscar equipo donde p1 = jugador A y p2 vacío
+                let placeholderTeamIdx = -1;
+                if (p2Name) {
+                    placeholderTeamIdx = cat.teams?.findIndex((t: any) => p1NameMatches(t) && isP2PlaceholderOrMissing(t)) ?? -1;
+                    // Fallback: p1 en torneo puede ser el jugador B (ej. Carla Di Matteo); buscamos por p2Name
+                    if (placeholderTeamIdx < 0) {
+                        placeholderTeamIdx = cat.teams?.findIndex((t: any) => p2NameMatches(t) && isP2PlaceholderOrMissing(t)) ?? -1;
+                    }
+                }
+                // 2) Si no, primer equipo con p1 placeholder (flujo clásico)
+                if (placeholderTeamIdx < 0) {
+                    placeholderTeamIdx = cat.teams?.findIndex((t: any) => isP1Placeholder(t)) ?? -1;
+                }
+
+                if (placeholderTeamIdx >= 0 && cat.teams) {
                     const team = cat.teams[placeholderTeamIdx];
                     targetTeamId = team.id;
-                    team.p1 = { ...team.p1, name: p1Name, id: `p1_${Date.now()}` };
+                    team.p1 = { ...team.p1, name: p1Name, id: team.p1?.id || `p1_${Date.now()}` };
                     if (p2Name) {
-                        team.p2 = { ...team.p2, name: p2Name, id: `p2_${Date.now()}` };
+                        team.p2 = { ...(team.p2 || {}), name: p2Name, id: team.p2?.id || `p2_${Date.now()}` };
                     }
                     cat.teams[placeholderTeamIdx] = team;
                     categoryUpdated = true;
@@ -301,38 +343,61 @@ export const dataService = {
             return cat;
         });
 
-        // También sincronizamos el array raíz de teams usado por el dashboard/cuadros
+        // Si no encontramos en categorías pero tenemos p1+p2 (invitación aceptada), buscar en el array raíz
+        let rootUpdateIndex = -1;
+        if (!targetTeamId && tournament.teams && p2Name && (p1Name.trim() !== '' || p2Name.trim() !== '')) {
+            let rootIdx = tournament.teams.findIndex((t: any) => p1NameMatches(t) && isP2PlaceholderOrMissing(t));
+            if (rootIdx < 0 && p2Name.trim() !== '') {
+                rootIdx = tournament.teams.findIndex((t: any) => p2NameMatches(t) && isP2PlaceholderOrMissing(t));
+            }
+            if (rootIdx < 0 && p2Name.trim() !== '') {
+                rootIdx = tournament.teams.findIndex((t: any) => isP2PlaceholderOrMissing(t));
+            }
+            if (rootIdx >= 0) {
+                const t = tournament.teams[rootIdx];
+                targetTeamId = t?.id != null ? String(t.id) : null;
+                rootUpdateIndex = rootIdx;
+            }
+        }
+
+        const sameTeamId = (a: any, b: any) =>
+            a != null && b != null && (String(a) === String(b) || a === b);
+
+        // Sincronizamos el array raíz de teams (grilla de grupos)
         let updatedTeams = tournament.teams;
-        if (tournament.teams && targetTeamId) {
-            updatedTeams = tournament.teams.map((team: any) => {
-                if (String(team.id) !== String(targetTeamId)) return team;
+        if (tournament.teams && (targetTeamId || rootUpdateIndex >= 0)) {
+            updatedTeams = tournament.teams.map((team: any, idx: number) => {
+                const isTarget = targetTeamId ? sameTeamId(team?.id, targetTeamId) : idx === rootUpdateIndex;
+                if (!isTarget) return team;
                 const next = { ...team };
                 next.p1 = { ...(team.p1 || {}), name: p1Name, id: team.p1?.id || `p1_${Date.now()}` };
                 if (p2Name) {
-                    next.p2 = { ...(team.p2 || {}), name: p2Name, id: team.p2?.id || `p2_${Date.now()}` };
+                    next.p2 = { name: p2Name, id: team.p2?.id || `p2_${Date.now()}` };
                 }
                 return next;
             });
         }
 
-        if (categoryUpdated && targetTeamId) {
+        const hasUpdate = categoryUpdated || targetTeamId || rootUpdateIndex >= 0;
+        if (hasUpdate && (targetTeamId || rootUpdateIndex >= 0)) {
             const payload: any = {
                 ...tournament,
-                categories: updatedCategories,
+                ...(categoryUpdated && updatedCategories ? { categories: updatedCategories } : {}),
+                ...(updatedTeams ? { teams: updatedTeams } : {}),
             };
-            if (updatedTeams) {
-                payload.teams = updatedTeams;
-            }
 
             await this.updateTournament(tournamentId, payload);
-            
-            // Update matches
+
+            const teamIdForMatches = targetTeamId || (rootUpdateIndex >= 0 && updatedTeams?.[rootUpdateIndex]?.id != null ? String(updatedTeams[rootUpdateIndex].id) : null);
+
+            // Actualizar también los partidos que referencian a este equipo
             const matches = await this.getMatches(tournamentId);
             for (const match of matches) {
+                if (!teamIdForMatches) continue;
                 let matchUpdated = false;
                 const updateData: any = {};
 
-                if (match?.team1?.id === targetTeamId) {
+                if (sameTeamId(match?.team1?.id, teamIdForMatches)) {
                     updateData.team1 = { 
                         ...match.team1, 
                         p1: { ...match.team1.p1, name: p1Name },
@@ -342,7 +407,7 @@ export const dataService = {
                     matchUpdated = true;
                 }
 
-                if (match?.team2?.id === targetTeamId) {
+                if (sameTeamId(match?.team2?.id, teamIdForMatches)) {
                     updateData.team2 = { 
                         ...match.team2, 
                         p1: { ...match.team2.p1, name: p1Name },
@@ -655,30 +720,52 @@ export const dataService = {
         return data;
     },
 
-    async createTeamInvitation(tournamentId: string, category: string, playerAId: string, playerBId: string) {
+    async createTeamInvitation(
+        tournamentId: string,
+        category: string,
+        playerAId: string,
+        playerBId: string,
+        tournamentTeamId?: string | null,
+    ) {
         if (playerAId === playerBId) throw new Error('No puedes invitarte a ti mismo.');
 
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + 2);
 
-        const { data, error } = await supabase()
+        const row: Record<string, unknown> = {
+            tournament_id: tournamentId,
+            category: category,
+            player_a_id: playerAId,
+            player_b_id: playerBId,
+            status: 'pending',
+            expires_at: expiresAt.toISOString(),
+            created_at: now(),
+            updated_at: now(),
+        };
+        if (tournamentTeamId != null && tournamentTeamId !== '') {
+            row.tournament_team_id = tournamentTeamId;
+        }
+
+        let { data, error } = await supabase()
             .from('teams')
-            .insert({
-                tournament_id: tournamentId,
-                category: category,
-                player_a_id: playerAId,
-                player_b_id: playerBId,
-                status: 'pending',
-                expires_at: expiresAt.toISOString(),
-                created_at: now(),
-                updated_at: now(),
-            })
+            .insert(row)
             .select()
             .single();
 
         if (error) {
-            if (error.code === '23505') throw new Error('Ya existe una inscripción o invitación para esta pareja en esta categoría.');
-            throw error;
+            const msg = String(error.message || '').toLowerCase();
+            if (msg.includes('tournament_team_id') || msg.includes('column') && msg.includes('does not exist')) {
+                delete row.tournament_team_id;
+                const retry = await supabase().from('teams').insert(row).select().single();
+                if (retry.error) {
+                    if (retry.error.code === '23505') throw new Error('Ya existe una inscripción o invitación para esta pareja en esta categoría.');
+                    throw retry.error;
+                }
+                data = retry.data;
+            } else {
+                if (error.code === '23505') throw new Error('Ya existe una inscripción o invitación para esta pareja en esta categoría.');
+                throw error;
+            }
         }
 
         // Enviar notificación al Jugador B
@@ -787,7 +874,7 @@ export const dataService = {
             // Verificar si ha expirado antes de aceptar
             const { data: team, error: fetchError } = await supabase()
                 .from('teams')
-                .select('id, expires_at, status, tournament_id, category, player_a_id, player_b_id')
+                .select('id, expires_at, status, tournament_id, category, player_a_id, player_b_id, tournament_team_id')
                 .eq('id', teamId)
                 .single();
 
@@ -824,12 +911,16 @@ export const dataService = {
 
                     const p1Name = (profileA?.name || '').trim() || 'Jugador A';
                     const p2Name = (profileB?.name || '').trim() || 'Jugador B';
+                    const tournamentTeamIdHint = (team as any).tournament_team_id
+                        ? String((team as any).tournament_team_id)
+                        : undefined;
 
                     await this.assignPlayersToTournament(
                         team.tournament_id,
                         team.category,
                         p1Name,
-                        p2Name
+                        p2Name,
+                        tournamentTeamIdHint,
                     );
 
                     // Notificar al Jugador A que la invitación fue aceptada
@@ -867,6 +958,44 @@ export const dataService = {
             ...inv,
             partner_name: inv.player_b?.name || 'Jugador'
         }));
+    },
+
+    /**
+     * Sincroniza en el torneo todas las parejas que ya aceptaron la invitación (status = 'accepted').
+     * Actualiza tournament.teams y categories para que la grilla de grupos muestre ambos jugadores.
+     */
+    async syncAcceptedTeamsToTournament(tournamentId: string): Promise<{ synced: number; errors: string[] }> {
+        const { data: acceptedTeams, error } = await supabase()
+            .from('teams')
+            .select('id, tournament_id, category, player_a_id, player_b_id')
+            .eq('tournament_id', tournamentId)
+            .eq('status', 'accepted');
+
+        if (error) throw error;
+        if (!acceptedTeams?.length) return { synced: 0, errors: [] };
+
+        const db = supabase();
+        const errors: string[] = [];
+        let synced = 0;
+
+        for (const row of acceptedTeams) {
+            if (!row.category || !row.player_a_id || !row.player_b_id) {
+                errors.push(`Equipo ${row.id}: faltan category o jugadores.`);
+                continue;
+            }
+            const { data: profileA } = await db.from('profiles').select('name').eq('id', row.player_a_id).single();
+            const { data: profileB } = await db.from('profiles').select('name').eq('id', row.player_b_id).single();
+            const p1Name = (profileA?.name || '').trim() || 'Jugador A';
+            const p2Name = (profileB?.name || '').trim() || 'Jugador B';
+            try {
+                await this.assignPlayersToTournament(tournamentId, row.category, p1Name, p2Name);
+                synced++;
+            } catch (err: any) {
+                errors.push(`Equipo ${row.id} (${p1Name} / ${p2Name}): ${err?.message || String(err)}`);
+            }
+        }
+
+        return { synced, errors };
     },
 
     async removePasswordsFromAllUsers(): Promise<number> {
@@ -991,17 +1120,18 @@ export const dataService = {
     /**
      * Sincroniza automáticamente los equipos (teams) de un torneo a partir de una inscripción.
      * Reemplaza el siguiente slot libre (placeholder "Jugador X") con los nombres reales del jugador/pareja.
+     * Devuelve el id del equipo del torneo actualizado para enlazarlo con la invitación (código del compañero).
      */
     async syncTeamsFromInscription(
         tournamentId: string,
         participant: { id: string; name: string; lastName?: string },
         partner?: { id: string; name: string; lastName?: string } | null,
-    ) {
+    ): Promise<string | null> {
         const tournament = await this.getTournament(tournamentId);
-        if (!tournament) return;
+        if (!tournament) return null;
 
         const teams = Array.isArray(tournament.teams) ? [...tournament.teams] : [];
-        if (teams.length === 0) return;
+        if (teams.length === 0) return null;
 
         const isPlaceholderPlayer = (p: any) =>
             !!p &&
@@ -1011,8 +1141,7 @@ export const dataService = {
         // Buscar el primer equipo cuyo p1 siga siendo un placeholder
         let slotIndex = teams.findIndex(team => !team.p1 || isPlaceholderPlayer(team.p1));
         if (slotIndex === -1) {
-            // Si no hay placeholders, no hacemos nada para no sobreescribir equipos ya definidos
-            return;
+            return null;
         }
 
         const fullName = `${participant.name} ${participant.lastName || ''}`.trim();
@@ -1021,6 +1150,7 @@ export const dataService = {
             : '';
 
         const team = teams[slotIndex] || {};
+        const updatedTeamId = team.id ?? null;
 
         const updatedTeam: any = {
             ...team,
@@ -1043,6 +1173,7 @@ export const dataService = {
             teams,
             updatedAt: now(),
         });
+        return updatedTeamId != null ? String(updatedTeamId) : null;
     },
 
     async getInscriptionsByTournament(tournamentId: string) {
