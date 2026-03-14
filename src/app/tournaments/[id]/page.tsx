@@ -165,6 +165,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                 const p1Name = getPlayerName(teamFromIdx.p1, idx, 1);
                 const p2Name = getPlayerName(teamFromIdx.p2, idx, 2);
                 return {
+                    id: teamFromIdx.id != null ? String(teamFromIdx.id) : undefined,
                     name: `${p1Name} / ${p2Name}`,
                     p1Name,
                     p2Name,
