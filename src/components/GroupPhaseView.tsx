@@ -214,6 +214,30 @@ export default function GroupPhaseView({
 
     const currentGroup = activeGroup ?? groupNames[0] ?? null;
 
+    // Nombres de pareja extraídos de partidos (fallback cuando tournament.teams no tiene p2)
+    const namesFromMatches = useMemo(() => {
+        const map: Record<string, { p1: string; p2: string }> = {};
+        const teams = tournament?.teams ?? [];
+        (matches ?? []).forEach((m: any) => {
+            const add = (teamId: string | undefined, mTeam: any, fullName: string | undefined) => {
+                if (!teamId) return;
+                const id = String(teamId);
+                const p1 = mTeam?.p1?.name || mTeam?.p1Name || (fullName ? fullName.split(/\s*\/\s*/)[0]?.trim() : null);
+                const p2 = mTeam?.p2?.name || mTeam?.p2Name || (fullName ? fullName.split(/\s*\/\s*/)[1]?.trim() : null);
+                if (p1 || p2) {
+                    if (!map[id]) map[id] = { p1: '', p2: '' };
+                    if (p1) map[id].p1 = p1;
+                    if (p2) map[id].p2 = p2;
+                }
+            };
+            const id1 = m.team1?.id ?? teams[m.team1Index - 1]?.id;
+            const id2 = m.team2?.id ?? teams[m.team2Index - 1]?.id;
+            add(id1, m.team1, m.team1Name);
+            add(id2, m.team2, m.team2Name);
+        });
+        return map;
+    }, [tournament?.teams, matches]);
+
     // ── Build standings per group ─────────────────────────────────────────────
     const groupStandings = useMemo(() => {
         const result: Record<string, GroupTeam[]> = {};
@@ -223,9 +247,10 @@ export default function GroupPhaseView({
                 const teamIdx = (tournament?.teams ?? []).findIndex((t: any) => String(t.id) === tid);
                 const team = teamIdx >= 0 ? tournament.teams[teamIdx] : null;
                 const tNum = teamIdx + 1;
-                const name = team
-                    ? `${team.p1?.name ?? 'J1'} / ${team.p2?.name ?? 'J2'}`
-                    : `Pareja ${tNum}`;
+                const fromMatch = namesFromMatches[tid];
+                const p1 = team?.p1?.name?.trim() || fromMatch?.p1 || 'J1';
+                const p2 = team?.p2?.name?.trim() || fromMatch?.p2 || 'J2';
+                const name = (team || fromMatch) ? `${p1} / ${p2}` : `Pareja ${tNum}`;
 
                 let PJ = 0, PG = 0, JF = 0, JC = 0;
 
@@ -258,7 +283,7 @@ export default function GroupPhaseView({
         }
 
         return result;
-    }, [tournament, matches, groupAssignments]);
+    }, [tournament, matches, groupAssignments, namesFromMatches]);
 
     // ── Build fixture per group ──────────────────────────────────────────────
     const groupFixtures = useMemo(() => {
@@ -282,8 +307,12 @@ export default function GroupPhaseView({
                     );
                     const team1 = (tournament?.teams ?? [])[t1Num - 1];
                     const team2 = (tournament?.teams ?? [])[t2Num - 1];
-                    const t1Name = team1 ? `${team1.p1?.name ?? 'J1'} / ${team1.p2?.name ?? 'J2'}` : `Pareja ${t1Num}`;
-                    const t2Name = team2 ? `${team2.p1?.name ?? 'J1'} / ${team2.p2?.name ?? 'J2'}` : `Pareja ${t2Num}`;
+                    const tid1 = team1?.id != null ? String(team1.id) : null;
+                    const tid2 = team2?.id != null ? String(team2.id) : null;
+                    const from1 = tid1 ? namesFromMatches[tid1] : null;
+                    const from2 = tid2 ? namesFromMatches[tid2] : null;
+                    const t1Name = team1 || from1 ? `${team1?.p1?.name?.trim() || from1?.p1 || 'J1'} / ${team1?.p2?.name?.trim() || from1?.p2 || 'J2'}` : `Pareja ${t1Num}`;
+                    const t2Name = team2 || from2 ? `${team2?.p1?.name?.trim() || from2?.p1 || 'J1'} / ${team2?.p2?.name?.trim() || from2?.p2 || 'J2'}` : `Pareja ${t2Num}`;
 
                     return existingMatch
                         ? { ...existingMatch, team1Name: t1Name, team2Name: t2Name }
@@ -302,7 +331,7 @@ export default function GroupPhaseView({
             result[gName] = rounds;
         }
         return result;
-    }, [tournament, matches, groupAssignments]);
+    }, [tournament, matches, groupAssignments, namesFromMatches]);
 
     // ── Progress ──────────────────────────────────────────────────────────────
     const groupMatches = matches.filter(m => m.stage === 'GROUP_STAGE');

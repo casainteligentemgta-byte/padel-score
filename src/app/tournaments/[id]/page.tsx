@@ -289,7 +289,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                     return { ...m, status: MatchStatus.FINISHED, actualEndTime: new Date(), score: finalScore };
                 }
 
-                // Si es un partido de cuadro y es el siguiente del ganador
+                // Cuadro con bracketPosition (ScheduleEngine / Master)
                 if (finishedMatch.stage === 'MAIN_DRAW' && m.stage === 'MAIN_DRAW' && finishedMatch.bracketPosition) {
                     const nextRound = finishedMatch.bracketPosition.round + 1;
                     const nextPos = Math.ceil(finishedMatch.bracketPosition.position / 2);
@@ -301,6 +301,19 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                             [isTeam1 ? 'team1Index' : 'team2Index']: winnerIndex
                         };
                     }
+                }
+
+                // Semifinales + Final sin bracketPosition (flujo new-tournament: 2 grupos → SEMIFINALES → FINAL)
+                const roundUpper = (x: any) => (x.roundName || '').toUpperCase();
+                const isSemi = (x: any) => roundUpper(x).includes('SEMIFINAL') || x.stage === 'SEMIFINAL';
+                const isFinalMatch = (x: any) => x.roundName === 'FINAL' || (roundUpper(x) === 'FINAL') || x.stage === 'FINAL';
+                if (finishedMatch.stage === 'MAIN_DRAW' && isSemi(finishedMatch) && !finishedMatch.bracketPosition && isFinalMatch(m)) {
+                    const semis = matches.filter((mx: any) => isSemi(mx)).sort((a: any, b: any) =>
+                        new Date(a.scheduledTime || 0).getTime() - new Date(b.scheduledTime || 0).getTime() || (a.id || '').localeCompare(b.id || '')
+                    );
+                    const semiIndex = semis.findIndex((s: any) => s.id === matchId);
+                    if (semiIndex === 0) return { ...m, team1Index: winnerIndex };
+                    if (semiIndex === 1) return { ...m, team2Index: winnerIndex };
                 }
 
                 return m;

@@ -205,18 +205,21 @@ function BracketView({
     onSaveResult: (matchId: string, g1: number, g2: number) => Promise<void>;
     tournamentId: string;
 }) {
+    const roundUpper = (m: any) => (m.roundName || '').toUpperCase();
+    const isSemifinal = (m: any) =>
+        m.stage === 'SEMIFINAL' || roundUpper(m).includes('SEMIFINAL') || (m.isKnockout && !m.isFinal);
+    const isFinal = (m: any) =>
+        m.stage === 'FINAL' || m.isFinal || (roundUpper(m) === 'FINAL' || (roundUpper(m).includes('FINAL') && !roundUpper(m).includes('SEMIFINAL')));
+
     const knockoutMatches = matches.filter(m =>
         m.stage === 'SEMIFINAL' || m.stage === 'FINAL' ||
-        m.roundName === 'SEMIFINAL' || m.roundName === 'FINAL' ||
+        m.roundName === 'SEMIFINAL' || m.roundName === 'SEMIFINALES' || m.roundName === 'FINAL' ||
+        (m.stage === 'MAIN_DRAW' && (roundUpper(m).includes('SEMIFINAL') || roundUpper(m) === 'FINAL')) ||
         m.isFinal || m.isKnockout
     );
 
-    const semis = knockoutMatches.filter(m =>
-        m.stage === 'SEMIFINAL' || m.roundName === 'SEMIFINAL' || (m.isKnockout && !m.isFinal)
-    );
-    const finals = knockoutMatches.filter(m =>
-        m.stage === 'FINAL' || m.roundName === 'FINAL' || m.isFinal
-    );
+    const semis = knockoutMatches.filter(m => isSemifinal(m));
+    const finals = knockoutMatches.filter(m => isFinal(m));
 
     // ── Locked state ────────────────────────────────────────────────────────
     if (locked) {
@@ -340,13 +343,15 @@ export default function TournamentPhaseManager({
         m.groupName != null
     ), [matches]);
 
-    const eliminationMatches = useMemo(() => matches.filter(m =>
-        m.stage === 'SEMIFINAL' || m.stage === 'FINAL' || m.stage === 'MAIN_DRAW' ||
-        m.isKnockout || m.isFinal ||
-        m.roundName === 'SEMIFINAL' || m.roundName === 'FINAL' ||
-        m.roundName === 'Principal SF' || m.roundName === 'Principal FINAL' ||
-        m.roundName === 'CUARTOS'
-    ), [matches]);
+    const eliminationMatches = useMemo(() => matches.filter(m => {
+        const r = (m.roundName || '').toUpperCase();
+        return m.stage === 'SEMIFINAL' || m.stage === 'FINAL' || m.stage === 'MAIN_DRAW' ||
+            m.isKnockout || m.isFinal ||
+            m.roundName === 'SEMIFINAL' || m.roundName === 'SEMIFINALES' || m.roundName === 'FINAL' ||
+            r.includes('SEMIFINAL') || r === 'FINAL' || (r.includes('FINAL') && !r.includes('SEMIFINAL')) ||
+            m.roundName === 'Principal SF' || m.roundName === 'Principal FINAL' ||
+            m.roundName === 'CUARTOS';
+    }), [matches]);
 
     const finishedGroupMatches = groupMatches.filter(m => m.status === MatchStatus.FINISHED);
     const allGroupsDone = groupMatches.length > 0 && finishedGroupMatches.length === groupMatches.length;

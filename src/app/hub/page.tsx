@@ -131,6 +131,11 @@ export default function HubPage() {
                 {/* Main Content */}
                 <main className="w-full max-w-md px-6 flex-1">
                     <div className="w-full">
+                        {/* Invitaciones pendientes: visible primero para el jugador invitado */}
+                        <div className="mb-6">
+                            <InvitationManager />
+                        </div>
+
                         {/* Hub Grid */}
                         <div className="grid grid-cols-2 gap-3 pb-8">
                             {hubItems.map((item, index) => (
@@ -175,10 +180,6 @@ export default function HubPage() {
                                     )}
                                 </motion.button>
                             ))}
-                        </div>
-
-                        <div className="space-y-6 mb-8">
-                            <InvitationManager />
                         </div>
 
                         {/* Logout Button */}

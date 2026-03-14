@@ -638,19 +638,34 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     return list[index % list.length];
                 };
 
-                const resolveTeam = (mTeam: any, teamIdx: number) => {
+                const resolveTeam = (mTeam: any, teamIdx: number, matchRecord?: any) => {
                     const gender = currentTournament?.gender;
-                    // Seeded index for consistent simulation per match/team
                     const seed = teamIdx || 1;
+                    const teams = currentTournament?.teams || [];
+                    const teamByIndex = teamIdx > 0 ? teams[teamIdx - 1] : null;
 
-                    // Support for embedded teams (new Master Generator)
+                    // 1) Prioridad: nombres en tournament.teams (si hay al menos uno real)
+                    const fromTournament = teamByIndex && (teamByIndex.p1?.name?.trim() || teamByIndex.p2?.name?.trim());
+                    if (fromTournament) {
+                        const p1Name = (teamByIndex.p1?.name || '').trim() || null;
+                        const p2Name = (teamByIndex.p2?.name || '').trim() || null;
+                        const p1Final = p1Name && p1Name !== '?' && p1Name !== 'TBD' ? p1Name : getSimulatedName(gender, seed * 2);
+                        const p2Final = p2Name && p2Name !== '?' && p2Name !== 'TBD' ? p2Name : getSimulatedName(gender, seed * 2 + 1);
+                        return {
+                            p1Name: p1Final,
+                            p2Name: p2Final,
+                            p1Photo: teamByIndex.p1?.photo || null,
+                            p2Photo: teamByIndex.p2?.photo || null,
+                            name: [p1Final, p2Final].filter(Boolean).join(' / ')
+                        };
+                    }
+
+                    // 2) Equipo embebido en el partido (p1/p2 o p1Name/p2Name)
                     if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
                         const p1Base = mTeam.isTBD ? (mTeam.teamLabel || 'TBD') : (mTeam.p1Name || mTeam.p1?.name);
                         const p2Base = mTeam.isTBD ? '' : (mTeam.p2Name || mTeam.p2?.name);
-
                         const p1Final = (!p1Base || p1Base === '?' || p1Base === 'TBD') ? getSimulatedName(gender, seed * 2) : p1Base;
                         const p2Final = (!p2Base || p2Base === '?' || (p2Base === 'TBD' && !mTeam.isTBD)) ? (mTeam.isTBD ? '' : getSimulatedName(gender, seed * 2 + 1)) : p2Base;
-
                         return {
                             p1Name: p1Final,
                             p2Name: p2Final,
@@ -660,38 +675,32 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                         };
                     }
 
-                    // Legacy support (using indices from t.teams)
-                    const teams = currentTournament?.teams || [];
-                    const team = teamIdx > 0 ? teams[teamIdx - 1] : null;
-
-                    if (!team) {
-                        const p1Sim = getSimulatedName(gender, seed * 2);
-                        const p2Sim = getSimulatedName(gender, seed * 2 + 1);
-                        return {
-                            p1Name: p1Sim,
-                            p2Name: p2Sim,
-                            p1Photo: null,
-                            p2Photo: null,
-                            name: `${p1Sim} / ${p2Sim}`
-                        };
+                    // 3) team1Name / team2Name guardados en el partido (según teamIdx)
+                    const storedName = mTeam?.teamLabel || mTeam?.name || (matchRecord && teamIdx === 1 ? (matchRecord as any).team1Name : matchRecord && teamIdx === 2 ? (matchRecord as any).team2Name : null);
+                    if (storedName && typeof storedName === 'string' && storedName.trim() && !storedName.startsWith('Pareja')) {
+                        const parts = storedName.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(Boolean);
+                        if (parts.length >= 2) {
+                            return { p1Name: parts[0], p2Name: parts[1], p1Photo: null, p2Photo: null, name: storedName.trim() };
+                        }
+                        if (parts.length === 1) {
+                            return { p1Name: parts[0], p2Name: getSimulatedName(gender, seed * 2 + 1), p1Photo: null, p2Photo: null, name: `${parts[0]} / ${getSimulatedName(gender, seed * 2 + 1)}` };
+                        }
                     }
 
-                    const p1Name = team.p1?.name;
-                    const p2Name = team.p2?.name;
-                    const p1Final = (!p1Name || p1Name === '?' || p1Name === 'TBD') ? getSimulatedName(gender, seed * 2) : p1Name;
-                    const p2Final = (!p2Name || p2Name === '?' || p2Name === 'TBD') ? getSimulatedName(gender, seed * 2 + 1) : p2Name;
+                    // 4) Fallback: equipo por índice sin nombres
+                    if (teamByIndex) {
+                        const p1 = (teamByIndex.p1?.name || '').trim() || getSimulatedName(gender, seed * 2);
+                        const p2 = (teamByIndex.p2?.name || '').trim() || getSimulatedName(gender, seed * 2 + 1);
+                        return { p1Name: p1, p2Name: p2, p1Photo: teamByIndex.p1?.photo || null, p2Photo: teamByIndex.p2?.photo || null, name: `${p1} / ${p2}` };
+                    }
 
-                    return {
-                        p1Name: p1Final,
-                        p2Name: p2Final,
-                        p1Photo: team.p1?.photo || null,
-                        p2Photo: team.p2?.photo || null,
-                        name: `${p1Final} / ${p2Final}`
-                    };
+                    const p1Sim = getSimulatedName(gender, seed * 2);
+                    const p2Sim = getSimulatedName(gender, seed * 2 + 1);
+                    return { p1Name: p1Sim, p2Name: p2Sim, p1Photo: null, p2Photo: null, name: `${p1Sim} / ${p2Sim}` };
                 };
 
-                const t1 = resolveTeam(found.team1, found.team1Index ?? 1);
-                const t2 = resolveTeam(found.team2, found.team2Index ?? 2);
+                const t1 = resolveTeam(found.team1, found.team1Index ?? 1, found);
+                const t2 = resolveTeam(found.team2, found.team2Index ?? 2, found);
 
                 const matchData = {
                     ...found,
@@ -715,8 +724,8 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     .sort((a: any, b: any) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
                     .slice(0, 3)
                     .map((mx: any) => {
-                        const rt1 = resolveTeam(mx.team1, mx.team1Index);
-                        const rt2 = resolveTeam(mx.team2, mx.team2Index);
+                        const rt1 = resolveTeam(mx.team1, mx.team1Index, mx);
+                        const rt2 = resolveTeam(mx.team2, mx.team2Index, mx);
                         return {
                             ...mx,
                             t1Name: rt1.name,
@@ -730,8 +739,8 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     .sort((a: any, b: any) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime())[0];
 
                 if (next) {
-                    const rnt1 = resolveTeam(next.team1, next.team1Index);
-                    const rnt2 = resolveTeam(next.team2, next.team2Index);
+                    const rnt1 = resolveTeam(next.team1, next.team1Index, next);
+                    const rnt2 = resolveTeam(next.team2, next.team2Index, next);
                     setNextMatch({
                         ...next,
                         t1Name: rnt1.name,
@@ -760,6 +769,15 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
             if (currentTournament) updateAll(currentTournament, currentMatches);
         });
 
+        // Polling de respaldo: cuando el partido está LIVE, refrescar cada 3s por si Realtime no dispara
+        const pollInterval = setInterval(async () => {
+            const ms = await dataService.getMatches(id);
+            if (ms?.length && currentTournament) {
+                currentMatches = ms;
+                updateAll(currentTournament, currentMatches);
+            }
+        }, 3000);
+
         // 2. Firestore Subscriptions (Fallback / Event view support)
         let unsubFT = () => { };
         let unsubFM = () => { };
@@ -784,6 +802,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return () => {
             unsubT();
             unsubM();
+            clearInterval(pollInterval);
             unsubFT();
             unsubFM();
             clearTimeout(timeout);
