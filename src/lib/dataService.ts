@@ -425,6 +425,46 @@ export const dataService = {
         return targetTeamId;
     },
 
+    /**
+     * Asigna un equipo (confirmado) a un grupo de la fase de grupos.
+     * Si el Grupo 1 está lleno (groupSize), asigna al Grupo 2, y así sucesivamente.
+     * Si no hay groupAssignments, inicializa con Grupo A.
+     * Idempotente: si el equipo ya está en algún grupo, no hace nada.
+     */
+    async assignTeamToGroup(tournamentId: string, teamId: string): Promise<void> {
+        const tournament = await this.getTournament(tournamentId);
+        if (!tournament) throw new Error('Torneo no encontrado');
+
+        const groupSize = Math.max(1, (tournament as any).groupSize ?? 4);
+        const assignments: Record<string, string[]> = { ...((tournament as any).groupAssignments || {}) };
+        const teamIdStr = String(teamId);
+
+        const groupNames = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+        const existingGroup = groupNames.find((g) => (assignments[g] || []).includes(teamIdStr));
+        if (existingGroup) return;
+
+        let targetGroup: string | null = null;
+        for (const g of groupNames) {
+            const list = assignments[g] || [];
+            if (list.length < groupSize) {
+                targetGroup = g;
+                break;
+            }
+        }
+        if (!targetGroup) {
+            const numGroups = Object.keys(assignments).length;
+            targetGroup = groupNames[numGroups] ?? `G${numGroups + 1}`;
+        }
+        if (!assignments[targetGroup]) assignments[targetGroup] = [];
+        if (assignments[targetGroup].includes(teamIdStr)) return;
+        assignments[targetGroup].push(teamIdStr);
+
+        await this.updateTournament(tournamentId, {
+            ...tournament,
+            groupAssignments: assignments,
+        });
+    },
+
     async migrateTournamentMatches(tournamentId: string, legacyMatches: any[]) {
         const db = supabase();
         for (const m of legacyMatches) {
@@ -720,19 +760,18 @@ export const dataService = {
         return data;
     },
 
-    /** Obtiene nombre para mostrar: profiles.name o participants (data.name + data.lastName) por owner_id */
+    /** Obtiene nombre completo para mostrar: prioriza ficha del jugador (participants name+lastName) para que en grupos, grilla y pizarra aparezca "Nombre Apellido" de A y de B; si no hay ficha, usa profiles.name */
     async getDisplayNameForUser(userId: string): Promise<string> {
         const db = supabase();
-        const { data: profile } = await db.from('profiles').select('name').eq('id', userId).single();
-        const fromProfile = (profile?.name || '').trim();
-        if (fromProfile) return fromProfile;
         const { data: participants } = await db.from('participants').select('data').eq('owner_id', userId).limit(1);
         const d = participants?.[0]?.data as { name?: string; lastName?: string } | undefined;
         if (d) {
             const full = [d.name, d.lastName].filter(Boolean).join(' ').trim();
             if (full) return full;
         }
-        return '';
+        const { data: profile } = await db.from('profiles').select('name').eq('id', userId).single();
+        const fromProfile = (profile?.name || '').trim();
+        return fromProfile || '';
     },
 
     async createTeamInvitation(
@@ -918,13 +957,21 @@ export const dataService = {
                         ? String((team as any).tournament_team_id)
                         : undefined;
 
-                    await this.assignPlayersToTournament(
+                    const updatedTeamId = await this.assignPlayersToTournament(
                         team.tournament_id,
                         team.category,
                         p1Name,
                         p2Name,
                         tournamentTeamIdHint ?? null,
                     );
+
+                    if (updatedTeamId) {
+                        try {
+                            await this.assignTeamToGroup(team.tournament_id, updatedTeamId);
+                        } catch (groupErr) {
+                            console.error('[dataService] Error assigning team to group:', groupErr);
+                        }
+                    }
 
                     // Notificar al Jugador A que la invitación fue aceptada
                     try {
@@ -989,7 +1036,12 @@ export const dataService = {
             const p2Name = (await this.getDisplayNameForUser(row.player_b_id)) || 'Jugador B';
             const teamIdHint = (row as any).tournament_team_id != null ? String((row as any).tournament_team_id) : undefined;
             try {
-                await this.assignPlayersToTournament(tournamentId, row.category, p1Name, p2Name, teamIdHint ?? null);
+                const updatedTeamId = await this.assignPlayersToTournament(tournamentId, row.category, p1Name, p2Name, teamIdHint ?? null);
+                if (updatedTeamId) {
+                    try {
+                        await this.assignTeamToGroup(tournamentId, updatedTeamId);
+                    } catch (_) {}
+                }
                 synced++;
             } catch (err: any) {
                 errors.push(`Equipo ${row.id} (${p1Name} / ${p2Name}): ${err?.message || String(err)}`);
@@ -1196,6 +1248,9 @@ export const dataService = {
             receiptUrl: r.receipt_url,
             paymentStatus: r.payment_status,
             alertMessage: r.alert_message,
+            isPlaceholder: r.is_placeholder === true,
+            groupName: r.group_name ?? null,
+            data: r.data ?? {},
             createdAt: r.created_at,
             updatedAt: r.updated_at,
         }));
@@ -1318,6 +1373,22 @@ export const dataService = {
         return data || [];
     },
 
+    /** Sustituye RTDB: animaciones del marcador (botones en pizarra). Upsert en match_animations con type 'animaciones_marcador'. */
+    async setAnimacionMarcador(animId: string, data: { nombre: string; url: string } | null): Promise<void> {
+        try {
+            if (!data) {
+                await supabase().from('match_animations').update({ is_active: false }).eq('id', animId);
+                return;
+            }
+            await supabase().from('match_animations').upsert(
+                { id: animId, type: 'animaciones_marcador', name: data.nombre, url: data.url, is_active: true, updated_at: now() },
+                { onConflict: 'id' }
+            );
+        } catch (e) {
+            console.warn('[dataService] setAnimacionMarcador (tabla match_animations puede no existir o tener otro esquema):', e);
+        }
+    },
+
     async getSponsorsByTournament(tournamentId: string) {
         try {
             const { data, error } = await supabase()
@@ -1394,5 +1465,43 @@ export const dataService = {
             .order('created_at', { ascending: true });
         if (error) throw error;
         return data || [];
-    }
+    },
+
+    // ─── Pizarra / Cancha (reemplazo RTDB) ─────────────────────────────────────
+    async getPizarraCanchaState(canchaId: string): Promise<{ cancha_id: string; data: any; updated_at: string } | null> {
+        try {
+            const { data, error } = await supabase()
+                .from('pizarra_cancha_state')
+                .select('cancha_id, data, updated_at')
+                .eq('cancha_id', canchaId)
+                .single();
+            if (error && error.code !== 'PGRST116') throw error;
+            return data;
+        } catch (e) {
+            console.warn('[dataService] getPizarraCanchaState (tabla puede no existir):', e);
+            return null;
+        }
+    },
+
+    async setPizarraCanchaState(canchaId: string, data: Record<string, unknown>): Promise<void> {
+        const db = supabase();
+        const { error } = await db.from('pizarra_cancha_state').upsert(
+            { cancha_id: canchaId, data, updated_at: now() },
+            { onConflict: 'cancha_id' }
+        );
+        if (error) throw error;
+    },
+
+    subscribePizarraCanchaState(canchaId: string, callback: (state: { cancha_id: string; data: any } | null) => void): () => void {
+        const db = supabase();
+        this.getPizarraCanchaState(canchaId).then(callback);
+        const channel = db
+            .channel(`pizarra_${canchaId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'pizarra_cancha_state', filter: `cancha_id=eq.${canchaId}` }, (payload) => {
+                const r = payload.new as any;
+                callback(r ? { cancha_id: r.cancha_id, data: r.data || {} } : null);
+            })
+            .subscribe();
+        return () => channel.unsubscribe();
+    },
 };

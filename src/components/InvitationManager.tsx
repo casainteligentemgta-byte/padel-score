@@ -99,7 +99,7 @@ export default function InvitationManager() {
                                         ) : (
                                             <>
                                                 <Check size={16} />
-                                                Aceptar
+                                                Aceptar invitación
                                             </>
                                         )}
                                     </button>

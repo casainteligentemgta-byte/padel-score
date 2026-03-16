@@ -41,6 +41,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 // Supabase is now used for data management.
 import GroupPhaseView from '@/components/GroupPhaseView';
 import TournamentPhaseManager from '@/components/TournamentPhaseManager';
+import { TournamentGridView, type Group, type Team } from '@/components/TournamentGridView';
 import Sidebar from '@/components/Sidebar';
 import { BackButton } from '@/components/BackButton';
 import AutoShrinkName from '@/components/AutoShrinkName';
@@ -74,6 +75,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const [isMigrating, setIsMigrating] = useState(false);
     const [syncAcceptedLoading, setSyncAcceptedLoading] = useState(false);
     const [syncAcceptedMessage, setSyncAcceptedMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [inscriptions, setInscriptions] = useState<Array<{ id: string; participantName?: string; isPlaceholder?: boolean; groupName?: string | null; data?: Record<string, unknown> }>>([]);
 
     const isOwner = user && tournament && (
         tournament.ownerId === user.uid ||
@@ -99,6 +101,12 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     useEffect(() => {
         // Only redirect if specifically needed, but dashboard is public
     }, [user, authLoading, router]);
+
+    // Inscripciones por torneo (para TournamentGridView agrupado por group_name)
+    useEffect(() => {
+        if (!id) return;
+        dataService.getInscriptionsByTournament(id).then(setInscriptions).catch(() => setInscriptions([]));
+    }, [id]);
 
     useEffect(() => {
         if (!id || authLoading) return;
@@ -1120,7 +1128,32 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 className="space-y-4"
                             >
-                                {isCruzado ? (() => {
+                                {(() => {
+                                    // Grilla por inscripciones (Supabase) agrupadas por group_name
+                                    const groupNames = [...new Set(inscriptions.map(ins => ins.groupName ?? 'Sin grupo'))].filter(Boolean).sort();
+                                    const gridGroups: Group[] = groupNames.length > 0
+                                        ? groupNames.map(name => ({
+                                            name: name === 'Sin grupo' ? 'Sin grupo' : name,
+                                            teams: inscriptions
+                                                .filter(ins => (ins.groupName ?? 'Sin grupo') === name)
+                                                .map(ins => {
+                                                    const partnerName = (ins.data?.partnerName as string) ?? '';
+                                                    return {
+                                                        id: ins.id,
+                                                        player1_name: ins.participantName ?? '',
+                                                        player2_name: partnerName,
+                                                        is_placeholder: ins.isPlaceholder === true,
+                                                        player2_accepted: !ins.isPlaceholder && !!partnerName,
+                                                    } satisfies Team;
+                                                }),
+                                        }))
+                                        : [];
+
+                                    if (gridGroups.length > 0) {
+                                        return <TournamentGridView groups={gridGroups} />;
+                                    }
+
+                                    return isCruzado ? (() => {
                                     // ── CRUZADO: Grupo A / Grupo B + Cuartos de final ────
                                     const ga = (tournament?.groupAssignments ?? {}) as Record<string, string[]>;
                                     const groupAIds: string[] = ga['A'] ?? [];
@@ -1516,6 +1549,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                             </div>
                                         </div>
                                     );
+                                })() : null;
                                 })()}
                             </motion.div>
                         ) : activeTab === 'Ranking' ? (

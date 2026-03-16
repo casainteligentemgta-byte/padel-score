@@ -9,6 +9,7 @@ import { MatchStatus } from '@/types/tournament';
 import {
     formatCategory, formatHHMM, resolveTeamNames, calcGroupStanding, formatDisplayName
 } from '../utils';
+import { TeamPairDisplay } from '@/components/TeamPairDisplay';
 
 interface GroupsViewProps {
     tournaments: Record<string, any>;
@@ -31,20 +32,27 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
 
         const isSimple = activeTournament?.type === 'AMERICANO_INDIVIDUAL';
         let name: string;
+        let p1Name = '';
+        let p2Name = '';
+        let player2Accepted = true;
         if (team) {
             const p1 = formatDisplayName((team.p1Name || team.p1?.name || '').trim());
             const p2 = formatDisplayName((team.p2Name || team.p2?.name || '').trim());
+            p1Name = p1 || `Jugador ${tNum}`;
+            p2Name = p2 || (isSimple ? '' : `Jugador ${tNum + 1}`);
+            const isPlaceholder = (s: string) => !s || s.startsWith('Jugador ');
             if (isSimple) {
-                name = p1 || `Jugador ${tNum}`;
+                name = p1Name;
             } else {
                 name = (p1 && p2) ? `${p1} / ${p2}` : (p1 || `Pareja ${tNum}`);
+                player2Accepted = !isPlaceholder(p2);
             }
         } else {
             name = isSimple ? `Jugador ${tNum}` : `Pareja ${tNum}`;
         }
 
         const stats = calcGroupStanding(tid, tNum, allMatches);
-        return { id: tid, name, tNum, ...stats };
+        return { id: tid, name, tNum, p1Name, p2Name, player2Accepted, ...stats };
     }).sort((a, b) => {
         if (b.Pts !== a.Pts) return b.Pts - a.Pts;
         const da = a.JF - a.JC, db = b.JF - b.JC;
@@ -134,15 +142,15 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
                                 <div className="min-w-0">
                                     {isSimple ? (
                                         <p className={`text-[10px] font-black uppercase italic tracking-tight truncate leading-none ${isLeader ? 'text-[#ccff00]' : 'text-white'}`}>{row.name}</p>
-                                    ) : (() => {
-                                        const parts = row.name.split(' / ');
-                                        return (
-                                            <div className="flex flex-col min-w-0">
-                                                <p className={`text-[9px] font-black uppercase italic tracking-tight truncate leading-none ${isLeader ? 'text-[#ccff00]' : 'text-white'}`}>{parts[0]}</p>
-                                                {parts[1] && <p className="text-[8px] font-bold text-gray-500 uppercase italic tracking-tighter truncate leading-none mt-1">{parts[1]}</p>}
-                                            </div>
-                                        );
-                                    })()}
+                                    ) : (
+                                        <TeamPairDisplay
+                                            player1Name={row.p1Name || row.name.split(' / ')[0] || '—'}
+                                            player2Name={row.p2Name || row.name.split(' / ')[1] || '—'}
+                                            player2Accepted={row.player2Accepted !== false}
+                                            compact
+                                            className={isLeader ? '[&_span]:text-[#ccff00]' : '[&_span]:text-white'}
+                                        />
+                                    )}
                                 </div>
                             </div>
                             <span className="text-[10px] font-bold text-white text-center">{row.PJ}</span>

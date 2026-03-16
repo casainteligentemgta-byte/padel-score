@@ -27,6 +27,7 @@ import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournam
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
+import { TournamentStepper } from '@/components/TournamentStepper';
 import { useEffect } from 'react';
 
 // ── Estado inicial del formulario ─────────────────────────────────────────
@@ -2065,6 +2066,38 @@ export default function NewTournamentPage() {
                                         )))
                                     }
                                 </div>
+
+                                {/* Lanzar torneo con cupos placeholder (inscripciones + Round Robin) */}
+                                {(tournamentData.inscriptionCategories?.length ?? 0) > 0 && user?.uid && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="pt-6 border-t border-white/10"
+                                    >
+                                        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-3">
+                                            O bien: crear cupos automáticos por categoría
+                                        </p>
+                                        <TournamentStepper
+                                            formData={{
+                                                name: tournamentData.name,
+                                                startDate: tournamentData.startDate,
+                                                startTime: tournamentData.startTime,
+                                                endTime: tournamentData.endTime,
+                                                complexName: tournamentData.complexName,
+                                                totalCourts: tournamentData.totalCourts,
+                                                courtNames: tournamentData.courtNames,
+                                                inscriptionCategories: tournamentData.inscriptionCategories,
+                                                maxTeamsByCategory: (tournamentData.inscriptionCategories || []).reduce<Record<string, number>>((acc, c) => {
+                                                    acc[c.key] = c.maxSlots ?? 8;
+                                                    return acc;
+                                                }, {}),
+                                            }}
+                                            userId={user.uid}
+                                            onError={(e) => alert(`Error: ${e.message}`)}
+                                            redirectTo={(id) => `/tournaments/${id}`}
+                                        />
+                                    </motion.div>
+                                )}
                             </motion.div>
                         )}
                     </AnimatePresence>

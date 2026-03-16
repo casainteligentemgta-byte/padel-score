@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -62,6 +62,23 @@ function EventView() {
     const [allMatches, setAllMatches] = useState<any[]>([]);
     const [activeTab, setActiveTab] = useState<string>('all');
     const [loading, setLoading] = useState(true);
+
+    // Fechas únicas con partidos (para selector de día)
+    const availableDates = useMemo(() => {
+        const dates = new Set<string>();
+        allMatches.forEach((m) => {
+            const raw = m.scheduledTime || m.time || '';
+            const datePart = typeof raw === 'string' ? raw.split('T')[0] : (raw && new Date(raw).toISOString().split('T')[0]);
+            if (datePart) dates.add(datePart);
+        });
+        return Array.from(dates).sort();
+    }, [allMatches]);
+    const [selectedDate, setSelectedDate] = useState<string>(availableDates[0] ?? '');
+    useEffect(() => {
+        if (availableDates.length > 0 && !availableDates.includes(selectedDate)) {
+            setSelectedDate(availableDates[0]);
+        }
+    }, [availableDates, selectedDate]);
 
     // Modals state
     const [showShareModal, setShowShareModal] = useState(false);
@@ -444,6 +461,9 @@ function EventView() {
                         numSlotsPorComenzar={numSlotsPorComenzar}
                         tournaments={tournaments}
                         canManageTournament={!!canManageTournament}
+                        availableDates={availableDates}
+                        selectedDate={selectedDate}
+                        onSelectDate={setSelectedDate}
                         onEditRules={() => {
                             setEventRulesDraft(firstT?.rules?.content ?? '');
                             setIsEventRulesEditOpen(true);

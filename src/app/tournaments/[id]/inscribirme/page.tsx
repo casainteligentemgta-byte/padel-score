@@ -681,15 +681,15 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                             </Link>
                         </div>
                     ) : pendingInvitation ? (
-                        /* VISTA PLAYER A: ESPERANDO */
+                        /* VISTA JUGADOR A: INVITACIÓN PENDIENTE */
                         <div className="max-w-md mx-auto p-8 rounded-3xl bg-white/5 border border-white/10 text-center space-y-6">
                             <div className="w-20 h-20 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto">
                                 <RefreshCw className="w-10 h-10 text-amber-500 animate-[spin_3s_linear_infinite]" />
                             </div>
-                            <h2 className="text-xl font-black uppercase italic italic tracking-tighter">Esperando respuesta</h2>
+                            <h2 className="text-xl font-black uppercase italic tracking-tighter text-amber-400">Invitación pendiente</h2>
                             <p className="text-gray-400 text-sm">
                                 Has invitado a <span className="text-white font-bold">{pendingInvitation.partner_name}</span>.
-                                El equipo se confirmará cuando acepte la invitación.
+                                Cuando acepte, el equipo quedará <strong className="text-white">confirmado</strong> y se asignará automáticamente a un grupo del torneo.
                             </p>
                             <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
                                 <p className="text-[10px] font-black uppercase text-gray-500 tracking-[0.2em] mb-2">Tu lugar se liberará en:</p>

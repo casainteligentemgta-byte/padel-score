@@ -3,12 +3,8 @@
 import { useState, useEffect, use, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import lottie from 'lottie-web';
-import { rtdb } from '@/lib/rtdb';
 import { dataService } from '@/lib/dataService';
-import { db } from '@/lib/firebase';
 import { createClient } from '@/lib/supabase/client';
-import { ref, onValue, off } from 'firebase/database';
-import { doc, onSnapshot, collection } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
 import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, Layers, ImageIcon, Play, Eye, Users } from 'lucide-react';
@@ -221,66 +217,29 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const [animacionesMarcador, setAnimacionesMarcador] = useState<Record<string, { nombre: string; url: string }>>({});
 
     useEffect(() => {
-        if (!rtdb) return;
-        const refs = [
-            { path: 'publicidad_master/reloj_ocasion', setter: setRelojOcasion },
-            { path: 'publicidad_master/cronometro_tipo', setter: setCronometroTipo },
-        ];
-        const unsubscribers = refs.map(r => {
-            const node = ref(rtdb!, r.path);
-            const h = (s: any) => r.setter(s.val() || 'default');
-            onValue(node, h);
-            return () => off(node, 'value', h);
-        });
-        const animNode = ref(rtdb, 'publicidad_master/animaciones_marcador');
-        const animH = (s: any) => setAnimacionesMarcador(s.val() || {});
-        onValue(animNode, animH);
-
-        const tickerNode = ref(rtdb, 'publicidad_master/ticker');
-        const tickerH = (s: any) => {
-            const v = s.val();
-            if (v) { setTickerActivo(v.activo ?? false); setTickerTexto(v.texto ?? ''); setTickerVelocidad(v.velocidad_seg ?? 30); }
-        };
-        onValue(tickerNode, tickerH);
-
-        return () => {
-            unsubscribers.forEach(u => u());
-            off(animNode, 'value', animH);
-            off(tickerNode, 'value', tickerH);
-        };
+        dataService.getAnimations()
+            .then((rows: any[]) => {
+                const map: Record<string, { nombre: string; url: string }> = {};
+                (rows || []).forEach((r: any) => {
+                    map[r.id || r.name] = { nombre: r.name || r.nombre || '', url: r.url || '' };
+                });
+                setAnimacionesMarcador(map);
+            })
+            .catch(() => setAnimacionesMarcador({}));
     }, []);
 
-    // ── Marcador en Vivo desde RTDB ─────────────────────────────────────
+    // ── Marcador en vivo desde Supabase (pizarra_cancha_state) ───────────────
     useEffect(() => {
-        if (!rtdb || !match) return;
+        if (!match) return;
         const courtNum = Number(match.court ?? (match.courtIndex != null ? (match.courtIndex as number) + 1 : 0));
         if (!courtNum) return;
 
         const canchaId = `cancha_${courtNum}`;
-        const marcRef = ref(rtdb, `canchas/${canchaId}/marcador`);
-        
-        let timeout: NodeJS.Timeout;
-
-        const connectMarcador = () => {
-            const unsub = onValue(marcRef, (snap) => {
-                if (snap.exists()) {
-                    setLiveMarcador(snap.val());
-                } else {
-                    setLiveMarcador(null);
-                }
-            }, (error) => {
-                console.error("❌ Error listener RTDB:", error);
-                timeout = setTimeout(connectMarcador, 5000);
-            });
-            return unsub;
-        };
-
-        const unsubscribe = connectMarcador();
-
-        return () => {
-            if (typeof unsubscribe === 'function') unsubscribe();
-            clearTimeout(timeout);
-        };
+        const unsub = dataService.subscribePizarraCanchaState(canchaId, (state) => {
+            const marcador = state?.data?.marcador ?? null;
+            setLiveMarcador(marcador);
+        });
+        return () => { unsub(); };
     }, [match?.court, match?.courtIndex]);
 
     // 5. Obtener TODA la biblioteca de imágenes activa para el carrusel automático
@@ -565,14 +524,15 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return () => off(marcRef, 'value', handler);
     }, [match?.court]);
 
-    // Animación actual disparada por el marker (botones debajo de los puntos)
+    // Animación actual disparada por el marker (Supabase pizarra_cancha_state)
     useEffect(() => {
-        if (!rtdb || !match?.court) return;
+        if (!match?.court) return;
         const canchaId = `cancha_${match.court}`;
-        const animRef = ref(rtdb, `canchas/${canchaId}/animacion_actual`);
-        const handler = (snap: any) => setAnimacionActual(snap.val());
-        onValue(animRef, handler);
-        return () => off(animRef, 'value', handler);
+        const unsub = dataService.subscribePizarraCanchaState(canchaId, (state) => {
+            const anim = state?.data?.animacion_actual ?? null;
+            setAnimacionActual(anim);
+        });
+        return () => unsub();
     }, [match?.court]);
 
     // Auto-ocultar overlay de animación tras 5s
@@ -784,33 +744,12 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
             }
         }, 3000);
 
-        // 2. Firestore Subscriptions (Fallback / Event view support)
-        let unsubFT = () => { };
-        let unsubFM = () => { };
-
-        if (db) {
-            unsubFT = onSnapshot(doc(db, 'tournaments', id), (snap) => {
-                if (!snap.exists()) return;
-                currentTournament = { id: snap.id, ...snap.data() };
-                if (currentMatches.length > 0) updateAll(currentTournament, currentMatches);
-            });
-
-            unsubFM = onSnapshot(collection(db, 'tournaments', id, 'matches'), (snap) => {
-                if (snap.empty) return;
-                currentMatches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                if (currentTournament) updateAll(currentTournament, currentMatches);
-            });
-        }
-
-        // Safety timeout to stop spinner if no data found
         const timeout = setTimeout(() => setLoading(false), 10000);
 
         return () => {
             unsubT();
             unsubM();
             clearInterval(pollInterval);
-            unsubFT();
-            unsubFM();
             clearTimeout(timeout);
         };
     }, [id, matchId]);

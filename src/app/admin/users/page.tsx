@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService, ROLES } from '@/lib/dataService';
-import { rtdbService } from '@/lib/rtdbService';
 import {
     Shield, User, Mail, RefreshCw, ChevronRight, Save,
     ShieldCheck, UserCircle, Target, Plus, Edit2, Key,
@@ -114,18 +113,6 @@ export default function AdminUsersPage() {
         setUpdating(uid);
         try {
             await dataService.setUserProfile(uid, { markerCanchas: canchas });
-
-            const user = users.find(u => u.uid === uid);
-            if (user) {
-                await rtdbService.setRTDBUserRole(
-                    uid,
-                    (user.role || ROLES.PLAYER).toLowerCase() as any,
-                    user.name || 'Sin nombre',
-                    user.email || 'no-email@padel-smart.tk',
-                    canchas.length > 0 ? canchas[0] : undefined
-                );
-            }
-
             setUsers(users.map(u => u.uid === uid ? { ...u, markerCanchas: canchas } : u));
         } catch (err) {
             console.error(err);
@@ -179,15 +166,6 @@ export default function AdminUsersPage() {
                 };
 
                 await dataService.setUserProfile(editingUser.uid, updateData);
-
-                await rtdbService.setRTDBUserRole(
-                    editingUser.uid,
-                    formData.role.toLowerCase() as any,
-                    formData.name,
-                    formData.email || editingUser.email || 'no-email@padel-smart.tk',
-                    (editingUser.markerCanchas && editingUser.markerCanchas.length > 0) ? editingUser.markerCanchas[0] : undefined
-                );
-
                 setUsers(users.map(u => u.uid === editingUser.uid ? { ...u, ...updateData, email: formData.email || u.email } : u));
                 setIsModalOpen(false);
             } else {

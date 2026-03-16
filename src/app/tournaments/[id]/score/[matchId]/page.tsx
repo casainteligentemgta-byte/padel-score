@@ -23,12 +23,7 @@ import {
     ZapOff
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { ref, onValue, off, update } from 'firebase/database';
-import { rtdb } from '@/lib/rtdb';
-import { dispararAnimacionMarcador } from '@/lib/rtdbService';
 import { dataService } from '@/lib/dataService';
-import { db } from '@/lib/firebase';
-import { doc, onSnapshot, collection, updateDoc } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
 import RefereeRemoteControl from '@/components/RefereeRemoteControl';
@@ -68,11 +63,15 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     }, []);
 
     useEffect(() => {
-        if (!rtdb) return;
-        const animRef = ref(rtdb, 'publicidad_master/animaciones_marcador');
-        const handler = (snap: any) => setAnimacionesMarcador(snap.val() || {});
-        onValue(animRef, handler);
-        return () => off(animRef, 'value', handler);
+        dataService.getAnimations()
+            .then((rows: any[]) => {
+                const map: Record<string, { nombre: string; url: string }> = {};
+                (rows || []).forEach((r: any) => {
+                    map[r.id || r.name] = { nombre: r.name || r.nombre || '', url: r.url || '' };
+                });
+                setAnimacionesMarcador(map);
+            })
+            .catch(() => setAnimacionesMarcador({}));
     }, []);
 
     useEffect(() => {
@@ -87,8 +86,18 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         return entries.sort((a, b) => a[0].localeCompare(b[0])).slice(0, 6);
     }, [animacionesMarcador]);
 
-    const handlePadAnimacion = (animId: string) => {
-        dispararAnimacionMarcador(`cancha_${matchCourt}`, animId);
+    const handlePadAnimacion = async (animId: string) => {
+        const canchaId = `cancha_${matchCourt}`;
+        try {
+            const cur = await dataService.getPizarraCanchaState(canchaId);
+            const data = cur?.data || {};
+            await dataService.setPizarraCanchaState(canchaId, {
+                ...data,
+                animacion_actual: { id: animId, ts: Date.now() },
+            });
+        } catch (e) {
+            console.warn('[Score] setPizarraCanchaState animacion:', e);
+        }
     };
 
     const handleFinishMatch = async () => {
@@ -228,37 +237,32 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         return () => clearInterval(interval);
     }, [isMedicalTimeout]);
 
-    // ── Sincronizar estado completo a RTDB automáticamente (Ultra-rápido para Firestick) ──
+    // ── Sincronizar marcador a pizarra_cancha_state (para displays por cancha) ──
     useEffect(() => {
-        if (!rtdb || !matchCourt || match?.status !== MatchStatus.LIVE) return;
-        
+        if (!matchCourt || match?.status !== MatchStatus.LIVE) return;
+
         const canchaId = `cancha_${matchCourt}`;
-        const marcRef = ref(rtdb, `canchas/${canchaId}/marcador`);
-        
         const isStb = match.superTiebreak || match.matchFormat === 'SUPER_TIEBREAK';
         const isTb = match.isTiebreak;
 
-        update(marcRef, {
-            puntos: {
-                local: match.points?.t1 || '0',
-                visitante: match.points?.t2 || '0'
-            },
-            games: {
-                local: match.games?.t1 || 0,
-                visitante: match.games?.t2 || 0
-            },
-            sets: {
-                local: match.sets?.t1 || 0,
-                visitante: match.sets?.t2 || 0
-            },
-            saque: {
-                equipo: match.server?.team || 1,
-                jugador: match.server?.player || 1
-            },
-            modo_puntos: isStb ? 'super_tiebreak' : (isTb ? 'tiebreak' : 'normal'),
-            ts: Date.now()
-        }).catch(err => console.error('[RTDB Sync Error]:', err));
+        dataService.getPizarraCanchaState(canchaId).then((cur) => {
+            const data = cur?.data || {};
+            const marcador = data.marcador || {};
+            return dataService.setPizarraCanchaState(canchaId, {
+                ...data,
+                marcador: {
+                    ...marcador,
+                    puntos: { local: match.points?.t1 || '0', visitante: match.points?.t2 || '0' },
+                    games: { local: match.games?.t1 || 0, visitante: match.games?.t2 || 0 },
+                    sets: { local: match.sets?.t1 || 0, visitante: match.sets?.t2 || 0 },
+                    saque: { equipo: match.server?.team || 1, jugador: match.server?.player || 1 },
+                    modo_puntos: isStb ? 'super_tiebreak' : (isTb ? 'tiebreak' : 'normal'),
+                    ultimo_update: Date.now(),
+                },
+            });
+        }).catch((err) => console.warn('[Score] Sync pizarra cancha:', err));
     }, [
+        match?.status,
         match?.points,
         match?.games,
         match?.sets,
@@ -267,7 +271,6 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         match?.superTiebreak,
         match?.matchFormat,
         matchCourt,
-        match?.status
     ]);
 
     const formatDuration = (seconds: number) => {
@@ -371,32 +374,11 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             if (currentTournament) updateAll(currentTournament, currentMatches);
         });
 
-        // 2. Firestore Subscriptions
-        let unsubFT = () => { };
-        let unsubFM = () => { };
-
-        if (db) {
-            unsubFT = onSnapshot(doc(db, 'tournaments', id), (snap) => {
-                if (!snap.exists()) return;
-                currentTournament = { id: snap.id, ...snap.data() };
-                if (currentMatches.length > 0) updateAll(currentTournament, currentMatches);
-            });
-
-            unsubFM = onSnapshot(collection(db, 'tournaments', id, 'matches'), (snap) => {
-                if (snap.empty) return;
-                currentMatches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                if (currentTournament) updateAll(currentTournament, currentMatches);
-            });
-        }
-
-        // Safety timeout
         const timeout = setTimeout(() => setLoading(false), 10000);
 
         return () => {
             if (typeof unsubT === 'function') unsubT();
             if (typeof unsubMatches === 'function') unsubMatches();
-            unsubFT();
-            unsubFM();
             clearTimeout(timeout);
         };
     }, [id, matchId]);
@@ -1552,21 +1534,21 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
                             <div className="p-6 bg-white/[0.02] border-t border-white/5 flex gap-4">
                                 <button
-                                    onClick={() => {
-                                        if (confirm('¿Resetear marcador de este partido?')) {
-                                            const updatedMatches = tournament.matches.map((m: any) =>
-                                                m.id === match.id ? {
-                                                    ...m,
-                                                    points: { t1: '0', t2: '0' },
-                                                    games: { t1: 0, t2: 0 },
-                                                    sets: { t1: 0, t2: 0 },
-                                                    status: MatchStatus.PENDING,
-                                                    startedAt: null,
-                                                    finishedAt: null
-                                                } : m
-                                            );
-                                            updateDoc(doc(db, 'tournaments', id), { matches: updatedMatches });
+                                    onClick={async () => {
+                                        if (!confirm('¿Resetear marcador de este partido?')) return;
+                                        try {
+                                            await dataService.updateMatch(id, match.id, {
+                                                points: { t1: '0', t2: '0' },
+                                                games: { t1: 0, t2: 0 },
+                                                sets: { t1: 0, t2: 0 },
+                                                status: MatchStatus.PENDING,
+                                                startedAt: null,
+                                                finishedAt: null,
+                                            });
+                                            setMatch((prev: any) => prev ? { ...prev, points: { t1: '0', t2: '0' }, games: { t1: 0, t2: 0 }, sets: { t1: 0, t2: 0 }, status: MatchStatus.PENDING, startedAt: null, finishedAt: null } : prev);
                                             setShowAdjustModal(false);
+                                        } catch (e) {
+                                            console.error('Reset match:', e);
                                         }
                                     }}
                                     className="flex-1 py-4 bg-red-500/10 text-red-500 rounded-2xl font-black italic uppercase tracking-widest text-[10px] hover:bg-red-500/20 transition-all border border-red-500/10"

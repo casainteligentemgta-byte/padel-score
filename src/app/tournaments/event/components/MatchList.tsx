@@ -7,6 +7,18 @@ import { MatchStatus } from '@/types/tournament';
 import { NextMatchCard, PlaceholderMatchCard, MatchCard } from './MatchCards';
 import { formatHHMM, toMinute } from '../utils';
 
+function getDatePart(m: any): string {
+    const raw = m.scheduledTime || m.time || '';
+    if (typeof raw === 'string') return raw.split('T')[0];
+    if (raw && typeof raw === 'object') return new Date(raw).toISOString().split('T')[0];
+    return '';
+}
+
+function formatDayLabel(dateStr: string): string {
+    if (!dateStr) return '';
+    return new Date(dateStr + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+}
+
 interface MatchListProps {
     activeTab: string;
     nextUpMatches: any[];
@@ -19,6 +31,9 @@ interface MatchListProps {
     numSlotsPorComenzar: number;
     tournaments: Record<string, any>;
     canManageTournament: boolean;
+    availableDates?: string[];
+    selectedDate?: string;
+    onSelectDate?: (date: string) => void;
     onEditRules: () => void;
 }
 
@@ -34,8 +49,23 @@ export const MatchList: React.FC<MatchListProps> = ({
     numSlotsPorComenzar,
     tournaments,
     canManageTournament,
+    availableDates = [],
+    selectedDate = '',
+    onSelectDate,
     onEditRules
 }) => {
+    const dateFilteredMatches = (activeTab === 'all' && selectedDate && availableDates.length > 0)
+        ? allMatches.filter((m) => getDatePart(m) === selectedDate)
+        : allMatches;
+    const dateFilteredNextUp = (activeTab === 'all' && selectedDate && availableDates.length > 0)
+        ? nextUpMatches.filter((m) => getDatePart(m) === selectedDate)
+        : nextUpMatches;
+    const dateFilteredLive = (activeTab === 'all' && selectedDate && availableDates.length > 0)
+        ? effectiveLiveMatches.filter((m) => getDatePart(m) === selectedDate)
+        : effectiveLiveMatches;
+    const dateFilteredFinished = (activeTab === 'all' && selectedDate && availableDates.length > 0)
+        ? allMatches.filter((m) => (m.status === 'FINISHED' || m.status === 'COMPLETED') && getDatePart(m) === selectedDate)
+        : allMatches.filter((m) => m.status === 'FINISHED' || m.status === 'COMPLETED');
     return (
         <AnimatePresence mode="wait">
             {activeTab === MatchStatus.PENDING ? (
@@ -148,6 +178,23 @@ export const MatchList: React.FC<MatchListProps> = ({
                     exit={{ opacity: 0 }}
                     className="space-y-10"
                 >
+                    {/* Selector de fechas horizontal (chips): días únicos con partidos programados */}
+                    {activeTab === 'all' && availableDates.length > 0 && onSelectDate && (
+                        <div className="flex flex-row gap-2 overflow-x-auto pb-2 mb-4 hide-scrollbar">
+                            <span className="flex-shrink-0 text-[9px] font-black uppercase tracking-widest text-white/60 self-center mr-1">Día:</span>
+                            {availableDates.map((date) => (
+                                <button
+                                    key={date}
+                                    type="button"
+                                    onClick={() => onSelectDate(date)}
+                                    className={`flex-shrink-0 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${selectedDate === date ? 'bg-[#ccff00] text-[#0a0a0a] border-[#ccff00]' : 'bg-[#0a0a0a] border-white/20 text-gray-400 hover:border-[#ccff00]/50 hover:text-white/80'}`}
+                                >
+                                    {formatDayLabel(date)}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
                     {/* 1. SECCIÓN EN VIVO */}
                     <div className="space-y-4">
                         <div className="flex items-center gap-3 px-1">
@@ -157,14 +204,14 @@ export const MatchList: React.FC<MatchListProps> = ({
                             </div>
                             <div className="flex-1 h-px bg-emerald-500/10" />
                             <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
-                                {allMatches.filter(m => m.status === MatchStatus.LIVE).length} en vivo
+                                {dateFilteredLive.length} en vivo
                             </span>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {allMatches.filter(m => m.status === 'LIVE' || m.status === 'IN_PROGRESS' || m.status === 'STARTED').map((m, idx) => (
+                            {dateFilteredLive.map((m, idx) => (
                                 <NextMatchCard key={m.id} match={m} rank={idx} compact matchNumber={allMatches.indexOf(m) + 1} />
                             ))}
-                            {allMatches.filter(m => m.status === 'LIVE' || m.status === 'IN_PROGRESS' || m.status === 'STARTED').length === 0 && (
+                            {dateFilteredLive.length === 0 && (
                                 <div className="py-10 text-center border border-dashed border-white/5 rounded-[2rem] opacity-20">
                                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Sin partidos en curso</p>
                                 </div>
@@ -181,20 +228,18 @@ export const MatchList: React.FC<MatchListProps> = ({
                             </div>
                             <div className="flex-1 h-px bg-yellow-400/10" />
                             <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
-                                {allMatches.filter(m => m.status === MatchStatus.PENDING).length} por jugar
+                                {dateFilteredMatches.filter(m => m.status === MatchStatus.PENDING).length} por jugar
                             </span>
                         </div>
 
-                        {/* Sub-bloque: Siguientes Salidas (Tarjetas Compactas Destacadas) */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {nextUpMatches.map((m, idx) => (
+                            {dateFilteredNextUp.map((m, idx) => (
                                 <NextMatchCard key={m.id} match={m} rank={idx} compact gameNumber={idx + 1} matchNumber={allMatches.indexOf(m) + 1} />
                             ))}
                         </div>
 
-                        {/* Sub-bloque: Resto de la jornada (Lista estándar) */}
                         <div className="space-y-3 pt-2">
-                            {allMatches
+                            {dateFilteredMatches
                                 .filter(m => m.status === MatchStatus.PENDING && !nextUpIds.has(m.id))
                                 .map((m, idx) => (
                                     <MatchCard
@@ -219,13 +264,12 @@ export const MatchList: React.FC<MatchListProps> = ({
                             <div className="flex-1 h-px bg-white/5" />
                         </div>
                         <div className="space-y-3">
-                            {allMatches.filter(m => m.status === 'FINISHED' || m.status === 'COMPLETED').length === 0 ? (
+                            {dateFilteredFinished.length === 0 ? (
                                 <div className="py-10 text-center border border-dashed border-white/5 rounded-[2rem] opacity-20">
                                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Aún no hay resultados</p>
                                 </div>
                             ) : (
-                                [...allMatches]
-                                    .filter(m => m.status === 'FINISHED' || m.status === 'COMPLETED')
+                                [...dateFilteredFinished]
                                     .reverse()
                                     .map((m, idx) => (
                                         <MatchCard

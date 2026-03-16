@@ -5,7 +5,7 @@ import { useDropzone } from 'react-dropzone';
 import { createClient } from '@/lib/supabase/client';
 import { uploadToSupabase } from '@/lib/storage';
 import type { MediaContent, Pantalla, TiraInformativa, MediaTipo } from '@/lib/supabase/publicidad';
-import { setAnimacionMarcador } from '@/lib/rtdbService';
+import { dataService } from '@/lib/dataService';
 import Sidebar from '@/components/Sidebar';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -456,12 +456,12 @@ export default function AdminPublicidad() {
       for (let btn = 1; btn <= 12; btn++) {
         const item = byButton[btn];
         if (item) {
-          await setAnimacionMarcador(String(btn), {
+          await dataService.setAnimacionMarcador(String(btn), {
             nombre: (item.nombre_sponsor || item.nombre || `Botón ${btn}`).slice(0, 80),
             url: item.url,
           });
         } else {
-          await setAnimacionMarcador(String(btn), null);
+          await dataService.setAnimacionMarcador(String(btn), null);
         }
       }
       setError(null);

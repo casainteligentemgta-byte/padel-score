@@ -14,9 +14,11 @@ import {
     Home,
     Shield,
     FileText,
-    Wallet
+    Wallet,
+    Download,
+    ImageIcon
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import BouncingBall from '@/components/BouncingBall';
@@ -25,6 +27,10 @@ import InvitationManager from '@/components/InvitationManager';
 export default function HubPage() {
     const { user, profile, logout, loading: authLoading, isAdmin } = useAuth();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const tournamentId = searchParams.get('tournament_id');
+    const matchId = searchParams.get('match_id');
+    const [downloading, setDownloading] = useState(false);
 
     useEffect(() => {
         if (!authLoading && isAdmin) {
@@ -83,6 +89,15 @@ export default function HubPage() {
             href: '/ranking'
         },
         {
+            name: 'Tarjeta de victoria',
+            subtitle: 'DESCARGAR IMAGEN',
+            icon: ImageIcon,
+            color: 'text-amber-400',
+            bg: 'bg-amber-400/10',
+            border: 'border-amber-400/10',
+            href: '/hub/victory-card'
+        },
+        {
             name: 'Wallet',
             subtitle: 'PRÓXIMAMENTE',
             icon: Wallet,
@@ -92,6 +107,30 @@ export default function HubPage() {
             disabled: true
         }
     ];
+
+    const handleDownloadVictoryCard = async () => {
+        if (!tournamentId || !matchId) return;
+        setDownloading(true);
+        try {
+            const res = await fetch(`/api/generate-victory-card?match_id=${encodeURIComponent(matchId)}&tournament_id=${encodeURIComponent(tournamentId)}`);
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.error || 'Error al generar la imagen');
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `victoria-pro-${matchId}.png`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e: any) {
+            console.error(e);
+            alert(e?.message || 'No se pudo descargar la tarjeta');
+        } finally {
+            setDownloading(false);
+        }
+    };
 
 
     if (authLoading) {
@@ -135,6 +174,33 @@ export default function HubPage() {
                         <div className="mb-6">
                             <InvitationManager />
                         </div>
+
+                        {/* Descargar tarjeta de victoria (al llegar desde partido finalizado) */}
+                        {tournamentId && matchId && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="mb-6 p-4 rounded-2xl border-2 border-[#ccff00]/40 bg-[#ccff00]/5"
+                            >
+                                <p className="text-xs font-black uppercase tracking-widest text-[#ccff00] mb-2">¡Partido finalizado!</p>
+                                <p className="text-[10px] text-white/70 mb-3">Descarga tu tarjeta de victoria en alta calidad (1080×1080).</p>
+                                <button
+                                    type="button"
+                                    onClick={handleDownloadVictoryCard}
+                                    disabled={downloading}
+                                    className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-[#ccff00] text-black font-black text-xs uppercase italic tracking-tight disabled:opacity-50"
+                                >
+                                    {downloading ? (
+                                        <>Generando imagen...</>
+                                    ) : (
+                                        <>
+                                            <Download className="w-4 h-4" />
+                                            Descargar tarjeta de victoria
+                                        </>
+                                    )}
+                                </button>
+                            </motion.div>
+                        )}
 
                         {/* Hub Grid */}
                         <div className="grid grid-cols-2 gap-3 pb-8">

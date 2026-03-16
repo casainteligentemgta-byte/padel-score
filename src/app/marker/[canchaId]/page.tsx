@@ -2,14 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { rtdb } from '@/lib/rtdb';
-import { ref, onValue, off } from 'firebase/database';
-import {
-    activarCancha,
-    desactivarCancha,
-    actualizarMarcador,
-    setModoPuntos,
-} from '@/lib/rtdbService';
+import { dataService } from '@/lib/dataService';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -52,20 +45,13 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
         }
     }, [user, canchaId, canMarkInCancha]);
 
-    // ── Escuchar estado de la cancha en RTDB; actualizar solo si datos visibles cambiaron (evita parpadeo) ──
+    // ── Escuchar estado de la cancha (Supabase Realtime) ─────────────────────
     useEffect(() => {
-        if (!rtdb) return;
         setLoadingCancha(true);
-        const canchaRef = ref(rtdb, `canchas/${canchaId}`);
         let prevStableJson = '';
-        let firstLoad = true;
-        const handler = (snap: any) => {
-            const val = snap.val();
-            if (firstLoad) {
-                firstLoad = false;
-                setLoadingCancha(false);
-            }
-            // Comparar solo datos que afectan la UI; ignorar ultimo_update (cambia en cada escritura y provoca re-renders)
+        const unsub = dataService.subscribePizarraCanchaState(canchaId, (state) => {
+            const val = state?.data ?? null;
+            setLoadingCancha(false);
             const stable = val == null ? null : (() => {
                 const m = val.marcador;
                 return { estado: val.estado, marcador: m ? { ...m, ultimo_update: undefined } : m };
@@ -75,28 +61,34 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
                 prevStableJson = nextJson;
                 setCanchaData(val);
             }
-        };
-        onValue(canchaRef, handler, (err) => {
-            console.error(`[Marker] Error leyendo cancha ${canchaId}:`, err);
-            setLoadingCancha(false);
         });
-        return () => off(canchaRef, 'value', handler);
+        return unsub;
     }, [canchaId]);
 
-    // ── Activar partido ────────────────────────────────────────────────────
+    // ── Activar partido (Supabase pizarra_cancha_state) ─────────────────────
     const handleActivar = async () => {
         if (!user) return;
         setActivando(true);
         try {
-            await activarCancha(
-                canchaId,
-                user.uid,
-                profile?.name || user.email || 'Marker',
-                '', // torneoId: se puede conectar luego con el fixture
-                `live_${Date.now()}`,
-                equipo1,
-                equipo2,
-            );
+            await dataService.setPizarraCanchaState(canchaId, {
+                estado: 'en_vivo',
+                marker_uid: user.uid,
+                marker_nombre: profile?.name || user.email || 'Marker',
+                torneo_id: '',
+                partido_id: `live_${Date.now()}`,
+                marcador: {
+                    sets: { local: 0, visitante: 0 },
+                    games: { local: 0, visitante: 0 },
+                    puntos: { local: '0', visitante: '0' },
+                    modo_puntos: 'normal',
+                    golden_point: false,
+                    equipo_1: equipo1,
+                    equipo_2: equipo2,
+                    saque: { equipo: 1, jugador: 1 },
+                    ultimo_update: Date.now(),
+                },
+                publicidad: { override_local: false, imagen_url_local: null },
+            });
             setShowSetup(false);
         } catch (err) {
             console.error('[Marker] Error activando cancha:', err);
@@ -106,37 +98,53 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
         }
     };
 
-    // ── Desactivar partido ────────────────────────────────────────────────
+    // ── Desactivar partido ──────────────────────────────────────────────────
     const handleDesactivar = async () => {
         if (!confirm('¿Terminar el partido y poner la cancha en espera?')) return;
         try {
-            await desactivarCancha(canchaId);
+            await dataService.setPizarraCanchaState(canchaId, {
+                estado: 'espera',
+                marker_uid: null,
+                marker_nombre: null,
+                torneo_id: null,
+                partido_id: null,
+                marcador: null,
+                publicidad: { override_local: false, imagen_url_local: null },
+            });
         } catch (err) {
             console.error('[Marker] Error desactivando cancha:', err);
         }
     };
 
-    // ── Operaciones de puntos ─────────────────────────────────────────────
+    // ── Operaciones de puntos (Supabase pizarra_cancha_state) ────────────────
+    const actualizarMarcadorLocal = async (patch: Record<string, unknown>) => {
+        const cur = await dataService.getPizarraCanchaState(canchaId);
+        const data = cur?.data || {};
+        const marcadorPrev = data.marcador || {};
+        await dataService.setPizarraCanchaState(canchaId, {
+            ...data,
+            marcador: { ...marcadorPrev, ...patch, ultimo_update: Date.now() },
+        });
+    };
+
     const cambiarPunto = async (equipo: 'local' | 'visitante', delta: 1 | -1) => {
         if (!marcador) return;
-        const puntosActual = marcador.puntos;
+        const puntosActual = marcador.puntos || {};
         const actual = puntosActual[equipo];
         const modo = marcador.modo_puntos || 'normal';
         const secuencia = modo === 'normal' ? PUNTOS_NORMAL : PUNTOS_TB;
-
         const idx = secuencia.indexOf(actual);
         const baseIdx = idx === -1 ? 0 : idx;
         const newIdx = Math.max(0, Math.min(secuencia.length - 1, baseIdx + delta));
-
-        await actualizarMarcador(canchaId, {
+        await actualizarMarcadorLocal({
             puntos: { ...puntosActual, [equipo]: secuencia[newIdx] },
         });
     };
 
     const cambiarGame = async (equipo: 'local' | 'visitante', delta: 1 | -1) => {
         if (!marcador) return;
-        const nuevo = Math.max(0, (marcador.games[equipo] || 0) + delta);
-        await actualizarMarcador(canchaId, {
+        const nuevo = Math.max(0, (marcador.games?.[equipo] || 0) + delta);
+        await actualizarMarcadorLocal({
             games: { ...marcador.games, [equipo]: nuevo },
             puntos: { local: '0', visitante: '0' },
         });
@@ -144,8 +152,8 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
 
     const cambiarSet = async (equipo: 'local' | 'visitante', delta: 1 | -1) => {
         if (!marcador) return;
-        const nuevo = Math.max(0, (marcador.sets[equipo] || 0) + delta);
-        await actualizarMarcador(canchaId, {
+        const nuevo = Math.max(0, (marcador.sets?.[equipo] || 0) + delta);
+        await actualizarMarcadorLocal({
             sets: { ...marcador.sets, [equipo]: nuevo },
             games: { local: 0, visitante: 0 },
             puntos: { local: '0', visitante: '0' },
@@ -154,7 +162,14 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
 
     const toggleGoldenPoint = async () => {
         if (!marcador) return;
-        await actualizarMarcador(canchaId, { golden_point: !marcador.golden_point });
+        await actualizarMarcadorLocal({ golden_point: !marcador.golden_point });
+    };
+
+    const setModoPuntosLocal = async (modo: 'normal' | 'tiebreak' | 'super_tiebreak') => {
+        await actualizarMarcadorLocal({
+            modo_puntos: modo,
+            puntos: { local: '0', visitante: '0' },
+        });
     };
 
     // ── Acceso denegado a esta cancha ───────────────────────────────────────
@@ -331,8 +346,7 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
                         {/* Modo de puntos: Tiebreak / Super Tie Break (STB) */}
                         <div className="grid grid-cols-2 gap-3">
                             <button
-                                onClick={() => setModoPuntos(
-                                    canchaId,
+                                onClick={() => setModoPuntosLocal(
                                     marcador.modo_puntos === 'tiebreak' ? 'normal' : 'tiebreak'
                                 )}
                                 className={`py-3 rounded-2xl font-black uppercase italic tracking-widest text-[10px] flex items-center justify-center gap-2 transition-all border-2 ${marcador.modo_puntos === 'tiebreak'
@@ -344,8 +358,7 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
                                 {marcador.modo_puntos === 'tiebreak' ? 'TB ACTIVO' : 'Tiebreak'}
                             </button>
                             <button
-                                onClick={() => setModoPuntos(
-                                    canchaId,
+                                onClick={() => setModoPuntosLocal(
                                     marcador.modo_puntos === 'super_tiebreak' ? 'normal' : 'super_tiebreak'
                                 )}
                                 className={`py-3 rounded-2xl font-black uppercase italic tracking-widest text-[10px] flex items-center justify-center gap-2 transition-all border-2 ${marcador.modo_puntos === 'super_tiebreak'
