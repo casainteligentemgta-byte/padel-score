@@ -7,6 +7,8 @@ import { dataService } from '@/lib/dataService';
 import { createClient } from '@/lib/supabase/client';
 import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
+import { rtdb } from '@/lib/rtdb';
+import { ref, onValue, off } from 'firebase/database';
 import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, Layers, ImageIcon, Play, Eye, Users } from 'lucide-react';
 import { BouncingBall } from '@/components/BouncingBall';
 

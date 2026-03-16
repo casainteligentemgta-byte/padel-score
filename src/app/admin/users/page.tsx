@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { CANCHA_IDS, getCanchaLabel } from '@/lib/markerCanchas';
 import { formatDate } from '@/lib/formatters';
+import { rtdbService } from '@/lib/rtdbService';
 
 export default function AdminUsersPage() {
     const { profile, isAdmin, loading: authLoading, logout } = useAuth();

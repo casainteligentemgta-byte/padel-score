@@ -68,9 +68,13 @@ export function TournamentStepper({
           ...rest,
         };
         const { id } = await dataService.createTournament(payload, userId);
-        tournamentId = id;
+        tournamentId = id ?? '';
       }
 
+      if (!tournamentId) {
+        onError?.(new Error('No se pudo obtener el ID del torneo.'));
+        return;
+      }
       const result = await initializeTournamentWithPlaceholders(tournamentId, maxTeamsByCategory);
 
       onSuccess?.({ tournamentId, ...result });

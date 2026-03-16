@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { dataService } from '@/lib/dataService';
+import { rtdb } from '@/lib/rtdb';
+import { ref, update } from 'firebase/database';
 import { MatchStatus } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
 import RefereeRemoteControl from '@/components/RefereeRemoteControl';
@@ -632,6 +634,13 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
             setMatch(match);
             alert('Error al finalizar el set. Por favor, revisa tu conexión.');
         }
+    };
+
+    const dispararAnimacionMarcador = (canchaId: string, animId: string) => {
+        const a = animacionesMarcador[animId];
+        if (!rtdb || !a?.url) return;
+        const pathRef = ref(rtdb, `canchas/${canchaId}/animacion_actual`);
+        update(pathRef, { id: animId, url: a.url, ts: Date.now() });
     };
 
     // ── Lógica de selección de sacador ───────────────────────────────────

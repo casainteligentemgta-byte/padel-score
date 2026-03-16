@@ -1002,6 +1002,323 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         return groupStandings;
     };
 
+    const gruposTabContent = (() => {
+        const groupNames = [...new Set(inscriptions.map(ins => ins.groupName ?? 'Sin grupo'))].filter(Boolean).sort();
+        const gridGroups: Group[] = groupNames.length > 0
+            ? groupNames.map(name => ({
+                name: name === 'Sin grupo' ? 'Sin grupo' : name,
+                teams: inscriptions
+                    .filter(ins => (ins.groupName ?? 'Sin grupo') === name)
+                    .map(ins => {
+                        const partnerName = (ins.data?.partnerName as string) ?? '';
+                        return {
+                            id: ins.id,
+                            player1_name: ins.participantName ?? '',
+                            player2_name: partnerName,
+                            is_placeholder: ins.isPlaceholder === true,
+                            player2_accepted: !ins.isPlaceholder && !!partnerName,
+                        } satisfies Team;
+                    }),
+            }))
+            : [];
+        if (gridGroups.length > 0) return <TournamentGridView groups={gridGroups} />;
+        if (isCruzado) {
+            const ga = (tournament?.groupAssignments ?? {}) as Record<string, string[]>;
+            const groupAIds: string[] = ga['A'] ?? [];
+            const groupBIds: string[] = ga['B'] ?? [];
+            const crossFinished = matches.filter((m: any) => m.status === MatchStatus.FINISHED && m.stage === 'GROUP_STAGE');
+            const buildGroupStanding = (teamIds: string[]) => {
+                return teamIds.map((tid) => {
+                    const teamIdx = tournament?.teams?.findIndex((t: any) => String(t.id) === tid);
+                    const team = teamIdx !== undefined && teamIdx >= 0 ? tournament?.teams?.[teamIdx] : null;
+                    const tNum = (teamIdx ?? -1) + 1;
+                    let mWon = 0, mPlayed = 0, sWon = 0, sLost = 0, gWon = 0, gLost = 0;
+                    crossFinished.forEach((m: any) => {
+                        const side = m.team1Index === tNum ? 't1' : m.team2Index === tNum ? 't2' : null;
+                        if (!side) return;
+                        const opp = side === 't1' ? 't2' : 't1';
+                        mPlayed++;
+                        gWon += m.games?.[side] ?? 0;
+                        gLost += m.games?.[opp] ?? 0;
+                        sWon += m.sets?.[side] ?? 0;
+                        sLost += m.sets?.[opp] ?? 0;
+                        if ((m.sets?.[side] ?? 0) > (m.sets?.[opp] ?? 0)) mWon++;
+                        else if (m.sets?.[side] === m.sets?.[opp] && (m.games?.[side] ?? 0) > (m.games?.[opp] ?? 0)) mWon++;
+                    });
+                    return { id: tid, tNum, name: team ? `${team.p1?.name ?? 'J1'} / ${team.p2?.name ?? 'J2'}` : `Pareja ${tNum}`, mWon, mPlayed, sWon, sLost, gWon, gLost };
+                }).sort((a, b) => b.mWon - a.mWon || (b.sWon - b.sLost) - (a.sWon - a.sLost) || (b.gWon - b.gLost) - (a.gWon - a.gLost));
+            };
+            const standA = buildGroupStanding(groupAIds);
+            const standB = buildGroupStanding(groupBIds);
+            const qfPairings = [
+                { label: 'QF 1', t1: standA[0]?.name ?? 'TBD', t2: standB[1]?.name ?? 'TBD', desc: '1° A vs 2° B' },
+                { label: 'QF 2', t1: standB[0]?.name ?? 'TBD', t2: standA[1]?.name ?? 'TBD', desc: '1° B vs 2° A' },
+                { label: 'QF 3', t1: standA[2]?.name ?? 'TBD', t2: standB[3]?.name ?? 'TBD', desc: '3° A vs 4° B' },
+                { label: 'QF 4', t1: standB[2]?.name ?? 'TBD', t2: standA[3]?.name ?? 'TBD', desc: '3° B vs 4° A' },
+            ];
+            const GroupPanel = ({ title, color, rows }: { title: string; color: string; rows: typeof standA }) => (
+                <div className={`flex-1 bg-white/5 rounded-2xl border ${color} overflow-hidden`}>
+                    <div className={`px-4 py-3 border-b ${color} flex items-center gap-2`}>
+                        <span className={`text-xs font-black uppercase tracking-widest ${title === 'Grupo A' ? 'text-[#ccff00]' : 'text-blue-400'}`}>{title}</span>
+                    </div>
+                    <div className="divide-y divide-white/5">
+                        {rows.map((row, idx) => (
+                            <div key={row.id} className="flex items-center gap-3 px-4 py-3">
+                                <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black ${idx === 0 ? 'bg-[#ccff00] text-black' : idx === 1 ? 'bg-white/20 text-white' : 'bg-white/5 text-gray-500'}`}>{idx + 1}</span>
+                                <span className="flex-1 text-xs font-bold text-white truncate">{row.name}</span>
+                                <div className="flex gap-3 text-[10px] font-mono text-gray-400">
+                                    <span title="Pts">{row.mWon}P</span>
+                                    <span title="Sets">{row.sWon}-{row.sLost}</span>
+                                    <span title="Games">{row.gWon}-{row.gLost}</span>
+                                </div>
+                            </div>
+                        ))}
+                                {rows.length === 0 && <p className="text-[10px] text-gray-600 text-center py-6 italic">Sin resultados aún</p>}
+                    </div>
+                </div>
+            );
+            return (
+                <div className="space-y-5">
+                    <div className="flex gap-3">
+                        <GroupPanel title="Grupo A" color="border-[#ccff00]/20" rows={standA} />
+                        <GroupPanel title="Grupo B" color="border-blue-500/20" rows={standB} />
+                    </div>
+                    <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+                            <Trophy className="w-3 h-3 text-[#ccff00]" />
+                            <span className="text-xs font-black uppercase tracking-widest text-[#ccff00]">Cuartos de Final</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-0 divide-x divide-y divide-white/5">
+                            {qfPairings.map((qf) => (
+                                <div key={qf.label} className="p-4 space-y-2">
+                                    <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest">{qf.desc}</p>
+                                    <div className="space-y-1">
+                                        <div className="text-[11px] font-bold text-white truncate">{qf.t1}</div>
+                                        <div className="text-[9px] text-gray-600 font-black uppercase">vs</div>
+                                        <div className="text-[11px] font-bold text-white truncate">{qf.t2}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        if (isRoundRobin) {
+            const handleSaveGroupResult = async (matchId: string, gamesT1: number, gamesT2: number) => {
+                const match = matches.find(m => m.id === matchId);
+                if (!match) return;
+                const teamAWon = gamesT1 > gamesT2;
+                await dataService.updateMatch(id, matchId, {
+                    status: MatchStatus.FINISHED,
+                    games: { t1: gamesT1, t2: gamesT2 },
+                    sets: { t1: teamAWon ? 1 : 0, t2: teamAWon ? 0 : 1 },
+                    score: `${gamesT1}-${gamesT2}`,
+                    actualEndTime: new Date().toISOString(),
+                });
+            };
+            return (
+                <div className="space-y-4">
+                    {tournament?.groupAssignments && Object.keys(tournament.groupAssignments).length > 0 && (() => {
+                        const ga = (tournament.groupAssignments ?? {}) as Record<string, string[]>;
+                        const groupNames = Object.keys(ga).sort();
+                        const allIds: string[] = [];
+                        groupNames.forEach(g => { (ga[g] || []).forEach((id: string) => allIds.push(id)); });
+                        const uniqueIds = new Set(allIds);
+                        const okNoDuplicates = allIds.length === uniqueIds.size;
+                        const totalTeams = tournament.teams?.length ?? 0;
+                        const okTotal = allIds.length === totalTeams;
+                        return (
+                            <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+                                <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+                                    <span className="text-xs font-black uppercase tracking-widest text-gray-400">Verificación del sorteo</span>
+                                    {(okNoDuplicates && okTotal) ? <CheckCircle2 className="w-4 h-4 text-green-500" aria-label="Sorteo correcto" /> : <AlertTriangle className="w-4 h-4 text-amber-500" aria-label="Revisar asignación" />}
+                                </div>
+                                <div className="p-4 space-y-3">
+                                    {groupNames.map(g => {
+                                        const teamIds = ga[g] ?? [];
+                                        const names = teamIds.map((tid: string) => {
+                                            const t = tournament.teams?.find((te: any) => String(te?.id) === tid);
+                                            return t ? `${t.p1?.name ?? '?'} / ${t.p2?.name ?? '?'}` : tid;
+                                        });
+                                        return (
+                                            <div key={g}>
+                                                <span className="text-[10px] font-black uppercase text-padel-primary">Grupo {g}</span>
+                                                <ul className="text-xs text-white mt-1 space-y-0.5">{names.map((n, i) => <li key={i}>{n}</li>)}</ul>
+                                            </div>
+                                        );
+                                    })}
+                                    <p className="text-[10px] text-gray-500">
+                                        {okNoDuplicates && okTotal ? '✓ Cada equipo en un solo grupo. Total correcto.' : !okNoDuplicates ? '⚠ Un equipo aparece en más de un grupo.' : `⚠ Total equipos en grupos (${allIds.length}) no coincide con inscritos (${totalTeams}).`}
+                                    </p>
+                                    {canManageTournament && (
+                                        <div className="pt-3 border-t border-white/10">
+                                            <button
+                                                type="button"
+                                                disabled={syncAcceptedLoading}
+                                                onClick={async () => {
+                                                    setSyncAcceptedMessage(null);
+                                                    setSyncAcceptedLoading(true);
+                                                    try {
+                                                        const headers = await getAuthHeaders();
+                                                        const res = await fetch(`/api/tournaments/${id}/sync-accepted-teams`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' } });
+                                                        const data = await res.json().catch(() => ({}));
+                                                        if (!res.ok) {
+                                                            setSyncAcceptedMessage({ type: 'error', text: data?.error || 'Error al sincronizar' });
+                                                            return;
+                                                        }
+                                                        const n = data.synced ?? 0;
+                                                        const errs = data.errors ?? [];
+                                                        if (errs.length > 0) {
+                                                            setSyncAcceptedMessage({ type: 'error', text: `${n} sincronizados. Errores: ${errs.slice(0, 2).join('; ')}${errs.length > 2 ? '...' : ''}` });
+                                                        } else {
+                                                            setSyncAcceptedMessage({ type: 'success', text: n > 0 ? `Se sincronizaron ${n} pareja(s) en la grilla.` : 'No había parejas pendientes de sincronizar.' });
+                                                        }
+                                                    } catch (e: any) {
+                                                        setSyncAcceptedMessage({ type: 'error', text: e?.message || 'Error de conexión' });
+                                                    } finally {
+                                                        setSyncAcceptedLoading(false);
+                                                    }
+                                                }}
+                                                className="flex gap-2 text-xs font-bold uppercase tracking-widest text-padel-primary hover:text-padel-primary/90 disabled:opacity-50"
+                                            >
+                                                <RefreshCw className={`w-3.5 h-3.5 ${syncAcceptedLoading ? 'animate-spin' : ''}`} />
+                                                Sincronizar parejas aceptadas
+                                            </button>
+                                            {syncAcceptedMessage && (
+                                                <p className={`mt-2 text-[10px] ${syncAcceptedMessage.type === 'success' ? 'text-green-400' : 'text-amber-400'}`}>{syncAcceptedMessage.text}</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
+                    <TournamentPhaseManager
+                        tournament={tournament}
+                        matches={matches}
+                        canManage={!!canManageTournament}
+                        onSaveResult={handleSaveGroupResult}
+                        onFinishGroupPhase={() => generateMainDraw()}
+                        onResetElimination={async () => {
+                            const eliminationMatches = matches.filter(m => m.stage !== 'GROUP_STAGE' && m.groupName == null);
+                            for (const m of eliminationMatches) {
+                                await dataService.deleteMatch(id, m.id);
+                            }
+                            await dataService.updateTournament(id, { ...tournament, mainDrawGenerated: false });
+                        }}
+                    />
+                </div>
+            );
+        }
+        const isIndividual = tournament?.type === TournamentType.AMERICANO_INDIVIDUAL;
+        const typeLabel = isIndividual ? 'Clasificación Individual' : 'Clasificación por Parejas';
+        const entityLabel = isIndividual ? 'Jugador' : 'Pareja';
+        const computed = calculateStandings();
+        const computedMap: Record<string, any> = {};
+        computed.forEach((s: any) => { computedMap[s.id] = s; });
+        const zeroStats = { matchesPlayed: 0, matchesWon: 0, setsWon: 0, setsLost: 0, gamesWon: 0, gamesLost: 0 };
+        const extra: any[] = [];
+        const seenIds = new Set(Object.keys(computedMap));
+        if (isIndividual) {
+            tournament?.teams?.forEach((team: any, idx: number) => {
+                const pid1 = team.p1?.id || `p-${idx + 1}-1`;
+                const pid2 = team.p2?.id || `p-${idx + 1}-2`;
+                if (!seenIds.has(pid1) && team.p1?.name) { extra.push({ id: pid1, name: team.p1.name, photo: team.p1.photo || null, ...zeroStats }); seenIds.add(pid1); }
+                if (!seenIds.has(pid2) && team.p2?.name && team.p2.name !== team.p1?.name) { extra.push({ id: pid2, name: team.p2.name, photo: team.p2.photo || null, ...zeroStats }); seenIds.add(pid2); }
+            });
+        } else {
+            tournament?.teams?.forEach((team: any, idx: number) => {
+                const tid = `team-${idx + 1}`;
+                if (!seenIds.has(tid)) extra.push({ id: tid, name: `${team.p1?.name || 'J1'} / ${team.p2?.name || 'J2'}`, photo: null, ...zeroStats });
+            });
+        }
+        const allEntries = [...computed, ...extra].sort((a: any, b: any) => {
+            if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;
+            const dSA = a.setsWon - a.setsLost, dSB = b.setsWon - b.setsLost;
+            if (dSB !== dSA) return dSB - dSA;
+            const dGA = a.gamesWon - a.gamesLost, dGB = b.gamesWon - b.gamesLost;
+            if (dGB !== dGA) return dGB - dGA;
+            return b.gamesWon - a.gamesWon;
+        });
+        const getPoints = (s: any) => s.matchesWon * 3 + s.setsWon;
+        if (allEntries.length === 0) {
+            return (
+                <div className="py-20 text-center space-y-4 bg-white/5 rounded-[2.5rem] border border-dashed border-white/10">
+                    <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto opacity-20">
+                        <Trophy className="w-8 h-8 text-white" />
+                    </div>
+                    <p className="text-xs font-black italic uppercase text-gray-600 tracking-widest">Sin participantes registrados</p>
+                </div>
+            );
+        }
+        return (
+            <div className="space-y-4">
+                <div className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
+                    <div className="bg-padel-primary px-8 py-5 flex justify-between items-center">
+                        <div>
+                            <h3 className="text-black font-black italic uppercase text-base tracking-tighter">{typeLabel}</h3>
+                            <p className="text-[9px] text-black/60 font-black uppercase tracking-widest mt-0.5">{allEntries.length} {isIndividual ? 'jugadores' : 'parejas'} · Puntos: PG×3 + Sets×1</p>
+                        </div>
+                        <Trophy className="w-7 h-7 text-black opacity-20" />
+                    </div>
+                    <div className="p-3">
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="text-[9px] font-black uppercase tracking-widest text-gray-500 border-b border-white/[0.06]">
+                                        <th className="text-left py-3 px-2 w-8">#</th>
+                                        <th className="text-left py-3 px-2">{entityLabel}</th>
+                                        <th className="text-center py-3 px-1.5 whitespace-nowrap">PJ</th>
+                                        <th className="text-center py-3 px-1.5 whitespace-nowrap text-green-500">PG</th>
+                                        <th className="text-center py-3 px-1.5 whitespace-nowrap text-red-500">PP</th>
+                                        <th className="text-center py-3 px-1.5 whitespace-nowrap">Sets</th>
+                                        <th className="text-center py-3 px-1.5 whitespace-nowrap">Games</th>
+                                        <th className="text-right py-3 px-3 whitespace-nowrap">Pts</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/[0.04]">
+                                    {allEntries.map((entry: any, idx: number) => {
+                                        const pts = getPoints(entry);
+                                        const pp = entry.matchesPlayed - entry.matchesWon;
+                                        const isPodium = idx < 3;
+                                        const posColor = idx === 0 ? 'bg-padel-primary text-black' : idx === 1 ? 'bg-white/30 text-white' : idx === 2 ? 'bg-white/15 text-white/80' : 'bg-white/5 text-gray-600';
+                                        return (
+                                            <tr key={entry.id} className={`group hover:bg-white/[0.03] transition-colors ${isPodium ? 'border-l-2 border-padel-primary/40' : ''}`}>
+                                                <td className="py-3 px-2">
+                                                    <span className={`w-5 h-5 flex items-center justify-center rounded-md text-[8px] font-black italic ${posColor}`}>{idx + 1}</span>
+                                                </td>
+                                                <td className="py-3 px-2 min-w-[120px]">
+                                                    <div className="flex items-center gap-2">
+                                                        {entry.photo ? <img src={entry.photo} className="w-6 h-6 rounded-full object-cover border border-white/10 flex-shrink-0" /> : <div className="w-6 h-6 rounded-full bg-white/5 border border-white/[0.06] flex items-center justify-center text-[8px] font-bold text-gray-500 uppercase flex-shrink-0">{(entry.name || '?')[0]}</div>}
+                                                        <span className="text-[10px] font-black italic uppercase tracking-tighter group-hover:text-padel-primary transition-colors leading-tight">{entry.name}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="py-3 px-1.5 text-center text-[10px] font-bold text-gray-400">{entry.matchesPlayed}</td>
+                                                <td className="py-3 px-1.5 text-center text-[10px] font-bold text-green-400">{entry.matchesWon}</td>
+                                                <td className="py-3 px-1.5 text-center text-[10px] font-bold text-red-400">{pp}</td>
+                                                <td className="py-3 px-1.5 text-center"><span className="text-[9px] font-bold text-gray-400 tabular-nums">{entry.setsWon}<span className="text-gray-600">-</span>{entry.setsLost}</span></td>
+                                                <td className="py-3 px-1.5 text-center"><span className="text-[9px] font-bold text-gray-400 tabular-nums">{entry.gamesWon}<span className="text-gray-600">-</span>{entry.gamesLost}</span></td>
+                                                <td className="py-3 px-3 text-right"><span className={`text-sm font-black italic tabular-nums ${pts > 0 ? 'text-padel-primary' : 'text-gray-600'}`}>{pts}</span></td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex flex-wrap gap-3 px-2">
+                    {[['PJ', 'Partidos Jugados'], ['PG', 'Partidos Ganados'], ['PP', 'Partidos Perdidos'], ['Sets', 'Sets G–P'], ['Games', 'Juegos G–P'], ['Pts', 'Puntos (PG×3 + Sets×1)']].map(([k, v]) => (
+                        <span key={k} className="text-[8px] font-bold uppercase tracking-widest text-gray-700">
+                            <span className="text-gray-500">{k}</span> {v}
+                        </span>
+                    ))}
+                </div>
+            </div>
+        );
+    })();
+
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit">
             <Sidebar />
@@ -1128,429 +1445,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 className="space-y-4"
                             >
-                                {(() => {
-                                    // Grilla por inscripciones (Supabase) agrupadas por group_name
-                                    const groupNames = [...new Set(inscriptions.map(ins => ins.groupName ?? 'Sin grupo'))].filter(Boolean).sort();
-                                    const gridGroups: Group[] = groupNames.length > 0
-                                        ? groupNames.map(name => ({
-                                            name: name === 'Sin grupo' ? 'Sin grupo' : name,
-                                            teams: inscriptions
-                                                .filter(ins => (ins.groupName ?? 'Sin grupo') === name)
-                                                .map(ins => {
-                                                    const partnerName = (ins.data?.partnerName as string) ?? '';
-                                                    return {
-                                                        id: ins.id,
-                                                        player1_name: ins.participantName ?? '',
-                                                        player2_name: partnerName,
-                                                        is_placeholder: ins.isPlaceholder === true,
-                                                        player2_accepted: !ins.isPlaceholder && !!partnerName,
-                                                    } satisfies Team;
-                                                }),
-                                        }))
-                                        : [];
-
-                                    if (gridGroups.length > 0) {
-                                        return <TournamentGridView groups={gridGroups} />;
-                                    }
-
-                                    return isCruzado ? (() => {
-                                    // ── CRUZADO: Grupo A / Grupo B + Cuartos de final ────
-                                    const ga = (tournament?.groupAssignments ?? {}) as Record<string, string[]>;
-                                    const groupAIds: string[] = ga['A'] ?? [];
-                                    const groupBIds: string[] = ga['B'] ?? [];
-
-                                    // Calcular standings por grupo usando solo partidos cruzados finalizados
-                                    const crossFinished = matches.filter((m: any) => m.status === MatchStatus.FINISHED && m.stage === 'GROUP_STAGE');
-
-                                    const buildGroupStanding = (teamIds: string[]) => {
-                                        return teamIds.map((tid) => {
-                                            const teamIdx = tournament?.teams?.findIndex((t: any) => String(t.id) === tid);
-                                            const team = teamIdx !== undefined && teamIdx >= 0 ? tournament?.teams?.[teamIdx] : null;
-                                            const tNum = (teamIdx ?? -1) + 1; // 1-based index used in matches
-
-                                            let mWon = 0, mPlayed = 0, sWon = 0, sLost = 0, gWon = 0, gLost = 0;
-                                            crossFinished.forEach((m: any) => {
-                                                const side = m.team1Index === tNum ? 't1' : m.team2Index === tNum ? 't2' : null;
-                                                if (!side) return;
-                                                const opp = side === 't1' ? 't2' : 't1';
-                                                mPlayed++;
-                                                gWon += m.games?.[side] ?? 0;
-                                                gLost += m.games?.[opp] ?? 0;
-                                                sWon += m.sets?.[side] ?? 0;
-                                                sLost += m.sets?.[opp] ?? 0;
-                                                if ((m.sets?.[side] ?? 0) > (m.sets?.[opp] ?? 0)) mWon++;
-                                                else if (m.sets?.[side] === m.sets?.[opp] && (m.games?.[side] ?? 0) > (m.games?.[opp] ?? 0)) mWon++;
-                                            });
-
-                                            return {
-                                                id: tid,
-                                                tNum,
-                                                name: team ? `${team.p1?.name ?? 'J1'} / ${team.p2?.name ?? 'J2'}` : `Pareja ${tNum}`,
-                                                mWon, mPlayed, sWon, sLost, gWon, gLost,
-                                            };
-                                        }).sort((a, b) =>
-                                            b.mWon - a.mWon ||
-                                            (b.sWon - b.sLost) - (a.sWon - a.sLost) ||
-                                            (b.gWon - b.gLost) - (a.gWon - a.gLost)
-                                        );
-                                    };
-
-                                    const standA = buildGroupStanding(groupAIds);
-                                    const standB = buildGroupStanding(groupBIds);
-
-                                    // QF pairing: 1°A vs 2°B | 1°B vs 2°A | 3°A vs 4°B | 3°B vs 4°A
-                                    const qfPairings = [
-                                        { label: 'QF 1', t1: standA[0]?.name ?? 'TBD', t2: standB[1]?.name ?? 'TBD', desc: '1° A vs 2° B' },
-                                        { label: 'QF 2', t1: standB[0]?.name ?? 'TBD', t2: standA[1]?.name ?? 'TBD', desc: '1° B vs 2° A' },
-                                        { label: 'QF 3', t1: standA[2]?.name ?? 'TBD', t2: standB[3]?.name ?? 'TBD', desc: '3° A vs 4° B' },
-                                        { label: 'QF 4', t1: standB[2]?.name ?? 'TBD', t2: standA[3]?.name ?? 'TBD', desc: '3° B vs 4° A' },
-                                    ];
-
-                                    const GroupPanel = ({ title, color, rows }: { title: string; color: string; rows: typeof standA }) => (
-                                        <div className={`flex-1 bg-white/5 rounded-2xl border ${color} overflow-hidden`}>
-                                            <div className={`px-4 py-3 border-b ${color} flex items-center gap-2`}>
-                                                <span className={`text-xs font-black uppercase tracking-widest ${title === 'Grupo A' ? 'text-[#ccff00]' : 'text-blue-400'}`}>{title}</span>
-                                            </div>
-                                            <div className="divide-y divide-white/5">
-                                                {rows.map((row, idx) => (
-                                                    <div key={row.id} className="flex items-center gap-3 px-4 py-3">
-                                                        <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black ${idx === 0 ? 'bg-[#ccff00] text-black' :
-                                                            idx === 1 ? 'bg-white/20 text-white' :
-                                                                'bg-white/5 text-gray-500'
-                                                            }`}>{idx + 1}</span>
-                                                        <span className="flex-1 text-xs font-bold text-white truncate">{row.name}</span>
-                                                        <div className="flex gap-3 text-[10px] font-mono text-gray-400">
-                                                            <span title="Pts">{row.mWon}P</span>
-                                                            <span title="Sets">{row.sWon}-{row.sLost}</span>
-                                                            <span title="Games">{row.gWon}-{row.gLost}</span>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                                {rows.length === 0 && (
-                                                    <p className="text-[10px] text-gray-600 text-center py-6 italic">Sin resultados aún</p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-
-                                    return (
-                                        <div className="space-y-5">
-                                            {/* Header */}
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 bg-[#ccff00]/10 rounded-full flex items-center justify-center">
-                                                    <span className="text-[#ccff00] text-base">⚡</span>
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-sm font-black uppercase tracking-tighter text-white">Formato Cruzado</h3>
-                                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Grupo A vs Grupo B · 2 juegos por pareja · Top 4 avanzan</p>
-                                                </div>
-                                            </div>
-
-                                            {/* Grupos lado a lado */}
-                                            <div className="flex gap-3">
-                                                <GroupPanel title="Grupo A" color="border-[#ccff00]/20" rows={standA} />
-                                                <GroupPanel title="Grupo B" color="border-blue-500/20" rows={standB} />
-                                            </div>
-
-                                            {/* Cuartos de final */}
-                                            <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
-                                                <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
-                                                    <Trophy className="w-3 h-3 text-[#ccff00]" />
-                                                    <span className="text-xs font-black uppercase tracking-widest text-[#ccff00]">Cuartos de Final</span>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-0 divide-x divide-y divide-white/5">
-                                                    {qfPairings.map((qf) => (
-                                                        <div key={qf.label} className="p-4 space-y-2">
-                                                            <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest">{qf.desc}</p>
-                                                            <div className="space-y-1">
-                                                                <div className="text-[11px] font-bold text-white truncate">{qf.t1}</div>
-                                                                <div className="text-[9px] text-gray-600 font-black uppercase">vs</div>
-                                                                <div className="text-[11px] font-bold text-white truncate">{qf.t2}</div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })() : isRoundRobin ? (() => {
-                                    // ── ROUND ROBIN: orquestador de fases con timeline y bracket ─
-                                    const handleSaveGroupResult = async (matchId: string, gamesT1: number, gamesT2: number) => {
-                                        const match = matches.find(m => m.id === matchId);
-                                        if (!match) return;
-                                        const teamAWon = gamesT1 > gamesT2;
-
-                                        await dataService.updateMatch(id, matchId, {
-                                            status: MatchStatus.FINISHED,
-                                            games: { t1: gamesT1, t2: gamesT2 },
-                                            sets: { t1: teamAWon ? 1 : 0, t2: teamAWon ? 0 : 1 },
-                                            score: `${gamesT1}-${gamesT2}`,
-                                            actualEndTime: new Date().toISOString(),
-                                        });
-                                    };
-                                    return (
-                                        <div className="space-y-4">
-                                            {/* Verificación del sorteo: muestra qué equipos están en cada grupo y comprueba coherencia */}
-                                            {tournament?.groupAssignments && Object.keys(tournament.groupAssignments).length > 0 && (() => {
-                                                const ga = (tournament.groupAssignments ?? {}) as Record<string, string[]>;
-                                                const groupNames = Object.keys(ga).sort();
-                                                const allIds: string[] = [];
-                                                groupNames.forEach(g => { (ga[g] || []).forEach((id: string) => allIds.push(id)); });
-                                                const uniqueIds = new Set(allIds);
-                                                const okNoDuplicates = allIds.length === uniqueIds.size;
-                                                const totalTeams = tournament.teams?.length ?? 0;
-                                                const okTotal = allIds.length === totalTeams;
-                                                return (
-                                                    <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
-                                                        <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-                                                            <span className="text-xs font-black uppercase tracking-widest text-gray-400">Verificación del sorteo</span>
-                                                            {(okNoDuplicates && okTotal) ? <CheckCircle2 className="w-4 h-4 text-green-500" aria-label="Sorteo correcto" /> : <AlertTriangle className="w-4 h-4 text-amber-500" aria-label="Revisar asignación" />}
-                                                        </div>
-                                                        <div className="p-4 space-y-3">
-                                                            {groupNames.map(g => {
-                                                                const teamIds = ga[g] ?? [];
-                                                                const names = teamIds.map((tid: string) => {
-                                                                    const t = tournament.teams?.find((te: any) => String(te?.id) === tid);
-                                                                    return t ? `${t.p1?.name ?? '?'} / ${t.p2?.name ?? '?'}` : tid;
-                                                                });
-                                                                return (
-                                                                    <div key={g}>
-                                                                        <span className="text-[10px] font-black uppercase text-padel-primary">Grupo {g}</span>
-                                                                        <ul className="text-xs text-white mt-1 space-y-0.5">{names.map((n, i) => <li key={i}>{n}</li>)}</ul>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                            <p className="text-[10px] text-gray-500">
-                                                                {okNoDuplicates && okTotal ? '✓ Cada equipo en un solo grupo. Total correcto.' : !okNoDuplicates ? '⚠ Un equipo aparece en más de un grupo.' : `⚠ Total equipos en grupos (${allIds.length}) no coincide con inscritos (${totalTeams}).`}
-                                                            </p>
-                                                            {canManageTournament && (
-                                                                <div className="pt-3 border-t border-white/10">
-                                                                    <button
-                                                                        type="button"
-                                                                        disabled={syncAcceptedLoading}
-                                                                        onClick={async () => {
-                                                                            setSyncAcceptedMessage(null);
-                                                                            setSyncAcceptedLoading(true);
-                                                                            try {
-                                                                                const headers = await getAuthHeaders();
-                                                                                const res = await fetch(`/api/tournaments/${id}/sync-accepted-teams`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' } });
-                                                                                const data = await res.json().catch(() => ({}));
-                                                                                if (!res.ok) {
-                                                                                    setSyncAcceptedMessage({ type: 'error', text: data?.error || 'Error al sincronizar' });
-                                                                                    return;
-                                                                                }
-                                                                                const n = data.synced ?? 0;
-                                                                                const errs = data.errors ?? [];
-                                                                                if (errs.length > 0) {
-                                                                                    setSyncAcceptedMessage({ type: 'error', text: `${n} sincronizados. Errores: ${errs.slice(0, 2).join('; ')}${errs.length > 2 ? '...' : ''}` });
-                                                                                } else {
-                                                                                    setSyncAcceptedMessage({ type: 'success', text: n > 0 ? `Se sincronizaron ${n} pareja(s) en la grilla.` : 'No había parejas pendientes de sincronizar.' });
-                                                                                }
-                                                                            } catch (e: any) {
-                                                                                setSyncAcceptedMessage({ type: 'error', text: e?.message || 'Error de conexión' });
-                                                                            } finally {
-                                                                                setSyncAcceptedLoading(false);
-                                                                            }
-                                                                        }}
-                                                                        className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-padel-primary hover:text-padel-primary/90 disabled:opacity-50"
-                                                                    >
-                                                                        <RefreshCw className={`w-3.5 h-3.5 ${syncAcceptedLoading ? 'animate-spin' : ''}`} />
-                                                                        Sincronizar parejas aceptadas
-                                                                    </button>
-                                                                    {syncAcceptedMessage && (
-                                                                        <p className={`mt-2 text-[10px] ${syncAcceptedMessage.type === 'success' ? 'text-green-400' : 'text-amber-400'}`}>
-                                                                            {syncAcceptedMessage.text}
-                                                                        </p>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })()}
-                                            <TournamentPhaseManager
-                                                tournament={tournament}
-                                                matches={matches}
-                                                canManage={!!canManageTournament}
-                                                onSaveResult={handleSaveGroupResult}
-                                                onFinishGroupPhase={() => generateMainDraw()}
-                                                onResetElimination={async () => {
-                                                    // Eliminar partidos de llave de la tabla
-                                                    const eliminationMatches = matches.filter(m =>
-                                                        m.stage !== 'GROUP_STAGE' && m.groupName == null
-                                                    );
-                                                    for (const m of eliminationMatches) {
-                                                        await dataService.deleteMatch(id, m.id);
-                                                    }
-
-                                                    await dataService.updateTournament(id, {
-                                                        ...tournament,
-                                                        mainDrawGenerated: false
-                                                    });
-                                                }}
-                                            />
-                                        </div>
-                                    );
-                                })() : (() => {
-                                    // ── AMERICANO / KNOCKOUT: clasificación general ────────
-                                    const isIndividual = tournament?.type === TournamentType.AMERICANO_INDIVIDUAL;
-                                    const typeLabel = isIndividual ? 'Clasificación Individual' : 'Clasificación por Parejas';
-                                    const entityLabel = isIndividual ? 'Jugador' : 'Pareja';
-
-                                    // Standings from finished matches
-                                    const computed = calculateStandings();
-                                    const computedMap: Record<string, any> = {};
-                                    computed.forEach((s: any) => { computedMap[s.id] = s; });
-
-                                    // Add participants who haven't played yet (zero stats)
-                                    const zeroStats = { matchesPlayed: 0, matchesWon: 0, setsWon: 0, setsLost: 0, gamesWon: 0, gamesLost: 0 };
-                                    const extra: any[] = [];
-                                    const seenIds = new Set(Object.keys(computedMap));
-
-                                    if (isIndividual) {
-                                        tournament?.teams?.forEach((team: any, idx: number) => {
-                                            const pid1 = team.p1?.id || `p-${idx + 1}-1`;
-                                            const pid2 = team.p2?.id || `p-${idx + 1}-2`;
-                                            if (!seenIds.has(pid1) && team.p1?.name) {
-                                                extra.push({ id: pid1, name: team.p1.name, photo: team.p1.photo || null, ...zeroStats });
-                                                seenIds.add(pid1);
-                                            }
-                                            if (!seenIds.has(pid2) && team.p2?.name && team.p2.name !== team.p1?.name) {
-                                                extra.push({ id: pid2, name: team.p2.name, photo: team.p2.photo || null, ...zeroStats });
-                                                seenIds.add(pid2);
-                                            }
-                                        });
-                                    } else {
-                                        tournament?.teams?.forEach((team: any, idx: number) => {
-                                            const tid = `team-${idx + 1}`;
-                                            if (!seenIds.has(tid)) {
-                                                extra.push({
-                                                    id: tid,
-                                                    name: `${team.p1?.name || 'J1'} / ${team.p2?.name || 'J2'}`,
-                                                    photo: null,
-                                                    ...zeroStats
-                                                });
-                                            }
-                                        });
-                                    }
-
-                                    const allEntries = [...computed, ...extra].sort((a: any, b: any) => {
-                                        if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;
-                                        const dSA = a.setsWon - a.setsLost, dSB = b.setsWon - b.setsLost;
-                                        if (dSB !== dSA) return dSB - dSA;
-                                        const dGA = a.gamesWon - a.gamesLost, dGB = b.gamesWon - b.gamesLost;
-                                        if (dGB !== dGA) return dGB - dGA;
-                                        return b.gamesWon - a.gamesWon;
-                                    });
-
-                                    const getPoints = (s: any) => s.matchesWon * 3 + s.setsWon;
-
-                                    if (allEntries.length === 0) {
-                                        return (
-                                            <div className="py-20 text-center space-y-4 bg-white/5 rounded-[2.5rem] border border-dashed border-white/10">
-                                                <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto opacity-20">
-                                                    <Trophy className="w-8 h-8 text-white" />
-                                                </div>
-                                                <p className="text-xs font-black italic uppercase text-gray-600 tracking-widest">Sin participantes registrados</p>
-                                            </div>
-                                        );
-                                    }
-
-                                    return (
-                                        <div className="space-y-4">
-                                            {/* Header card */}
-                                            <div className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
-                                                <div className="bg-padel-primary px-8 py-5 flex justify-between items-center">
-                                                    <div>
-                                                        <h3 className="text-black font-black italic uppercase text-base tracking-tighter">{typeLabel}</h3>
-                                                        <p className="text-[9px] text-black/60 font-black uppercase tracking-widest mt-0.5">
-                                                            {allEntries.length} {isIndividual ? 'jugadores' : 'parejas'} · Puntos: PG×3 + Sets×1
-                                                        </p>
-                                                    </div>
-                                                    <Trophy className="w-7 h-7 text-black opacity-20" />
-                                                </div>
-
-                                                <div className="p-3">
-                                                    <div className="overflow-x-auto">
-                                                        <table className="w-full">
-                                                            <thead>
-                                                                <tr className="text-[9px] font-black uppercase tracking-widest text-gray-500 border-b border-white/[0.06]">
-                                                                    <th className="text-left py-3 px-2 w-8">#</th>
-                                                                    <th className="text-left py-3 px-2">{entityLabel}</th>
-                                                                    <th className="text-center py-3 px-1.5 whitespace-nowrap">PJ</th>
-                                                                    <th className="text-center py-3 px-1.5 whitespace-nowrap text-green-500">PG</th>
-                                                                    <th className="text-center py-3 px-1.5 whitespace-nowrap text-red-500">PP</th>
-                                                                    <th className="text-center py-3 px-1.5 whitespace-nowrap">Sets</th>
-                                                                    <th className="text-center py-3 px-1.5 whitespace-nowrap">Games</th>
-                                                                    <th className="text-right py-3 px-3 whitespace-nowrap">Pts</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody className="divide-y divide-white/[0.04]">
-                                                                {allEntries.map((entry: any, idx: number) => {
-                                                                    const pts = getPoints(entry);
-                                                                    const pp = entry.matchesPlayed - entry.matchesWon;
-                                                                    const isPodium = idx < 3;
-                                                                    const posColor = idx === 0
-                                                                        ? 'bg-padel-primary text-black'
-                                                                        : idx === 1
-                                                                            ? 'bg-white/30 text-white'
-                                                                            : idx === 2
-                                                                                ? 'bg-white/15 text-white/80'
-                                                                                : 'bg-white/5 text-gray-600';
-                                                                    return (
-                                                                        <tr key={entry.id} className={`group hover:bg-white/[0.03] transition-colors ${isPodium ? 'border-l-2 border-padel-primary/40' : ''}`}>
-                                                                            <td className="py-3 px-2">
-                                                                                <span className={`w-5 h-5 flex items-center justify-center rounded-md text-[8px] font-black italic ${posColor}`}>
-                                                                                    {idx + 1}
-                                                                                </span>
-                                                                            </td>
-                                                                            <td className="py-3 px-2 min-w-[120px]">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    {entry.photo ? (
-                                                                                        <img src={entry.photo} className="w-6 h-6 rounded-full object-cover border border-white/10 flex-shrink-0" />
-                                                                                    ) : (
-                                                                                        <div className="w-6 h-6 rounded-full bg-white/5 border border-white/[0.06] flex items-center justify-center text-[8px] font-bold text-gray-500 uppercase flex-shrink-0">
-                                                                                            {(entry.name || '?')[0]}
-                                                                                        </div>
-                                                                                    )}
-                                                                                    <span className="text-[10px] font-black italic uppercase tracking-tighter group-hover:text-padel-primary transition-colors leading-tight">
-                                                                                        {entry.name}
-                                                                                    </span>
-                                                                                </div>
-                                                                            </td>
-                                                                            <td className="py-3 px-1.5 text-center text-[10px] font-bold text-gray-400">{entry.matchesPlayed}</td>
-                                                                            <td className="py-3 px-1.5 text-center text-[10px] font-bold text-green-400">{entry.matchesWon}</td>
-                                                                            <td className="py-3 px-1.5 text-center text-[10px] font-bold text-red-400">{pp}</td>
-                                                                            <td className="py-3 px-1.5 text-center">
-                                                                                <span className="text-[9px] font-bold text-gray-400 tabular-nums">{entry.setsWon}<span className="text-gray-600">-</span>{entry.setsLost}</span>
-                                                                            </td>
-                                                                            <td className="py-3 px-1.5 text-center">
-                                                                                <span className="text-[9px] font-bold text-gray-400 tabular-nums">{entry.gamesWon}<span className="text-gray-600">-</span>{entry.gamesLost}</span>
-                                                                            </td>
-                                                                            <td className="py-3 px-3 text-right">
-                                                                                <span className={`text-sm font-black italic tabular-nums ${pts > 0 ? 'text-padel-primary' : 'text-gray-600'}`}>{pts}</span>
-                                                                            </td>
-                                                                        </tr>
-                                                                    );
-                                                                })}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Legend */}
-                                            <div className="flex flex-wrap gap-3 px-2">
-                                                {[['PJ', 'Partidos Jugados'], ['PG', 'Partidos Ganados'], ['PP', 'Partidos Perdidos'], ['Sets', 'Sets G–P'], ['Games', 'Juegos G–P'], ['Pts', 'Puntos (PG×3 + Sets×1)']].map(([k, v]) => (
-                                                    <span key={k} className="text-[8px] font-bold uppercase tracking-widest text-gray-700">
-                                                        <span className="text-gray-500">{k}</span> {v}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    );
-                                })() : null;
-                                })()}
+                                {gruposTabContent}
                             </motion.div>
                         ) : activeTab === 'Ranking' ? (
                             <motion.div

@@ -76,7 +76,7 @@ export async function initializeTournamentWithPlaceholders(
   const existingTeams = Array.isArray((tournament as any).teams) ? (tournament as any).teams : [];
   const updatedCategories: any[] = [...existingCategories];
   let rootTeams: any[] = [...existingTeams];
-  const rootGroupAssignments: Record<string, string[]> = { ...((tournament as any).groupAssignments || {}) };
+  let rootGroupAssignments: Record<string, string[]> = { ...((tournament as any).groupAssignments || {}) };
   let rootGroupSize = (tournament as any).groupSize ?? defaultGroupSize;
 
   const categoryKeys = Object.keys(maxTeamsByCategory);
