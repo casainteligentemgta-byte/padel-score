@@ -135,12 +135,15 @@ export class MasterScheduleEngine {
         const sortByKnockoutPriority = (matches: any[]): any[] =>
             [...matches].sort((a, b) => (KNOCKOUT_PRIORITY[a.category] ?? 99) - (KNOCKOUT_PRIORITY[b.category] ?? 99));
 
-        // Orden fijo: grupos primero, luego eliminatorias (semifinales y final)
+        // Orden cronológico estricto: Fase de Grupos → Cuartos → Semifinales → Finales.
+        // Prohibido programar una Final en el mismo bloque o antes que las Semifinales de la misma categoría.
         const phaseOrder = [
             'Fase de Grupos',
             'Principal R1', 'Principal SF', 'Principal FINAL',
             'Consolación R1', 'Consolación FINAL',
-            'CUARTOS', 'SEMIFINAL', 'FINAL',
+            'CUARTOS',      // antes que SEMIFINAL
+            'SEMIFINAL',    // antes que FINAL
+            'FINAL',
         ];
         const phases: Array<{ name: string; queue: any[] }> = phaseOrder
             .map(name => ({
@@ -256,6 +259,9 @@ export class MasterScheduleEngine {
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
+    /** Bloque horario mínimo por partido (minutos). Evita retrasos en cadena. */
+    static readonly SLOT_MINUTES = 90;
+
     private static generateTimeSlots(day: Date, startStr: string, endStr: string, duration: number, buffer: number): Date[] {
         const slots: Date[] = [];
         const [startH, startM] = startStr.split(':').map(Number);
@@ -267,13 +273,11 @@ export class MasterScheduleEngine {
         const limit = new Date(day);
         limit.setHours(endH, endM, 0, 0);
 
-        // Si el cierre es menor que la apertura → el club cierra al DÍA SIGUIENTE (cruza medianoche)
-        // Ej: abre 07:00, cierra 01:00 → limit es 01:00 del día siguiente
         if (limit.getTime() <= current.getTime()) {
             limit.setDate(limit.getDate() + 1);
         }
 
-        const slotDuration = duration + buffer; // minutos totales por franja
+        const slotDuration = Math.max(MasterScheduleEngine.SLOT_MINUTES, duration + buffer);
         while (current.getTime() + duration * 60000 <= limit.getTime()) {
             slots.push(new Date(current));
             current.setMinutes(current.getMinutes() + slotDuration);
@@ -501,12 +505,15 @@ export class MasterScheduleEngine {
                     roundName: 'FINAL', isKnockout: true, isFinal: true
                 });
             } else if (nK <= 8) {
-                // Cuartos, Semis y Final
-                for (let i = 0; i < nK; i += 2) {
-                    if (knockoutTeams[i + 1]) {
-                        result.push({ team1: knockoutTeams[i], team2: knockoutTeams[i + 1], roundName: 'CUARTOS', isKnockout: true, isFinal: false });
+                // Cuartos con cruces cruzados: nunca enfrentar parejas del mismo grupo (1ºA vs 2ºA).
+                // knockoutTeams orden: [1°A, 2°A, 1°B, 2°B, 1°C, 2°C, 1°D, 2°D] para 4 grupos.
+                // Cruces: 1°A vs 2°B, 1°B vs 2°A, 1°C vs 2°D, 1°D vs 2°C (índices 0-3, 2-1, 4-7, 6-5).
+                const quarterPairings = this.buildQuarterFinalCrossovers(knockoutTeams, groups.length, advanceCount);
+                quarterPairings.forEach(([i, j]) => {
+                    if (knockoutTeams[i] && knockoutTeams[j]) {
+                        result.push({ team1: knockoutTeams[i], team2: knockoutTeams[j], roundName: 'CUARTOS', isKnockout: true, isFinal: false });
                     }
-                }
+                });
                 // SFs genéricas
                 result.push({
                     team1: { p1: { id: 'tbd_c1', name: 'Gan. C1' }, p2: { id: 'tbd_c1_p2', name: '(TBD)' }, isTBD: true, teamLabel: 'Ganador C1' },
@@ -540,6 +547,46 @@ export class MasterScheduleEngine {
         return result;
     }
 
+    /**
+     * Cruces para Cuartos de Final: nunca enfrentar equipos del mismo grupo.
+     * 4 grupos (8 clasificados): 1°A vs 2°B, 1°B vs 2°A, 1°C vs 2°D, 1°D vs 2°C.
+     * 3 grupos (6 clasificados): 1°A vs 2°B, 1°B vs 2°C, 1°C vs 2°A.
+     */
+    private static buildQuarterFinalCrossovers(knockoutTeams: any[], numGroups: number, advanceCount: number): [number, number][] {
+        const pairs: [number, number][] = [];
+        const nK = knockoutTeams.length;
+        if (nK <= 4) return pairs;
+
+        // Índices por grupo: grupo g tiene clasificados en [g*advanceCount, (g+1)*advanceCount)
+        if (numGroups === 4 && nK === 8 && advanceCount === 2) {
+            // 1°A=0, 2°A=1, 1°B=2, 2°B=3, 1°C=4, 2°C=5, 1°D=6, 2°D=7
+            pairs.push([0, 3], [2, 1], [4, 7], [6, 5]);
+        } else if (numGroups === 3 && nK === 6 && advanceCount === 2) {
+            // 1°A=0, 2°A=1, 1°B=2, 2°B=3, 1°C=4, 2°C=5 → 1A vs 2B, 1B vs 2C, 1C vs 2A
+            pairs.push([0, 3], [2, 5], [4, 1]);
+        } else {
+            // Genérico: emparejar 1° del grupo i con 2° del grupo (i+1) % numGroups, etc.
+            for (let g = 0; g < numGroups; g++) {
+                const next = (g + 1) % numGroups;
+                const i1 = g * advanceCount;           // 1° del grupo g
+                const j2 = next * advanceCount + 1;   // 2° del grupo next (si advanceCount >= 2)
+                if (advanceCount >= 2 && i1 < nK && j2 < nK) {
+                    pairs.push([i1, j2]);
+                }
+            }
+            // Segundos partidos: 1° del grupo next vs 2° del grupo g
+            for (let g = 0; g < numGroups; g++) {
+                const next = (g + 1) % numGroups;
+                const i1Next = next * advanceCount;   // 1° del grupo next
+                const j2G = g * advanceCount + 1;    // 2° del grupo g
+                if (advanceCount >= 2 && i1Next < nK && j2G < nK && !pairs.some(([a, b]) => (a === i1Next && b === j2G) || (a === j2G && b === i1Next))) {
+                    pairs.push([i1Next, j2G]);
+                }
+            }
+        }
+        return pairs;
+    }
+
     private static getTeamPlayerIds(t1: any, t2: any): string[] {
         const ids: string[] = [];
         if (t1?.p1?.id) ids.push(t1.p1.id);
@@ -549,10 +596,9 @@ export class MasterScheduleEngine {
         return ids;
     }
 
-    /** Retorna true si todos los jugadores han descansado al menos 1 slot */
     /**
-     * Evita que un jugador tenga dos partidos en el mismo slot (o consecutivos sin margen).
-     * Así, si un jugador está inscrito en varias categorías, no se le solapan horarios.
+     * Descanso mínimo: un bloque horario entre partidos (60–90 min según SLOT_MINUTES).
+     * canPlay retorna false si algún jugador jugó en el slot actual o en el inmediatamente anterior.
      */
     private static canPlay(playerIds: string[], currentSlotIdx: number, playerLastSlot: { [pid: string]: number }): boolean {
         for (const pid of playerIds) {

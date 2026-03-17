@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { Trophy, Calendar, MapPin, ChevronRight, ChevronLeft, Plus, RefreshCw, LogOut, Trash2, User } from 'lucide-react';
@@ -12,6 +13,9 @@ import { BouncingBall } from '@/components/BouncingBall';
 import { formatDate } from '@/lib/formatters';
 
 export default function MyTournamentsPage() {
+    const searchParams = useSearchParams();
+    const partnerCode = searchParams.get('partnerCode') ?? '';
+    const partnerName = searchParams.get('partnerName') ?? '';
     const { user, isAdmin, loading: authLoading } = useAuth();
     const [tournaments, setTournaments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -113,6 +117,15 @@ export default function MyTournamentsPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Banner: inscripción con compañero desde Hub */}
+            {partnerCode && partnerCode.length === 6 && (
+                <div className="mx-6 mb-4 p-3 rounded-xl bg-padel-primary/10 border border-padel-primary/30">
+                    <p className="text-[11px] font-bold text-padel-primary">
+                        Inscríbete con <span className="text-white">{partnerName || 'tu compañero'}</span>. Selecciona un torneo y pulsa «Inscribirme».
+                    </p>
+                </div>
+            )}
 
             {/* ── Lista scrollable ── */}
             <div className="ipad-scroll-area pb-2">
@@ -240,7 +253,7 @@ export default function MyTournamentsPage() {
                                                                 <div className="flex items-center gap-1.5 flex-shrink-0">
                                                                     {showInscribirme && (
                                                                         <Link
-                                                                            href={`/tournaments/${t.id}/inscribirme`}
+                                                                            href={partnerCode ? `/tournaments/${t.id}/inscribirme?code=${encodeURIComponent(partnerCode)}` : `/tournaments/${t.id}/inscribirme`}
                                                                             onClick={(e) => e.stopPropagation()}
                                                                             className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#ccff00]/20 border border-[#ccff00]/40 text-[#ccff00] hover:bg-[#ccff00]/30 text-[10px] font-black uppercase tracking-wider"
                                                                             title="Inscribirme"

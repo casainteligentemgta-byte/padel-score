@@ -144,8 +144,9 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
     const registrationStatus = tournament?.registrationStatus || 'open';
     const inscriptionClosed = registrationStatus === 'closed' || (tournament?.startDate && (tournament.startDate < todayStr || (tournament.startDate === todayStr && is1600OrLater)));
 
-    // Partner search state
-    const [partnerCode, setPartnerCode] = useState<string>('');
+    // Partner search state (puede venir de URL ?code= cuando se llega desde Hub / compañeros recientes)
+    const codeFromUrl = searchParams.get('code') ?? '';
+    const [partnerCode, setPartnerCode] = useState<string>(codeFromUrl.length === 6 ? codeFromUrl : '');
     const [searchingPartner, setSearchingPartner] = useState(false);
     const [foundPartner, setFoundPartner] = useState<any>(null);
     const [partnerError, setPartnerError] = useState<string | null>(null);
@@ -169,6 +170,13 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
             router.replace(`/tournaments/${tournamentId}/inscribirme`, { scroll: false });
         }
     }, [searchParams, tournamentId, router]);
+
+    // Sincronizar código de pareja desde URL (cuando se llega desde Hub / compañeros recientes)
+    useEffect(() => {
+        if (codeFromUrl.length === 6 && codeFromUrl !== partnerCode) {
+            setPartnerCode(codeFromUrl);
+        }
+    }, [codeFromUrl]);
 
     // Auto-search partner when code is 6 chars
     useEffect(() => {
@@ -582,6 +590,10 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                     .filter(c => selectedCategories.has(c.key))
                     .map(c => c.name)
                     .join(', ');
+                const baseUrl =
+                    typeof window !== 'undefined'
+                        ? window.location.origin
+                        : process.env.NEXT_PUBLIC_APP_URL || '';
 
                 const emailRes = await fetch('/api/send-email', {
                     method: 'POST',
@@ -596,7 +608,8 @@ export default function InscribirmePage({ params }: { params: Promise<{ id: stri
                             amount: paymentData.amount || '0',
                             paymentMethod: paymentData.method || 'No especificado',
                             paymentReference: paymentData.reference || 'N/A',
-                            receiptUrl: paymentData.receiptUrl || undefined
+                            receiptUrl: paymentData.receiptUrl || undefined,
+                            tournamentUrl: baseUrl ? `${baseUrl}/tournaments/${tournamentId}` : undefined
                         }
                     })
                 });

@@ -684,7 +684,11 @@ export default function MasterGeneratorPage() {
                     results.push({ id: docRef.id, name: tournamentToSave.name });
                 } catch (catErr: any) {
                     console.error(`Error saving category ${cat.category}:`, catErr);
-                    throw new Error(`Cat ${cat.category}: ${catErr.message || catErr}`);
+                    const rawMsg =
+                        catErr?.message ||
+                        catErr?.error?.message ||
+                        (typeof catErr === 'object' ? JSON.stringify(catErr) : String(catErr));
+                    throw new Error(`Cat ${cat.category}: ${rawMsg}`);
                 }
             }
 

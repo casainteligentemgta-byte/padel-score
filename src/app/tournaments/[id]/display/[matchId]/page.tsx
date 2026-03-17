@@ -516,15 +516,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         prevScore.current = currentScore;
     }, [match?.points?.t1, match?.points?.t2]);
 
-    // ── Sincronizar marcador RTDB ───────────────────────────────────────
-    useEffect(() => {
-        if (!rtdb || !match?.court) return;
-        const canchaId = `cancha_${match.court}`;
-        const marcRef = ref(rtdb, `canchas/${canchaId}/marcador`);
-        const handler = (snap: any) => setLiveMarcador(snap.val());
-        onValue(marcRef, handler);
-        return () => off(marcRef, 'value', handler);
-    }, [match?.court]);
+    // Marcador en vivo y animación vienen de Supabase (pizarra_cancha_state) en el efecto anterior
 
     // Animación actual disparada por el marker (Supabase pizarra_cancha_state)
     useEffect(() => {
@@ -861,13 +853,13 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                         }}
                     >
                         {isCurrent && <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />}
-                        <span className="font-black uppercase text-gray-500 tracking-widest" style={{ fontSize: 'clamp(5px,0.5vw,9px)', marginBottom: '2px' }}>{`SET ${setNum}`}</span>
+                        <span className="font-black uppercase text-gray-500 tracking-widest" style={{ fontSize: 'clamp(10px,0.9vw,16px)', marginBottom: '2px' }}>{`SET ${setNum}`}</span>
                         <motion.span
                             key={isCurrent ? match.games?.[`t${team}`] : (pastVal ?? setNum)}
                             initial={isCurrent ? { scale: 1.5, opacity: 0 } : {}}
                             animate={{ scale: 1, opacity: 1 }}
                             className={`font-black italic ${isCurrent ? 'text-white' : 'text-white/40'}`}
-                            style={{ fontSize: 'clamp(16px,3vw,52px)', lineHeight: 1 }}
+                            style={{ fontSize: 'clamp(24px,3.5vw,60px)', lineHeight: 1 }}
                         >
                             {val}
                         </motion.span>
@@ -921,7 +913,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
 
     return (
         <div
-            className={`h-screen w-screen text-white overflow-hidden font-outfit relative flex flex-col transition-colors duration-1000 ${isFinal ? 'bg-[#000] border-8 border-[#FFD700]/20' : 'bg-[#050505]'}`}
+            className={`min-h-screen h-screen w-screen text-white overflow-hidden font-outfit relative flex flex-col transition-colors duration-1000 ${isFinal ? 'bg-[#000] border-8 border-[#FFD700]/20' : 'bg-[#050505]'}`}
             style={{ padding: 'clamp(6px,1vh,16px) clamp(8px,1.2vw,20px)', gap: 'clamp(4px,0.8vh,12px)' }}
         >
             {/* Grand Final ambient glow */}
@@ -1066,11 +1058,11 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 <div className="flex-1" />
                                 {[1, 2].map(s => (
                                     <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full" style={{ width: '8%' }}>
-                                        <span className="font-black uppercase tracking-widest text-white/40" style={{ fontSize: 'clamp(7px,0.8vw,12px)' }}>SET {s}</span>
+                                        <span className="font-black uppercase tracking-widest text-white/40" style={{ fontSize: 'clamp(12px,1.2vw,20px)' }}>SET {s}</span>
                                     </div>
                                 ))}
                                 <div className="flex items-center justify-center border-l border-white/[0.15] h-full" style={{ width: '12%', backgroundColor: `${primaryColor}20` }}>
-                                    <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(7px,0.8vw,12px)', color: primaryColor }}>GAME:</span>
+                                    <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(12px,1.2vw,20px)', color: primaryColor }}>GAME:</span>
                                 </div>
                             </div>
 
@@ -1079,7 +1071,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 <div className="flex-1 flex flex-col justify-center h-full px-6 relative">
                                     <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden shadow-2xl">
                                         <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
-                                        <p className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(18px,3.5vh,44px)', lineHeight: 1.0 }}>
+                                        <p className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
                                             <span className="flex items-center">
                                                 <AnimatePresence>
                                                     {( (lm?.saque?.equipo === 1 && lm?.saque?.jugador === 1) || (match.server?.team === 1 && match.server?.player === 1) ) && (
@@ -1111,14 +1103,14 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     const val = (s < currentSet) ? (match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? 0) : '';
                                     return (
                                         <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full" style={{ width: '8%' }}>
-                                            <span className="font-black italic text-white" style={{ fontSize: 'clamp(28px,6vh,65px)' }}>{val}</span>
+                                            <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
                                         </div>
                                     );
                                 })}
                                 {/* Game Points */}
                                 <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ width: '12%', backgroundColor: `${primaryColor}40` }}>
                                     <motion.span key={ptsT1} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                                        className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(32px,9vh,95px)' }}>{ptsT1}</motion.span>
+                                        className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(42px,9vh,110px)' }}>{ptsT1}</motion.span>
                                 </div>
                             </div>
 
@@ -1127,7 +1119,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 <div className="flex-1 flex flex-col justify-center h-full px-6 relative">
                                     <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden">
                                         <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
-                                        <p className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(18px,3.5vh,44px)', lineHeight: 1.0 }}>
+                                        <p className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
                                             <span className="flex items-center">
                                                 <AnimatePresence>
                                                     {( (lm?.saque?.equipo === 2 && lm?.saque?.jugador === 1) || (match.server?.team === 2 && match.server?.player === 1) ) && (
@@ -1159,14 +1151,14 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     const val = (s < currentSet) ? (match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? 0) : '';
                                     return (
                                         <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full" style={{ width: '8%' }}>
-                                            <span className="font-black italic text-white" style={{ fontSize: 'clamp(28px,6vh,65px)' }}>{val}</span>
+                                            <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
                                         </div>
                                     );
                                 })}
                                 {/* Game Points */}
                                 <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ width: '12%', backgroundColor: `${primaryColor}40` }}>
                                     <motion.span key={ptsT2} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                                        className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(32px,9vh,95px)' }}>{ptsT2}</motion.span>
+                                        className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(42px,9vh,110px)' }}>{ptsT2}</motion.span>
                                 </div>
                             </div>
                         </div>

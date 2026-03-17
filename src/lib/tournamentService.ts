@@ -131,18 +131,20 @@ export async function initializeTournamentWithPlaceholders(
       groupAssignments[groupName] = chunk.map((t: any) => String(t.id));
     });
 
-    // 3) Generar partidos Round Robin (fase de grupos)
+    // 3) Generar partidos Round Robin (fase de grupos) — inserción masiva
     const pairingsByRound = generateRoundRobinPairings(maxTeams);
-    const matchId = (i: number) => `m-${categoryKey}-${i}-${Date.now().toString(36)}`;
+    const matchIdPrefix = `m-${categoryKey}`;
+    const ts = Date.now().toString(36);
     const teamIdToIndex = new Map(teams.map((t, idx) => [t.id, idx + 1]));
     let matchIndex = 0;
     const startDate = (tournament as any).startDate ?? new Date().toISOString().split('T')[0];
     const startTime = (tournament as any).startTime ?? '08:00';
     const [startH = 8, startM = 0] = startTime.split(':').map(Number);
-    const matchDuration = 60;
-    const buffer = 10;
+    const matchDuration = 90;
+    const buffer = 0;
     let slotMinutes = 0;
 
+    const matchPayloads: any[] = [];
     for (const round of pairingsByRound) {
       for (const [idx1, idx2] of round) {
         const t1 = teams[idx1];
@@ -152,8 +154,8 @@ export async function initializeTournamentWithPlaceholders(
         scheduledTime.setHours(startH, startM + slotMinutes, 0, 0);
         slotMinutes += matchDuration + buffer;
 
-        const matchPayload = {
-          id: matchId(matchIndex++),
+        matchPayloads.push({
+          id: `${matchIdPrefix}-${matchIndex++}-${ts}`,
           team1: t1,
           team2: t2,
           team1Name: t1.p1?.name ? (t1.p2?.name ? `${t1.p1.name} / ${t1.p2.name}` : t1.p1.name) : 'TBD',
@@ -165,10 +167,12 @@ export async function initializeTournamentWithPlaceholders(
           stage: 'GROUP_STAGE',
           scheduledTime: scheduledTime.toISOString(),
           categoryId: categoryKey,
-        };
-        await dataService.createMatch(tournamentId, matchPayload);
-        matchesCreated++;
+        });
       }
+    }
+    if (matchPayloads.length > 0) {
+      const { inserted } = await dataService.createMatchesBulk(tournamentId, matchPayloads);
+      matchesCreated += inserted;
     }
 
     if (isSingleCategory) {

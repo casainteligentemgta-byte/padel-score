@@ -8,8 +8,8 @@ export class ScheduleEngine {
     /**
    * Genera los matches para un torneo basándose en la configuración.
    */
-    /** Slot fijo entre partidos en la misma cancha (minutos) */
-    static readonly SLOT_MINUTES = 85;
+    /** Slot fijo entre partidos en la misma cancha (minutos). 90 min evita retrasos en cadena. */
+    static readonly SLOT_MINUTES = 90;
 
     static generateSchedule(config: ScheduleConfig) {
         if (config.numTeams < 2) {

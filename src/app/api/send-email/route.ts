@@ -43,6 +43,7 @@ export async function POST(request: Request) {
     if (type === 'NEW_PLAYER') {
       const instagram = String(data.instagram || '').replace(/^@+/, '').trim();
       const fullName = [data.name, data.lastName].filter(Boolean).join(' ').trim() || 'Nuevo jugador';
+      const profileUrl = typeof data.profileUrl === 'string' ? data.profileUrl.trim() : '';
       subject = `🎾 Nuevo Jugador Registrado: ${data.name} ${data.lastName}`;
       html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
@@ -57,14 +58,23 @@ export async function POST(request: Request) {
             <li><strong>Nivel:</strong> Cat. ${data.level}</li>
             <li><strong>Posición:</strong> ${data.position}</li>
           </ul>
+          ${profileUrl ? `<p><strong>Perfil:</strong> <a href="${profileUrl}" target="_blank" rel="noopener noreferrer">Ver ficha del jugador</a></p>` : ''}
           <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
           <p style="font-size: 12px; color: #666; text-align: center;">Sistema de Notificaciones Smart Padel</p>
         </div>
       `;
       // Aviso por WhatsApp (IA CEO) al mismo tiempo que el email
-      const whatsappMsg = `🎾 *Smart Padel – Nuevo jugador registrado*\n\n👤 ${fullName}\n📱 ${data.phone || '—'}\n📧 ${data.email || '—'}\n\nSe ha creado una nueva ficha en el sistema.`;
+      const whatsappMsg = `🎾 *Smart Padel – Nuevo jugador registrado*
+
+👤 ${fullName}
+📱 ${data.phone || '—'}
+📧 ${data.email || '—'}
+${profileUrl ? `🔗 Perfil: ${profileUrl}` : ''}
+
+Se ha creado una nueva ficha en el sistema.`;
       sendCEOMessage(whatsappMsg).catch((e) => console.warn('[send-email] WhatsApp CEO:', e?.message || e));
     } else if (type === 'NEW_INSCRIPTION') {
+      const tournamentUrl = typeof data.tournamentUrl === 'string' ? data.tournamentUrl.trim() : '';
       subject = `🏆 Nueva Inscripción: ${data.participantName} en ${data.tournamentName}`;
       html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
@@ -80,12 +90,20 @@ export async function POST(request: Request) {
             <li><strong>Referencia:</strong> ${data.paymentReference}</li>
           </ul>
           ${data.receiptUrl ? `<p><strong>Comprobante:</strong> <a href="${data.receiptUrl}">Ver Imagen</a></p>` : ''}
+          ${tournamentUrl ? `<p><strong>Panel del Torneo:</strong> <a href="${tournamentUrl}" target="_blank" rel="noopener noreferrer">Ver torneo en Smart Padel</a></p>` : ''}
           <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
           <p style="font-size: 12px; color: #666; text-align: center;">Sistema de Notificaciones Smart Padel</p>
         </div>
       `;
       // Aviso por WhatsApp (IA CEO) en nueva inscripción
-      const whatsappInsc = `🏆 *Smart Padel – Nueva inscripción*\n\n👤 ${data.participantName || 'Jugador'}\n📋 ${data.tournamentName || 'Torneo'}\n📂 ${data.categoryName || '—'}\n\nInscripción registrada en el sistema.`;
+      const whatsappInsc = `🏆 *Smart Padel – Nueva inscripción*
+
+👤 ${data.participantName || 'Jugador'}
+📋 ${data.tournamentName || 'Torneo'}
+📂 ${data.categoryName || '—'}
+${tournamentUrl ? `🔗 Torneo: ${tournamentUrl}` : ''}
+
+Inscripción registrada en el sistema.`;
       sendCEOMessage(whatsappInsc).catch((e) => console.warn('[send-email] WhatsApp CEO:', e?.message || e));
     }
 

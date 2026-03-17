@@ -483,13 +483,23 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         const complexName = tournament.complexName || 'Margarita Padel';
         const category = formatCat(tournament.category);
         const gender = tournament.gender ? formatGender(tournament.gender) : '';
+        const startD = tournament.startDate ? (typeof tournament.startDate === 'string' ? new Date(tournament.startDate) : tournament.startDate) : null;
+        const endD = tournament.endDate ? (typeof tournament.endDate === 'string' ? new Date(tournament.endDate) : tournament.endDate) : null;
+        const fechaTorneoStr = startD && !isNaN(startD.getTime())
+            ? (endD && !isNaN(endD.getTime()) && endD.getTime() !== startD.getTime()
+                ? `${startD.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })} - ${endD.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
+                : startD.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }))
+            : '';
 
         pdf.setFontSize(20);
         pdf.text(tournamentName, 14, 22);
         pdf.setFontSize(10);
         pdf.setTextColor(100);
         pdf.text(`${complexName} | Categoría: ${category}${gender ? ` | ${gender}` : ''}`, 14, 30);
-        pdf.text(`Fecha de exportación: ${new Date().toLocaleDateString('es-ES')}`, 14, 35);
+        if (fechaTorneoStr) pdf.text(`Fecha del torneo: ${fechaTorneoStr}`, 14, 35);
+        pdf.text(`Fecha de exportación: ${new Date().toLocaleDateString('es-ES')}`, 14, fechaTorneoStr ? 40 : 35);
+
+        const defaultDateStr = startD && !isNaN(startD.getTime()) ? startD.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
 
         const tableData = matches.length > 0
             ? [...matches].sort((a, b) => {
@@ -499,33 +509,37 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
             }).map((m, idx) => {
                 const timeRaw = m.time || m.scheduledTime;
                 const d = timeRaw?.toDate ? timeRaw.toDate() : new Date(timeRaw);
-                const time = isNaN(d.getTime()) ? String(timeRaw) : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                const dateStr = isNaN(d.getTime()) ? defaultDateStr : d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const time = isNaN(d.getTime()) ? (timeRaw ? String(timeRaw) : '-') : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
                 return [
                     idx + 1,
+                    dateStr,
                     time,
-                    m.court || m.courtIndex + 1 || '-',
-                    m.team1?.name || 'Por definir',
+                    m.court ?? (m.courtIndex != null ? m.courtIndex + 1 : '-'),
+                    m.team1Name ?? m.team1?.name ?? 'Por definir',
                     m.status === MatchStatus.FINISHED ? (m.score || '-') : 'VS',
-                    m.team2?.name || 'Por definir',
+                    m.team2Name ?? m.team2?.name ?? 'Por definir',
                     getStageLabel(m)
                 ];
             })
             : [];
 
+        const startY = fechaTorneoStr ? 50 : 45;
+
         if (tableData.length > 0) {
             autoTable(pdf, {
-                startY: 45,
-                head: [['#', 'Hora', 'Pista', 'Equipo 1', 'Resultado', 'Equipo 2', 'Fase']],
+                startY,
+                head: [['#', 'Fecha', 'Hora', 'Pista', 'Equipo 1', 'Resultado', 'Equipo 2', 'Fase']],
                 body: tableData,
                 theme: 'striped',
                 headStyles: { fillColor: [204, 255, 0], textColor: [0, 0, 0], fontStyle: 'bold' },
                 alternateRowStyles: { fillColor: [245, 245, 245] },
-                margin: { top: 45 },
+                margin: { top: startY },
             });
         } else {
             pdf.setFontSize(11);
             pdf.setTextColor(80);
-            pdf.text('Aún no hay partidos en el cuadro.', 14, 45);
+            pdf.text('Aún no hay partidos en el cuadro.', 14, startY);
         }
         return pdf;
     };

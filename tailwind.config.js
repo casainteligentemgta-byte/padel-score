@@ -11,6 +11,9 @@ export default {
             colors: {
                 primary: '#ec5b13',
                 neon: '#CCFF00',
+                brand: '#ccff00',
+                surface: '#0a0a0a',
+                surfaceCard: '#111111',
                 padel: {
                     primary: '#ccff00',
                     secondary: '#1a1a1a',

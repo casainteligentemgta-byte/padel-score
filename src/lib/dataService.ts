@@ -243,6 +243,25 @@ export const dataService = {
         return { id };
     },
 
+    /** Inserción masiva de partidos (evita N round-trips en categorías grandes). */
+    async createMatchesBulk(tournamentId: string, matchesData: any[]): Promise<{ inserted: number }> {
+        if (!matchesData.length) return { inserted: 0 };
+        const rows = matchesData.map((data) => {
+            const id = data.id || crypto.randomUUID?.() || `m_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+            const { id: _id, ...rest } = data;
+            return {
+                id,
+                tournament_id: tournamentId,
+                data: rest,
+                created_at: now(),
+                updated_at: now(),
+            };
+        });
+        const { error } = await supabase().from('tournament_matches').insert(rows);
+        if (error) throw error;
+        return { inserted: rows.length };
+    },
+
     async assignPlayersToTournament(
         tournamentId: string,
         categoryKey: string,
@@ -612,13 +631,15 @@ export const dataService = {
                 effectiveness = Math.round((won / played) * 100);
             }
 
+            const points = played > 0 ? won * 3 + Math.floor(played * 0.5) : 0;
             return {
                 played,
                 won,
                 lost,
                 streak: `${streak}${results[results.length - 1] ? 'W' : 'L'}`,
                 effectiveness: `${effectiveness}%`,
-                ranking: '#142', // Placeholder for now
+                ranking: '#142',
+                points,
             };
         } catch (e) {
             console.error('Error calculating player stats:', e);
@@ -1227,6 +1248,44 @@ export const dataService = {
             updatedAt: now(),
         });
         return updatedTeamId != null ? String(updatedTeamId) : null;
+    },
+
+    /** Próximo partido del usuario (hoy o futuro): inscripciones por participant_id → partidos donde juega → filtro por fecha hoy. */
+    async getNextMatchForUser(userId: string): Promise<{ tournamentId: string; matchId: string; scheduledTime?: string; team1Name?: string; team2Name?: string; tournamentName?: string } | null> {
+        const participants = await this.getMyParticipants(userId);
+        const participantId = participants?.[0]?.id;
+        if (!participantId) return null;
+        const { data: inscr } = await supabase().from('inscriptions').select('tournament_id').eq('participant_id', participantId);
+        const tournamentIds = [...new Set((inscr || []).map((r: any) => r.tournament_id).filter(Boolean))];
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date(todayStart);
+        todayEnd.setDate(todayEnd.getDate() + 1);
+        let best: { tournamentId: string; matchId: string; scheduledTime?: string; team1Name?: string; team2Name?: string; tournamentName?: string; at: number } | null = null;
+        for (const tid of tournamentIds) {
+            const matches = await this.getMatches(tid);
+            const tournament = await this.getTournament(tid);
+            const tournamentName = (tournament as any)?.name ?? '';
+            for (const m of matches) {
+                const d = m as any;
+                const st = d.scheduledTime ? new Date(d.scheduledTime).getTime() : 0;
+                if (st < todayStart.getTime() || st >= todayEnd.getTime()) continue;
+                const ids = [d.team1?.p1?.id, d.team1?.p2?.id, d.team2?.p1?.id, d.team2?.p2?.id].filter(Boolean);
+                if (!ids.includes(participantId)) continue;
+                if (!best || st < best.at) {
+                    best = {
+                        tournamentId: tid,
+                        matchId: d.id ?? m.id,
+                        scheduledTime: d.scheduledTime,
+                        team1Name: d.team1Name ?? (d.team1?.p1?.name ? [d.team1.p1.name, d.team1.p2?.name].filter(Boolean).join(' / ') : 'TBD'),
+                        team2Name: d.team2Name ?? (d.team2?.p1?.name ? [d.team2.p1.name, d.team2.p2?.name].filter(Boolean).join(' / ') : 'TBD'),
+                        tournamentName,
+                        at: st,
+                    };
+                }
+            }
+        }
+        return best ? { tournamentId: best.tournamentId, matchId: best.matchId, scheduledTime: best.scheduledTime, team1Name: best.team1Name, team2Name: best.team2Name, tournamentName: best.tournamentName } : null;
     },
 
     async getInscriptionsByTournament(tournamentId: string) {

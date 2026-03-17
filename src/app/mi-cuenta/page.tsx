@@ -26,6 +26,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { BouncingBall } from '@/components/BouncingBall';
 import LoginButton from '@/components/LoginButton';
+import PlayerCard from '@/components/PlayerCard';
 import { dataService } from '@/lib/dataService';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { formatDate } from '@/lib/formatters';
@@ -38,6 +39,7 @@ export default function MiCuentaPage() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [player, setPlayer] = useState<any | null>(null);
+    const [playerStats, setPlayerStats] = useState<{ ranking?: string; titles?: number; played?: number; points?: number } | null>(null);
     const [loadingPlayer, setLoadingPlayer] = useState(true);
     const [copied, setCopied] = useState(false);
     const [invitations, setInvitations] = useState<any[]>([]);
@@ -58,9 +60,18 @@ export default function MiCuentaPage() {
             }
             try {
                 const mine = await dataService.getMyParticipants(user.uid);
-                setPlayer(mine[0] || null);
+                const p = mine[0] || null;
+                setPlayer(p);
+                if (p?.id) {
+                    dataService.getPlayerStats(p.id).then((s) => {
+                        setPlayerStats(s ? { ranking: s.ranking, played: s.played, titles: s.won ?? 0, points: (s as any).points ?? 0 } : null);
+                    }).catch(() => setPlayerStats(null));
+                } else {
+                    setPlayerStats(null);
+                }
             } catch {
                 setPlayer(null);
+                setPlayerStats(null);
             } finally {
                 setLoadingPlayer(false);
             }
@@ -256,6 +267,24 @@ export default function MiCuentaPage() {
                                     </div>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {/* Carta tipo FIFA/Panini (destacada) */}
+                    {!loadingPlayer && player && (
+                        <div className="w-full flex justify-center mb-6">
+                            <PlayerCard
+                                player={{
+                                    id: player.id,
+                                    name: player.name ?? '',
+                                    lastName: player.lastName,
+                                    photo: player.photo,
+                                    level: player.level,
+                                    position: player.position,
+                                    category: player.category ?? (player.level != null ? `Nivel ${player.level}` : undefined),
+                                }}
+                                stats={playerStats ? { ranking: playerStats.ranking, titles: playerStats.titles ?? 0, played: playerStats.played ?? 0, points: playerStats.points ?? 0 } : undefined}
+                            />
                         </div>
                     )}
 

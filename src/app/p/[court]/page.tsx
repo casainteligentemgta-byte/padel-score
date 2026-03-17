@@ -41,7 +41,7 @@ export default function PizarraCanchaPage() {
     if (!valid) return null;
 
     return (
-        <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6">
+        <div className="min-h-screen h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 overflow-hidden">
             <div className="w-14 h-14 rounded-2xl bg-[#ccff00]/10 flex items-center justify-center mb-4">
                 <Tv className="w-7 h-7 text-[#ccff00]" />
             </div>

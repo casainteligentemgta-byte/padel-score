@@ -97,9 +97,6 @@ function EventView() {
         const doc = new jsPDF() as any;
         const firstT = Object.values(tournaments)[0];
         const eventName = firstT?.eventName ?? firstT?.name ?? firstT?.complexName ?? 'Evento de Padel';
-        const eventDate = firstT?.startDate
-            ? new Date(firstT.startDate).toLocaleDateString('es-ES')
-            : '';
 
         doc.setFillColor(10, 10, 10);
         doc.rect(0, 0, 210, 20, 'F');
@@ -110,31 +107,41 @@ function EventView() {
 
         doc.setTextColor(100, 100, 100);
         doc.setFontSize(10);
-        doc.text(`PLANILLA DE JUEGOS - ${eventDate}`, 150, 14);
+        doc.text('PLANILLA DE JUEGOS', 150, 14);
+        doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}`, 15, 22);
 
+        const formatFecha = (v: any) => {
+            if (v == null || v === '') return '-';
+            const d = typeof v === 'string' ? new Date(v) : (v?.toDate ? v.toDate() : new Date(v));
+            return isNaN(d.getTime()) ? '-' : d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        };
         // Una fila por partido (todas las categorías): 3 categorías × 7 partidos = 21 filas. Solo se evitan duplicados reales (mismo torneo + mismo id).
         const seenMatchKeys = new Set<string>();
-        const tableData: string[][] = [];
+        const list: any[] = [];
         for (const m of allMatches) {
             const matchKey = `${m._tournamentId ?? ''}_${m.id ?? m.matchId ?? ''}`;
             if (seenMatchKeys.has(matchKey)) continue;
             seenMatchKeys.add(matchKey);
-            const hora = formatHHMM(m.scheduledTime);
+            list.push(m);
+        }
+        list.sort((a, b) => toMs(a.scheduledTime) - toMs(b.scheduledTime) || (Number(a.court ?? a.courtIndex ?? 0) - Number(b.court ?? b.courtIndex ?? 0)));
+        const tableData: string[][] = [];
+        for (const m of list) {
+            const hora = formatHHMM(m.scheduledTime ?? m.time);
             const pista = String(m.court ?? m.courtIndex ?? '-').trim();
             tableData.push([
                 hora,
-                `Pista ${pista}`,
+                pista === '-' ? '-' : `Pista ${pista}`,
                 formatCategory(m._category),
                 getFaseLabel(m),
-                m.team1?.name ?? '?',
-                m.team2?.name ?? '?',
-                m.status === MatchStatus.FINISHED ? `${m.score1 ?? 0} - ${m.score2 ?? 0}` : (m.status === MatchStatus.LIVE ? 'En Vivo' : 'Pendiente')
+                m.team1?.name ?? m.team1Name ?? '?',
+                m.team2?.name ?? m.team2Name ?? '?'
             ]);
         }
 
         autoTable(doc, {
-            startY: 25,
-            head: [['Hora', 'Pista', 'Categoría', 'Fase', 'Equipo 1', 'Equipo 2', 'Resultado']],
+            startY: 28,
+            head: [['Hora', 'Pista', 'Categoría', 'Fase', 'Equipo 1', 'Equipo 2']],
             body: tableData,
             styles: { fontSize: 8, font: 'helvetica', cellPadding: 4, valign: 'middle' },
             headStyles: { fillColor: [0, 0, 0], textColor: [204, 255, 0], fontStyle: 'bold', minCellHeight: 10 },

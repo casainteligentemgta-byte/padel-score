@@ -231,6 +231,10 @@ function RegistrationFormContent() {
 
                 // --- EMAIL NOTIFICATION (aviso al club) ---
                 try {
+                    const profileUrl =
+                        typeof window !== 'undefined'
+                            ? `${window.location.origin}/players/${result.id}`
+                            : '';
                     const emailRes = await fetch('/api/send-email', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -244,7 +248,8 @@ function RegistrationFormContent() {
                                 email: formData.email,
                                 instagram: formData.instagram,
                                 level: formData.level,
-                                position: formData.position
+                                position: formData.position,
+                                profileUrl: profileUrl || undefined
                             }
                         })
                     });
