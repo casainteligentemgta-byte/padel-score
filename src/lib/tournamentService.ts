@@ -215,6 +215,20 @@ export async function initializeTournamentWithPlaceholders(
   return { inscriptionsCreated, matchesCreated };
 }
 
+/**
+ * Facade amigable para el lanzador de torneo.
+ *
+ * Genera la estructura completa del torneo (placeholders por categoría,
+ * grupos Round Robin y partidos) reutilizando la lógica central de
+ * `initializeTournamentWithPlaceholders`.
+ */
+export async function generateTournamentStructure(
+  tournamentId: string,
+  maxTeamsByCategory: MaxTeamsByCategory
+): Promise<{ inscriptionsCreated: number; matchesCreated: number }> {
+  return initializeTournamentWithPlaceholders(tournamentId, maxTeamsByCategory);
+}
+
 /** Datos de la pareja real para sustituir un placeholder de inscripción */
 export type RealTeamInscriptionData = {
   participant_name?: string;
@@ -268,4 +282,119 @@ export async function replacePlaceholderWithRealTeam(
 
   if (error) throw error;
   return placeholder.id;
+}
+
+/**
+ * Datos completos de una inscripción real (pareja) para ocupar un placeholder.
+ *
+ * Nota: el esquema real de `inscriptions` no tiene columnas `team_name`, `player1_id`, `player2_id`.
+ * En su lugar usamos:
+ * - `participant_name` para el nombre visible del equipo (p. ej. "Juan / Pedro")
+ * - `participant_id` para el participante principal (p1)
+ * - `data.partnerId` para el segundo jugador (p2)
+ * - `data.user1Id` y `data.user2Id` para vincular al usuario dueño de cada jugador (si aplica)
+ */
+export type RealInscriptionTeamData = {
+  teamName: string;
+  /** ID del participante principal (p1) en la tabla participants */
+  player1ParticipantId: string;
+  /** ID del participante compañero (p2), opcional */
+  player2ParticipantId?: string | null;
+  /** IDs de usuario (Auth) opcionales, por si quieres enlazar al owner de cada jugador */
+  user1Id?: string | null;
+  user2Id?: string | null;
+  /** Estado de pago / inscripción */
+  paymentStatus?: 'pending' | 'paid' | 'alert';
+  /** Datos adicionales (email, método de pago, etc.) */
+  extraData?: Record<string, unknown>;
+};
+
+/**
+ * Maneja la conversión de un placeholder en inscripción real cuando una pareja
+ * completa su registro y pago.
+ *
+ * Lógica:
+ * 1) Buscar el primer placeholder disponible en `inscriptions`:
+ *    - `tournament_id` = torneo
+ *    - `category_key` = categoría
+ *    - `is_placeholder` = true
+ *    - ordenado por `group_name` (A, B, C, ...) y `created_at` ascendente
+ *      para rellenar primero los grupos iniciales.
+ * 2) Hacer UPDATE sobre ese registro:
+ *    - `is_placeholder` → false
+ *    - `participant_name` → nombre del equipo real (p. ej. "Juan / Pedro")
+ *    - `participant_id` → participantId del jugador principal
+ *    - `payment_status` → 'confirmed' (mapeado a 'paid') o el que se pase
+ *    - `data` → se extiende con partnerId, user1Id, user2Id, etc.
+ *
+ * Como conservamos el mismo `id` de inscripción, todos los partidos que ya
+ * usaban ese equipo/inscripción verán automáticamente reflejados los nombres
+ * reales en el dashboard y pizarras.
+ */
+export async function handleRealInscription(
+  tournamentId: string,
+  categoryKey: string,
+  teamData: RealInscriptionTeamData
+): Promise<{ success: boolean; inscriptionId?: string; message?: string; error?: unknown }> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return { success: false, error: new Error('Supabase no configurado') };
+  }
+
+  try {
+    // 1) Buscar primer placeholder disponible en esa categoría, priorizando grupos A, B, C...
+    const { data: placeholder, error: searchError } = await supabase
+      .from('inscriptions')
+      .select('id, group_name, data')
+      .eq('tournament_id', tournamentId)
+      .eq('category_key', categoryKey)
+      .eq('is_placeholder', true)
+      .order('group_name', { ascending: true, nullsFirst: true })
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (searchError) throw searchError;
+    if (!placeholder) {
+      return {
+        success: false,
+        message: 'No hay cupos disponibles (placeholders) para esta categoría.',
+      };
+    }
+
+    // 2) UPDATE del placeholder → inscripción real
+    const existingData = (placeholder as any).data ?? {};
+    const mergedData = {
+      ...existingData,
+      partnerId: teamData.player2ParticipantId ?? existingData.partnerId ?? null,
+      user1Id: teamData.user1Id ?? existingData.user1Id ?? null,
+      user2Id: teamData.user2Id ?? existingData.user2Id ?? null,
+      ...teamData.extraData,
+    };
+
+    const paymentStatus = teamData.paymentStatus ?? 'paid';
+
+    const { error: updateError } = await supabase
+      .from('inscriptions')
+      .update({
+        participant_name: teamData.teamName,
+        participant_id: teamData.player1ParticipantId,
+        payment_status: paymentStatus,
+        is_placeholder: false,
+        data: mergedData,
+        updated_at: now(),
+      })
+      .eq('id', (placeholder as any).id);
+
+    if (updateError) throw updateError;
+
+    return {
+      success: true,
+      inscriptionId: (placeholder as any).id as string,
+      message: 'Inscripción procesada y cupo asignado.',
+    };
+  } catch (error) {
+    console.error('[handleRealInscription] Error transformando placeholder en inscripción real:', error);
+    return { success: false, error };
+  }
 }

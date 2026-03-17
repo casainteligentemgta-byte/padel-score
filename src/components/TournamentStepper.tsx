@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, ChevronLeft, ChevronRight, RefreshCw, Rocket } from 'lucide-react';
-import { initializeTournamentWithPlaceholders } from '@/lib/tournamentService';
+import { generateTournamentStructure } from '@/lib/tournamentService';
 import { dataService } from '@/lib/dataService';
 
 export type TournamentStepperFormData = {
@@ -127,7 +127,7 @@ export function TournamentStepper({
         return;
       }
 
-      const result = await initializeTournamentWithPlaceholders(tournamentId, filteredMax);
+      const result = await generateTournamentStructure(tournamentId, filteredMax);
       onSuccess?.({ tournamentId, ...result });
 
       if (redirectTo) {

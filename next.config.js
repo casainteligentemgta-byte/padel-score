@@ -18,7 +18,7 @@ const nextConfig = {
     async rewrites() {
         return [
             {
-                source: '/pizarra/cancha:id',
+                source: '/pizarra/cancha/:id',
                 destination: '/display/tv/:id',
             },
             {

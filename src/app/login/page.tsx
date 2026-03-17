@@ -14,7 +14,8 @@ import {
     Zap,
     Eye,
     EyeOff,
-    Shield
+    Shield,
+    Layout
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { isValidEmail, isValidPassword } from '@/lib/authValidators';
@@ -37,6 +38,7 @@ export default function LoginPage() {
     } = useAuth();
     const router = useRouter();
     const [isLogin, setIsLogin] = useState(true);
+    const [designMode, setDesignMode] = useState<'minimal' | 'glass'>('glass');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
@@ -121,29 +123,59 @@ export default function LoginPage() {
         }
     };
 
+    const isGlass = designMode === 'glass';
+
     if (authLoading) {
         return (
-            <div className="h-dvh bg-[#050505] flex items-center justify-center">
+            <div className="h-dvh bg-[#050505] flex items-center justifyCenter">
                 <BouncingBall size={40} bounceHeight={2} />
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center relative overflow-hidden px-6 py-12 font-outfit">
+        <div
+            className={`min-h-screen text-white flex flex-col items-center justify-center relative overflow-hidden px-6 py-12 font-outfit transition-colors duration-500 ${
+                isGlass ? 'bg-[#050505]' : 'bg-[#0a0a0a]'
+            }`}
+        >
+            {/* Grid Aura Background solo en modo glass */}
+            {isGlass && (
+                <div className="absolute inset-0 pointer-events-none">
+                    {/* Court Grid Effect */}
+                    <div
+                        className="absolute inset-0 opacity-[0.03]"
+                        style={{
+                            backgroundImage:
+                                'linear-gradient(to right, #ccff00 1px, transparent 1px), linear-gradient(to bottom, #ccff00 1px, transparent 1px)',
+                            backgroundSize: '60px 60px',
+                        }}
+                    />
 
-            {/* Grid Aura Background */}
-            <div className="absolute inset-0 pointer-events-none">
-                {/* Court Grid Effect */}
-                <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(to right, #ccff00 1px, transparent 1px), linear-gradient(to bottom, #ccff00 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
+                    {/* Dynamic Glows */}
+                    <div
+                        className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-padel-primary/10 blur-[150px] rounded-full animate-pulse"
+                        style={{ animationDuration: '6s' }}
+                    />
+                    <div
+                        className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/5 blur-[120px] rounded-full animate-pulse"
+                        style={{ animationDuration: '9s', animationDelay: '3s' }}
+                    />
 
-                {/* Dynamic Glows */}
-                <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-padel-primary/10 blur-[150px] rounded-full animate-pulse" style={{ animationDuration: '6s' }} />
-                <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/5 blur-[120px] rounded-full animate-pulse" style={{ animationDuration: '9s', animationDelay: '3s' }} />
+                    {/* Centered Focus Glow */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40%] h-[40%] bg-padel-primary/5 blur-[100px] rounded-full" />
+                </div>
+            )}
 
-                {/* Centered Focus Glow */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40%] h-[40%] bg-padel-primary/5 blur-[100px] rounded-full" />
-            </div>
+            {/* Botón flotante para cambiar modo de diseño */}
+            <button
+                type="button"
+                onClick={() => setDesignMode((prev) => (prev === 'glass' ? 'minimal' : 'glass'))}
+                className="fixed top-4 right-4 z-20 inline-flex items-center justify-center w-9 h-9 rounded-full border border-white/15 bg-black/70 text-white/70 hover:text-white hover:border-[#ccff00]/80 hover:bg-black/90 shadow-lg shadow-black/60 transition-all"
+                aria-label="Cambiar diseño de login"
+            >
+                <Layout className="w-4 h-4" />
+            </button>
 
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -182,7 +214,14 @@ export default function LoginPage() {
                     initial={{ y: 20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ delay: 0.4 }}
-                    className="bg-white/5 backdrop-blur-xl rounded-[2.5rem] border border-white/10 shadow-2xl overflow-hidden relative"
+                    className={`
+                        rounded-[2.5rem] overflow-hidden relative border transition-all duration-500
+                        ${
+                            isGlass
+                                ? 'bg-white/5 backdrop-blur-xl border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.8)]'
+                                : 'bg-[#0f0f0f] border-white/5 shadow-[0_0_30px_rgba(0,0,0,0.9)]'
+                        }
+                    `}
                 >
                     {/* Interior Glow */}
                     <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-padel-primary/30 to-transparent" />
@@ -308,16 +347,32 @@ export default function LoginPage() {
                             <button
                                 disabled={loading}
                                 type="submit"
-                                className="w-full py-6 bg-transparent text-padel-primary font-black uppercase text-lg transition-all flex items-center justify-center disabled:opacity-50 mt-10 group relative outline-none border-none cursor-pointer"
+                                className={`w-full py-6 font-black uppercase text-lg transition-all flex items-center justify-center disabled:opacity-50 mt-10 group relative outline-none cursor-pointer ${
+                                    isGlass
+                                        ? 'bg-transparent text-padel-primary'
+                                        : 'bg-white text-black rounded-2xl'
+                                }`}
                             >
-                                <div className={`transition-all duration-300 ${loading ? 'opacity-50' : 'group-hover:scale-110 group-active:scale-95 drop-shadow-[0_0_15px_rgba(204,255,0,0.8)] focus:drop-shadow-[0_0_20px_rgba(204,255,0,1)]'}`}>
+                                <div
+                                    className={`transition-all duration-300 ${
+                                        loading
+                                            ? 'opacity-50'
+                                            : isGlass
+                                            ? 'group-hover:scale-110 group-active:scale-95 drop-shadow-[0_0_15px_rgba(204,255,0,0.8)] focus:drop-shadow-[0_0_20px_rgba(204,255,0,1)]'
+                                            : 'group-hover:scale-105 group-active:scale-95'
+                                    }`}
+                                >
                                     {loading ? (
                                         <RefreshCw className="w-6 h-6 animate-spin" />
                                     ) : (
-                                        <span className="tracking-[0.2em]">{isLogin ? 'ENTRAR AHORA' : 'CREAR CUENTA'}</span>
+                                        <span className="tracking-[0.2em]">
+                                            {isLogin ? 'ENTRAR AHORA' : 'CREAR CUENTA'}
+                                        </span>
                                     )}
                                 </div>
-                                <div className="absolute inset-x-0 bottom-0 h-[2px] bg-padel-primary/40 scale-x-0 group-hover:scale-x-50 group-focus:scale-x-100 transition-transform duration-500 shadow-[0_0_15px_#ccff00]" />
+                                {isGlass && (
+                                    <div className="absolute inset-x-0 bottom-0 h-[2px] bg-padel-primary/40 scale-x-0 group-hover:scale-x-50 group-focus:scale-x-100 transition-transform duration-500 shadow-[0_0_15px_#ccff00]" />
+                                )}
                             </button>
 
                             {isLogin && (
