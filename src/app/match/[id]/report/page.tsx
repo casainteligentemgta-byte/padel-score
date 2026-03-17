@@ -167,8 +167,9 @@ export default function MatchReportPage({ params }: { params: Promise<{ id: stri
         );
     }
 
-    if (status !== 'ready' || !match || myTeam === null) return null;
+    if ((status !== 'ready' && status !== 'sending') || !match || myTeam === null) return null;
 
+    const isSending = status === 'sending';
     const team1Name = match.team1Name || (match.team1?.p1?.name ? [match.team1.p1.name, match.team1.p2?.name].filter(Boolean).join(' / ') : 'Equipo 1');
     const team2Name = match.team2Name || (match.team2?.p1?.name ? [match.team2.p1.name, match.team2.p2?.name].filter(Boolean).join(' / ') : 'Equipo 2');
 
@@ -196,11 +197,11 @@ export default function MatchReportPage({ params }: { params: Promise<{ id: stri
                 <div className="grid grid-cols-2 gap-4">
                     <button
                         type="button"
-                        disabled={status === 'sending'}
+                        disabled={isSending}
                         onClick={() => submitResult(1)}
                         className="min-h-[72px] flex flex-col items-center justify-center gap-1 rounded-2xl border-2 border-brand/50 bg-brand/10 text-brand font-black uppercase text-sm tracking-tight active:scale-95 transition-transform touch-manipulation"
                     >
-                        {status === 'sending' ? (
+                        {isSending ? (
                             <Loader2 className="w-6 h-6 animate-spin" />
                         ) : (
                             <>
@@ -211,11 +212,11 @@ export default function MatchReportPage({ params }: { params: Promise<{ id: stri
                     </button>
                     <button
                         type="button"
-                        disabled={status === 'sending'}
+                        disabled={isSending}
                         onClick={() => submitResult(2)}
                         className="min-h-[72px] flex flex-col items-center justify-center gap-1 rounded-2xl border-2 border-brand/50 bg-brand/10 text-brand font-black uppercase text-sm tracking-tight active:scale-95 transition-transform touch-manipulation"
                     >
-                        {status === 'sending' ? (
+                        {isSending ? (
                             <Loader2 className="w-6 h-6 animate-spin" />
                         ) : (
                             <>
