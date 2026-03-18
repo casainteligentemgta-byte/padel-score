@@ -26,9 +26,6 @@ export default function InvitationManager() {
 
     useEffect(() => {
         fetchInvitations();
-
-        // Suscribirse a cambios en la tabla teams para actualizaciones en tiempo real
-        // Nota: En una implementación real, esto escucharía inserciones donde player_b_id === user.uid
     }, [user]);
 
     const handleResponse = async (id: string, status: 'accepted' | 'rejected') => {
@@ -51,7 +48,10 @@ export default function InvitationManager() {
         );
     }
 
-    if (invitations.length === 0) return null;
+    // Sin invitaciones: no mostrar nada (accesos Ranking / Mi cuenta eliminados)
+    if (invitations.length === 0) {
+        return null;
+    }
 
     return (
         <div className="space-y-4">
