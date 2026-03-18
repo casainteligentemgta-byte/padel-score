@@ -165,7 +165,7 @@ export default function MarkerControlPage() {
     // y luego sincroniza con Supabase (best-effort).
     const actualizarMarcadorLocal = async (patch: Record<string, unknown>) => {
         // Optimistic UI: actualizar inmediatamente el estado local
-        setCanchaData(prev => {
+        setCanchaData((prev: any) => {
             const data = prev || {};
             const marcadorPrev = data.marcador || {};
             return {
