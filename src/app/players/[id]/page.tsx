@@ -102,7 +102,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ id: st
 
     // Mock stats for visualization - these will be populated by calculations later
     const stats = [
-        { label: 'RANK TOTAL', val: playerStats?.ranking || '#142', color: 'text-blue-400', icon: Award },
+        { label: 'RANK TOTAL', val: playerStats?.ranking || '0', color: 'text-blue-400', icon: Award },
         { label: 'GANADOS', val: playerStats?.won.toString().padStart(2, '0') || '00', color: 'text-padel-primary', icon: Trophy },
         { label: 'EFECTIVIDAD', val: playerStats?.effectiveness || '0%', color: 'text-yellow-400', icon: Zap },
         { label: 'RACHA', val: playerStats?.streak || '0-', color: 'text-emerald-400', icon: Activity },

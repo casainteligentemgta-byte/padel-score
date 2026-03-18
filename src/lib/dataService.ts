@@ -638,7 +638,7 @@ export const dataService = {
                 lost,
                 streak: `${streak}${results[results.length - 1] ? 'W' : 'L'}`,
                 effectiveness: `${effectiveness}%`,
-                ranking: '#142',
+                ranking: '0',
                 points,
             };
         } catch (e) {

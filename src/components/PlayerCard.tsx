@@ -82,38 +82,35 @@ export default function PlayerCard({ player, stats, className = '', static: isSt
             }
             className={`relative w-full max-w-[320px] mx-auto rounded-2xl overflow-hidden ${className}`}
         >
-            <div className="relative rounded-2xl overflow-hidden border-2 border-brand/40 bg-surface transition-colors duration-300 shadow-[0_0_20px_rgba(204,255,0,0.12),0_0_40px_rgba(204,255,0,0.08),inset_0_0_60px_rgba(0,0,0,0.5)]">
-                {/* Contenido: nombre, categoría (badge #ccff00), stats con Ranking en brand */}
-                <div className="relative px-4 pb-4 pt-1">
-                    <h3 className="font-black uppercase tracking-tight text-white text-xs sm:text-sm md:text-base truncate font-outfit max-w-full" style={{ letterSpacing: '-0.02em' }}>
-                        {displayName}
-                    </h3>
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] mt-0.5 truncate text-brand text-center">
-                        {categoryLabel}
-                    </p>
+            <div className="relative rounded-2xl overflow-hidden border-2 border-brand/40 bg-surface transition-colors duration-300 shadow-[0_0_20px_rgba(204,255,0,0.12),0_0_40px_rgba(204,255,0,0.08),inset_0_0_60px_rgba(0,0,0,0.5)] px-4 pb-4 pt-1">
+                <h3 className="font-black uppercase tracking-tight text-white text-xs sm:text-sm md:text-base truncate font-outfit max-w-full" style={{ letterSpacing: '-0.02em' }}>
+                    {displayName}
+                </h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] mt-0.5 truncate text-brand text-center">
+                    {categoryLabel}
+                </p>
 
-                    {/* Estadísticas: Ranking, Títulos, Partidos, Puntos */}
-                    <div className="mt-1.5 flex flex-row items-center justify-between gap-px">
-                        <div className="flex flex-1 min-w-0 flex-col items-center justify-center py-0.5 px-0.5 rounded border border-white/10 bg-white/[0.03]">
-                            <Target className="w-5 h-5 mb-0.5 text-brand shrink-0" />
-                            <span className="text-[6px] font-black uppercase tracking-widest text-white/50 leading-tight">Ranking</span>
-                            <span className="text-[8px] font-black text-white tabular-nums">{ranking}</span>
-                        </div>
-                        <div className="flex flex-1 min-w-0 flex-col items-center justify-center py-0.5 px-0.5 rounded border border-white/10 bg-white/[0.03]">
-                            <Trophy className="w-5 h-5 mb-0.5 text-brand shrink-0" />
-                            <span className="text-[6px] font-black uppercase tracking-widest text-white/50 leading-tight">Títulos</span>
-                            <span className="text-[8px] font-black text-white tabular-nums">{titles}</span>
-                        </div>
-                        <div className="flex flex-1 min-w-0 flex-col items-center justify-center py-0.5 px-0.5 rounded border border-white/10 bg-white/[0.03]">
-                            <Activity className="w-5 h-5 mb-0.5 text-brand shrink-0" />
-                            <span className="text-[6px] font-black uppercase tracking-widest text-white/50 leading-tight">Partidos</span>
-                            <span className="text-[8px] font-black text-white tabular-nums">{played}</span>
-                        </div>
-                        <div className="flex flex-1 min-w-0 flex-col items-center justify-center py-0.5 px-0.5 rounded border border-white/10 bg-white/[0.03]">
-                            <Zap className="w-5 h-5 mb-0.5 text-brand shrink-0" />
-                            <span className="text-[6px] font-black uppercase tracking-widest text-white/50 leading-tight">Puntos</span>
-                            <span className="text-[8px] font-black text-white tabular-nums">{points}</span>
-                        </div>
+                {/* Estadísticas: Ranking, Títulos, Partidos, Puntos */}
+                <div className="mt-1.5 flex flex-row items-center justify-between gap-px">
+                    <div className="flex flex-1 min-w-0 flex-col items-center justify-center py-0.5 px-0.5 rounded border border-white/10 bg-white/[0.03]">
+                        <Target className="w-5 h-5 mb-0.5 text-brand shrink-0" />
+                        <span className="text-[6px] font-black uppercase tracking-widest text-white/50 leading-tight">Ranking</span>
+                        <span className="text-[8px] font-black text-white tabular-nums">{ranking}</span>
+                    </div>
+                    <div className="flex flex-1 min-w-0 flex-col items-center justify-center py-0.5 px-0.5 rounded border border-white/10 bg-white/[0.03]">
+                        <Trophy className="w-5 h-5 mb-0.5 text-brand shrink-0" />
+                        <span className="text-[6px] font-black uppercase tracking-widest text-white/50 leading-tight">Títulos</span>
+                        <span className="text-[8px] font-black text-white tabular-nums">{titles}</span>
+                    </div>
+                    <div className="flex flex-1 min-w-0 flex-col items-center justify-center py-0.5 px-0.5 rounded border border-white/10 bg-white/[0.03]">
+                        <Activity className="w-5 h-5 mb-0.5 text-brand shrink-0" />
+                        <span className="text-[6px] font-black uppercase tracking-widest text-white/50 leading-tight">Partidos</span>
+                        <span className="text-[8px] font-black text-white tabular-nums">{played}</span>
+                    </div>
+                    <div className="flex flex-1 min-w-0 flex-col items-center justify-center py-0.5 px-0.5 rounded border border-white/10 bg-white/[0.03]">
+                        <Zap className="w-5 h-5 mb-0.5 text-brand shrink-0" />
+                        <span className="text-[6px] font-black uppercase tracking-widest text-white/50 leading-tight">Puntos</span>
+                        <span className="text-[8px] font-black text-white tabular-nums">{points}</span>
                     </div>
                 </div>
             </div>
