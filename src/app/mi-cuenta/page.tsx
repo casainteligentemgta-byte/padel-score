@@ -26,7 +26,6 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { BouncingBall } from '@/components/BouncingBall';
 import LoginButton from '@/components/LoginButton';
-import PlayerCard from '@/components/PlayerCard';
 import { dataService } from '@/lib/dataService';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { formatDate } from '@/lib/formatters';
@@ -39,7 +38,6 @@ export default function MiCuentaPage() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [player, setPlayer] = useState<any | null>(null);
-    const [playerStats, setPlayerStats] = useState<{ ranking?: string; titles?: number; played?: number; points?: number } | null>(null);
     const [loadingPlayer, setLoadingPlayer] = useState(true);
     const [copied, setCopied] = useState(false);
     const [invitations, setInvitations] = useState<any[]>([]);
@@ -62,16 +60,8 @@ export default function MiCuentaPage() {
                 const mine = await dataService.getMyParticipants(user.uid);
                 const p = mine[0] || null;
                 setPlayer(p);
-                if (p?.id) {
-                    dataService.getPlayerStats(p.id).then((s) => {
-                        setPlayerStats(s ? { ranking: s.ranking, played: s.played, titles: s.won ?? 0, points: (s as any).points ?? 0 } : null);
-                    }).catch(() => setPlayerStats(null));
-                } else {
-                    setPlayerStats(null);
-                }
             } catch {
                 setPlayer(null);
-                setPlayerStats(null);
             } finally {
                 setLoadingPlayer(false);
             }
@@ -270,31 +260,13 @@ export default function MiCuentaPage() {
                         </div>
                     )}
 
-                    {/* Carta tipo FIFA/Panini (destacada) */}
-                    {!loadingPlayer && player && (
-                        <div className="w-full flex justify-center mb-6">
-                            <PlayerCard
-                                player={{
-                                    id: player.id,
-                                    name: player.name ?? '',
-                                    lastName: player.lastName,
-                                    photo: player.photo,
-                                    level: player.level,
-                                    position: player.position,
-                                    category: player.category ?? (player.level != null ? `Nivel ${player.level}` : undefined),
-                                }}
-                                stats={playerStats ? { ranking: playerStats.ranking, titles: playerStats.titles ?? 0, played: playerStats.played ?? 0, points: playerStats.points ?? 0 } : undefined}
-                            />
-                        </div>
-                    )}
-
                     {/* Ficha de jugador (si existe en participants) */}
                     {!loadingPlayer && player && (
                         <div className="w-full max-w-full min-w-0 bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl">
                             <div className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-5">
-                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex flex-wrap items-end justify-between gap-3">
                                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-white/5 overflow-hidden flex items-center justify-center flex-shrink-0 border border-white/10">
+                                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white/5 overflow-hidden flex items-center justify-center flex-shrink-0 border border-white/10">
                                             {player.photo ? (
                                                 <img src={player.photo} alt="" className="w-full h-full object-cover" />
                                             ) : (
@@ -306,14 +278,6 @@ export default function MiCuentaPage() {
                                                 <p className="font-black uppercase tracking-wider text-white truncate text-sm sm:text-base">
                                                     {player.name} {player.lastName}
                                                 </p>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => router.push(`/players/register?edit=${player.id}`)}
-                                                    className="p-1 rounded-full bg-white/5 hover:bg-padel-primary hover:text-black text-gray-400 transition-colors flex-shrink-0"
-                                                    title="Modificar ficha de jugador"
-                                                >
-                                                    <Edit3 className="w-3 h-3" />
-                                                </button>
                                             </div>
                                             <p className="mt-0.5 text-[9px] font-bold uppercase tracking-widest text-gray-500 flex flex-wrap items-center gap-1.5 leading-tight">
                                                 <span>Posición:</span>
@@ -326,9 +290,6 @@ export default function MiCuentaPage() {
                                             <span className="px-2 py-0.5 rounded-full bg-padel-primary/10 text-padel-primary text-[9px] font-black uppercase tracking-widest">
                                                 Nivel {player.level ?? 4}
                                             </span>
-                                            <span className="px-2 py-0.5 rounded-full bg-white/5 text-gray-300 text-[9px] font-black uppercase tracking-widest">
-                                                {player.position || 'Mixta'}
-                                            </span>
                                         </div>
                                         <button
                                             onClick={() => router.push(`/players/register?edit=${player.id}`)}
@@ -340,15 +301,26 @@ export default function MiCuentaPage() {
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 border-t border-white/5 pt-3 mt-1">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 border-t border-white/5 pt-3 mt-1 items-end">
                                     {/* Identificación */}
-                                    <div className="space-y-2 min-w-0">
+                                    <div className="space-y-2 min-w-0 flex flex-col justify-end">
                                         <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-1.5">
                                             <Shield className="w-3.5 h-3.5 flex-shrink-0" /> Identificación
                                         </p>
                                         <div className="text-[11px] sm:text-xs text-gray-300 space-y-0.5 break-words">
-                                            <p className="flex flex-wrap gap-x-1"><span className="font-bold text-white">DNI:</span> <span className="min-w-0">{player.dni || '—'}</span></p>
+                                            <p className="flex flex-wrap gap-x-1"><span className="font-bold text-white">Cédula:</span> <span className="min-w-0">{player.dni || '—'}</span></p>
                                             <p className="flex flex-wrap gap-x-1"><span className="font-bold text-white">Fecha nac.:</span> <span>{formatDate(player.birthDate)}</span></p>
+                                        </div>
+                                    </div>
+
+                                    {/* Contacto — al lado de Identificación */}
+                                    <div className="space-y-2 min-w-0 flex flex-col justify-end">
+                                        <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-1.5">
+                                            <Phone className="w-3.5 h-3.5 flex-shrink-0" /> Contacto
+                                        </p>
+                                        <div className="text-[11px] sm:text-xs text-gray-300 space-y-0.5 break-words">
+                                            <p><span className="font-bold text-white">Teléfono:</span> {player.phone || '—'}</p>
+                                            <p className="flex items-center gap-1 min-w-0"><Instagram className="w-3 h-3 text-gray-500 flex-shrink-0" /><span className="min-w-0 truncate"><span className="font-bold text-white">IG:</span> {player.instagram ? `@${String(player.instagram).replace('@', '')}` : 'No vinculado'}</span></p>
                                         </div>
                                     </div>
 
@@ -373,17 +345,6 @@ export default function MiCuentaPage() {
                                             <p><span className="font-bold text-white">Sangre:</span> {player.bloodType || '—'}</p>
                                             <p><span className="font-bold text-white">Alergias:</span> {player.allergies || 'Ninguna'}</p>
                                             <p><span className="font-bold text-white">Cond. médicas:</span> {player.medicalConditions || 'Ninguna'}</p>
-                                        </div>
-                                    </div>
-
-                                    {/* Contacto */}
-                                    <div className="space-y-2 min-w-0">
-                                        <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-1.5">
-                                            <Phone className="w-3.5 h-3.5 flex-shrink-0" /> Contacto
-                                        </p>
-                                        <div className="text-[11px] sm:text-xs text-gray-300 space-y-0.5 break-words">
-                                            <p><span className="font-bold text-white">Teléfono:</span> {player.phone || '—'}</p>
-                                            <p className="flex items-center gap-1 min-w-0"><Instagram className="w-3 h-3 text-gray-500 flex-shrink-0" /><span className="min-w-0 truncate"><span className="font-bold text-white">IG:</span> {player.instagram ? `@${String(player.instagram).replace('@', '')}` : 'No vinculado'}</span></p>
                                         </div>
                                     </div>
                                 </div>

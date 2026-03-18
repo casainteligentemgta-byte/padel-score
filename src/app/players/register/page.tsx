@@ -18,7 +18,6 @@ import {
     Stethoscope,
     Save,
     RefreshCw,
-    Star,
     Target,
     Award,
     CircleDot
@@ -309,9 +308,6 @@ function RegistrationFormContent() {
                                 )}
                             </h1>
                             <p className="text-[8px] font-black text-white/40 uppercase tracking-[0.5em] italic mt-0.5 drop-shadow-[0_0_10px_rgba(204,255,0,0.2)]">SISTEMA OFICIAL SMART PADEL</p>
-                        </div>
-                        <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 border border-white/5">
-                            <Star className="w-3.5 h-3.5 text-padel-primary" />
                         </div>
                     </div>
                     {/* Progress Bar Visual Only */}
