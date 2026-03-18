@@ -180,7 +180,9 @@ export default function MyTournamentsPage() {
 
                                                 {/* Título */}
                                                 <h3 className="text-base font-black italic uppercase tracking-tighter mb-2 group-hover:text-padel-primary transition-colors leading-tight">
-                                                    {isGrouped ? `Torneo ${first.complexName || 'Margarita Padel'}` : first.name}
+                                                    {isGrouped
+                                                        ? `Torneo ${(first.name || '').split(' - ')[0] || first.name}`
+                                                        : first.name}
                                                 </h3>
 
                                                 {/* Meta info */}
@@ -247,6 +249,9 @@ export default function MyTournamentsPage() {
                                                                     <div className="w-1.5 h-1.5 rounded-full bg-padel-primary flex-shrink-0" />
                                                                     <span className="text-[10px] font-black uppercase italic tracking-wider text-gray-300 group-hover/btn:text-padel-primary">
                                                                         Categoría {t.category}
+                                                                        {t.gender && (
+                                                                            <> {t.gender === 'MALE' ? 'Masculino' : t.gender === 'FEMALE' ? 'Femenino' : 'Mixto'}</>
+                                                                        )}
                                                                     </span>
                                                                     <ChevronRight className="w-3.5 h-3.5 text-padel-primary flex-shrink-0" />
                                                                 </Link>
