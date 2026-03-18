@@ -83,7 +83,10 @@ export default function PlayerCard({ player, stats, className = '', static: isSt
             className={`relative w-full max-w-[320px] mx-auto rounded-2xl overflow-hidden ${className}`}
         >
             <div className="relative rounded-2xl overflow-hidden border-2 border-brand/40 bg-surface transition-colors duration-300 shadow-[0_0_20px_rgba(204,255,0,0.12),0_0_40px_rgba(204,255,0,0.08),inset_0_0_60px_rgba(0,0,0,0.5)] px-4 pb-4 pt-1">
-                <h3 className="font-black uppercase tracking-tight text-white text-xs sm:text-sm md:text-base truncate font-outfit max-w-full" style={{ letterSpacing: '-0.02em' }}>
+                <h3
+                    className="font-black uppercase tracking-tight text-white text-[13px] sm:text-[15px] md:text-[18px] truncate font-outfit max-w-full text-center"
+                    style={{ letterSpacing: '-0.02em' }}
+                >
                     {displayName}
                 </h3>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] mt-0.5 truncate text-brand text-center">

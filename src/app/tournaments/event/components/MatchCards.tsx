@@ -70,7 +70,8 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
     const safeRank = Math.min(rank, rankColors.length - 1);
 
     const matchKey = match.id || (match.court ? `court_${match.court}` : (match.courtIndex != null ? `court_${match.courtIndex + 1}` : 'court_1'));
-    const controlHref = `/tournaments/${match._tournamentId}/score/${matchKey}`;
+    const canchaId = `cancha_${match.court ?? (match.courtIndex != null ? match.courtIndex + 1 : 1)}`;
+    const controlHref = `/marker/${encodeURIComponent(canchaId)}`;
     const pizarraHref = match.id
         ? `/tournaments/${match._tournamentId}/display/${match.id}`
         : `/tournaments/${match._tournamentId}/control`;
@@ -89,56 +90,69 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                 {/* Franja superior */}
                 <div className="px-2 pt-2 pb-1.5 flex items-center justify-between gap-1 border-b-2 border-[#ccff00]/50 bg-[#ccff00]/10 flex-wrap">
                     <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                        {matchNumber != null && (
-                            <>
-                                <span className="text-[7px] font-black uppercase tracking-widest text-[#ccff00]/80 flex-shrink-0">Partido {matchNumber}</span>
-                                <span className="text-[#ccff00]/50 text-[6px]">·</span>
-                            </>
-                        )}
-                        <span className="text-[7px] font-bold text-[#ccff00]/90 italic flex-shrink-0">
+                        {/* 1) Hora estimada / score si está en vivo */}
+                        <span className="text-[8px] font-bold text-[#ccff00]/90 italic flex-shrink-0">
                             {isLive ? `${match.score1 ?? 0} - ${match.score2 ?? 0}` : formatHHMM(match.scheduledTime)}
                         </span>
-                        <span className="text-[#ccff00]/50 text-[6px]">·</span>
-                        <span className="text-[8px] font-black uppercase tracking-widest text-[#ccff00]">
-                            {isLive ? (match.courtName ?? (match.court != null ? `Pista ${match.court}` : 'Pista –')) : rankLabel[safeRank]}
-                        </span>
+
+                        {/* 2) Número de partido */}
+                        {matchNumber != null && (
+                            <>
+                                <span className="text-[#ccff00]/50 text-[8px]">·</span>
+                                <span className="text-[8px] font-black uppercase tracking-widest text-[#ccff00]/80 flex-shrink-0">
+                                    Partido {matchNumber}
+                                </span>
+                            </>
+                        )}
+
+                        {/* 3) Juego */}
+                        {!isLive && gameNumber != null && (
+                            <>
+                                <span className="text-[#ccff00]/50 text-[8px]">·</span>
+                                <span className="text-[8px] font-black text-[#ccff00]/90 italic">{gameNumber}º Juego</span>
+                            </>
+                        )}
+
+                        {/* 4) Nivel/Categoría */}
                         {match._category && (
                             <>
-                                <span className="text-[#ccff00]/50 text-[6px]">·</span>
-                                <span className="text-[7px] font-bold text-[#ccff00]/90 uppercase tracking-tight">
+                                <span className="text-[#ccff00]/50 text-[8px]">·</span>
+                                <span className="text-[8px] font-bold text-[#ccff00]/90 uppercase tracking-tight">
                                     {formatCategory(match._category)}
                                 </span>
                             </>
                         )}
-                        <span className="text-[#ccff00]/50 text-[6px]">·</span>
-                        <span className={`text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${CAT_COLORS[match._gender] ?? 'bg-white/10 border-white/20 text-[#ccff00]/90'}`}>
+
+                        {/* 5) Género */}
+                        <span className="text-[#ccff00]/50 text-[8px]">·</span>
+                        <span
+                            className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${CAT_COLORS[match._gender] ?? 'bg-white/10 border-white/20 text-[#ccff00]/90'}`}
+                        >
                             {formatGender(match._gender) || '—'}
                         </span>
-                        {!isLive && gameNumber != null && (
-                            <>
-                                <span className="text-[#ccff00]/50 text-[6px]">·</span>
-                                <span className="text-[7px] font-black text-[#ccff00]/90 italic">{gameNumber}º juego</span>
-                            </>
-                        )}
                     </div>
                 </div>
 
                 {/* Jugadores compactos */}
-                <div className="px-2 py-2 flex-1 flex flex-col gap-1 bg-[#ccff00]/5 border-y-2 border-[#ccff00]/30 justify-center">
-                    <div className="text-center">
-                        <p className="text-[10px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t1p1}</p>
-                        {t1p2 && <p className="text-[8px] font-bold text-[#ccff00]/70 uppercase tracking-tighter truncate">{t1p2}</p>}
-                    </div>
-                    <div className="text-[8px] font-black text-[#ccff00]/40 text-center italic leading-none my-0.5">vs</div>
-                    <div className="text-center">
-                        <p className="text-[10px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t2p1}</p>
-                        {t2p2 && <p className="text-[8px] font-bold text-[#ccff00]/70 uppercase tracking-tighter truncate">{t2p2}</p>}
+                <div className="px-2 py-2 flex-1 bg-[#ccff00]/5 border-y-2 border-[#ccff00]/30 flex items-center justify-center">
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 w-full">
+                        <div className="text-center min-w-0">
+                            <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t1p1}</p>
+                            <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t1p2 || '—'}</p>
+                        </div>
+                        <div className="text-[9px] font-black text-[#ccff00]/40 text-center italic leading-none px-1">
+                            VS
+                        </div>
+                        <div className="text-center min-w-0">
+                            <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t2p1}</p>
+                            <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t2p2 || '—'}</p>
+                        </div>
                     </div>
                 </div>
 
 
                 {/* Action Dock */}
-                <div className={`grid ${(!isLive && match._tournamentId) ? 'grid-cols-5' : 'grid-cols-4'} gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40 overflow-hidden`}>
+                <div className={`grid ${(!isLive && match._tournamentId) ? 'grid-cols-3 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4'} gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40 overflow-hidden`}>
                     {!isLive && match._tournamentId && (
                         <button
                             onClick={async () => {
@@ -150,15 +164,17 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                             className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00] text-black hover:bg-white transition-all active:scale-95"
                         >
                             <Gamepad2 className="w-3.5 h-3.5" />
-                            <span className="text-[6px] font-black uppercase tracking-tight">Comenzar</span>
+                            <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Comenzar</span>
                         </button>
                     )}
                     <Link
                         href={controlHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                     >
                         <Gamepad2 className="w-3.5 h-3.5" />
-                        <span className="text-[6px] font-black uppercase tracking-tight">Control</span>
+                        <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Control</span>
                     </Link>
                     <Link
                         href={pizarraHref}
@@ -166,7 +182,7 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                         className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                     >
                         <Monitor className="w-3.5 h-3.5" />
-                        <span className="text-[6px] font-black uppercase tracking-tight">Pizarra</span>
+                        <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Pizarra</span>
                     </Link>
                     <Link
                         href={camasHref}
@@ -174,7 +190,7 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                         className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                     >
                         <Camera className="w-3.5 h-3.5" />
-                        <span className="text-[6px] font-black uppercase tracking-tight">Cámaras</span>
+                        <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Cámaras</span>
                     </Link>
                     <Link
                         href={adsHref}
@@ -182,7 +198,7 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                         className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                     >
                         <Tv className="w-3.5 h-3.5" />
-                        <span className="text-[6px] font-black uppercase tracking-tight">Ads</span>
+                        <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Ads</span>
                     </Link>
                 </div>
             </motion.div>
@@ -239,13 +255,15 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                 </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40">
                 <Link
                     href={controlHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                 >
                     <Gamepad2 className="w-4 h-4" />
-                    <span className="text-[8px] font-black uppercase tracking-widest">Control</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Control</span>
                 </Link>
                 <Link
                     href={pizarraHref}
@@ -253,7 +271,7 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                     className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                 >
                     <Monitor className="w-4 h-4" />
-                    <span className="text-[8px] font-black uppercase tracking-widest">Pizarra</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Pizarra</span>
                 </Link>
                 <Link
                     href={camasHref}
@@ -261,7 +279,7 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                     className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                 >
                     <Camera className="w-4 h-4" />
-                    <span className="text-[8px] font-black uppercase tracking-widest">Cámaras</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Cámaras</span>
                 </Link>
                 <Link
                     href={adsHref}
@@ -269,7 +287,7 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                     className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                 >
                     <Tv className="w-4 h-4" />
-                    <span className="text-[8px] font-black uppercase tracking-widest">Publicidad</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Publicidad</span>
                 </Link>
             </div>
         </motion.div>

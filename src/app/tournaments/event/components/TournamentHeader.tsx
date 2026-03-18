@@ -57,20 +57,20 @@ export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
                             href={sponsorLink}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden hover:bg-white/10 transition-colors"
+                            className="w-20 h-20 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden hover:bg-white/10 transition-colors"
                         >
                             <img
                                 src={sponsorLogoUrl || '/sponsor-example.png'}
                                 alt={sponsorName || 'Patrocinador'}
-                                className="w-10 h-10 object-contain"
+                                className="w-16 h-16 object-contain"
                             />
                         </a>
                     ) : (
-                        <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
+                        <div className="w-20 h-20 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
                             <img
                                 src={sponsorLogoUrl || '/sponsor-example.png'}
                                 alt={sponsorName || 'Patrocinador'}
-                                className="w-10 h-10 object-contain"
+                                className="w-16 h-16 object-contain"
                             />
                         </div>
                     )}
@@ -81,12 +81,12 @@ export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
                         {eventName}
                     </h1>
                     {complexName && (
-                        <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mt-1 truncate">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mt-3 truncate">
                             {complexName}
                         </p>
                     )}
                     {(category || gender) && (
-                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-black uppercase italic tracking-widest text-[#ccff00]/90">
+                        <div className="flex items-center gap-1.5 mt-0 text-[10px] font-black uppercase italic tracking-widest text-[#ccff00]/90">
                             {category && <span>{formatCategory(category)}</span>}
                             {category && gender && <span className="text-white/30">•</span>}
                             {gender && <span>{formatGender(gender)}</span>}

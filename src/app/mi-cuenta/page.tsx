@@ -266,7 +266,7 @@ export default function MiCuentaPage() {
                             <div className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-5">
                                 <div className="flex flex-wrap items-end justify-between gap-3">
                                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white/5 overflow-hidden flex items-center justify-center flex-shrink-0 border border-white/10">
+                                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/5 overflow-hidden flex items-center justify-center flex-shrink-0 border border-white/10">
                                             {player.photo ? (
                                                 <img src={player.photo} alt="" className="w-full h-full object-cover" />
                                             ) : (

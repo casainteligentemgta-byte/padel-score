@@ -134,6 +134,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const { id, matchId } = use(params);
     const [tournament, setTournament] = useState<any>(null);
     const [match, setMatch] = useState<any>(null);
+    const [matchNumberInTournament, setMatchNumberInTournament] = useState<number | null>(null);
     const [nextMatch, setNextMatch] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [mode, setMode] = useState<'score' | 'ad'>('score');
@@ -161,7 +162,21 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
             lower.includes('player') ||
             (lower.includes('jugador') && !/\d/.test(lower))
         ) return null;
-        return trimmed;
+
+        const parts = trimmed.split(/\s+/).filter(Boolean);
+        if (parts.length <= 1) return trimmed;
+
+        const firstName = parts[0];
+        // Si viene "NOMBRE APELLIDO" (2 partes), mostramos solo primer nombre + primer apellido
+        if (parts.length === 2) {
+            return `${firstName} ${parts[1]}`;
+        }
+
+        // Caso típico: "NOMBRE SEGUNDONOMBRE APELLIDO ..."
+        const secondNameInitial = parts[1]?.[0] ? `${parts[1][0]}.` : '';
+        const firstLastName = parts[2] ?? '';
+        const formatted = [firstName, secondNameInitial, firstLastName].filter(Boolean).join(' ');
+        return formatted || trimmed;
     };
 
     // ── Marcador en vivo del RTDB (escrito por el marker en tiempo real) ─────
@@ -587,6 +602,8 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
             }
 
             if (found) {
+                const idxInTournament = ms.findIndex((m: any) => String(m?.id) === String(found?.id));
+                setMatchNumberInTournament(idxInTournament >= 0 ? idxInTournament + 1 : null);
                 const getSimulatedName = (gender: string | undefined, index: number) => {
                     const list = gender === 'female' ? PRO_NAMES_FEMALE : PRO_NAMES_MALE;
                     return list[index % list.length];
@@ -992,8 +1009,10 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     <MatchDurationCounter isLive={isLiveForDuration} startTimeMs={matchStartTimeMs} primaryColor={primaryColor} cronometroTipo={cronometroTipo} />
                                 ) : matchTimeDisplay ? (
                                     <div className="flex flex-col items-center leading-none">
-                                        <span className="font-bold uppercase text-white/50 tracking-[0.35em]" style={{ fontSize: 'clamp(6px,0.6vw,10px)' }}>Partido</span>
-                                        <span className="font-black italic tracking-tighter" style={{ fontSize: 'clamp(18px,2.5vw,40px)', color: primaryColor }}>{matchTimeDisplay}</span>
+                                        <span className="font-bold uppercase text-white/50 tracking-[0.35em]" style={{ fontSize: 'clamp(8px,0.78vw,13px)' }}>
+                                            {matchNumberInTournament ? `PARTIDO ${matchNumberInTournament}` : 'PARTIDO'}
+                                        </span>
+                                        <span className="font-black italic tracking-tighter" style={{ fontSize: 'clamp(36px,5vw,80px)', color: primaryColor }}>{matchTimeDisplay}</span>
                                     </div>
                                 ) : null}
                             </div>
@@ -1008,7 +1027,10 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     }`}
                                     style={{
                                         borderRadius: 'clamp(10px,1.4vw,22px)',
-                                        padding: '0.5vw 1.2vw',
+                                        paddingTop: '0.5vw',
+                                        paddingLeft: '1.2vw',
+                                        paddingRight: '1.2vw',
+                                        paddingBottom: '1.0vw',
                                         minWidth: 'fit-content'
                                     }}>
                                     <div className="flex flex-col items-center w-full">
@@ -1303,7 +1325,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
 
                         {/* ══════════════ FOOTER BAR (10%) ══════════════ */}
                         <div
-                            className="flex-shrink-0 overflow-hidden border-t border-white/10 bg-black/40 backdrop-blur-md relative flex items-center"
+                            className="flex-shrink-0 overflow-hidden border-t border-white/10 bg-black/40 backdrop-blur-md relative flex items-center mb-[0.8vh]"
                             style={{
                                 height: '9.5vh',
                                 borderRadius: 'clamp(10px,1.2vw,18px) clamp(10px,1.2vw,18px) 0 0',

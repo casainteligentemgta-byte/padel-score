@@ -171,31 +171,46 @@ export default function MyTournamentsPage() {
                                                     <div className="px-2 py-0.5 bg-padel-primary/10 text-padel-primary text-[8px] font-black rounded uppercase tracking-widest leading-none">
                                                         {isGrouped ? 'EVENTO UNIFICADO' : (first.type || 'AMERICANO_INDIVIDUAL').replace('_', ' ')}
                                                     </div>
-                                                    {!isGrouped && (
-                                                        <div className="px-2 py-0.5 bg-white/5 text-gray-400 text-[8px] font-black rounded uppercase tracking-widest leading-none">
-                                                            {first.category}
-                                                        </div>
-                                                    )}
                                                 </div>
 
                                                 {/* Título */}
-                                                <h3 className="text-base font-black italic uppercase tracking-tighter mb-2 group-hover:text-padel-primary transition-colors leading-tight">
+                                                <h3
+                                                    className="text-base font-black italic uppercase tracking-tighter mb-3 group-hover:text-padel-primary transition-colors leading-tight"
+                                                    style={{ textShadow: 'none' }}
+                                                >
                                                     {isGrouped
                                                         ? `Torneo ${(first.name || '').split(' - ')[0] || first.name}`
                                                         : first.name}
                                                 </h3>
 
                                                 {/* Meta info */}
-                                                <div className="flex flex-col gap-1 mb-3">
-                                                    <div className="flex items-center gap-2 text-gray-500 text-[11px]">
-                                                        <Calendar className="w-3 h-3 text-padel-primary flex-shrink-0" />
-                                                        <span>{formatTournamentDate(first.startDate)}</span>
+                                                {!isGrouped ? (
+                                                    <div className="mb-3 space-y-1.5" style={{ textShadow: 'none' }}>
+                                                        <div className="text-gray-400 text-[11px] font-black uppercase tracking-wider leading-tight" style={{ textShadow: 'none' }}>
+                                                            {first.complexName || 'Margarita Padel'}
+                                                        </div>
+                                                        <div className="text-gray-500 text-[11px] font-black uppercase tracking-wider leading-tight" style={{ textShadow: 'none' }}>
+                                                            {first.category}
+                                                            {first.gender && (
+                                                                <> {first.gender === 'MALE' ? 'Masculino' : first.gender === 'FEMALE' ? 'Femenino' : 'Mixto'}</>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-gray-500 text-[11px] font-black uppercase tracking-wider leading-tight" style={{ textShadow: 'none' }}>
+                                                            {formatTournamentDate(first.startDate)}
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center gap-2 text-gray-500 text-[11px]">
-                                                        <MapPin className="w-3 h-3 text-padel-primary flex-shrink-0" />
-                                                        <span>{first.complexName || 'Margarita Padel'}</span>
+                                                ) : (
+                                                    <div className="flex flex-col gap-1 mb-3">
+                                                        <div className="flex items-center gap-2 text-gray-500 text-[11px]">
+                                                            <Calendar className="w-3 h-3 text-padel-primary flex-shrink-0" />
+                                                            <span>{formatTournamentDate(first.startDate)}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 text-gray-500 text-[11px]">
+                                                            <MapPin className="w-3 h-3 text-padel-primary flex-shrink-0" />
+                                                            <span>{first.complexName || 'Margarita Padel'}</span>
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                )}
 
                                                 {/* Botones de acceso */}
                                                 <div className="mt-auto space-y-1.5">

@@ -229,7 +229,7 @@ export default function HubPage() {
 
             <div className="relative z-10 flex flex-col items-center w-full flex-1 min-h-0 ipad-scroll-area">
                 {/* Header: nombre, foto y código — compacto para caber en iPhone */}
-                <header className="w-full max-w-md px-4 sm:px-6 pt-6 sm:pt-12 pb-2 sm:pb-4 flex items-center justify-center min-h-0">
+                <header className="w-full max-w-md px-4 sm:px-6 pt-4 sm:pt-10 pb-2 sm:pb-4 flex items-center justify-center min-h-0">
                     <div className="flex flex-col items-center w-full">
                         {/* 1. HOLA, NOMBRE */}
                         <h1 className="text-lg sm:text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white text-center mb-1 sm:mb-4">
@@ -241,9 +241,9 @@ export default function HubPage() {
                             animate={{ opacity: 1, scale: 1 }}
                             className="flex justify-center mb-1 sm:mb-4"
                         >
-                            <div className="relative w-16 h-16 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-full overflow-hidden border-2 border-brand/40 shadow-[0_0_24px_rgba(204,255,0,0.15)] ring-2 ring-black/20 bg-zinc-800">
+                            <div className="relative w-24 h-24 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-full overflow-hidden border-2 border-brand/40 shadow-[0_0_24px_rgba(204,255,0,0.15)] ring-2 ring-black/20 bg-zinc-800">
                                 {photoUrl ? (
-                                    <img src={photoUrl} alt="" className="absolute inset-0 w-full h-full object-cover object-center" />
+                                    <img src={photoUrl} alt="" className="absolute w-full h-full object-cover object-center" />
                                 ) : (
                                     <div className="absolute inset-0 flex items-center justify-center">
                                         <User className="w-8 h-8 sm:w-12 sm:h-12 md:w-14 md:h-14 text-zinc-600" strokeWidth={1.5} />
@@ -289,7 +289,7 @@ export default function HubPage() {
                             <motion.div
                                 initial={{ opacity: 0, y: 12 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="mt-2 sm:mt-4 flex justify-center max-w-[260px] sm:max-w-[320px] mx-auto scale-[0.85] sm:scale-100 origin-top"
+                                className="mt-2 sm:mt-4 w-full"
                             >
                                 <PlayerCard
                                     player={{
@@ -314,7 +314,7 @@ export default function HubPage() {
                         {/* Compañeros recientes: burbujas de avatar para inscribirse rápido con su código */}
                         {recentPartners.length > 0 && (
                             <div className="mb-3 sm:mb-6">
-                                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white/50 mb-1 sm:mb-2">
+                                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white/50 mb-1 sm:mb-2 text-center w-full">
                                     Inscribirse con un compañero
                                 </p>
                                 <div className="flex flex-wrap gap-1.5 sm:gap-2">
@@ -410,7 +410,7 @@ export default function HubPage() {
                         )}
 
                         {/* Hub Grid - compacto en móvil para caber en una pantalla */}
-                        <div className="grid grid-cols-2 gap-1 sm:gap-1.5 pb-4 sm:pb-8 max-w-[180px] sm:max-w-[200px] mx-auto mt-0 sm:mt-1">
+                        <div className="grid grid-cols-2 gap-2 sm:gap-3 pb-4 sm:pb-8 w-full mt-0 sm:mt-1">
                             {hubItems.map((item, index) => (
                                 <motion.button
                                     key={item.name}
