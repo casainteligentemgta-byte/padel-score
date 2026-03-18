@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
-import { useRouter } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
     Crosshair, Wifi, WifiOff, ChevronUp, ChevronDown,
@@ -16,8 +16,9 @@ const PUNTOS_NORMAL = ['0', '15', '30', '40', 'AD'];
 const PUNTOS_TB = Array.from({ length: 21 }, (_, i) => String(i)); // 0..20 (más que suficiente)
 const NUM_CANCHAS = 6;
 
-export default function MarkerControlPage({ params }: { params: Promise<{ canchaId: string }> }) {
-    const { canchaId } = use(params);
+export default function MarkerControlPage() {
+    const routeParams = useParams<{ canchaId: string }>();
+    const canchaId = String(routeParams?.canchaId ?? '');
     const { user, profile, loading: authLoading, canMarkInCancha, markerCanchas } = useAuth();
     const router = useRouter();
     const [accessDenied, setAccessDenied] = useState(false);
@@ -28,14 +29,56 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
     const [equipo1, setEquipo1] = useState({ nombre: 'Equipo 1', color: '#CCFF00' });
     const [equipo2, setEquipo2] = useState({ nombre: 'Equipo 2', color: '#FF5500' });
     const [showSetup, setShowSetup] = useState(false);
+    const [cronSeconds, setCronSeconds] = useState(0);
+
+    const searchParams = useSearchParams();
+    const team1Raw = searchParams.get('team1');
+    const team2Raw = searchParams.get('team2');
+
+    // Formatea nombres como: "Nombre1 Nombre2 Apellido1 Apellido2..." -> "Nombre1 N. Apellido1 Apellido2..."
+    // Si solo hay 2 partes, deja el nombre tal cual.
+    const formatPlayerForMarker = (full: string): string => {
+        const trimmed = (full || '').trim();
+        if (!trimmed) return '';
+        const parts = trimmed.split(/\s+/).filter(Boolean);
+        if (parts.length === 2) return `${parts[0]} ${parts[1]}`;
+        if (parts.length < 2) return trimmed;
+        const firstName = parts[0];
+        const secondInitial = parts[1]?.[0] ? `${parts[1][0].toUpperCase()}.` : '';
+        const lastNameFull = parts.slice(2).join(' ');
+        return [firstName, secondInitial, lastNameFull].filter(Boolean).join(' ');
+    };
+
+    // Si el equipo viene como "Jugador A / Jugador B", formateamos cada jugador.
+    const formatTeamNameForMarker = (teamName: string): string => {
+        const trimmed = (teamName || '').trim();
+        if (!trimmed) return '';
+        const parts = trimmed.split('/').map(p => p.trim()).filter(Boolean);
+        if (parts.length <= 1) return formatPlayerForMarker(trimmed);
+        return parts.map(formatPlayerForMarker).join(' / ');
+    };
 
     const canchaLabel = canchaId; // ej: "cancha_1"
     const canchaNum = canchaId.split('_')[1];
     const isEnVivo = canchaData?.estado === 'en_vivo';
     const marcador = canchaData?.marcador;
 
+    // Migrar nombres desde el torneo (vienen por querystring al abrir el marker)
+    useEffect(() => {
+        if (team1Raw) {
+            const formatted = formatTeamNameForMarker(team1Raw);
+            if (formatted) setEquipo1(prev => (prev.nombre === formatted ? prev : { ...prev, nombre: formatted }));
+        }
+        if (team2Raw) {
+            const formatted = formatTeamNameForMarker(team2Raw);
+            if (formatted) setEquipo2(prev => (prev.nombre === formatted ? prev : { ...prev, nombre: formatted }));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [team1Raw, team2Raw]);
+
     // ── Guard: solo admin o marcador autorizado para esta cancha ───────────
     useEffect(() => {
+        if (!canchaId) return;
         if (!user) {
             router.replace('/');
             return;
@@ -84,6 +127,7 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
                     golden_point: false,
                     equipo_1: equipo1,
                     equipo_2: equipo2,
+                    cronometro: { running: false, startedAt: null, elapsedSec: 0 },
                     saque: { equipo: 1, jugador: 1 },
                     ultimo_update: Date.now(),
                 },
@@ -117,14 +161,30 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
     };
 
     // ── Operaciones de puntos (Supabase pizarra_cancha_state) ────────────────
+    // Actualiza primero el estado local para que el marcador responda al instante,
+    // y luego sincroniza con Supabase (best-effort).
     const actualizarMarcadorLocal = async (patch: Record<string, unknown>) => {
-        const cur = await dataService.getPizarraCanchaState(canchaId);
-        const data = cur?.data || {};
-        const marcadorPrev = data.marcador || {};
-        await dataService.setPizarraCanchaState(canchaId, {
-            ...data,
-            marcador: { ...marcadorPrev, ...patch, ultimo_update: Date.now() },
+        // Optimistic UI: actualizar inmediatamente el estado local
+        setCanchaData(prev => {
+            const data = prev || {};
+            const marcadorPrev = data.marcador || {};
+            return {
+                ...data,
+                marcador: { ...marcadorPrev, ...patch, ultimo_update: Date.now() },
+            };
         });
+
+        try {
+            const cur = await dataService.getPizarraCanchaState(canchaId);
+            const data = cur?.data || {};
+            const marcadorPrev = data.marcador || {};
+            await dataService.setPizarraCanchaState(canchaId, {
+                ...data,
+                marcador: { ...marcadorPrev, ...patch, ultimo_update: Date.now() },
+            });
+        } catch (err) {
+            console.error('[Marker] Error actualizando marcador en Supabase:', err);
+        }
     };
 
     const cambiarPunto = async (equipo: 'local' | 'visitante', delta: 1 | -1) => {
@@ -163,6 +223,93 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
     const toggleGoldenPoint = async () => {
         if (!marcador) return;
         await actualizarMarcadorLocal({ golden_point: !marcador.golden_point });
+    };
+
+    const formatCron = (seconds: number): string => {
+        const s = Math.max(0, Math.floor(seconds));
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const ss = s % 60;
+        if (h > 0) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+        return `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+    };
+
+    // Cronómetro: se calcula desde `marcador.cronometro` (persiste en la BD)
+    useEffect(() => {
+        const cron = marcador?.cronometro;
+        if (!cron) {
+            setCronSeconds(0);
+            return;
+        }
+
+        const compute = () => {
+            const elapsedSec = Number(cron.elapsedSec ?? 0) || 0;
+            if (cron.running && cron.startedAt != null) {
+                const startMs = Number(cron.startedAt);
+                if (!isNaN(startMs)) {
+                    return elapsedSec + Math.floor((Date.now() - startMs) / 1000);
+                }
+            }
+            return elapsedSec;
+        };
+
+        setCronSeconds(compute());
+        if (cron.running) {
+            const t = setInterval(() => setCronSeconds(compute()), 250);
+            return () => clearInterval(t);
+        }
+        return;
+    }, [marcador?.cronometro, canchaId]);
+
+    const toggleCronometro = async () => {
+        if (!marcador) return;
+        const curCron = marcador.cronometro ?? { running: false, startedAt: null, elapsedSec: 0 };
+        const elapsedSec = Number(curCron.elapsedSec ?? 0) || 0;
+
+        if (curCron.running && curCron.startedAt != null) {
+            const startMs = Number(curCron.startedAt);
+            const add = !isNaN(startMs) ? Math.floor((Date.now() - startMs) / 1000) : 0;
+            const nextElapsed = Math.max(0, elapsedSec + add);
+            await actualizarMarcadorLocal({
+                cronometro: { running: false, startedAt: null, elapsedSec: nextElapsed },
+            });
+        } else {
+            await actualizarMarcadorLocal({
+                cronometro: { running: true, startedAt: Date.now(), elapsedSec },
+            });
+        }
+    };
+
+    // Si la cancha está en vivo pero no existe cronometro (por datos antiguos),
+    // inicializamos para evitar que el UI quede en 00:00.
+    useEffect(() => {
+        if (!isEnVivo || !marcador) return;
+        if (marcador.cronometro) return;
+        actualizarMarcadorLocal({ cronometro: { running: false, startedAt: null, elapsedSec: 0 } });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isEnVivo, canchaId, marcador]);
+
+    const toggleAsistenciaMedica = async () => {
+        if (!marcador) return;
+        await actualizarMarcadorLocal({
+            asistencia_medica_active: !marcador.asistencia_medica_active,
+        });
+    };
+
+    const toggleMesaTecnica = async () => {
+        if (!marcador) return;
+        await actualizarMarcadorLocal({
+            mesa_tecnica_active: !marcador.mesa_tecnica_active,
+        });
+    };
+
+    const requestCambioCancha = async () => {
+        if (!marcador) return;
+        const cur = Number(marcador.cambio_cancha_count ?? 0) || 0;
+        await actualizarMarcadorLocal({
+            cambio_cancha_count: cur + 1,
+            cambio_cancha_requestedAt: Date.now(),
+        });
     };
 
     const setModoPuntosLocal = async (modo: 'normal' | 'tiebreak' | 'super_tiebreak') => {
@@ -309,38 +456,27 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
                             })}
                         </div>
 
-                        {/* Sets */}
-                        <ScoreRow
-                            label="SETS"
-                            localVal={marcador.sets.local}
-                            visitanteVal={marcador.sets.visitante}
-                            onUpLocal={() => cambiarSet('local', 1)}
-                            onDownLocal={() => cambiarSet('local', -1)}
-                            onUpVisitante={() => cambiarSet('visitante', 1)}
-                            onDownVisitante={() => cambiarSet('visitante', -1)}
-                            highlight
-                        />
-
-                        {/* Games */}
-                        <ScoreRow
-                            label="GAMES"
-                            localVal={marcador.games.local}
-                            visitanteVal={marcador.games.visitante}
-                            onUpLocal={() => cambiarGame('local', 1)}
-                            onDownLocal={() => cambiarGame('local', -1)}
-                            onUpVisitante={() => cambiarGame('visitante', 1)}
-                            onDownVisitante={() => cambiarGame('visitante', -1)}
-                        />
-
-                        {/* Puntos */}
-                        <ScoreRow
-                            label={`PUNTOS${marcador.modo_puntos === 'tiebreak' ? ' — TIEBREAK' : marcador.modo_puntos === 'super_tiebreak' ? ' — SUPER TIE BREAK' : ''}`}
-                            localVal={marcador.puntos.local}
-                            visitanteVal={marcador.puntos.visitante}
-                            onUpLocal={() => cambiarPunto('local', 1)}
-                            onDownLocal={() => cambiarPunto('local', -1)}
-                            onUpVisitante={() => cambiarPunto('visitante', 1)}
-                            onDownVisitante={() => cambiarPunto('visitante', -1)}
+                        {/* Marcador compacto: puntos a los lados, games/sets al centro */}
+                        <CompactScoreRow
+                            modoPuntos={marcador.modo_puntos}
+                            puntosLocal={marcador.puntos.local}
+                            puntosVisitante={marcador.puntos.visitante}
+                            gamesLocal={marcador.games.local}
+                            gamesVisitante={marcador.games.visitante}
+                            setsLocal={marcador.sets.local}
+                            setsVisitante={marcador.sets.visitante}
+                            onPuntoUpLocal={() => cambiarPunto('local', 1)}
+                            onPuntoDownLocal={() => cambiarPunto('local', -1)}
+                            onPuntoUpVisitante={() => cambiarPunto('visitante', 1)}
+                            onPuntoDownVisitante={() => cambiarPunto('visitante', -1)}
+                            onGameUpLocal={() => cambiarGame('local', 1)}
+                            onGameDownLocal={() => cambiarGame('local', -1)}
+                            onGameUpVisitante={() => cambiarGame('visitante', 1)}
+                            onGameDownVisitante={() => cambiarGame('visitante', -1)}
+                            onSetUpLocal={() => cambiarSet('local', 1)}
+                            onSetDownLocal={() => cambiarSet('local', -1)}
+                            onSetUpVisitante={() => cambiarSet('visitante', 1)}
+                            onSetDownVisitante={() => cambiarSet('visitante', -1)}
                         />
 
                         {/* Modo de puntos: Tiebreak / Super Tie Break (STB) */}
@@ -395,6 +531,71 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
                 )}
             </div>
 
+            {/* ── Acciones fijas del marker (siempre visibles) ───────────────── */}
+            <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-6 pb-4 z-50">
+                <div className="bg-[#0a0a0a]/90 border border-white/10 rounded-3xl px-3 py-3 space-y-2 backdrop-blur-md">
+                    <div className="grid grid-cols-3 gap-2">
+                        <button
+                            onClick={toggleAsistenciaMedica}
+                            disabled={!isEnVivo || !marcador}
+                            className={`w-full py-2 rounded-2xl font-black uppercase tracking-widest text-[9px] border transition-all ${
+                                !isEnVivo || !marcador
+                                    ? 'bg-white/5 border-white/10 text-gray-600'
+                                    : marcador?.asistencia_medica_active
+                                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                                        : 'bg-white/5 border-white/10 text-white hover:bg-white/10'
+                            }`}
+                        >
+                            ASISTENCIA
+                        </button>
+                        <button
+                            onClick={toggleMesaTecnica}
+                            disabled={!isEnVivo || !marcador}
+                            className={`w-full py-2 rounded-2xl font-black uppercase tracking-widest text-[9px] border transition-all ${
+                                !isEnVivo || !marcador
+                                    ? 'bg-white/5 border-white/10 text-gray-600'
+                                    : marcador?.mesa_tecnica_active
+                                        ? 'bg-padel-primary/15 border-padel-primary/40 text-padel-primary'
+                                        : 'bg-white/5 border-white/10 text-white hover:bg-white/10'
+                            }`}
+                        >
+                            MESA
+                        </button>
+                        <button
+                            onClick={requestCambioCancha}
+                            disabled={!isEnVivo || !marcador}
+                            className={`w-full py-2 rounded-2xl font-black uppercase tracking-widest text-[9px] border transition-all ${
+                                !isEnVivo || !marcador
+                                    ? 'bg-white/5 border-white/10 text-gray-600'
+                                    : 'bg-yellow-400/10 border-yellow-400/30 text-yellow-200 hover:bg-yellow-400/15'
+                            }`}
+                        >
+                            CAMBIO
+                        </button>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-col">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-white/50 leading-none">CRONÓMETRO</span>
+                            <span className="text-[18px] font-black italic tracking-tighter text-padel-primary leading-none">{formatCron(cronSeconds)}</span>
+                        </div>
+                        <button
+                            onClick={toggleCronometro}
+                            disabled={!isEnVivo || !marcador}
+                            className={`px-3 py-2 rounded-2xl font-black uppercase italic tracking-widest text-[10px] border transition-all ${
+                                !isEnVivo || !marcador
+                                    ? 'bg-white/5 border-white/10 text-gray-600'
+                                    : marcador?.cronometro?.running
+                                        ? 'bg-red-500/10 border-red-500/30 text-red-300 hover:bg-red-500/15'
+                                        : 'bg-padel-primary/15 border-padel-primary/40 text-padel-primary hover:bg-padel-primary/25'
+                            }`}
+                        >
+                            {marcador?.cronometro?.running ? 'PAUSAR' : 'INICIAR'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <style jsx global>{`
                 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
                 .font-outfit { font-family: 'Outfit', sans-serif; }
@@ -404,10 +605,106 @@ export default function MarkerControlPage({ params }: { params: Promise<{ cancha
 }
 
 // ── Componente reutilizable de fila de puntaje ─────────────────────────────
-function ScoreRow({
-    label, localVal, visitanteVal,
-    onUpLocal, onDownLocal, onUpVisitante, onDownVisitante,
-    highlight = false,
+function CompactScoreRow({
+    modoPuntos,
+    puntosLocal,
+    puntosVisitante,
+    gamesLocal,
+    gamesVisitante,
+    setsLocal,
+    setsVisitante,
+    onPuntoUpLocal,
+    onPuntoDownLocal,
+    onPuntoUpVisitante,
+    onPuntoDownVisitante,
+    onGameUpLocal,
+    onGameDownLocal,
+    onGameUpVisitante,
+    onGameDownVisitante,
+    onSetUpLocal,
+    onSetDownLocal,
+    onSetUpVisitante,
+    onSetDownVisitante,
+}: {
+    modoPuntos: string;
+    puntosLocal: string | number;
+    puntosVisitante: string | number;
+    gamesLocal: string | number;
+    gamesVisitante: string | number;
+    setsLocal: string | number;
+    setsVisitante: string | number;
+    onPuntoUpLocal: () => void;
+    onPuntoDownLocal: () => void;
+    onPuntoUpVisitante: () => void;
+    onPuntoDownVisitante: () => void;
+    onGameUpLocal: () => void;
+    onGameDownLocal: () => void;
+    onGameUpVisitante: () => void;
+    onGameDownVisitante: () => void;
+    onSetUpLocal: () => void;
+    onSetDownLocal: () => void;
+    onSetUpVisitante: () => void;
+    onSetDownVisitante: () => void;
+}) {
+    const puntosLabel =
+        `PUNTOS${modoPuntos === 'tiebreak' ? ' — TIEBREAK' : modoPuntos === 'super_tiebreak' ? ' — SUPER TIE BREAK' : ''}`;
+
+    return (
+        <div className="rounded-3xl border bg-white/5 border-white/10 p-4 space-y-3">
+            <p className="text-center text-[9px] font-black uppercase tracking-[0.35em] text-gray-500">
+                {puntosLabel}
+            </p>
+            <div className="grid grid-cols-[1fr_auto_auto_1fr] items-center gap-3">
+                {/* Puntos equipo 1 (izquierda) */}
+                <TeamScoreControl
+                    value={puntosLocal}
+                    onUp={onPuntoUpLocal}
+                    onDown={onPuntoDownLocal}
+                    highlight
+                />
+
+                {/* Games al centro */}
+                <MiniScoreControl
+                    label="GAMES"
+                    localVal={gamesLocal}
+                    visitanteVal={gamesVisitante}
+                    onUpLocal={onGameUpLocal}
+                    onDownLocal={onGameDownLocal}
+                    onUpVisitante={onGameUpVisitante}
+                    onDownVisitante={onGameDownVisitante}
+                />
+
+                {/* Sets al centro, al lado de games */}
+                <MiniScoreControl
+                    label="SETS"
+                    localVal={setsLocal}
+                    visitanteVal={setsVisitante}
+                    onUpLocal={onSetUpLocal}
+                    onDownLocal={onSetDownLocal}
+                    onUpVisitante={onSetUpVisitante}
+                    onDownVisitante={onSetDownVisitante}
+                />
+
+                {/* Puntos equipo 2 (derecha) */}
+                <TeamScoreControl
+                    value={puntosVisitante}
+                    onUp={onPuntoUpVisitante}
+                    onDown={onPuntoDownVisitante}
+                    highlight
+                />
+            </div>
+        </div>
+    );
+}
+
+function MiniScoreControl({
+    label,
+    localVal,
+    visitanteVal,
+    onUpLocal,
+    onDownLocal,
+    onUpVisitante,
+    onDownVisitante,
 }: {
     label: string;
     localVal: string | number;
@@ -416,27 +713,45 @@ function ScoreRow({
     onDownLocal: () => void;
     onUpVisitante: () => void;
     onDownVisitante: () => void;
-    highlight?: boolean;
 }) {
     return (
-        <div className={`rounded-3xl border p-5 ${highlight ? 'bg-padel-primary/5 border-padel-primary/20' : 'bg-white/5 border-white/10'}`}>
-            <p className={`text-center text-[9px] font-black uppercase tracking-[0.4em] mb-4 ${highlight ? 'text-padel-primary' : 'text-gray-600'}`}>
+        <div className="flex flex-col items-center gap-1 px-1">
+            <span className="text-[8px] font-black uppercase tracking-[0.3em] text-gray-500 mb-0.5">
                 {label}
-            </p>
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-                <TeamScoreControl
-                    value={localVal}
-                    onUp={onUpLocal}
-                    onDown={onDownLocal}
-                    highlight={highlight}
-                />
-                <span className="text-gray-700 font-black text-2xl">—</span>
-                <TeamScoreControl
-                    value={visitanteVal}
-                    onUp={onUpVisitante}
-                    onDown={onDownVisitante}
-                    highlight={highlight}
-                />
+            </span>
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={onDownLocal}
+                    className="w-6 h-6 rounded-xl flex items-center justify-center border border-white/20 bg-black/40 text-xs"
+                >
+                    −
+                </button>
+                <span className="text-sm font-black min-w-[1.5rem] text-center">
+                    {localVal}
+                </span>
+                <button
+                    onClick={onUpLocal}
+                    className="w-6 h-6 rounded-xl flex items-center justify-center border border-white/20 bg-black/40 text-xs"
+                >
+                    +
+                </button>
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+                <button
+                    onClick={onDownVisitante}
+                    className="w-6 h-6 rounded-xl flex items-center justify-center border border-white/20 bg-black/40 text-xs"
+                >
+                    −
+                </button>
+                <span className="text-sm font-black min-w-[1.5rem] text-center">
+                    {visitanteVal}
+                </span>
+                <button
+                    onClick={onUpVisitante}
+                    className="w-6 h-6 rounded-xl flex items-center justify-center border border-white/20 bg-black/40 text-xs"
+                >
+                    +
+                </button>
             </div>
         </div>
     );

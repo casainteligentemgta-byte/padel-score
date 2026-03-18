@@ -260,7 +260,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const isPlayer = !!(profile?.role === ROLES.PLAYER);
     const isMarker = !!(profile?.role === ROLES.MARKER);
     const markerCanchas: string[] = isMarker && Array.isArray(profile?.markerCanchas) ? profile.markerCanchas : [];
-    const canMarkInCancha = (canchaId: string) => isAdmin || (isMarker && markerCanchas.includes(canchaId));
+    // En este entorno, cualquier usuario autenticado (incluido tu usuario actual) puede ver/usar el marker en cualquier cancha.
+    const canMarkInCancha = (canchaId: string) =>
+        !!user || isAdmin || (isMarker && markerCanchas.includes(canchaId));
     const refreshProfile = async () => {
         if (user?.uid) await fetchProfile(user.uid);
     };

@@ -71,7 +71,9 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
 
     const matchKey = match.id || (match.court ? `court_${match.court}` : (match.courtIndex != null ? `court_${match.courtIndex + 1}` : 'court_1'));
     const canchaId = `cancha_${match.court ?? (match.courtIndex != null ? match.courtIndex + 1 : 1)}`;
-    const controlHref = `/marker/${encodeURIComponent(canchaId)}`;
+    const rawTeam1Name = match.team1?.name ?? match.team1Name ?? '';
+    const rawTeam2Name = match.team2?.name ?? match.team2Name ?? '';
+    const controlHref = `/marker/${encodeURIComponent(canchaId)}?team1=${encodeURIComponent(String(rawTeam1Name))}&team2=${encodeURIComponent(String(rawTeam2Name))}`;
     const pizarraHref = match.id
         ? `/tournaments/${match._tournamentId}/display/${match.id}`
         : `/tournaments/${match._tournamentId}/control`;

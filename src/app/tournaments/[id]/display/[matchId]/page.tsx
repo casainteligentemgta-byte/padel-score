@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, use, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import lottie from 'lottie-web';
 import { dataService } from '@/lib/dataService';
@@ -130,8 +131,10 @@ function MatchDurationCounter({
     );
 }
 
-export default function FullScreenDisplay({ params }: { params: Promise<{ id: string, matchId: string }> }) {
-    const { id, matchId } = use(params);
+export default function FullScreenDisplay() {
+    const routeParams = useParams<{ id: string; matchId: string }>();
+    const id = String(routeParams?.id ?? '');
+    const matchId = String(routeParams?.matchId ?? '');
     const [tournament, setTournament] = useState<any>(null);
     const [match, setMatch] = useState<any>(null);
     const [matchNumberInTournament, setMatchNumberInTournament] = useState<number | null>(null);
@@ -1076,15 +1079,19 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                             </div>
 
                             {/* Column headers (Names -> S1 -> S2 -> G -> PTS) */}
-                            <div className="flex items-center border-b border-white/[0.1] bg-black/40 h-[10%] px-6">
-                                <div className="flex-1" />
+                            <div className="grid grid-cols-[1fr_8%_8%_12%] items-center border-b border-white/[0.1] bg-black/40 h-[10%] px-6">
+                                <div />
                                 {[1, 2].map(s => (
-                                    <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full" style={{ width: '8%' }}>
-                                        <span className="font-black uppercase tracking-widest text-white/40" style={{ fontSize: 'clamp(12px,1.2vw,20px)' }}>SET {s}</span>
+                                    <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
+                                        <span className="font-black uppercase tracking-widest text-white/40 leading-none text-center w-full" style={{ fontSize: 'clamp(12px,1.2vw,20px)' }}>
+                                            SET {s}
+                                        </span>
                                     </div>
                                 ))}
-                                <div className="flex items-center justify-center border-l border-white/[0.15] h-full" style={{ width: '12%', backgroundColor: `${primaryColor}20` }}>
-                                    <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(12px,1.2vw,20px)', color: primaryColor }}>GAME:</span>
+                                <div className="flex items-center justify-center border-l border-white/[0.15] h-full" style={{ backgroundColor: `${primaryColor}20` }}>
+                                    <span className="font-black uppercase tracking-widest leading-none text-center w-full" style={{ fontSize: 'clamp(12px,1.2vw,20px)', color: primaryColor }}>
+                                        GAME:
+                                    </span>
                                 </div>
                             </div>
 
@@ -1093,7 +1100,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 <div className="flex-1 flex flex-col justify-center h-full px-6 relative">
                                     <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden shadow-2xl">
                                         <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
-                                        <p className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
+                                        <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
                                             <span className="flex items-center">
                                                 <AnimatePresence>
                                                     {( (lm?.saque?.equipo === 1 && lm?.saque?.jugador === 1) || (match.server?.team === 1 && match.server?.player === 1) ) && (
@@ -1117,7 +1124,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                                 </AnimatePresence>
                                                 {processDisplayName(match.t1p2) || match.t1p2}
                                             </span>
-                                        </p>
+                                        </div>
                                     </div>
                                 </div>
                                 {/* Sets History */}
@@ -1141,7 +1148,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                 <div className="flex-1 flex flex-col justify-center h-full px-6 relative">
                                     <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden">
                                         <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
-                                        <p className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
+                                        <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
                                             <span className="flex items-center">
                                                 <AnimatePresence>
                                                     {( (lm?.saque?.equipo === 2 && lm?.saque?.jugador === 1) || (match.server?.team === 2 && match.server?.player === 1) ) && (
@@ -1165,7 +1172,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                                 </AnimatePresence>
                                                 {processDisplayName(match.t2p2) || match.t2p2}
                                             </span>
-                                        </p>
+                                        </div>
                                     </div>
                                 </div>
                                 {/* Sets History */}
