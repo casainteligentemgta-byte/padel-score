@@ -579,6 +579,21 @@ export const dataService = {
         return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
     },
 
+    async searchParticipants(query: string, limit = 10) {
+        const term = String(query || '').trim();
+        if (term.length < 2) return [];
+        const escaped = term.replace(/[%_]/g, '\\$&');
+        const ilikePattern = `%${escaped}%`;
+        const { data, error } = await supabase()
+            .from('participants')
+            .select('*')
+            .or(`data->>name.ilike.${ilikePattern},data->>lastName.ilike.${ilikePattern},data->>email.ilike.${ilikePattern}`)
+            .order('created_at', { ascending: false })
+            .limit(Math.max(1, Math.min(25, limit)));
+        if (error) throw error;
+        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+    },
+
     async updateParticipant(id: string, data: any) {
         const { id: _id, ...rest } = data;
         const { data: row } = await supabase().from('participants').select('data').eq('id', id).single();
@@ -1413,6 +1428,59 @@ export const dataService = {
         if (data.receiptUrl != null) upd.receipt_url = data.receiptUrl;
         const { error } = await supabase().from('inscriptions').update(upd).eq('id', id);
         if (error) throw error;
+    },
+
+    /**
+     * Vincula una pareja manual (desde admin) al placeholder de inscripción con el mismo label.
+     * Usa participant_id para jugador 1 y data.partnerId para jugador 2.
+     */
+    async replacePlaceholderInscriptionByLabel(
+        tournamentId: string,
+        placeholderLabel: string,
+        player1: { id: string; fullName: string; email?: string | null },
+        player2: { id: string; fullName: string; email?: string | null },
+        categoryKey?: string
+    ): Promise<string | null> {
+        const db = supabase();
+        let query = db
+            .from('inscriptions')
+            .select('id, data')
+            .eq('tournament_id', tournamentId)
+            .eq('is_placeholder', true)
+            .eq('participant_name', placeholderLabel)
+            .order('created_at', { ascending: true })
+            .limit(1);
+        if (categoryKey) query = query.eq('category_key', categoryKey);
+
+        const { data: placeholder, error: searchError } = await query.maybeSingle();
+        if (searchError) throw searchError;
+        if (!placeholder) return null;
+
+        const oldData = (placeholder as any).data ?? {};
+        const mergedData = sanitizeObject({
+            ...oldData,
+            partnerId: player2.id,
+            partnerName: player2.fullName,
+            player1_id: player1.id,
+            player2_id: player2.id,
+            player1_email: player1.email ?? null,
+            player2_email: player2.email ?? null,
+        });
+
+        const { error: updateError } = await db
+            .from('inscriptions')
+            .update({
+                participant_name: sanitizeString(`${player1.fullName} / ${player2.fullName}`),
+                participant_email: sanitizeString(player1.email ?? null),
+                participant_id: player1.id,
+                payment_status: 'paid',
+                is_placeholder: false,
+                data: mergedData,
+                updated_at: now(),
+            })
+            .eq('id', (placeholder as any).id);
+        if (updateError) throw updateError;
+        return (placeholder as any).id as string;
     },
 
     subscribeToTournament(id: string, callback: (t: any) => void) {

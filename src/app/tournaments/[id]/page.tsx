@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -52,6 +52,7 @@ import { getAuthHeaders } from '@/lib/apiAuth';
 
 
 export default function TournamentDashboard({ params }: { params: Promise<{ id: string }> }) {
+    type ParticipantOption = { id: string; name?: string; lastName?: string; email?: string; phone?: string };
     const { id } = use(params);
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -76,6 +77,24 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const [syncAcceptedLoading, setSyncAcceptedLoading] = useState(false);
     const [syncAcceptedMessage, setSyncAcceptedMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [inscriptions, setInscriptions] = useState<Array<{ id: string; participantName?: string; isPlaceholder?: boolean; groupName?: string | null; data?: Record<string, unknown> }>>([]);
+    const [isManualInscriptionOpen, setIsManualInscriptionOpen] = useState(false);
+    const [manualTeamId, setManualTeamId] = useState<string | null>(null);
+    const [savingManualInscription, setSavingManualInscription] = useState(false);
+    const [manualError, setManualError] = useState<string | null>(null);
+    const [p1Query, setP1Query] = useState('');
+    const [p2Query, setP2Query] = useState('');
+    const [p1Matches, setP1Matches] = useState<ParticipantOption[]>([]);
+    const [p2Matches, setP2Matches] = useState<ParticipantOption[]>([]);
+    const [p1Selected, setP1Selected] = useState<ParticipantOption | null>(null);
+    const [p2Selected, setP2Selected] = useState<ParticipantOption | null>(null);
+    const [p1LastName, setP1LastName] = useState('');
+    const [p2LastName, setP2LastName] = useState('');
+    const [p1Email, setP1Email] = useState('');
+    const [p2Email, setP2Email] = useState('');
+    const [p1Phone, setP1Phone] = useState('');
+    const [p2Phone, setP2Phone] = useState('');
+    const p1SearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const p2SearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isOwner = user && tournament && (
         tournament.ownerId === user.uid ||
@@ -1040,25 +1059,169 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         setTournament(updatedTournament);
     };
 
+    const fullName = (name?: string, lastName?: string) => `${(name || '').trim()} ${(lastName || '').trim()}`.trim();
+
+    const resetManualInscriptionForm = () => {
+        setManualError(null);
+        setSavingManualInscription(false);
+        setP1Query('');
+        setP2Query('');
+        setP1Matches([]);
+        setP2Matches([]);
+        setP1Selected(null);
+        setP2Selected(null);
+        setP1LastName('');
+        setP2LastName('');
+        setP1Email('');
+        setP2Email('');
+        setP1Phone('');
+        setP2Phone('');
+    };
+
+    const openManualInscriptionModal = (teamId: string) => {
+        setManualTeamId(teamId);
+        resetManualInscriptionForm();
+        setIsManualInscriptionOpen(true);
+    };
+
+    const pickParticipant = (slot: 1 | 2, participant: ParticipantOption) => {
+        const name = fullName(participant.name, participant.lastName);
+        if (slot === 1) {
+            setP1Selected(participant);
+            setP1Query(name || '');
+            setP1LastName(participant.lastName || '');
+            setP1Email(participant.email || '');
+            setP1Phone(participant.phone || '');
+            setP1Matches([]);
+        } else {
+            setP2Selected(participant);
+            setP2Query(name || '');
+            setP2LastName(participant.lastName || '');
+            setP2Email(participant.email || '');
+            setP2Phone(participant.phone || '');
+            setP2Matches([]);
+        }
+    };
+
+    useEffect(() => {
+        if (!isManualInscriptionOpen) return;
+        if (p1SearchRef.current) clearTimeout(p1SearchRef.current);
+        p1SearchRef.current = setTimeout(async () => {
+            if (p1Selected || p1Query.trim().length < 2) {
+                setP1Matches([]);
+                return;
+            }
+            try {
+                const results = await dataService.searchParticipants(p1Query.trim(), 8);
+                setP1Matches(results);
+            } catch {
+                setP1Matches([]);
+            }
+        }, 220);
+        return () => {
+            if (p1SearchRef.current) clearTimeout(p1SearchRef.current);
+        };
+    }, [p1Query, p1Selected, isManualInscriptionOpen]);
+
+    useEffect(() => {
+        if (!isManualInscriptionOpen) return;
+        if (p2SearchRef.current) clearTimeout(p2SearchRef.current);
+        p2SearchRef.current = setTimeout(async () => {
+            if (p2Selected || p2Query.trim().length < 2) {
+                setP2Matches([]);
+                return;
+            }
+            try {
+                const results = await dataService.searchParticipants(p2Query.trim(), 8);
+                setP2Matches(results);
+            } catch {
+                setP2Matches([]);
+            }
+        }, 220);
+        return () => {
+            if (p2SearchRef.current) clearTimeout(p2SearchRef.current);
+        };
+    }, [p2Query, p2Selected, isManualInscriptionOpen]);
+
     const handleQuickFillPlaceholder = async (teamId: string) => {
         if (!canManageTournament) return;
-        const p1 = window.prompt('Nombre y apellido del jugador 1');
-        if (!p1 || !p1.trim()) return;
-        const p2 = window.prompt('Nombre y apellido del jugador 2');
-        if (!p2 || !p2.trim()) return;
+        openManualInscriptionModal(teamId);
+    };
+
+    const saveManualInscription = async () => {
+        if (!manualTeamId || !tournament || !user?.uid) return;
+        setManualError(null);
+
+        const p1Name = (p1Selected?.name || p1Query || '').trim();
+        const p2Name = (p2Selected?.name || p2Query || '').trim();
+        const p1Last = (p1Selected?.lastName || p1LastName || '').trim();
+        const p2Last = (p2Selected?.lastName || p2LastName || '').trim();
+        const p1Full = fullName(p1Name, p1Last);
+        const p2Full = fullName(p2Name, p2Last);
+        if (!p1Name || !p2Name) {
+            setManualError('Debes indicar ambos jugadores.');
+            return;
+        }
+
+        setSavingManualInscription(true);
         try {
+            const ownerId = tournament?.ownerId || user.uid;
+            const p1Id = p1Selected?.id || (await dataService.addParticipant({
+                name: p1Name,
+                lastName: p1Last,
+                email: p1Email || null,
+                phone: p1Phone || null,
+                category: tournament?.category || null,
+                gender: tournament?.gender || null
+            }, ownerId)).id;
+            const p2Id = p2Selected?.id || (await dataService.addParticipant({
+                name: p2Name,
+                lastName: p2Last,
+                email: p2Email || null,
+                phone: p2Phone || null,
+                category: tournament?.category || null,
+                gender: tournament?.gender || null
+            }, ownerId)).id;
+
+            if (String(p1Id) === String(p2Id)) {
+                setManualError('No puedes vincular el mismo participante dos veces en la misma pareja.');
+                setSavingManualInscription(false);
+                return;
+            }
+
+            const team = (tournament?.teams || []).find((t: any) => String(t.id) === String(manualTeamId));
+            const previousPlaceholderLabel = (team?.p1?.name || '').trim();
+
             await updateTournamentTeams((teams, groupAssignments) => {
-                const idx = teams.findIndex((t: any) => String(t.id) === String(teamId));
+                const idx = teams.findIndex((t: any) => String(t.id) === String(manualTeamId));
                 if (idx < 0) return { teams, groupAssignments };
                 teams[idx] = {
                     ...teams[idx],
-                    p1: { ...(teams[idx]?.p1 || {}), name: p1.trim() },
-                    p2: { ...(teams[idx]?.p2 || {}), name: p2.trim() },
+                    p1: { ...(teams[idx]?.p1 || {}), id: p1Id, name: p1Full || p1Name },
+                    p2: { ...(teams[idx]?.p2 || {}), id: p2Id, name: p2Full || p2Name },
                 };
                 return { teams, groupAssignments };
             });
+
+            // Sincroniza la inscripción placeholder para que participant_name refleje nombre oficial.
+            if (previousPlaceholderLabel) {
+                await dataService.replacePlaceholderInscriptionByLabel(
+                    id,
+                    previousPlaceholderLabel,
+                    { id: p1Id, fullName: p1Full || p1Name, email: p1Email || p1Selected?.email || null },
+                    { id: p2Id, fullName: p2Full || p2Name, email: p2Email || p2Selected?.email || null },
+                    tournament?.category
+                );
+                const fresh = await dataService.getInscriptionsByTournament(id);
+                setInscriptions(fresh);
+            }
+
+            setIsManualInscriptionOpen(false);
+            resetManualInscriptionForm();
         } catch (e: any) {
-            alert(e?.message || 'No se pudo completar el cupo');
+            setManualError(e?.message || 'No se pudo completar la inscripción manual.');
+        } finally {
+            setSavingManualInscription(false);
         }
     };
 
@@ -2054,6 +2217,121 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
             </div>
 
 
+
+            <AnimatePresence>
+                {isManualInscriptionOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm p-4 flex items-center justify-center"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="w-full max-w-2xl rounded-3xl border border-white/10 bg-[#0f0f0f] p-5 md:p-6"
+                        >
+                            <div className="flex items-center justify-between gap-4 mb-4">
+                                <div>
+                                    <h3 className="text-lg font-black uppercase tracking-tight">Inscripción Manual</h3>
+                                    <p className="text-[10px] text-gray-400 uppercase tracking-widest">Vinculación con participants + inscriptions</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => { setIsManualInscriptionOpen(false); resetManualInscriptionForm(); }}
+                                    className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center"
+                                >
+                                    <X className="w-4 h-4 text-gray-300" />
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {([
+                                    { slot: 1 as const, query: p1Query, setQuery: setP1Query, selected: p1Selected, matches: p1Matches, lastName: p1LastName, setLastName: setP1LastName, email: p1Email, setEmail: setP1Email, phone: p1Phone, setPhone: setP1Phone },
+                                    { slot: 2 as const, query: p2Query, setQuery: setP2Query, selected: p2Selected, matches: p2Matches, lastName: p2LastName, setLastName: setP2LastName, email: p2Email, setEmail: setP2Email, phone: p2Phone, setPhone: setP2Phone },
+                                ]).map((cfg) => {
+                                    const locked = !!cfg.selected;
+                                    return (
+                                        <div key={cfg.slot} className="rounded-2xl border border-white/10 bg-white/[0.02] p-3 space-y-2">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-padel-primary">Jugador {cfg.slot}</p>
+                                            <input
+                                                value={cfg.query}
+                                                onChange={(e) => {
+                                                    cfg.setQuery(e.target.value);
+                                                    if (cfg.slot === 1) setP1Selected(null);
+                                                    else setP2Selected(null);
+                                                }}
+                                                placeholder="Nombre del jugador (buscar por nombre o email)"
+                                                className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-padel-primary/60"
+                                            />
+                                            {!locked && cfg.matches.length > 0 && (
+                                                <div className="max-h-40 overflow-y-auto rounded-xl border border-white/10 bg-black/40">
+                                                    {cfg.matches.map((m) => (
+                                                        <button
+                                                            key={m.id}
+                                                            type="button"
+                                                            onClick={() => pickParticipant(cfg.slot, m)}
+                                                            className="w-full text-left px-3 py-2 hover:bg-white/10 border-b border-white/5 last:border-b-0"
+                                                        >
+                                                            <p className="text-xs font-semibold">{fullName(m.name, m.lastName) || 'Sin nombre'}</p>
+                                                            <p className="text-[10px] text-gray-400">{m.email || 'Sin email'}</p>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {locked && (
+                                                <p className="text-[10px] text-emerald-400">Jugador existente vinculado. Email/Teléfono bloqueados.</p>
+                                            )}
+                                            <input
+                                                value={cfg.lastName}
+                                                onChange={(e) => cfg.setLastName(e.target.value)}
+                                                readOnly={locked}
+                                                placeholder="Apellido"
+                                                className={`w-full rounded-xl border px-3 py-2 text-sm outline-none ${locked ? 'border-white/10 bg-white/5 text-gray-400' : 'border-white/15 bg-black/30 focus:border-padel-primary/60'}`}
+                                            />
+                                            <input
+                                                value={cfg.email}
+                                                onChange={(e) => cfg.setEmail(e.target.value)}
+                                                readOnly={locked}
+                                                placeholder="Email"
+                                                className={`w-full rounded-xl border px-3 py-2 text-sm outline-none ${locked ? 'border-white/10 bg-white/5 text-gray-400' : 'border-white/15 bg-black/30 focus:border-padel-primary/60'}`}
+                                            />
+                                            <input
+                                                value={cfg.phone}
+                                                onChange={(e) => cfg.setPhone(e.target.value)}
+                                                readOnly={locked}
+                                                placeholder="Teléfono"
+                                                className={`w-full rounded-xl border px-3 py-2 text-sm outline-none ${locked ? 'border-white/10 bg-white/5 text-gray-400' : 'border-white/15 bg-black/30 focus:border-padel-primary/60'}`}
+                                            />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {manualError && <p className="mt-3 text-sm text-red-400">{manualError}</p>}
+
+                            <div className="mt-5 flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => { setIsManualInscriptionOpen(false); resetManualInscriptionForm(); }}
+                                    className="px-4 py-2 rounded-xl border border-white/15 bg-white/5 text-xs font-black uppercase tracking-widest"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={saveManualInscription}
+                                    disabled={savingManualInscription}
+                                    className="px-4 py-2 rounded-xl bg-padel-primary text-black text-xs font-black uppercase tracking-widest disabled:opacity-60"
+                                >
+                                    {savingManualInscription ? 'Guardando...' : 'Guardar Pareja'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Score Management Modal */}
             <AnimatePresence>
