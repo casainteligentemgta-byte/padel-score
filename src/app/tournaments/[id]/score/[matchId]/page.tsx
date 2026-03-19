@@ -654,7 +654,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     const setSpecificServer = async (team: number, player: number) => {
         if (!tournament || !match) return;
         const previous = match;
-        setMatch((prev) => (prev ? { ...prev, server: { team, player } } : prev));
+        setMatch((prev: any) => (prev ? { ...prev, server: { team, player } } : prev));
         try {
             await dataService.updateMatch(id, match.id, { server: { team, player } });
         } catch (err) {
@@ -713,7 +713,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         const previous = match;
         const currentServer = match.server || { team: 1, player: 1 };
         const next = { ...currentServer, player: currentServer.player === 1 ? 2 : 1 };
-        setMatch((prev) => (prev ? { ...prev, server: next } : prev));
+        setMatch((prev: any) => (prev ? { ...prev, server: next } : prev));
         try {
             await dataService.updateMatch(id, match.id, { server: next });
         } catch (err) {
@@ -728,7 +728,7 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
         const previous = match;
         const currentServer = match.server || { team: 1, player: 1 };
         const next = { ...currentServer, team: currentServer.team === 1 ? 2 : 1 };
-        setMatch((prev) => (prev ? { ...prev, server: next } : prev));
+        setMatch((prev: any) => (prev ? { ...prev, server: next } : prev));
         try {
             await dataService.updateMatch(id, match.id, { server: next });
         } catch (err) {
