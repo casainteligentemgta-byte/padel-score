@@ -123,6 +123,7 @@ export default function MarkerControlPage() {
                     sets: { local: 0, visitante: 0 },
                     games: { local: 0, visitante: 0 },
                     puntos: { local: '0', visitante: '0' },
+                    historico_sets: [],
                     modo_puntos: 'normal',
                     golden_point: false,
                     equipo_1: equipo1,
@@ -187,37 +188,241 @@ export default function MarkerControlPage() {
         }
     };
 
+    const winGame = async (equipo: 'local' | 'visitante') => {
+        if (!marcador) return;
+        const otroEquipo = equipo === 'local' ? 'visitante' : 'local';
+        const games = marcador.games || { local: 0, visitante: 0 };
+        const sets = marcador.sets || { local: 0, visitante: 0 };
+        
+        const newGames = { ...games, [equipo]: games[equipo] + 1 };
+        
+        // Verifica si gana el Set
+        const gamesWinner = newGames[equipo];
+        const gamesLoser = newGames[otroEquipo];
+        
+        if ((gamesWinner >= 6 && gamesWinner - gamesLoser >= 2) || gamesWinner >= 7) {
+            const newSets = { ...sets, [equipo]: sets[equipo] + 1 };
+            const newHistorico = [...(marcador.historico_sets || []), { local: newGames.local, visitante: newGames.visitante }];
+            
+            // Verifica si gana el Partido (2 sets)
+            if (newSets[equipo] >= 2) {
+                const curCron = marcador.cronometro;
+                const finalCron = (curCron && curCron.running && curCron.startedAt) 
+                    ? { running: false, startedAt: null, elapsedSec: (curCron.elapsedSec || 0) + Math.floor((dataService.getSyncedNow() - curCron.startedAt) / 1000) }
+                    : curCron;
+
+                await actualizarMarcadorLocal({
+                    sets: newSets,
+                    games: { local: 0, visitante: 0 },
+                    puntos: { local: '0', visitante: '0' },
+                    modo_puntos: 'normal',
+                    historico_sets: newHistorico,
+                    cronometro: finalCron
+                });
+                alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
+            } else {
+                await actualizarMarcadorLocal({
+                    sets: newSets,
+                    games: { local: 0, visitante: 0 },
+                    puntos: { local: '0', visitante: '0' },
+                    modo_puntos: 'normal',
+                    historico_sets: newHistorico
+                });
+            }
+        } else {
+            await actualizarMarcadorLocal({
+                games: newGames,
+                puntos: { local: '0', visitante: '0' }
+            });
+        }
+    };
+
     const cambiarPunto = async (equipo: 'local' | 'visitante', delta: 1 | -1) => {
         if (!marcador) return;
+        const otroEquipo = equipo === 'local' ? 'visitante' : 'local';
         const puntosActual = marcador.puntos || {};
-        const actual = puntosActual[equipo];
         const modo = marcador.modo_puntos || 'normal';
-        const secuencia = modo === 'normal' ? PUNTOS_NORMAL : PUNTOS_TB;
-        const idx = secuencia.indexOf(actual);
-        const baseIdx = idx === -1 ? 0 : idx;
-        const newIdx = Math.max(0, Math.min(secuencia.length - 1, baseIdx + delta));
-        await actualizarMarcadorLocal({
-            puntos: { ...puntosActual, [equipo]: secuencia[newIdx] },
-        });
+
+        if (modo === 'normal') {
+            const actual = puntosActual[equipo];
+            const actualOtro = puntosActual[otroEquipo];
+
+            if (delta === 1) {
+                if (actual === 'AD') {
+                    await winGame(equipo);
+                    return;
+                }
+                if (actual === '40') {
+                    if (actualOtro === 'AD') {
+                        // Vuelve a 40 iguales
+                        await actualizarMarcadorLocal({
+                            puntos: { [equipo]: '40', [otroEquipo]: '40' }
+                        });
+                        return;
+                    } else if (actualOtro === '40') {
+                        if (marcador.golden_point) {
+                            await winGame(equipo);
+                        } else {
+                            await actualizarMarcadorLocal({
+                                puntos: { ...puntosActual, [equipo]: 'AD' }
+                            });
+                        }
+                        return;
+                    } else {
+                        // El otro no tiene 40 o AD, ganamos el game
+                        await winGame(equipo);
+                        return;
+                    }
+                }
+                
+                const idx = PUNTOS_NORMAL.indexOf(actual);
+                const nextPoint = PUNTOS_NORMAL[idx + 1];
+                if (nextPoint && nextPoint !== 'AD') {
+                    await actualizarMarcadorLocal({
+                        puntos: { ...puntosActual, [equipo]: nextPoint }
+                    });
+                }
+            } else {
+                // delta -1 (restar punto manualmente)
+                if (actual === 'AD') {
+                    await actualizarMarcadorLocal({
+                        puntos: { ...puntosActual, [equipo]: '40' }
+                    });
+                    return;
+                }
+                const idx = PUNTOS_NORMAL.indexOf(actual);
+                if (idx > 0) {
+                    await actualizarMarcadorLocal({
+                        puntos: { ...puntosActual, [equipo]: PUNTOS_NORMAL[idx - 1] }
+                    });
+                }
+            }
+        } else {
+            // Tiebreak / Super Tiebreak
+            const actual = parseInt(puntosActual[equipo] || '0');
+            const actualOtro = parseInt(puntosActual[otroEquipo] || '0');
+            
+            if (delta === 1) {
+                const nuevo = actual + 1;
+                const winTarget = modo === 'super_tiebreak' ? 10 : 7;
+                
+                if (nuevo >= winTarget && (nuevo - actualOtro) >= 2) {
+                    // Win Set via TB/STB
+                    const newSets = { ...marcador.sets, [equipo]: (marcador.sets?.[equipo] || 0) + 1 };
+                    const finalGames = { 
+                        local: (marcador.games?.local || 0) + (equipo === 'local' ? 1 : 0),
+                        visitante: (marcador.games?.visitante || 0) + (equipo === 'visitante' ? 1 : 0)
+                    };
+                    const newHistorico = [...(marcador.historico_sets || []), { local: finalGames.local, visitante: finalGames.visitante }];
+
+                    if (newSets[equipo] >= 2) {
+                        const curCron = marcador.cronometro;
+                        const finalCron = (curCron && curCron.running && curCron.startedAt) 
+                            ? { running: false, startedAt: null, elapsedSec: (curCron.elapsedSec || 0) + Math.floor((dataService.getSyncedNow() - curCron.startedAt) / 1000) }
+                            : curCron;
+
+                        await actualizarMarcadorLocal({
+                            sets: newSets,
+                            games: { local: 0, visitante: 0 },
+                            puntos: { local: '0', visitante: '0' },
+                            modo_puntos: 'normal',
+                            historico_sets: newHistorico,
+                            cronometro: finalCron
+                        });
+                        alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
+                    } else {
+                        await actualizarMarcadorLocal({
+                            sets: newSets,
+                            games: { local: 0, visitante: 0 },
+                            puntos: { local: '0', visitante: '0' },
+                            modo_puntos: 'normal',
+                            historico_sets: newHistorico
+                        });
+                    }
+                } else {
+                    await actualizarMarcadorLocal({
+                        puntos: { ...puntosActual, [equipo]: String(nuevo) }
+                    });
+                }
+            } else {
+                // delta -1
+                const nuevo = Math.max(0, actual - 1);
+                await actualizarMarcadorLocal({
+                    puntos: { ...puntosActual, [equipo]: String(nuevo) }
+                });
+            }
+        }
     };
 
     const cambiarGame = async (equipo: 'local' | 'visitante', delta: 1 | -1) => {
         if (!marcador) return;
-        const nuevo = Math.max(0, (marcador.games?.[equipo] || 0) + delta);
-        await actualizarMarcadorLocal({
-            games: { ...marcador.games, [equipo]: nuevo },
-            puntos: { local: '0', visitante: '0' },
-        });
+        const actual = marcador.games?.[equipo] || 0;
+        const nuevo = Math.max(0, actual + delta);
+        
+        if (delta === 1) {
+            const otroEquipo = equipo === 'local' ? 'visitante' : 'local';
+            const gamesLoser = marcador.games?.[otroEquipo] || 0;
+            
+            if ((nuevo >= 6 && nuevo - gamesLoser >= 2) || nuevo >= 7) {
+                const newSets = { ...marcador.sets, [equipo]: (marcador.sets?.[equipo] || 0) + 1 };
+                const newGames = { ...marcador.games, [equipo]: nuevo };
+                const newHistorico = [...(marcador.historico_sets || []), { local: newGames.local || 0, visitante: newGames.visitante || 0 }];
+
+                if (newSets[equipo] >= 2) {
+                    const curCron = marcador.cronometro;
+                    const finalCron = (curCron && curCron.running && curCron.startedAt) 
+                        ? { running: false, startedAt: null, elapsedSec: (curCron.elapsedSec || 0) + Math.floor((dataService.getSyncedNow() - curCron.startedAt) / 1000) }
+                        : curCron;
+
+                    await actualizarMarcadorLocal({
+                        sets: newSets,
+                        games: { local: 0, visitante: 0 },
+                        puntos: { local: '0', visitante: '0' },
+                        modo_puntos: 'normal',
+                        historico_sets: newHistorico,
+                        cronometro: finalCron
+                    });
+                    alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
+                } else {
+                    await actualizarMarcadorLocal({
+                        sets: newSets,
+                        games: { local: 0, visitante: 0 },
+                        puntos: { local: '0', visitante: '0' },
+                        modo_puntos: 'normal',
+                        historico_sets: newHistorico
+                    });
+                }
+            } else {
+                await actualizarMarcadorLocal({
+                    games: { ...marcador.games, [equipo]: nuevo },
+                    puntos: { local: '0', visitante: '0' },
+                });
+            }
+        } else {
+            await actualizarMarcadorLocal({
+                games: { ...marcador.games, [equipo]: nuevo },
+                puntos: { local: '0', visitante: '0' },
+            });
+        }
     };
 
     const cambiarSet = async (equipo: 'local' | 'visitante', delta: 1 | -1) => {
         if (!marcador) return;
         const nuevo = Math.max(0, (marcador.sets?.[equipo] || 0) + delta);
+        let finalCron = marcador.cronometro;
+        if (nuevo >= 2 && finalCron && finalCron.running && finalCron.startedAt) {
+            finalCron = { running: false, startedAt: null, elapsedSec: (finalCron.elapsedSec || 0) + Math.floor((dataService.getSyncedNow() - finalCron.startedAt) / 1000) };
+        }
         await actualizarMarcadorLocal({
             sets: { ...marcador.sets, [equipo]: nuevo },
             games: { local: 0, visitante: 0 },
             puntos: { local: '0', visitante: '0' },
+            modo_puntos: 'normal',
+            cronometro: finalCron
         });
+        if (nuevo >= 2) {
+             alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
+        }
     };
 
     const toggleGoldenPoint = async () => {
@@ -247,7 +452,7 @@ export default function MarkerControlPage() {
             if (cron.running && cron.startedAt != null) {
                 const startMs = Number(cron.startedAt);
                 if (!isNaN(startMs)) {
-                    return elapsedSec + Math.floor((Date.now() - startMs) / 1000);
+                    return elapsedSec + Math.floor((dataService.getSyncedNow() - startMs) / 1000);
                 }
             }
             return elapsedSec;
@@ -267,18 +472,18 @@ export default function MarkerControlPage() {
         const elapsedSec = Number(curCron.elapsedSec ?? 0) || 0;
 
         if (curCron.running && curCron.startedAt != null) {
-            const startMs = Number(curCron.startedAt);
-            const add = !isNaN(startMs) ? Math.floor((Date.now() - startMs) / 1000) : 0;
-            const nextElapsed = Math.max(0, elapsedSec + add);
-            await actualizarMarcadorLocal({
-                cronometro: { running: false, startedAt: null, elapsedSec: nextElapsed },
-            });
+            alert('El tiempo de partido oficial no se puede pausar una vez iniciado. Solo se detiene al finalizar el partido.');
+            return;
         } else {
             await actualizarMarcadorLocal({
-                cronometro: { running: true, startedAt: Date.now(), elapsedSec },
+                cronometro: { running: true, startedAt: dataService.getSyncedNow(), elapsedSec },
             });
         }
     };
+
+    useEffect(() => {
+        dataService.syncSystemClock();
+    }, []);
 
     // Si la cancha está en vivo pero no existe cronometro (por datos antiguos),
     // inicializamos para evitar que el UI quede en 00:00.
@@ -441,9 +646,25 @@ export default function MarkerControlPage() {
                                 return (
                                     <div
                                         key={lado}
-                                        className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center"
+                                        className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center relative"
                                         style={{ borderColor: equipo?.color + '40' }}
                                     >
+                                        <div className="absolute top-2 right-2 flex gap-1">
+                                            <button 
+                                                onClick={() => actualizarMarcadorLocal({ saque: { equipo: i + 1, jugador: 1 }})}
+                                                className={`w-7 h-7 rounded-full flex items-center justify-center text-[12px] transition-all bg-black border ${marcador.saque?.equipo === i + 1 && marcador.saque?.jugador === 1 ? 'border-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.5)] opacity-100 grayscale-0' : 'border-white/10 opacity-50 grayscale hover:opacity-100 hover:grayscale-0'}`}
+                                                title="Saca Jugador 1"
+                                            >
+                                                🎾
+                                            </button>
+                                            <button 
+                                                onClick={() => actualizarMarcadorLocal({ saque: { equipo: i + 1, jugador: 2 }})}
+                                                className={`w-7 h-7 rounded-full flex items-center justify-center text-[12px] transition-all bg-black border ${marcador.saque?.equipo === i + 1 && marcador.saque?.jugador === 2 ? 'border-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.5)] opacity-100 grayscale-0' : 'border-white/10 opacity-50 grayscale hover:opacity-100 hover:grayscale-0'}`}
+                                                title="Saca Jugador 2"
+                                            >
+                                                🎾
+                                            </button>
+                                        </div>
                                         <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-1">
                                             {lado === 'local' ? 'Equipo 1' : 'Equipo 2'}
                                         </p>
@@ -581,16 +802,14 @@ export default function MarkerControlPage() {
                         </div>
                         <button
                             onClick={toggleCronometro}
-                            disabled={!isEnVivo || !marcador}
+                            disabled={!isEnVivo || !marcador || marcador?.cronometro?.running}
                             className={`px-3 py-2 rounded-2xl font-black uppercase italic tracking-widest text-[10px] border transition-all ${
-                                !isEnVivo || !marcador
-                                    ? 'bg-white/5 border-white/10 text-gray-600'
-                                    : marcador?.cronometro?.running
-                                        ? 'bg-red-500/10 border-red-500/30 text-red-300 hover:bg-red-500/15'
-                                        : 'bg-padel-primary/15 border-padel-primary/40 text-padel-primary hover:bg-padel-primary/25'
+                                !isEnVivo || !marcador || marcador?.cronometro?.running
+                                    ? 'bg-white/5 border-white/10 text-gray-500'
+                                    : 'bg-padel-primary/15 border-padel-primary/40 text-padel-primary hover:bg-padel-primary/25'
                             }`}
                         >
-                            {marcador?.cronometro?.running ? 'PAUSAR' : 'INICIAR'}
+                            {marcador?.cronometro?.running ? 'EN MARCHA' : 'INICIAR'}
                         </button>
                     </div>
                 </div>

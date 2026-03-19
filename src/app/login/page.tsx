@@ -18,7 +18,7 @@ import {
     Layout
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { isValidEmail, isValidPassword } from '@/lib/authValidators';
+import { isValidEmail, isValidPassword, validateSignupPassword } from '@/lib/authValidators';
 import { getAuthErrorMessage } from '@/lib/authErrorMessages';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -99,9 +99,17 @@ export default function LoginPage() {
             setError('Correo electrónico no válido.');
             return;
         }
-        if (!isValidPassword(formData.password)) {
-            setError('Mínimo 6 caracteres en la contraseña.');
-            return;
+        if (isLogin) {
+            if (!isValidPassword(formData.password)) {
+                setError('Mínimo 6 caracteres en la contraseña.');
+                return;
+            }
+        } else {
+            const validation = validateSignupPassword(formData.password);
+            if (!validation.valid) {
+                setError(validation.error!);
+                return;
+            }
         }
 
         setLoading(true);

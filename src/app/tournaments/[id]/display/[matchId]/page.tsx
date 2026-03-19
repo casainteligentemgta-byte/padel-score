@@ -86,33 +86,64 @@ function DisplayClockDate({ className, style }: { className?: string, style?: an
 function MatchDurationCounter({
     isLive,
     startTimeMs,
+    cronData,
     primaryColor,
     cronometroTipo,
     showInPill,
 }: {
-    isLive: boolean;
-    startTimeMs: number | null;
+    isLive?: boolean;
+    startTimeMs?: number | null;
+    cronData?: { elapsedSec?: number, running?: boolean, startedAt?: number | null };
     primaryColor: string;
     cronometroTipo: string;
     showInPill?: boolean;
 }) {
-    const [duration, setDuration] = useState('');
+    const [duration, setDuration] = useState('00:00');
+    
     useEffect(() => {
-        if (!isLive || startTimeMs == null) {
-            setDuration('');
-            return;
-        }
         const update = () => {
-            const elapsedSec = Math.max(0, Math.floor((Date.now() - startTimeMs) / 1000));
-            const h = Math.floor(elapsedSec / 3600);
-            const m = Math.floor((elapsedSec % 3600) / 60);
-            const s = elapsedSec % 60;
-            setDuration(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+            let totalSec = 0;
+            const now = dataService.getSyncedNow();
+
+            // Solo usamos cronData si realmente viene algo útil de la BD del Marker (no usamos fallback vacío).
+            if (cronData && Object.keys(cronData).length > 0 && ('elapsedSec' in cronData || typeof cronData.running === 'boolean')) {
+                const elapsedSec = Number(cronData.elapsedSec ?? 0) || 0;
+                
+                if (cronData.running && cronData.startedAt != null) {
+                    const st = Number(cronData.startedAt);
+                    const diff = !isNaN(st) ? Math.floor((now - st) / 1000) : 0;
+                    if (diff > 0) {
+                        totalSec = elapsedSec + diff;
+                    } else {
+                        totalSec = elapsedSec;
+                    }
+                } else {
+                    totalSec = elapsedSec;
+                }
+            } else if (isLive && startTimeMs != null) {
+                // Fallback: si el cronometro de Supabase falla, usamos startTimeMs del Match.
+                const diff = Math.floor((now - startTimeMs) / 1000);
+                if (diff > 0) totalSec = diff;
+            } else if (!isLive && startTimeMs != null && typeof cronData?.running === 'undefined') {
+                 // Si NO está live pero hay startTimeMs y el cron no existe
+                 totalSec = 0;
+            }
+
+            const h = Math.floor(totalSec / 3600);
+            const m = Math.floor((totalSec % 3600) / 60);
+            const s = totalSec % 60;
+            
+            if (h > 0) {
+                setDuration(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
+            } else {
+                setDuration(`${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
+            }
         };
+
         update();
-        const id = setInterval(update, 1000);
+        const id = setInterval(update, 250);
         return () => clearInterval(id);
-    }, [isLive, startTimeMs]);
+    }, [isLive, startTimeMs, cronData?.elapsedSec, cronData?.running, cronData?.startedAt]);
     if (!duration) return null;
     if (showInPill)
         return (
@@ -194,6 +225,11 @@ export default function FullScreenDisplay() {
     const [hubLibraryVidIdx, setHubLibraryVidIdx] = useState(0);
     const [hubLibraryImgIdx, setHubLibraryImgIdx] = useState(0);
 
+    // Sync system clock offsets with Supabase server time
+    useEffect(() => {
+        dataService.syncSystemClock();
+    }, []);
+
     // ── Carrusel de Patrocinadores desde Supabase ───────────────────────
     useEffect(() => {
         if (!tournament?.id) return;
@@ -259,7 +295,24 @@ export default function FullScreenDisplay() {
             const marcador = state?.data?.marcador ?? null;
             setLiveMarcador(marcador);
         });
-        return () => { unsub(); };
+
+        // Polling de respaldo en caso de que Supabase Realtime no esté habilitado en el Dashboard
+        const pollingInterval = setInterval(() => {
+            dataService.getPizarraCanchaState(canchaId).then((state) => {
+                const marcador = state?.data?.marcador ?? null;
+                setLiveMarcador((prev: any) => {
+                    if (marcador?.ultimo_update !== prev?.ultimo_update || JSON.stringify(marcador) !== JSON.stringify(prev)) {
+                        return marcador;
+                    }
+                    return prev;
+                });
+            }).catch(() => {});
+        }, 2000);
+
+        return () => { 
+            unsub(); 
+            clearInterval(pollingInterval);
+        };
     }, [match?.court, match?.courtIndex]);
 
     // 5. Obtener TODA la biblioteca de imágenes activa para el carrusel automático
@@ -589,17 +642,18 @@ export default function FullScreenDisplay() {
 
             // Fallback final: Si el partido no existe en la base de datos, creamos uno simulado para demostración
             if (!found) {
+                const isCourt = matchId.startsWith('court_');
+                const parsedCourt = isCourt ? parseInt(matchId.replace('court_', ''), 10) : 1;
+                const courtNum = isNaN(parsedCourt) ? 1 : parsedCourt;
+
                 found = {
                     id: matchId,
                     team1Index: 1,
                     team2Index: 2,
                     status: 'live',
-                    court: 1,
-                    courtName: 'Cancha Central',
-                    groupName: 'Exhibición Profesional',
+                    court: courtNum,
+                    courtName: isCourt ? `Pista ${courtNum}` : 'Cancha Central',
                     scheduledTime: new Date().toISOString(),
-                    points: { t1: '15', t2: '30' },
-                    games: { t1: 2, t2: 4 },
                     setScores: [{ t1: 6, t2: 3 }]
                 };
             }
@@ -926,7 +980,7 @@ export default function FullScreenDisplay() {
         return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
     })();
 
-    const isLiveForDuration = match?.status === MatchStatus.LIVE || match?.status === 'live' || match?.status === MatchStatus.PAUSED || match?.status === 'PAUSED';
+    const isLiveForDuration = lm ? (!!lm.cronometro?.running || lm.cronometro?.elapsedSec > 0) : (match?.status === MatchStatus.LIVE || match?.status === 'live' || match?.status === MatchStatus.PAUSED || match?.status === 'PAUSED' || match?.status === 'EN_CURSO');
     const matchStartTimeMs = getMatchStartTimeMs(match);
 
     const relojTheme = relojOcasion || 'default';
@@ -1008,16 +1062,13 @@ export default function FullScreenDisplay() {
 
                             {/* Center: Match Control (Timer/Clock) */}
                             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center">
-                                {isLiveForDuration && matchStartTimeMs != null ? (
-                                    <MatchDurationCounter isLive={isLiveForDuration} startTimeMs={matchStartTimeMs} primaryColor={primaryColor} cronometroTipo={cronometroTipo} />
-                                ) : matchTimeDisplay ? (
-                                    <div className="flex flex-col items-center leading-none">
-                                        <span className="font-bold uppercase text-white/50 tracking-[0.35em]" style={{ fontSize: 'clamp(8px,0.78vw,13px)' }}>
-                                            {matchNumberInTournament ? `PARTIDO ${matchNumberInTournament}` : 'PARTIDO'}
-                                        </span>
-                                        <span className="font-black italic tracking-tighter" style={{ fontSize: 'clamp(36px,5vw,80px)', color: primaryColor }}>{matchTimeDisplay}</span>
-                                    </div>
-                                ) : null}
+                                <MatchDurationCounter 
+                                    isLive={isLiveForDuration} 
+                                    startTimeMs={matchStartTimeMs} 
+                                    cronData={lm?.cronometro} 
+                                    primaryColor={primaryColor} 
+                                    cronometroTipo={cronometroTipo} 
+                                />
                             </div>
 
                             {/* Right: Clock Box (Time / Date + Temp) */}
@@ -1078,10 +1129,10 @@ export default function FullScreenDisplay() {
                                 </h2>
                             </div>
 
-                            {/* Column headers (Names -> S1 -> S2 -> G -> PTS) */}
-                            <div className="grid grid-cols-[1fr_8%_8%_12%] items-center border-b border-white/[0.1] bg-black/40 h-[10%] px-6">
+                            {/* Column headers (Names -> S1 -> S2 -> S3 -> PTS) */}
+                            <div className="grid grid-cols-[1fr_8%_8%_8%_12%] items-center border-b border-white/[0.1] bg-black/40 h-[10%] px-6">
                                 <div />
-                                {[1, 2].map(s => (
+                                {[1, 2, 3].map(s => (
                                     <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
                                         <span className="font-black uppercase tracking-widest text-white/40 leading-none text-center w-full" style={{ fontSize: 'clamp(12px,1.2vw,20px)' }}>
                                             SET {s}
@@ -1090,14 +1141,14 @@ export default function FullScreenDisplay() {
                                 ))}
                                 <div className="flex items-center justify-center border-l border-white/[0.15] h-full" style={{ backgroundColor: `${primaryColor}20` }}>
                                     <span className="font-black uppercase tracking-widest leading-none text-center w-full" style={{ fontSize: 'clamp(12px,1.2vw,20px)', color: primaryColor }}>
-                                        GAME:
+                                        PTS
                                     </span>
                                 </div>
                             </div>
 
                             {/* Team 1 row */}
-                            <div className="flex-1 flex items-center relative border-b border-white/[0.1] overflow-hidden">
-                                <div className="flex-1 flex flex-col justify-center h-full px-6 relative">
+                            <div className="flex-1 grid grid-cols-[1fr_8%_8%_8%_12%] items-center relative border-b border-white/[0.1] overflow-hidden px-6">
+                                <div className="flex flex-col justify-center h-full pr-6 relative">
                                     <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden shadow-2xl">
                                         <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
                                         <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
@@ -1127,25 +1178,30 @@ export default function FullScreenDisplay() {
                                         </div>
                                     </div>
                                 </div>
-                                {/* Sets History */}
-                                {[1, 2].map((s: number) => {
-                                    const val = (s < currentSet) ? (match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? 0) : '';
-                                    return (
-                                        <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full" style={{ width: '8%' }}>
-                                            <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
-                                        </div>
-                                    );
-                                })}
+                                {/* Sets History & Current Game */}
+                                    {[1, 2, 3].map((s: number) => {
+                                        let val: string | number = '';
+                                        if (s < currentSet) {
+                                            val = lm?.historico_sets?.[s - 1]?.local ?? match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? 0;
+                                        } else if (s === currentSet) {
+                                            val = gamesT1;
+                                        }
+                                        return (
+                                            <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
+                                                <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
+                                            </div>
+                                        );
+                                    })}
                                 {/* Game Points */}
-                                <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ width: '12%', backgroundColor: `${primaryColor}40` }}>
+                                <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ backgroundColor: `${primaryColor}40` }}>
                                     <motion.span key={ptsT1} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                                         className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(42px,9vh,110px)' }}>{ptsT1}</motion.span>
                                 </div>
                             </div>
 
                             {/* Team 2 row */}
-                            <div className="flex-1 flex items-center relative overflow-hidden">
-                                <div className="flex-1 flex flex-col justify-center h-full px-6 relative">
+                            <div className="flex-1 grid grid-cols-[1fr_8%_8%_8%_12%] items-center relative overflow-hidden px-6">
+                                <div className="flex flex-col justify-center h-full pr-6 relative">
                                     <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden">
                                         <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
                                         <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
@@ -1175,17 +1231,22 @@ export default function FullScreenDisplay() {
                                         </div>
                                     </div>
                                 </div>
-                                {/* Sets History */}
-                                {[1, 2].map((s: number) => {
-                                    const val = (s < currentSet) ? (match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? 0) : '';
-                                    return (
-                                        <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full" style={{ width: '8%' }}>
-                                            <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
-                                        </div>
-                                    );
-                                })}
+                                {/* Sets History & Current Game */}
+                                    {[1, 2, 3].map((s: number) => {
+                                        let val: string | number = '';
+                                        if (s < currentSet) {
+                                            val = lm?.historico_sets?.[s - 1]?.visitante ?? match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? 0;
+                                        } else if (s === currentSet) {
+                                            val = gamesT2;
+                                        }
+                                        return (
+                                            <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
+                                                <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
+                                            </div>
+                                        );
+                                    })}
                                 {/* Game Points */}
-                                <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ width: '12%', backgroundColor: `${primaryColor}40` }}>
+                                <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ backgroundColor: `${primaryColor}40` }}>
                                     <motion.span key={ptsT2} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                                         className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(42px,9vh,110px)' }}>{ptsT2}</motion.span>
                                 </div>

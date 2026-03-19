@@ -18,6 +18,12 @@ const supabase = () => {
 
 const now = () => new Date().toISOString();
 
+// ── Time Synchronization (NTP-like using Supabase Headers) ─────────────
+let globalClockOffset = 0;
+let clockSynced = false;
+
+// Replaced with object methods later in file
+
 export const ROLES = {
     ADMIN: 'admin',
     PLAYER: 'player',
@@ -78,6 +84,31 @@ function sanitizeObject(obj: any): any {
 }
 
 export const dataService = {
+    // Time Synchronization
+    async syncSystemClock() {
+        if (clockSynced) return;
+        try {
+            const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+            if (!url) return;
+            const res = await fetch(`${url}/rest/v1/`, { method: 'HEAD', cache: 'no-store' });
+            const serverDateStr = res.headers.get('Date');
+            if (serverDateStr) {
+                const serverMs = new Date(serverDateStr).getTime();
+                if (!isNaN(serverMs)) {
+                    globalClockOffset = serverMs - Date.now();
+                    clockSynced = true;
+                    console.log('[TimeSync] Offset applied:', globalClockOffset, 'ms');
+                }
+            }
+        } catch (err) {
+            console.warn('[TimeSync] Failed to sync clock:', err);
+        }
+    },
+
+    getSyncedNow() {
+        return Date.now() + globalClockOffset;
+    },
+
     // Media & Ticker Management
     async getTiraInformativa(pantallaId?: string | null) {
         const client = getSupabaseClient();
