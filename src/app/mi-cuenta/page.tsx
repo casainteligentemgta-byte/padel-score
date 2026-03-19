@@ -266,19 +266,48 @@ export default function MiCuentaPage() {
                             <div className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-5">
                                 <div className="flex flex-wrap items-end justify-between gap-3">
                                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/5 overflow-hidden flex items-center justify-center flex-shrink-0 border border-white/10">
+                                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white/5 overflow-hidden flex items-center justify-center flex-shrink-0 border border-white/10">
                                             {player.photo ? (
                                                 <img src={player.photo} alt="" className="w-full h-full object-cover" />
                                             ) : (
-                                                <User className="w-6 h-6 sm:w-7 sm:h-7 text-gray-600" />
+                                                <User className="w-8 h-8 sm:w-9 sm:h-9 text-gray-600" />
                                             )}
                                         </div>
                                         <div className="min-w-0 flex flex-col justify-center flex-1">
                                             <div className="flex items-center gap-2 leading-tight min-w-0">
-                                                <p className="font-black uppercase tracking-wider text-white truncate text-sm sm:text-base">
+                                                <p className="font-black uppercase tracking-wider text-white truncate text-base sm:text-xl">
                                                     {player.name} {player.lastName}
                                                 </p>
                                             </div>
+                                            {player?.uniqueCode && (
+                                                <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                        try {
+                                                            await navigator.clipboard.writeText(String(player.uniqueCode));
+                                                            setCopied(true);
+                                                            setTimeout(() => setCopied(false), 1600);
+                                                        } catch {
+                                                            setError('No se pudo copiar el código.');
+                                                        }
+                                                    }}
+                                                    onTouchStart={async () => {
+                                                        try {
+                                                            await navigator.clipboard.writeText(String(player.uniqueCode));
+                                                            setCopied(true);
+                                                            setTimeout(() => setCopied(false), 1600);
+                                                        } catch {
+                                                            setError('No se pudo copiar el código.');
+                                                        }
+                                                    }}
+                                                    className="mt-1 inline-flex w-fit items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 hover:border-padel-primary/40 text-gray-300 hover:text-white transition-all"
+                                                    title="Toca para copiar el código"
+                                                >
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Código:</span>
+                                                    <span className="font-black text-sm sm:text-base tracking-[0.25em] text-white">{player.uniqueCode}</span>
+                                                    {copied ? <Check className="w-3.5 h-3.5 text-padel-primary" /> : <Copy className="w-3.5 h-3.5 text-gray-500" />}
+                                                </button>
+                                            )}
                                             <p className="mt-0.5 text-[9px] font-bold uppercase tracking-widest text-gray-500 flex flex-wrap items-center gap-1.5 leading-tight">
                                                 <span>Posición:</span>
                                                 <span className="text-padel-primary truncate">{player.position || 'Drive / Revés'}</span>
@@ -287,16 +316,16 @@ export default function MiCuentaPage() {
                                     </div>
                                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                                         <div className="flex flex-wrap justify-end gap-1">
-                                            <span className="px-2 py-0.5 rounded-full bg-padel-primary/10 text-padel-primary text-[9px] font-black uppercase tracking-widest">
+                                            <span className="px-3 py-1 rounded-full bg-padel-primary/10 text-padel-primary text-[11px] font-black uppercase tracking-widest">
                                                 Nivel {player.level ?? 4}
                                             </span>
                                         </div>
                                         <button
                                             onClick={() => router.push(`/players/register?edit=${player.id}`)}
-                                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-padel-primary hover:text-black text-gray-400 text-[9px] font-black uppercase tracking-widest transition-all"
+                                            className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-padel-primary hover:text-black text-gray-300 text-[11px] font-black uppercase tracking-widest transition-all"
                                         >
-                                            <Edit3 className="w-3 h-3" />
-                                            Editar Ficha
+                                            <Edit3 className="w-3.5 h-3.5" />
+                                            Modificar
                                         </button>
                                     </div>
                                 </div>
@@ -318,8 +347,8 @@ export default function MiCuentaPage() {
                                         <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-1.5">
                                             <Phone className="w-3.5 h-3.5 flex-shrink-0" /> Contacto
                                         </p>
-                                        <div className="text-[11px] sm:text-xs text-gray-300 space-y-0.5 break-words">
-                                            <p><span className="font-bold text-white">Teléfono:</span> {player.phone || '—'}</p>
+                                        <div className="text-sm sm:text-base text-gray-300 space-y-0.5 break-words">
+                                            <p><span className="font-bold text-white">WhatsApp:</span> {player.phone || '—'}</p>
                                             <p className="flex items-center gap-1 min-w-0"><Instagram className="w-3 h-3 text-gray-500 flex-shrink-0" /><span className="min-w-0 truncate"><span className="font-bold text-white">IG:</span> {player.instagram ? `@${String(player.instagram).replace('@', '')}` : 'No vinculado'}</span></p>
                                         </div>
                                     </div>

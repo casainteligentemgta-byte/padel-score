@@ -5,10 +5,10 @@ import { useAuth } from '@/lib/AuthContext';
 import { dataService, ROLES } from '@/lib/dataService';
 import {
     Shield, User, Mail, RefreshCw, ChevronRight, Save,
-    ShieldCheck, UserCircle, Target, Plus, Edit2, Key,
+    ShieldCheck, Target, Plus, Edit2, Key,
     X, ShieldAlert, ChevronLeft, Search,
     Filter, Layout, LogOut, CheckCircle2, Users, Settings, Phone,
-    Copy, Shirt, Footprints, HeartPulse, Instagram, ExternalLink
+    Copy, Check, Shirt, Footprints, HeartPulse, Instagram, ExternalLink, Trash2
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -28,9 +28,22 @@ export default function AdminUsersPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterRole, setFilterRole] = useState<string>('all');
     const [apiError, setApiError] = useState<'501' | '500' | 'network' | null>(null);
-    const [photoModalUser, setPhotoModalUser] = useState<any | null>(null);
     const [fichaModalUser, setFichaModalUser] = useState<any | null>(null);
-    const [copiedCode, setCopiedCode] = useState<string | null>(null);
+    /** contador de seguridad para borrar (3 clics) por jugador */
+    const [deleteClickCount, setDeleteClickCount] = useState<Record<string, number>>({});
+    /** id de fila (participant id o uid) cuyo código se acaba de copiar */
+    const [copiedRowId, setCopiedRowId] = useState<string | null>(null);
+
+    const handleCopyUniqueCode = async (rowId: string, code?: string) => {
+        if (!code) return;
+        try {
+            await navigator.clipboard.writeText(String(code));
+            setCopiedRowId(rowId);
+            setTimeout(() => setCopiedRowId(prev => (prev === rowId ? null : prev)), 1600);
+        } catch (e) {
+            console.error('No se pudo copiar el código', e);
+        }
+    };
 
     const [formData, setFormData] = useState({
         name: '',
@@ -75,6 +88,34 @@ export default function AdminUsersPage() {
             setUsers([]);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDeleteParticipant = async (id: string | undefined) => {
+        if (!id) {
+            alert('Este registro no tiene ID de participante; no se puede borrar desde aquí.');
+            return;
+        }
+        const nextCount = (deleteClickCount[id] || 0) + 1;
+        if (nextCount < 3) {
+            setDeleteClickCount(prev => ({ ...prev, [id]: nextCount }));
+            setTimeout(() => {
+                setDeleteClickCount(prev => (prev[id] === nextCount ? { ...prev, [id]: 0 } : prev));
+            }, 5000);
+            return;
+        }
+
+        setDeleteClickCount(prev => ({ ...prev, [id]: 0 }));
+        setUpdating(id);
+        try {
+            await dataService.deleteParticipant(id);
+            setUsers(prev => prev.filter(u => u.id !== id));
+            if (fichaModalUser?.id === id) setFichaModalUser(null);
+        } catch (e) {
+            console.error(e);
+            alert('Error al eliminar el jugador');
+        } finally {
+            setUpdating(null);
         }
     };
 
@@ -290,9 +331,8 @@ export default function AdminUsersPage() {
                         <div className="col-span-2">NOMBRES</div>
                         <div className="col-span-2">APELLIDOS</div>
                         <div className="col-span-2">WHATSAPP</div>
-                        <div className="col-span-2 text-center">NIVEL</div>
-                        <div className="col-span-1 text-center">FICHA</div>
-                        <div className="col-span-1 text-right">MODIFICAR</div>
+                        <div className="col-span-1 text-center">NIVEL</div>
+                        <div className="col-span-3 text-right">ACCIONES</div>
                     </div>
 
                     <AnimatePresence>
@@ -305,62 +345,52 @@ export default function AdminUsersPage() {
                                 className="group relative bg-white/[0.02] hover:bg-white/[0.04] backdrop-blur-3xl border border-white/5 hover:border-padel-primary/20 rounded-2xl transition-all duration-300"
                             >
                                 <div className="px-10 py-3 grid grid-cols-1 lg:grid-cols-12 items-center gap-2">
-                                    {/* Photo (click to enlarge) */}
+                                    {/* Foto: abre la ficha del jugador */}
                                     <div className="lg:col-span-1">
                                         <button
                                             type="button"
-                                            onClick={() => setPhotoModalUser(u)}
-                                            className="block w-10 h-10 rounded-xl overflow-hidden border border-white/10 bg-white/5 hover:border-padel-primary/50 transition-all hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-padel-primary/50"
+                                            onClick={() => setFichaModalUser(u)}
+                                            className="block w-[52px] h-[52px] rounded-full overflow-hidden border-2 border-white/10 bg-white/5 hover:border-padel-primary/50 transition-all hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-padel-primary/50"
+                                            title="Ver ficha"
                                         >
                                             {u.photo ? (
                                                 <img src={u.photo} alt={u.name} className="w-full h-full object-cover" />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center text-gray-700">
-                                                    <User size={20} />
+                                                    <User size={26} />
                                                 </div>
                                             )}
                                         </button>
                                     </div>
 
-                                    {/* Código */}
-                                    <div className="lg:col-span-1 flex items-center gap-1 min-w-0">
+                                    {/* Código: copiar sin caja blanca ni sombra */}
+                                    <div className="lg:col-span-1 flex items-center min-w-0">
                                         {u.uniqueCode ? (
-                                            <>
-                                                <span className="text-[10px] font-mono font-black text-padel-primary tracking-wider truncate" title={u.uniqueCode}>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleCopyUniqueCode(String(u.id || u.uid), u.uniqueCode)}
+                                                className="inline-flex items-center gap-1.5 min-w-0 text-left bg-transparent border-0 shadow-none p-0 cursor-pointer hover:opacity-90 active:opacity-80"
+                                                title="Copiar código"
+                                            >
+                                                <span className="text-sm font-mono font-black text-padel-primary tracking-[0.2em] whitespace-nowrap tabular-nums min-w-[6ch]">
                                                     {u.uniqueCode}
                                                 </span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        navigator.clipboard.writeText(u.uniqueCode);
-                                                        setCopiedCode(u.uniqueCode);
-                                                        setTimeout(() => setCopiedCode(null), 2000);
-                                                    }}
-                                                    className="flex-shrink-0 p-1 rounded hover:bg-white/10 text-gray-500 hover:text-padel-primary transition-colors"
-                                                    title="Copiar código"
-                                                >
-                                                    {copiedCode === u.uniqueCode ? (
-                                                        <span className="text-[8px] font-black text-padel-primary">OK</span>
-                                                    ) : (
-                                                        <Copy size={12} />
-                                                    )}
-                                                </button>
-                                            </>
+                                            </button>
                                         ) : (
-                                            <span className="text-[9px] text-gray-600">—</span>
+                                            <span className="text-xs text-gray-600">—</span>
                                         )}
                                     </div>
 
                                     {/* Names */}
                                     <div className="lg:col-span-2">
-                                        <h3 className="text-[11px] font-black uppercase italic tracking-tighter text-white group-hover:text-padel-primary transition-colors truncate">
+                                        <h3 className="text-sm font-black uppercase italic tracking-tighter text-white group-hover:text-padel-primary transition-colors truncate">
                                             {u.name || (u.fullName?.split(' ')[0]) || 'S/N'}
                                         </h3>
                                     </div>
 
                                     {/* Surnames */}
                                     <div className="lg:col-span-2">
-                                        <h3 className="text-[11px] font-black uppercase italic tracking-tighter text-gray-400 truncate">
+                                        <h3 className="text-sm font-black uppercase italic tracking-tighter text-gray-400 truncate">
                                             {u.lastName || (u.fullName?.split(' ').slice(1).join(' ')) || '—'}
                                         </h3>
                                     </div>
@@ -371,40 +401,43 @@ export default function AdminUsersPage() {
                                             href={u.phone ? `https://wa.me/${u.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola ${(u.name || u.fullName || '').split(' ')[0]}, te escribimos de Smart Padel! 🎾🚀`)}` : '#'}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-[10px] font-bold text-gray-500 hover:text-green-500 uppercase flex items-center gap-1.5 transition-colors group/wa"
+                                            className="text-sm font-bold text-gray-400 hover:text-green-500 uppercase flex items-center gap-2 transition-colors group/wa"
                                         >
-                                            <Phone size={10} className="text-padel-primary/40 group-hover/wa:text-green-500 transition-colors" />
-                                            {u.phone || u.whatsapp || '—'}
+                                            <Phone size={14} className="text-padel-primary/40 group-hover/wa:text-green-500 transition-colors flex-shrink-0" />
+                                            <span className="truncate">{u.phone || u.whatsapp || '—'}</span>
                                         </a>
                                     </div>
 
                                     {/* Nivel */}
-                                    <div className="lg:col-span-2 flex justify-center">
-                                        <div className="bg-padel-primary/10 border border-padel-primary/20 px-3 py-1 rounded-lg">
-                                            <span className="text-[10px] font-black text-padel-primary italic">CAT. {u.level || '—'}</span>
+                                    <div className="lg:col-span-1 flex justify-center">
+                                        <div className="bg-padel-primary/10 border border-padel-primary/20 px-3 py-1.5 rounded-xl max-w-full">
+                                            <span className="text-xs font-black text-padel-primary italic whitespace-nowrap">NIVEL {u.level || '—'}</span>
                                         </div>
                                     </div>
 
-                                    {/* Ver ficha */}
-                                    <div className="lg:col-span-1 flex justify-center">
+                                    {/* Borrar + Modificar */}
+                                    <div className="lg:col-span-3 flex flex-wrap justify-end gap-2">
                                         <button
                                             type="button"
-                                            onClick={() => setFichaModalUser(u)}
-                                            className="p-2.5 bg-white/5 text-gray-500 hover:text-padel-primary hover:bg-padel-primary/10 rounded-xl transition-all"
-                                            title="Ver ficha del jugador"
+                                            disabled={!u.id || updating === u.id}
+                                            onClick={() => handleDeleteParticipant(u.id)}
+                                            className="h-10 w-28 flex items-center justify-center gap-1.5 rounded-xl bg-red-500/15 text-red-400 hover:bg-red-500/25 hover:text-red-300 transition-all font-black text-[10px] uppercase tracking-widest border border-red-500/30 disabled:opacity-40 disabled:pointer-events-none"
+                                            title="Se elimina al tercer clic"
                                         >
-                                            <UserCircle size={16} />
+                                            {updating === u.id ? (
+                                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                                <Trash2 size={16} />
+                                            )}
+                                            <span>Borrar</span>
                                         </button>
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="lg:col-span-1 flex justify-end">
                                         <Link
                                             href={u.id ? `/players/register?edit=${u.id}` : '#'}
-                                            className="p-2.5 bg-white/5 text-gray-500 hover:text-padel-primary hover:bg-padel-primary/10 rounded-xl transition-all"
+                                            className="h-10 w-28 flex items-center justify-center gap-1.5 rounded-xl bg-padel-primary/10 text-padel-primary hover:bg-padel-primary hover:text-black transition-all font-black text-[10px] uppercase tracking-widest border border-padel-primary/20"
                                             title="Modificar ficha"
                                         >
-                                            <Edit2 size={14} />
+                                            <Edit2 size={16} />
+                                            <span>Modificar</span>
                                         </Link>
                                     </div>
                                 </div>
@@ -413,51 +446,6 @@ export default function AdminUsersPage() {
                     </AnimatePresence>
                 </div>
             </main>
-
-            {/* Modal foto ampliada */}
-            <AnimatePresence>
-                {photoModalUser && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95" onClick={() => setPhotoModalUser(null)}>
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="absolute inset-0"
-                            onClick={() => setPhotoModalUser(null)}
-                        />
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.9 }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="relative z-10 max-w-md w-full flex flex-col items-center"
-                        >
-                            <button
-                                type="button"
-                                onClick={() => setPhotoModalUser(null)}
-                                className="absolute -top-12 right-0 p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
-                                aria-label="Cerrar"
-                            >
-                                <X className="w-6 h-6" />
-                            </button>
-                            {photoModalUser.photo ? (
-                                <img
-                                    src={photoModalUser.photo}
-                                    alt={photoModalUser.name}
-                                    className="w-full max-h-[70vh] object-contain rounded-2xl border border-white/20 shadow-2xl"
-                                />
-                            ) : (
-                                <div className="w-48 h-48 rounded-2xl border border-white/20 bg-white/5 flex items-center justify-center">
-                                    <User className="w-24 h-24 text-gray-600" />
-                                </div>
-                            )}
-                            <p className="mt-3 text-sm font-bold text-white uppercase italic">
-                                {photoModalUser.name} {photoModalUser.lastName}
-                            </p>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
 
             {/* Modal ficha del jugador */}
             <AnimatePresence>

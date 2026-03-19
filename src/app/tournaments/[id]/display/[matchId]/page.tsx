@@ -82,18 +82,22 @@ function DisplayClockDate({ className, style }: { className?: string, style?: an
     return <span className={className} style={style}>{date}</span>;
 }
 
-// ── Cronómetro de partido: actualización cada segundo solo aquí (evita parpadeo de la pizarra) ──
+// ── Cronómetro de partido: misma lógica que el marcador del marker (score/[matchId]) ──
 function MatchDurationCounter({
-    isLive,
+    matchStatus,
     startTimeMs,
+    endTimeMs,
     cronData,
     primaryColor,
     cronometroTipo,
     showInPill,
 }: {
-    isLive?: boolean;
+    /** Estado del partido en BD (mismo que usa el marker) */
+    matchStatus?: string;
     startTimeMs?: number | null;
-    cronData?: { elapsedSec?: number, running?: boolean, startedAt?: number | null };
+    endTimeMs?: number | null;
+    /** Estado del cronómetro en RTDB (pizarra_cancha_state.cronometro) escrito por el marker */
+    cronData?: { elapsedSec?: number; running?: boolean; startedAt?: number | null };
     primaryColor: string;
     cronometroTipo: string;
     showInPill?: boolean;
@@ -103,30 +107,38 @@ function MatchDurationCounter({
     useEffect(() => {
         const update = () => {
             let totalSec = 0;
-            const now = dataService.getSyncedNow();
+            const now = Date.now();
+            const st = startTimeMs;
+            const en = endTimeMs;
+            const status = (matchStatus || '').toString();
 
-            // Solo usamos cronData si realmente viene algo útil de la BD del Marker (no usamos fallback vacío).
-            if (cronData && Object.keys(cronData).length > 0 && ('elapsedSec' in cronData || typeof cronData.running === 'boolean')) {
-                const elapsedSec = Number(cronData.elapsedSec ?? 0) || 0;
-                
+            const isFinished = status === MatchStatus.FINISHED || status === 'FINISHED';
+            const isLiveLike =
+                status === MatchStatus.LIVE ||
+                status === MatchStatus.PAUSED ||
+                status === 'live' ||
+                status === 'PAUSED' ||
+                status === 'EN_CURSO';
+
+            // 1) Si el marker está enviando cronData (RTDB), usamos exactamente ese reloj
+            if (cronData && (typeof cronData.elapsedSec === 'number' || typeof cronData.running === 'boolean')) {
+                const base = Number(cronData.elapsedSec ?? 0) || 0;
                 if (cronData.running && cronData.startedAt != null) {
-                    const st = Number(cronData.startedAt);
-                    const diff = !isNaN(st) ? Math.floor((now - st) / 1000) : 0;
-                    if (diff > 0) {
-                        totalSec = elapsedSec + diff;
-                    } else {
-                        totalSec = elapsedSec;
-                    }
+                    const stCron = Number(cronData.startedAt);
+                    const diff = !Number.isNaN(stCron) ? Math.floor((now - stCron) / 1000) : 0;
+                    totalSec = base + Math.max(0, diff);
                 } else {
-                    totalSec = elapsedSec;
+                    totalSec = base;
                 }
-            } else if (isLive && startTimeMs != null) {
-                // Fallback: si el cronometro de Supabase falla, usamos startTimeMs del Match.
-                const diff = Math.floor((now - startTimeMs) / 1000);
-                if (diff > 0) totalSec = diff;
-            } else if (!isLive && startTimeMs != null && typeof cronData?.running === 'undefined') {
-                 // Si NO está live pero hay startTimeMs y el cron no existe
-                 totalSec = 0;
+            } else {
+                // 2) Respaldo: misma lógica que el marcador basada en startedAt / finishedAt
+                if (isFinished && st != null && en != null) {
+                    totalSec = Math.max(0, Math.floor((en - st) / 1000));
+                } else if (isLiveLike && st != null) {
+                    totalSec = Math.max(0, Math.floor((now - st) / 1000));
+                } else {
+                    totalSec = 0;
+                }
             }
 
             const h = Math.floor(totalSec / 3600);
@@ -141,9 +153,9 @@ function MatchDurationCounter({
         };
 
         update();
-        const id = setInterval(update, 250);
+        const id = setInterval(update, 1000);
         return () => clearInterval(id);
-    }, [isLive, startTimeMs, cronData?.elapsedSec, cronData?.running, cronData?.startedAt]);
+    }, [matchStatus, startTimeMs, endTimeMs, cronData?.elapsedSec, cronData?.running, cronData?.startedAt]);
     if (!duration) return null;
     if (showInPill)
         return (
@@ -553,9 +565,7 @@ export default function FullScreenDisplay() {
         return () => clearInterval(id);
     }, [tournament?.broadcastingSettings?.sponsors]);
 
-    // Hora de inicio del partido (misma fuente que el marcador: startedAt/actualStartTime en BD)
-    const getMatchStartTimeMs = (m: any): number | null => {
-        const raw = m?.startedAt ?? m?.actualStartTime ?? m?.startTime ?? liveMarcador?.match_start_time;
+    const parseTimeFieldToMs = (raw: any): number | null => {
         if (raw == null) return null;
         if (typeof raw?.toDate === 'function') return raw.toDate().getTime();
         if (typeof raw?.seconds === 'number') return raw.seconds * 1000 + (raw.nanoseconds || 0) / 1e6;
@@ -563,6 +573,22 @@ export default function FullScreenDisplay() {
         const d = new Date(raw);
         return isNaN(d.getTime()) ? null : d.getTime();
     };
+
+    /** Resolución de partidos por horario (puede usar fallbacks) */
+    const getMatchStartTimeMs = (m: any): number | null => {
+        const raw = m?.startedAt ?? m?.actualStartTime ?? m?.startTime ?? liveMarcador?.match_start_time;
+        return parseTimeFieldToMs(raw);
+    };
+
+    /**
+     * Cronómetro de la pizarra = mismo criterio que el marcador del marker (score/[matchId]):
+     * solo startedAt / actualStartTime y finishedAt / actualEndTime.
+     */
+    const getMarkerDurationStartMs = (m: any): number | null =>
+        parseTimeFieldToMs(m?.startedAt ?? m?.actualStartTime);
+
+    const getMarkerDurationEndMs = (m: any): number | null =>
+        parseTimeFieldToMs(m?.finishedAt ?? m?.actualEndTime);
 
     // Temperature (Open-Meteo) — Isla de Margarita
 
@@ -980,8 +1006,27 @@ export default function FullScreenDisplay() {
         return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
     })();
 
-    const isLiveForDuration = lm ? (!!lm.cronometro?.running || lm.cronometro?.elapsedSec > 0) : (match?.status === MatchStatus.LIVE || match?.status === 'live' || match?.status === MatchStatus.PAUSED || match?.status === 'PAUSED' || match?.status === 'EN_CURSO');
-    const matchStartTimeMs = getMatchStartTimeMs(match);
+    // Activa el cronómetro cuando el marker inicia el partido (status LIVE en match),
+    // y también cuando existe estado de cronómetro en pizarra_cancha_state.
+    const markerDurationStartMs = getMarkerDurationStartMs(match);
+    const markerDurationEndMs = getMarkerDurationEndMs(match);
+
+    /**
+     * Un solo indicador de saque: no mezclar lm.saque OR match.server (provoca dos destellos).
+     * Prioridad: match.server (BD, lo controla el marker) → refuerzo lm.saque si aún no hay server válido.
+     */
+    const mServer = match?.server;
+    const mTeam = Number(mServer?.team);
+    const mPlayer = Number(mServer?.player);
+    const lSaque = lm?.saque;
+    const lTeam = Number(lSaque?.equipo);
+    const lPlayer = Number(lSaque?.jugador);
+    const displayServer =
+        ((mTeam === 1 || mTeam === 2) && (mPlayer === 1 || mPlayer === 2))
+            ? { team: mTeam as 1 | 2, player: mPlayer as 1 | 2 }
+            : ((lTeam === 1 || lTeam === 2) && (lPlayer === 1 || lPlayer === 2))
+                ? { team: lTeam as 1 | 2, player: lPlayer as 1 | 2 }
+                : { team: 1 as const, player: 1 as const };
 
     const relojTheme = relojOcasion || 'default';
 
@@ -1062,12 +1107,13 @@ export default function FullScreenDisplay() {
 
                             {/* Center: Match Control (Timer/Clock) */}
                             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center">
-                                <MatchDurationCounter 
-                                    isLive={isLiveForDuration} 
-                                    startTimeMs={matchStartTimeMs} 
-                                    cronData={lm?.cronometro} 
-                                    primaryColor={primaryColor} 
-                                    cronometroTipo={cronometroTipo} 
+                                <MatchDurationCounter
+                                    matchStatus={match?.status}
+                                    startTimeMs={markerDurationStartMs}
+                                    endTimeMs={markerDurationEndMs}
+                                    cronData={lm?.cronometro}
+                                    primaryColor={primaryColor}
+                                    cronometroTipo={cronometroTipo}
                                 />
                             </div>
 
@@ -1154,7 +1200,7 @@ export default function FullScreenDisplay() {
                                         <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
                                             <span className="flex items-center">
                                                 <AnimatePresence>
-                                                    {( (lm?.saque?.equipo === 1 && lm?.saque?.jugador === 1) || (match.server?.team === 1 && match.server?.player === 1) ) && (
+                                                    {(displayServer.team === 1 && displayServer.player === 1) && (
                                                         <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
                                                             className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
                                                             <span style={{ fontSize: '0.6em' }}>🎾</span>
@@ -1166,7 +1212,7 @@ export default function FullScreenDisplay() {
                                             <span className="text-white/30 mx-3">/</span>
                                             <span className="flex items-center">
                                                 <AnimatePresence>
-                                                    {( (lm?.saque?.equipo === 1 && lm?.saque?.jugador === 2) || (match.server?.team === 1 && match.server?.player === 2) ) && (
+                                                    {(displayServer.team === 1 && displayServer.player === 2) && (
                                                         <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
                                                             className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
                                                             <span style={{ fontSize: '0.6em' }}>🎾</span>
@@ -1207,7 +1253,7 @@ export default function FullScreenDisplay() {
                                         <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
                                             <span className="flex items-center">
                                                 <AnimatePresence>
-                                                    {( (lm?.saque?.equipo === 2 && lm?.saque?.jugador === 1) || (match.server?.team === 2 && match.server?.player === 1) ) && (
+                                                    {(displayServer.team === 2 && displayServer.player === 1) && (
                                                         <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
                                                             className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
                                                             <span style={{ fontSize: '0.6em' }}>🎾</span>
@@ -1219,7 +1265,7 @@ export default function FullScreenDisplay() {
                                             <span className="text-white/30 mx-3">/</span>
                                             <span className="flex items-center">
                                                 <AnimatePresence>
-                                                    {( (lm?.saque?.equipo === 2 && lm?.saque?.jugador === 2) || (match.server?.team === 2 && match.server?.player === 2) ) && (
+                                                    {(displayServer.team === 2 && displayServer.player === 2) && (
                                                         <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
                                                             className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
                                                             <span style={{ fontSize: '0.6em' }}>🎾</span>

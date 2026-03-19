@@ -511,14 +511,18 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                 const d = timeRaw?.toDate ? timeRaw.toDate() : new Date(timeRaw);
                 const dateStr = isNaN(d.getTime()) ? defaultDateStr : d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const time = isNaN(d.getTime()) ? (timeRaw ? String(timeRaw) : '-') : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                // Misma prioridad que las tarjetas del dashboard: team1/team2 vienen enriquecidos
+                // con buildTeamDisplay (nombres desde tournament.teams); team1Name en Firebase puede quedar desactualizado.
+                const label1 = m.team1?.name ?? m.team1Name ?? 'Por definir';
+                const label2 = m.team2?.name ?? m.team2Name ?? 'Por definir';
                 return [
                     idx + 1,
                     dateStr,
                     time,
                     m.court ?? (m.courtIndex != null ? m.courtIndex + 1 : '-'),
-                    m.team1Name ?? m.team1?.name ?? 'Por definir',
+                    label1,
                     m.status === MatchStatus.FINISHED ? (m.score || '-') : 'VS',
-                    m.team2Name ?? m.team2?.name ?? 'Por definir',
+                    label2,
                     getStageLabel(m)
                 ];
             })
@@ -861,6 +865,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const displayMatches = activeTab === 'En Vivo' ? _liveSorted : filteredMatches;
 
     const isLiveDashboard = activeTab === 'En Vivo' && filteredMatches.length > 0 && filteredMatches.length <= _numCanchas;
+    const enableCourtScroll = _numCanchas > 3 && (activeTab === 'Por Comenzar' || isLiveDashboard);
 
     const getLiveConfig = (count: number) => {
         // Uniform config for rows of three as requested
@@ -1016,26 +1021,153 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         return groupStandings;
     };
 
+    const isPlaceholderName = (name?: string) => /^jugador\s+\d+$/i.test((name || '').trim());
+
+    const updateTournamentTeams = async (
+        updater: (teams: any[], groupAssignments: Record<string, string[]>) => { teams: any[]; groupAssignments: Record<string, string[]> }
+    ) => {
+        if (!tournament) return;
+        const currentTeams = Array.isArray(tournament.teams) ? [...tournament.teams] : [];
+        const currentAssignments = { ...(tournament.groupAssignments || {}) } as Record<string, string[]>;
+        const next = updater(currentTeams, currentAssignments);
+        const updatedTournament = {
+            ...tournament,
+            teams: next.teams,
+            groupAssignments: next.groupAssignments,
+            updatedAt: new Date().toISOString(),
+        };
+        await dataService.updateTournament(id, updatedTournament);
+        setTournament(updatedTournament);
+    };
+
+    const handleQuickFillPlaceholder = async (teamId: string) => {
+        if (!canManageTournament) return;
+        const p1 = window.prompt('Nombre y apellido del jugador 1');
+        if (!p1 || !p1.trim()) return;
+        const p2 = window.prompt('Nombre y apellido del jugador 2');
+        if (!p2 || !p2.trim()) return;
+        try {
+            await updateTournamentTeams((teams, groupAssignments) => {
+                const idx = teams.findIndex((t: any) => String(t.id) === String(teamId));
+                if (idx < 0) return { teams, groupAssignments };
+                teams[idx] = {
+                    ...teams[idx],
+                    p1: { ...(teams[idx]?.p1 || {}), name: p1.trim() },
+                    p2: { ...(teams[idx]?.p2 || {}), name: p2.trim() },
+                };
+                return { teams, groupAssignments };
+            });
+        } catch (e: any) {
+            alert(e?.message || 'No se pudo completar el cupo');
+        }
+    };
+
+    const handleEditTeamFromGrid = async (teamId: string) => {
+        if (!canManageTournament) return;
+        const team = (tournament?.teams || []).find((t: any) => String(t.id) === String(teamId));
+        if (!team) return;
+        const currentP1 = team?.p1?.name || '';
+        const currentP2 = team?.p2?.name || '';
+        const p1 = window.prompt('Editar jugador 1', currentP1);
+        if (p1 == null) return;
+        const p2 = window.prompt('Editar jugador 2', currentP2);
+        if (p2 == null) return;
+        try {
+            await updateTournamentTeams((teams, groupAssignments) => {
+                const idx = teams.findIndex((t: any) => String(t.id) === String(teamId));
+                if (idx < 0) return { teams, groupAssignments };
+                teams[idx] = {
+                    ...teams[idx],
+                    p1: { ...(teams[idx]?.p1 || {}), name: p1.trim() || currentP1 },
+                    p2: { ...(teams[idx]?.p2 || {}), name: p2.trim() || currentP2 },
+                };
+                return { teams, groupAssignments };
+            });
+        } catch (e: any) {
+            alert(e?.message || 'No se pudo editar la pareja');
+        }
+    };
+
+    const handleMoveTeamToGroup = async (teamId: string, targetGroup: string) => {
+        if (!canManageTournament || !targetGroup) return;
+        try {
+            await updateTournamentTeams((teams, groupAssignments) => {
+                const normalizedAssignments: Record<string, string[]> = {};
+                Object.entries(groupAssignments).forEach(([groupName, ids]) => {
+                    normalizedAssignments[groupName] = (ids || []).filter((tid) => String(tid) !== String(teamId));
+                });
+                if (!normalizedAssignments[targetGroup]) normalizedAssignments[targetGroup] = [];
+                if (!normalizedAssignments[targetGroup].some((tid) => String(tid) === String(teamId))) {
+                    normalizedAssignments[targetGroup].push(String(teamId));
+                }
+                return { teams, groupAssignments: normalizedAssignments };
+            });
+        } catch (e: any) {
+            alert(e?.message || 'No se pudo mover la pareja de grupo');
+        }
+    };
+
     const gruposTabContent = (() => {
-        const groupNames = [...new Set(inscriptions.map(ins => ins.groupName ?? 'Sin grupo'))].filter(Boolean).sort();
-        const gridGroups: Group[] = groupNames.length > 0
-            ? groupNames.map(name => ({
-                name: name === 'Sin grupo' ? 'Sin grupo' : name,
-                teams: inscriptions
-                    .filter(ins => (ins.groupName ?? 'Sin grupo') === name)
-                    .map(ins => {
-                        const partnerName = (ins.data?.partnerName as string) ?? '';
+        let gridGroups: Group[] = [];
+        const assignments = (tournament?.groupAssignments ?? {}) as Record<string, string[]>;
+        const assignmentNames = Object.keys(assignments).sort();
+
+        if (assignmentNames.length > 0 && Array.isArray(tournament?.teams) && tournament.teams.length > 0) {
+            gridGroups = assignmentNames.map((groupName) => ({
+                name: groupName,
+                teams: (assignments[groupName] || [])
+                    .map((teamId) => {
+                        const team = (tournament.teams || []).find((t: any) => String(t.id) === String(teamId));
+                        if (!team) return null;
+                        const p1 = String(team?.p1?.name || '').trim();
+                        const p2 = String(team?.p2?.name || '').trim();
+                        const isPlaceholder = !p1 || !p2 || isPlaceholderName(p1) || isPlaceholderName(p2);
                         return {
-                            id: ins.id,
-                            player1_name: ins.participantName ?? '',
-                            player2_name: partnerName,
-                            is_placeholder: ins.isPlaceholder === true,
-                            player2_accepted: !ins.isPlaceholder && !!partnerName,
+                            id: String(team.id),
+                            player1_name: p1 || 'Jugador por definir',
+                            player2_name: p2 || 'Jugador por definir',
+                            is_placeholder: isPlaceholder,
+                            player2_accepted: !isPlaceholder,
+                            group_name: groupName,
                         } satisfies Team;
-                    }),
-            }))
-            : [];
-        if (gridGroups.length > 0) return <TournamentGridView groups={gridGroups} />;
+                    })
+                    .filter(Boolean) as Team[],
+            }));
+        }
+
+        if (gridGroups.length === 0) {
+            const groupNames = [...new Set(inscriptions.map(ins => ins.groupName ?? 'Sin grupo'))].filter(Boolean).sort();
+            gridGroups = groupNames.length > 0
+                ? groupNames.map(name => ({
+                    name: name === 'Sin grupo' ? 'Sin grupo' : name,
+                    teams: inscriptions
+                        .filter(ins => (ins.groupName ?? 'Sin grupo') === name)
+                        .map(ins => {
+                            const partnerName = (ins.data?.partnerName as string) ?? '';
+                            return {
+                                id: ins.id,
+                                player1_name: ins.participantName ?? '',
+                                player2_name: partnerName,
+                                is_placeholder: ins.isPlaceholder === true,
+                                player2_accepted: !ins.isPlaceholder && !!partnerName,
+                                group_name: name,
+                            } satisfies Team;
+                        }),
+                }))
+                : [];
+        }
+
+        if (gridGroups.length > 0) {
+            return (
+                <TournamentGridView
+                    groups={gridGroups}
+                    canManage={!!canManageTournament}
+                    onQuickFillPlaceholder={handleQuickFillPlaceholder}
+                    onEditTeam={handleEditTeamFromGrid}
+                    onMoveTeam={handleMoveTeamToGroup}
+                />
+            );
+        }
         if (isCruzado) {
             const ga = (tournament?.groupAssignments ?? {}) as Record<string, string[]>;
             const groupAIds: string[] = ga['A'] ?? [];
@@ -1448,7 +1580,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
             )}
 
             {/* Content Area (pizarra / cuadro / listados) */}
-            <div className={`ipad-scroll-area pb-20 ${isLiveDashboard ? 'overflow-hidden !pr-0' : (activeTab === 'Por Comenzar' ? 'overflow-hidden' : '')}`}>
+            <div className={`ipad-scroll-area pb-20 ${isLiveDashboard ? (enableCourtScroll ? 'overflow-y-auto !pr-0' : 'overflow-hidden !pr-0') : (activeTab === 'Por Comenzar' ? (enableCourtScroll ? 'overflow-y-auto' : 'overflow-hidden') : '')}`}>
                 <main className={`${isLiveDashboard ? 'max-w-none w-full h-full p-2' : activeTab === 'Por Comenzar' ? 'max-w-4xl mx-auto w-full px-4 py-6 h-full flex flex-col' : 'max-w-4xl mx-auto w-full px-4 py-10'} transition-all duration-500`}>
                     <AnimatePresence mode="wait">
                         {activeTab === 'Grupos' ? (

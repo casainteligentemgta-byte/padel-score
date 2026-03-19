@@ -172,10 +172,13 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                 setDuration(0);
             }
 
-            // Iniciar intervalo si no existe
+            // Mismo criterio que la pizarra: segundos desde startedAt/actualStartTime (reloj de pared, sin deriva)
             if (!timerRef.current) {
                 timerRef.current = setInterval(() => {
-                    setDuration(prev => prev + 1);
+                    const sm = getMatchStartTimeMs(match);
+                    if (sm != null) {
+                        setDuration(Math.max(0, Math.floor((Date.now() - sm) / 1000)));
+                    }
                 }, 1000);
             }
             return;
@@ -650,7 +653,15 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
 
     const setSpecificServer = async (team: number, player: number) => {
         if (!tournament || !match) return;
-        await dataService.updateMatch(id, match.id, { server: { team, player } });
+        const previous = match;
+        setMatch((prev) => (prev ? { ...prev, server: { team, player } } : prev));
+        try {
+            await dataService.updateMatch(id, match.id, { server: { team, player } });
+        } catch (err) {
+            console.error('[setSpecificServer]', err);
+            setMatch(previous);
+            alert('No se pudo actualizar el sacador.');
+        }
     };
 
     /** Intercambia la cancha del partido actual con un partido pendiente (no iniciado). */
@@ -699,15 +710,31 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
     const toggleServingPlayer = async () => {
         if (!match) return;
         saveHistory();
+        const previous = match;
         const currentServer = match.server || { team: 1, player: 1 };
-        await dataService.updateMatch(id, match.id, { server: { ...currentServer, player: currentServer.player === 1 ? 2 : 1 } });
+        const next = { ...currentServer, player: currentServer.player === 1 ? 2 : 1 };
+        setMatch((prev) => (prev ? { ...prev, server: next } : prev));
+        try {
+            await dataService.updateMatch(id, match.id, { server: next });
+        } catch (err) {
+            console.error('[toggleServingPlayer]', err);
+            setMatch(previous);
+        }
     };
 
     const toggleServingTeam = async () => {
         if (!match) return;
         saveHistory();
+        const previous = match;
         const currentServer = match.server || { team: 1, player: 1 };
-        await dataService.updateMatch(id, match.id, { server: { ...currentServer, team: currentServer.team === 1 ? 2 : 1 } });
+        const next = { ...currentServer, team: currentServer.team === 1 ? 2 : 1 };
+        setMatch((prev) => (prev ? { ...prev, server: next } : prev));
+        try {
+            await dataService.updateMatch(id, match.id, { server: next });
+        } catch (err) {
+            console.error('[toggleServingTeam]', err);
+            setMatch(previous);
+        }
     };
 
     const handleMedicalTimeout = async () => {
@@ -927,6 +954,31 @@ export default function RefereeScoreboard({ params }: { params: Promise<{ id: st
                     </div>
                 </div>
             </header>
+
+            {/* Ayuda sacador: solo el marker controla quién saca (un toque en el jugador) */}
+            {match.status === MatchStatus.LIVE && (
+                <div className="shrink-0 px-4 py-1.5 flex flex-wrap items-center justify-center gap-2">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/35 text-center">
+                        Sacador: toca J1–J4 · doble toque = deshacer punto
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => toggleServingPlayer()}
+                            className="px-2.5 py-1 rounded-lg border border-white/15 bg-white/5 text-[8px] font-black uppercase tracking-widest text-padel-primary hover:bg-padel-primary/10"
+                        >
+                            Otro jugador (misma pareja)
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => toggleServingTeam()}
+                            className="px-2.5 py-1 rounded-lg border border-white/15 bg-white/5 text-[8px] font-black uppercase tracking-widest text-white/70 hover:bg-white/10"
+                        >
+                            Cambiar pareja al saque
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Rectangle 2 & 3: Middle Content */}
             <main className="flex-1 flex flex-wrap gap-1.5 min-h-0 overflow-hidden content-start">

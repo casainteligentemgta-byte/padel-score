@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Lock, CheckCircle2, UserPlus } from 'lucide-react';
+import { Lock, CheckCircle2, UserPlus, Pencil } from 'lucide-react';
 
 export interface Team {
   id: string;
@@ -9,6 +9,7 @@ export interface Team {
   player2_name: string;
   is_placeholder: boolean;
   player2_accepted: boolean;
+  group_name?: string;
 }
 
 export interface Group {
@@ -16,9 +17,22 @@ export interface Group {
   teams: Team[];
 }
 
-export function TournamentGridView({ groups }: { groups: Group[] }) {
+export function TournamentGridView({
+  groups,
+  canManage = false,
+  onQuickFillPlaceholder,
+  onEditTeam,
+  onMoveTeam,
+}: {
+  groups: Group[];
+  canManage?: boolean;
+  onQuickFillPlaceholder?: (teamId: string) => void;
+  onEditTeam?: (teamId: string) => void;
+  onMoveTeam?: (teamId: string, targetGroup: string) => void;
+}) {
+  const availableGroups = groups.map((g) => g.name);
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 p-6 bg-[#0a0a0a]">
+    <div className="grid grid-cols-1 gap-6 p-6 bg-[#0a0a0a]">
       {groups.map((group) => (
         <div key={group.name} className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-md">
           {/* Encabezado del Grupo */}
@@ -40,18 +54,30 @@ export function TournamentGridView({ groups }: { groups: Group[] }) {
               >
                 {team.is_placeholder ? (
                   /* VISTA PLACEHOLDER */
-                  <div className="flex items-center gap-3">
-                    <div className="bg-white/5 p-2 rounded-lg border border-dashed border-white/10">
-                      <UserPlus size={16} className="text-white/40" />
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-white/5 p-2 rounded-lg border border-dashed border-white/10">
+                        <UserPlus size={16} className="text-white/40" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-white/70 uppercase tracking-tighter">Cupo disponible</p>
+                        <p className="text-[10px] text-white/30 italic">Toca para inscribir una pareja…</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold text-white/70 uppercase tracking-tighter">Cupo disponible</p>
-                      <p className="text-[10px] text-white/30 italic">Toca para inscribir una pareja…</p>
-                    </div>
+                    {canManage && onQuickFillPlaceholder && (
+                      <button
+                        type="button"
+                        onClick={() => onQuickFillPlaceholder(team.id)}
+                        className="w-full h-8 rounded-lg border border-padel-primary/40 bg-padel-primary/10 text-padel-primary text-[10px] font-black uppercase tracking-widest hover:bg-padel-primary/20 transition-colors"
+                      >
+                        Completar cupo
+                      </button>
+                    )}
                   </div>
                 ) : (
                   /* VISTA REAL */
-                  <div className="flex items-center justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-[#ccff00]" />
@@ -82,6 +108,35 @@ export function TournamentGridView({ groups }: { groups: Group[] }) {
                         <CheckCircle2 size={16} className="text-[#ccff00] opacity-90" />
                       )}
                     </div>
+                    </div>
+                    {canManage && (
+                      <div className="flex flex-col gap-2">
+                        {onEditTeam && (
+                          <button
+                            type="button"
+                            onClick={() => onEditTeam(team.id)}
+                            className="w-full h-9 rounded-lg border border-white/20 bg-white/5 text-white text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-colors inline-flex items-center justify-center gap-1.5"
+                          >
+                            <Pencil size={12} />
+                            Editar
+                          </button>
+                        )}
+                        {onMoveTeam && availableGroups.length > 1 && (
+                          <select
+                            value={team.group_name ?? group.name}
+                            onChange={(e) => onMoveTeam(team.id, e.target.value)}
+                            className="w-full h-9 rounded-lg border border-white/20 bg-white/5 text-white text-[10px] font-black uppercase tracking-widest px-3"
+                            title="Mover equipo de grupo"
+                          >
+                            {availableGroups.map((gName) => (
+                              <option key={`${team.id}-${gName}`} value={gName} className="bg-[#111]">
+                                Mover a grupo {gName}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
