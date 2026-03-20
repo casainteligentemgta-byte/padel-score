@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
 import { Monitor, Wifi, WifiOff, Maximize2 } from 'lucide-react';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 
 // ── Grid layouts según número de canchas activas ─────────────────────────────
 // Máximo 6 canchas (La Margarita)
@@ -26,8 +27,8 @@ interface ActiveMatch {
     status: MatchStatus;
 }
 
-export default function MonitorCanchas({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
+export default function MonitorCanchas() {
+    const id = useRouteSegment('id');
     const [tournament, setTournament] = useState<any>(null);
     const [activeMatches, setActiveMatches] = useState<ActiveMatch[]>([]);
     const [loading, setLoading] = useState(true);

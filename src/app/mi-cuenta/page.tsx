@@ -20,7 +20,8 @@ import {
     CalendarDays,
     Users,
     LogOut,
-    ChevronLeft
+    ChevronLeft,
+    Fingerprint
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
@@ -43,10 +44,17 @@ export default function MiCuentaPage() {
     const [invitations, setInvitations] = useState<any[]>([]);
     const [loadingInvs, setLoadingInvs] = useState(true);
     const [respondingId, setRespondingId] = useState<string | null>(null);
+    const [passkeySupported, setPasskeySupported] = useState(false);
+    const [biometricLoading, setBiometricLoading] = useState(false);
+    const [biometricMsg, setBiometricMsg] = useState<string>('');
 
     useEffect(() => {
         if (!authLoading && !user) router.replace('/login');
     }, [user, authLoading, router]);
+
+    useEffect(() => {
+        setPasskeySupported(typeof window !== 'undefined' && 'PublicKeyCredential' in window);
+    }, []);
 
     // Cargar ficha de jugador asociada a este usuario (participants.ownerId = uid)
     useEffect(() => {
@@ -159,6 +167,29 @@ export default function MiCuentaPage() {
             setError(e?.message || 'Error al guardar. Intenta de nuevo.');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleEnableBiometric = async () => {
+        const supabase = getSupabaseClient();
+        if (!supabase) {
+            setBiometricMsg('Supabase no está configurado.');
+            return;
+        }
+        setBiometricLoading(true);
+        setBiometricMsg('');
+        try {
+            const authAny = supabase.auth as any;
+            if (typeof authAny.addPasskey !== 'function') {
+                throw new Error('Tu SDK de Supabase no soporta addPasskey en este entorno.');
+            }
+            const { error: addErr } = await authAny.addPasskey();
+            if (addErr) throw addErr;
+            setBiometricMsg('Biometría activada correctamente en este dispositivo.');
+        } catch (e: any) {
+            setBiometricMsg(e?.message || 'No se pudo activar FaceID/TouchID.');
+        } finally {
+            setBiometricLoading(false);
         }
     };
 
@@ -399,6 +430,34 @@ export default function MiCuentaPage() {
                     )}
 
                     {/* Tarjeta de cuenta (correo, rol) oculta por solicitud del usuario */}
+                    {passkeySupported && (
+                        <div className="w-full max-w-full min-w-0 bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <h2 className="text-sm sm:text-base font-black uppercase tracking-widest text-padel-primary flex items-center gap-2">
+                                        <Fingerprint className="w-4 h-4" />
+                                        Seguridad Biométrica
+                                    </h2>
+                                    <p className="text-[11px] text-gray-400 mt-1">
+                                        Activa FaceID / TouchID en este dispositivo para iniciar sesión sin contraseña.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-4 flex flex-wrap items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={handleEnableBiometric}
+                                    disabled={biometricLoading}
+                                    className="px-4 py-2.5 rounded-xl border border-[#ccff00]/40 bg-[#ccff00]/10 text-[#ccff00] text-[10px] font-black uppercase tracking-widest hover:bg-[#ccff00]/20 transition-all disabled:opacity-60"
+                                >
+                                    {biometricLoading ? 'Activando...' : 'Activar FaceID / TouchID en este dispositivo'}
+                                </button>
+                                {biometricMsg && (
+                                    <p className="text-[11px] text-gray-300">{biometricMsg}</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Botón de Cerrar Sesión */}

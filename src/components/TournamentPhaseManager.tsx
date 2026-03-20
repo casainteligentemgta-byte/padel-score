@@ -221,6 +221,37 @@ function BracketView({
     const semis = knockoutMatches.filter(m => isSemifinal(m));
     const finals = knockoutMatches.filter(m => isFinal(m));
 
+    // ── Orden lógico: Octavos → Cuartos → Semis → Final (Final al final del scroll)
+    // Hooks (useMemo) deben ejecutarse siempre: NO poner return condicionales antes.
+    const getRoundOrder = (name: string): number => {
+        const upper = (name || '').toUpperCase();
+        if (upper.includes('DIECISEISAVOS') || upper.includes('16')) return 1;
+        if (upper.includes('OCTAVOS') || upper.includes('8VO')) return 2;
+        if (upper.includes('CUARTOS') || upper.includes('PRINCIPAL R1') || upper.includes('CONSOLACIÓN R1')) return 3;
+        if (upper.includes('SEMIFINAL') && !upper.includes('FINAL')) return 4;
+        if (upper.includes('CONSOLACIÓN FINAL')) return 4;
+        if (upper.includes('FINAL') && !upper.includes('SEMI') || upper.includes('PRINCIPAL FINAL')) return 5;
+        if (name === 'Principal R1' || name === 'Consolación R1') return 3;
+        if (name === 'Principal SF') return 4;
+        if (name === 'Principal FINAL' || name === 'FINAL') return 5;
+        return 10;
+    };
+
+    const rounds = useMemo(() => {
+        const byRound: Record<string, any[]> = {};
+        knockoutMatches.forEach((m) => {
+            const key = m.roundName || 'Eliminatoria';
+            if (!byRound[key]) byRound[key] = [];
+            byRound[key].push(m);
+        });
+        return Object.entries(byRound).map(([name, matches]) => ({ id: name, name, matches }));
+    }, [knockoutMatches]);
+
+    const sortedRounds = useMemo(
+        () => [...rounds].sort((a, b) => getRoundOrder(a.name) - getRoundOrder(b.name)),
+        [rounds]
+    );
+
     // ── Locked state ────────────────────────────────────────────────────────
     if (locked) {
         return (
@@ -266,36 +297,6 @@ function BracketView({
             </motion.div>
         );
     }
-
-    // ── Orden lógico: Octavos → Cuartos → Semis → Final (Final al final del scroll)
-    const getRoundOrder = (name: string): number => {
-        const upper = (name || '').toUpperCase();
-        if (upper.includes('DIECISEISAVOS') || upper.includes('16')) return 1;
-        if (upper.includes('OCTAVOS') || upper.includes('8VO')) return 2;
-        if (upper.includes('CUARTOS') || upper.includes('PRINCIPAL R1') || upper.includes('CONSOLACIÓN R1')) return 3;
-        if (upper.includes('SEMIFINAL') && !upper.includes('FINAL')) return 4;
-        if (upper.includes('CONSOLACIÓN FINAL')) return 4;
-        if (upper.includes('FINAL') && !upper.includes('SEMI') || upper.includes('PRINCIPAL FINAL')) return 5;
-        if (name === 'Principal R1' || name === 'Consolación R1') return 3;
-        if (name === 'Principal SF') return 4;
-        if (name === 'Principal FINAL' || name === 'FINAL') return 5;
-        return 10;
-    };
-
-    const rounds = useMemo(() => {
-        const byRound: Record<string, any[]> = {};
-        knockoutMatches.forEach((m) => {
-            const key = m.roundName || 'Eliminatoria';
-            if (!byRound[key]) byRound[key] = [];
-            byRound[key].push(m);
-        });
-        return Object.entries(byRound).map(([name, matches]) => ({ id: name, name, matches }));
-    }, [knockoutMatches]);
-
-    const sortedRounds = useMemo(
-        () => [...rounds].sort((a, b) => getRoundOrder(a.name) - getRoundOrder(b.name)),
-        [rounds]
-    );
 
     // ── Bracket tree: flex-row para flujo izquierda→derecha (Octavos … Final)
     return (

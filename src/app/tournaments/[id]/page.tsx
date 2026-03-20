@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -38,6 +38,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 // Supabase is now used for data management.
 import GroupPhaseView from '@/components/GroupPhaseView';
 import TournamentPhaseManager from '@/components/TournamentPhaseManager';
@@ -51,9 +52,9 @@ import { getAuthHeaders } from '@/lib/apiAuth';
 
 
 
-export default function TournamentDashboard({ params }: { params: Promise<{ id: string }> }) {
+export default function TournamentDashboard() {
     type ParticipantOption = { id: string; name?: string; lastName?: string; email?: string; phone?: string };
-    const { id } = use(params);
+    const id = useRouteSegment('id');
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user, profile, isAdmin, markerCanchas, loading: authLoading } = useAuth();
@@ -126,6 +127,47 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         if (!id) return;
         dataService.getInscriptionsByTournament(id).then(setInscriptions).catch(() => setInscriptions([]));
     }, [id]);
+
+    // Búsqueda realtime de participantes para inscripción manual (siempre antes de cualquier return de render).
+    useEffect(() => {
+        if (!isManualInscriptionOpen) return;
+        if (p1SearchRef.current) clearTimeout(p1SearchRef.current);
+        p1SearchRef.current = setTimeout(async () => {
+            if (p1Selected || p1Query.trim().length < 2) {
+                setP1Matches([]);
+                return;
+            }
+            try {
+                const results = await dataService.searchParticipants(p1Query.trim(), 8);
+                setP1Matches(results);
+            } catch {
+                setP1Matches([]);
+            }
+        }, 220);
+        return () => {
+            if (p1SearchRef.current) clearTimeout(p1SearchRef.current);
+        };
+    }, [p1Query, p1Selected, isManualInscriptionOpen]);
+
+    useEffect(() => {
+        if (!isManualInscriptionOpen) return;
+        if (p2SearchRef.current) clearTimeout(p2SearchRef.current);
+        p2SearchRef.current = setTimeout(async () => {
+            if (p2Selected || p2Query.trim().length < 2) {
+                setP2Matches([]);
+                return;
+            }
+            try {
+                const results = await dataService.searchParticipants(p2Query.trim(), 8);
+                setP2Matches(results);
+            } catch {
+                setP2Matches([]);
+            }
+        }, 220);
+        return () => {
+            if (p2SearchRef.current) clearTimeout(p2SearchRef.current);
+        };
+    }, [p2Query, p2Selected, isManualInscriptionOpen]);
 
     useEffect(() => {
         if (!id || authLoading) return;
@@ -1102,46 +1144,6 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
             setP2Matches([]);
         }
     };
-
-    useEffect(() => {
-        if (!isManualInscriptionOpen) return;
-        if (p1SearchRef.current) clearTimeout(p1SearchRef.current);
-        p1SearchRef.current = setTimeout(async () => {
-            if (p1Selected || p1Query.trim().length < 2) {
-                setP1Matches([]);
-                return;
-            }
-            try {
-                const results = await dataService.searchParticipants(p1Query.trim(), 8);
-                setP1Matches(results);
-            } catch {
-                setP1Matches([]);
-            }
-        }, 220);
-        return () => {
-            if (p1SearchRef.current) clearTimeout(p1SearchRef.current);
-        };
-    }, [p1Query, p1Selected, isManualInscriptionOpen]);
-
-    useEffect(() => {
-        if (!isManualInscriptionOpen) return;
-        if (p2SearchRef.current) clearTimeout(p2SearchRef.current);
-        p2SearchRef.current = setTimeout(async () => {
-            if (p2Selected || p2Query.trim().length < 2) {
-                setP2Matches([]);
-                return;
-            }
-            try {
-                const results = await dataService.searchParticipants(p2Query.trim(), 8);
-                setP2Matches(results);
-            } catch {
-                setP2Matches([]);
-            }
-        }, 220);
-        return () => {
-            if (p2SearchRef.current) clearTimeout(p2SearchRef.current);
-        };
-    }, [p2Query, p2Selected, isManualInscriptionOpen]);
 
     const handleQuickFillPlaceholder = async (teamId: string) => {
         if (!canManageTournament) return;

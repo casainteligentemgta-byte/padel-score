@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Camera, Plus, X, Wifi, WifiOff, Tv, Radio, Monitor,
@@ -16,6 +16,7 @@ import { useAuth } from '@/lib/AuthContext';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
 import { BackButton } from '@/components/BackButton';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 import { MatchStatus } from '@/types/tournament';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -357,8 +358,8 @@ function EditCameraModal({
 }
 
 // ── Main Page ────────────────────────────────────────────────────────────────
-export default function BroadcastingPage({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
+export default function BroadcastingPage() {
+    const id = useRouteSegment('id');
     const { isAdmin, isMarker } = useAuth();
 
     const [tournament, setTournament] = useState<any>(null);

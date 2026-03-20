@@ -18,6 +18,13 @@ const supabase = () => {
 
 const now = () => new Date().toISOString();
 
+/** Valida UUID v4 (y variantes comunes en Supabase) para IDs de inscripción en URL. */
+export function isValidInscriptionId(id: string | null | undefined): boolean {
+    if (!id || typeof id !== 'string') return false;
+    const s = id.trim();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
+
 // ── Time Synchronization (NTP-like using Supabase Headers) ─────────────
 let globalClockOffset = 0;
 let clockSynced = false;
@@ -1387,10 +1394,11 @@ export const dataService = {
     },
 
     async getInscriptionById(id: string) {
+        if (!isValidInscriptionId(id)) return null;
         const { data, error } = await supabase()
             .from('inscriptions')
             .select('*')
-            .eq('id', id)
+            .eq('id', id.trim())
             .maybeSingle();
         if (error) throw error;
         if (!data) return null;
@@ -1402,7 +1410,177 @@ export const dataService = {
             categoryKey: r.category_key,
             participantName: r.participant_name,
             partnerName: r.data?.partnerName ?? null,
+            partnerId: r.data?.partnerId ?? null,
             paymentStatus: r.payment_status,
+            inscriptionStatus: (r.inscription_status as string) ?? 'NORMAL',
+        };
+    },
+
+    /**
+     * Invitado (partnerId en data) confirma una inscripción RESERVED.
+     * Acepta la invitación en `teams` si existe fila pending asociada, luego marca CONFIRMED y devuelve la fila actualizada.
+     */
+    async confirmReservedTeam(inscriptionId: string): Promise<{
+        id: string;
+        ownerId: string;
+        tournamentId: string | null;
+        tournamentName: string | null;
+        tournamentLiveName: string | null;
+        player1Name: string | null;
+        player1Email: string | null;
+        categoryKey: string | null;
+        participantName: string | null;
+        inscriptionStatus: string;
+        paymentStatus: string;
+        data: Record<string, unknown>;
+        updatedAt: string;
+        confirmedAt: string | null;
+    }> {
+        const cleanId = inscriptionId?.trim() ?? '';
+        if (!isValidInscriptionId(cleanId)) {
+            throw new Error('El enlace de confirmación no es válido.');
+        }
+
+        const db = supabase();
+        const { data: { user } } = await db.auth.getUser();
+        if (!user?.id) {
+            throw new Error('Debes iniciar sesión para confirmar tu lugar.');
+        }
+
+        const { data: ins, error: fetchErr } = await db
+            .from('inscriptions')
+            .select('*, tournament:tournaments(name), player1:participants!player1_id(name, email)')
+            .eq('id', cleanId)
+            .maybeSingle();
+
+        if (fetchErr) throw fetchErr;
+        if (!ins) {
+            throw new Error('No encontramos esta inscripción.');
+        }
+
+        const row = ins as any;
+        const status = String(row.inscription_status ?? 'NORMAL').toUpperCase();
+        if (status !== 'RESERVED') {
+            if (status === 'CONFIRMED') {
+                throw new Error('Este lugar ya fue confirmado.');
+            }
+            throw new Error('Esta inscripción no está pendiente de tu confirmación.');
+        }
+
+        const dataObj = (row.data ?? {}) as Record<string, unknown>;
+        const partnerId =
+            row.partner_id != null
+                ? String(row.partner_id)
+                : dataObj.partnerId != null
+                    ? String(dataObj.partnerId)
+                    : '';
+        if (partnerId !== user.id) {
+            throw new Error('Tu cuenta no coincide con el invitado de esta reserva.');
+        }
+
+        const tournamentId = row.tournament_id as string | null;
+        const categoryKey = row.category_key as string | null;
+        const ownerId = String(row.owner_id);
+
+        if (tournamentId && categoryKey) {
+            const { data: team } = await db
+                .from('teams')
+                .select('id, status')
+                .eq('tournament_id', tournamentId)
+                .eq('category', categoryKey)
+                .eq('player_a_id', ownerId)
+                .eq('player_b_id', user.id)
+                .maybeSingle();
+
+            if (team?.id && (team as any).status === 'pending') {
+                await this.respondToInvitation(String(team.id), 'accepted');
+            }
+        }
+
+        const ts = now();
+        let updated: any = null;
+
+        // Intento principal (especificación solicitada): status + embed tournament/player1.
+        const primary = await db
+            .from('inscriptions')
+            .update({
+                status: 'CONFIRMED',
+                confirmed_at: ts,
+                updated_at: ts,
+            } as any)
+            .eq('id', cleanId)
+            .select('*, tournament:tournaments(name), player1:participants!player1_id(name, email)')
+            .single();
+
+        if (primary.error) {
+            // Fallback para esquemas existentes del proyecto (inscription_status / participant_name / tournament_name).
+            const fb = await db
+                .from('inscriptions')
+                .update({
+                    inscription_status: 'CONFIRMED',
+                    confirmed_at: ts,
+                    updated_at: ts,
+                } as any)
+                .eq('id', cleanId)
+                .eq('inscription_status', 'RESERVED')
+                .select('*')
+                .single();
+            if (fb.error) throw fb.error;
+            updated = fb.data as any;
+        } else {
+            updated = primary.data as any;
+        }
+
+        if (!updated) {
+            throw new Error('No se pudo actualizar la inscripción (quizá ya fue confirmada).');
+        }
+
+        const u = updated as any;
+        const tournamentNameFromEmbed =
+            u?.tournament?.name != null && String(u.tournament.name).trim() !== ''
+                ? String(u.tournament.name).trim()
+                : null;
+        const player1Name = u?.player1?.name != null ? String(u.player1.name) : null;
+        const player1EmailFromEmbed = u?.player1?.email != null ? String(u.player1.email).trim() : '';
+        const guestNameFromData = (u?.data?.partnerName != null ? String(u.data.partnerName) : '').trim();
+        const guestNameForEmail = guestNameFromData || 'Tu pareja';
+        const tournamentForEmail = (u?.tournament_name != null ? String(u.tournament_name) : '').trim() || tournamentNameFromEmbed || 'tu torneo';
+
+        // Aviso por email al anfitrión (player1) sin WhatsApp/costos extra.
+        try {
+            const ownerProfile = await this.getUserProfile(String(u.owner_id));
+            const ownerEmail = player1EmailFromEmbed || (ownerProfile?.email || '').trim();
+            if (ownerEmail) {
+                fetch('/api/partner-confirmed-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to: ownerEmail,
+                        hostName: player1Name,
+                        guestName: guestNameForEmail,
+                        tournamentName: tournamentForEmail,
+                    }),
+                }).catch((err) => console.warn('[dataService] partner-confirmed-email warning:', err));
+            }
+        } catch (mailErr) {
+            console.warn('[dataService] partner-confirmed-email warning:', mailErr);
+        }
+
+        return {
+            id: u.id,
+            ownerId: String(u.owner_id),
+            tournamentId: u.tournament_id ?? null,
+            tournamentName: u.tournament_name ?? null,
+            tournamentLiveName: tournamentNameFromEmbed,
+            player1Name,
+            player1Email: player1EmailFromEmbed || null,
+            categoryKey: u.category_key ?? null,
+            participantName: u.participant_name ?? null,
+            inscriptionStatus: String(u.inscription_status ?? u.status ?? 'CONFIRMED'),
+            paymentStatus: String(u.payment_status ?? ''),
+            data: (u.data ?? {}) as Record<string, unknown>,
+            updatedAt: u.updated_at ?? ts,
+            confirmedAt: u.confirmed_at ?? ts,
         };
     },
 
@@ -1662,4 +1840,72 @@ export const dataService = {
             .subscribe();
         return () => channel.unsubscribe();
     },
+};
+
+/**
+ * Confirma una inscripción en estado RESERVED y notifica al anfitrión.
+ * Maneja fallbacks de esquema (status vs inscription_status).
+ */
+export const confirmReservedTeam = async (inscriptionId: string) => {
+    const db = supabase();
+
+    const cleanId = (inscriptionId || '').trim();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(cleanId)) {
+        throw new Error('El enlace de invitación no tiene un formato válido.');
+    }
+
+    const { data: { user }, error: authError } = await db.auth.getUser();
+    if (authError || !user) throw new Error('Debes iniciar sesión para confirmar tu lugar.');
+
+    const { data: inscription, error: fetchErr } = await db
+        .from('inscriptions')
+        .select('*, tournament:tournaments(name), player1:participants!player1_id(name, email)')
+        .eq('id', cleanId)
+        .single();
+
+    if (fetchErr || !inscription) throw new Error('La invitación ya no está disponible.');
+
+    const row = inscription as any;
+    const partnerId = row.partner_id ?? row?.data?.partnerId ?? null;
+    if (!partnerId || String(partnerId) !== user.id) {
+        throw new Error('Esta invitación está dirigida a otro jugador.');
+    }
+
+    const currentStatus = String(row.inscription_status ?? row.status ?? '').toUpperCase();
+    if (currentStatus === 'CONFIRMED') {
+        return { alreadyConfirmed: true, ...row };
+    }
+
+    const ts = now();
+    const updateData: Record<string, unknown> = { confirmed_at: ts, updated_at: ts };
+    if (Object.prototype.hasOwnProperty.call(row, 'inscription_status')) {
+        updateData.inscription_status = 'CONFIRMED';
+    } else {
+        updateData.status = 'CONFIRMED';
+    }
+
+    const { data: updated, error: updateErr } = await db
+        .from('inscriptions')
+        .update(updateData)
+        .eq('id', cleanId)
+        .select()
+        .single();
+
+    if (updateErr || !updated) {
+        throw new Error('No se pudo procesar la confirmación. Intenta de nuevo.');
+    }
+
+    fetch('/api/partner-confirmed-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            to: row?.player1?.email,
+            hostName: row?.player1?.name ?? null,
+            guestName: (user.user_metadata as Record<string, unknown> | null)?.full_name || user.email?.split('@')[0] || 'Tu pareja',
+            tournamentName: row?.tournament?.name ?? row.tournament_name ?? 'tu torneo',
+        }),
+    }).catch((err) => console.warn('Aviso al anfitrión falló (Email):', err));
+
+    return updated;
 };

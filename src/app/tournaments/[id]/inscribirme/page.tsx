@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -34,6 +34,7 @@ import {
     Search,
     RefreshCw
 } from 'lucide-react';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 
 /** Categorías de inscripción que el organizador puede configurar en el torneo (tournament.inscriptionCategories). */
 export type InscriptionCategoryOption = {
@@ -113,8 +114,8 @@ const VENEZUELAN_BANKS = [
     { code: '0191', name: 'BNC Banco Nacional de Crédito' },
 ];
 
-export default function InscribirmePage({ params }: { params: Promise<{ id: string }> }) {
-    const { id: tournamentId } = use(params);
+export default function InscribirmePage() {
+    const tournamentId = useRouteSegment('id');
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user, profile, loading: authLoading } = useAuth();

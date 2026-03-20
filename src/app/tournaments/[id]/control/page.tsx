@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Trophy, Clock, Activity, Settings, LayoutDashboard,
@@ -18,6 +18,7 @@ import { doc, onSnapshot, collection } from 'firebase/firestore';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 interface EnrichedMatch {
@@ -414,8 +415,8 @@ function ControlMatchCard({
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function ControlPanel({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
+export default function ControlPanel() {
+    const id = useRouteSegment('id');
     const router = useRouter();
     const { user, profile, isAdmin, loading: authLoading } = useAuth();
 

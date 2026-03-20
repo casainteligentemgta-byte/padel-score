@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot as onSnapshotFirebase } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
@@ -9,9 +9,10 @@ import { RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { dataService } from '@/lib/dataService';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 
-export default function TVCourtDisplayPage({ params }: { params: Promise<{ courtId: string }> }) {
-    const { courtId } = use(params);
+export default function TVCourtDisplayPage() {
+    const courtId = useRouteSegment('courtId');
     const searchParams = useSearchParams();
     const complexFilter = searchParams.get('complex');
     const supabase = getSupabaseClient();

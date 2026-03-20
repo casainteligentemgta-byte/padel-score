@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
@@ -14,6 +14,7 @@ import {
     CheckCircle2, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { BackButton } from '@/components/BackButton';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 const formatHHMM = (v: any) => {
@@ -31,8 +32,9 @@ const formatCountdown = (seconds: number): string => {
     return `${sign}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
-export default function PreMatchControl({ params }: { params: Promise<{ id: string; matchId: string }> }) {
-    const { id, matchId } = use(params);
+export default function PreMatchControl() {
+    const id = useRouteSegment('id');
+    const matchId = useRouteSegment('matchId');
     const router = useRouter();
     const { user, isAdmin, isMarker, loading: authLoading } = useAuth();
     const canControl = isAdmin || isMarker;

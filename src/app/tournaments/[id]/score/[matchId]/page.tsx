@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     ChevronLeft,
@@ -23,6 +23,7 @@ import {
     ZapOff
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 import { dataService } from '@/lib/dataService';
 import { rtdb } from '@/lib/rtdb';
 import { ref, update } from 'firebase/database';
@@ -32,8 +33,9 @@ import RefereeRemoteControl from '@/components/RefereeRemoteControl';
 import AutoShrinkName from '@/components/AutoShrinkName';
 import { Bluetooth, LayoutDashboard, Search, ListFilter } from 'lucide-react';
 
-export default function RefereeScoreboard({ params }: { params: Promise<{ id: string, matchId: string }> }) {
-    const { id, matchId } = use(params);
+export default function RefereeScoreboard() {
+    const id = useRouteSegment('id');
+    const matchId = useRouteSegment('matchId');
     const router = useRouter();
     const { user, profile, isAdmin, canMarkInCancha, loading: authLoading } = useAuth();
     const [tournament, setTournament] = useState<any>(null);

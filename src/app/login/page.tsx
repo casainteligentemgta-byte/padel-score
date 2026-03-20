@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Mail,
@@ -15,7 +15,10 @@ import {
     Eye,
     EyeOff,
     Shield,
-    Layout
+    ShieldCheck,
+    Layout,
+    Fingerprint,
+    Circle,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { isValidEmail, isValidPassword, validateSignupPassword } from '@/lib/authValidators';
@@ -23,6 +26,79 @@ import { getAuthErrorMessage } from '@/lib/authErrorMessages';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import BouncingBall from '@/components/BouncingBall';
+import { getSupabaseClient } from '@/lib/supabase/client';
+
+type PasswordRequirement = {
+    label: string;
+    regex: RegExp;
+};
+
+const PASSWORD_REQUIREMENTS: PasswordRequirement[] = [
+    { label: '6-12 caracteres', regex: /^.{6,12}$/ },
+    { label: 'Mayúscula y Minúscula', regex: /^(?=.*[a-z])(?=.*[A-Z]).+$/ },
+    { label: 'Un número (0-9)', regex: /[0-9]/ },
+    { label: 'Carácter especial', regex: /[!@#$%^&*(),.?":{}|<>]/ },
+];
+
+function PasswordValidator({ password }: { password: string }) {
+    const checks = useMemo(
+        () => PASSWORD_REQUIREMENTS.map((req) => ({ ...req, isMet: req.regex.test(password) })),
+        [password]
+    );
+    const score = checks.filter((check) => check.isMet).length;
+    const isStrong = score === 4;
+    const barColor = score <= 2 ? '#ef4444' : score === 3 ? '#fbbf24' : '#ccff00';
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
+            className="mt-4 p-4 rounded-2xl bg-[#0d0d0d] border border-white/5"
+        >
+            <div className="flex items-center gap-2.5 mb-3">
+                <ShieldCheck className={`w-5 h-5 ${isStrong ? 'text-[#ccff00]' : 'text-zinc-500'}`} />
+                <h4 className="text-[11px] font-black uppercase tracking-[0.14em] text-white">Seguridad de tu llave</h4>
+            </div>
+
+            <div className="flex gap-1.5 mb-4">
+                {[1, 2, 3, 4].map((step) => (
+                    <div
+                        key={step}
+                        className="h-1.5 flex-1 rounded-full transition-all duration-500"
+                        style={{ backgroundColor: step <= score ? barColor : '#1a1a1a' }}
+                    />
+                ))}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-4">
+                {checks.map((check, idx) => (
+                    <div key={idx} className={`flex items-center gap-2 text-[11px] transition-colors ${check.isMet ? 'text-[#ccff00]' : 'text-gray-600'}`}>
+                        <AnimatePresence mode="wait" initial={false}>
+                            {check.isMet ? (
+                                <motion.span
+                                    key="checked"
+                                    initial={{ scale: 0.5, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    exit={{ scale: 0.5, opacity: 0 }}
+                                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                                    className="inline-flex"
+                                >
+                                    <CheckCircle2 size={14} className="shrink-0" />
+                                </motion.span>
+                            ) : (
+                                <motion.span key="unchecked" className="inline-flex">
+                                    <Circle size={14} className="shrink-0" />
+                                </motion.span>
+                            )}
+                        </AnimatePresence>
+                        <span className={check.isMet ? 'font-bold' : ''}>{check.label}</span>
+                    </div>
+                ))}
+            </div>
+        </motion.div>
+    );
+}
 
 export default function LoginPage() {
     const {
@@ -43,6 +119,9 @@ export default function LoginPage() {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
+    const [passkeySupported, setPasskeySupported] = useState(false);
+    const [passkeyLoading, setPasskeyLoading] = useState(false);
+    const [passkeyBurst, setPasskeyBurst] = useState(false);
 
     const [formData, setFormData] = useState({
         email: '',
@@ -59,6 +138,16 @@ export default function LoginPage() {
             }
         }
     }, [authLoading, user, profileLoading, isAdmin, router]);
+
+    useEffect(() => {
+        setPasskeySupported(typeof window !== 'undefined' && 'PublicKeyCredential' in window);
+    }, []);
+
+    useEffect(() => {
+        if (!passkeyBurst) return;
+        const t = window.setTimeout(() => setPasskeyBurst(false), 1100);
+        return () => window.clearTimeout(t);
+    }, [passkeyBurst]);
 
     const handleGoogleSignIn = async () => {
         setLoading(true);
@@ -131,7 +220,49 @@ export default function LoginPage() {
         }
     };
 
+    const handlePasskeyLogin = async () => {
+        const supabase = getSupabaseClient();
+        if (!supabase) {
+            setError('Supabase no está configurado.');
+            return;
+        }
+        setPasskeyLoading(true);
+        setError(null);
+        setSuccess(null);
+        try {
+            const authAny = supabase.auth as any;
+            if (typeof authAny.signInWithPasskey !== 'function') {
+                throw new Error('Tu SDK de Supabase no soporta signInWithPasskey en este entorno.');
+            }
+            const { error: signErr } = await authAny.signInWithPasskey();
+            if (signErr) throw signErr;
+            setSuccess('Acceso biométrico completado. Ingresando...');
+            if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                navigator.vibrate([12, 45, 14]);
+            }
+            setPasskeyBurst(true);
+            if (isAdmin) {
+                router.push('/admin');
+            } else {
+                router.push('/hub');
+            }
+        } catch (err: any) {
+            setError(getAuthErrorMessage(err));
+        } finally {
+            setPasskeyLoading(false);
+        }
+    };
+
     const isGlass = designMode === 'glass';
+    const registerPassword = formData.password;
+    const isSignupPasswordValid = useMemo(
+        () => PASSWORD_REQUIREMENTS.every((rule) => rule.regex.test(formData.password)),
+        [formData.password]
+    );
+    const canSubmitSignup = useMemo(
+        () => formData.name.trim().length > 0 && formData.email.trim().length > 0 && isSignupPasswordValid,
+        [formData.name, formData.email, isSignupPasswordValid]
+    );
 
     if (authLoading) {
         return (
@@ -147,6 +278,40 @@ export default function LoginPage() {
                 isGlass ? 'bg-[#050505]' : 'bg-[#0a0a0a]'
             }`}
         >
+            {/* Mini celebración passkey (sin dependencia extra; framer-motion ya está en el proyecto) */}
+            <AnimatePresence>
+                {passkeyBurst && (
+                    <motion.div
+                        key="passkey-burst"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center"
+                        aria-hidden
+                    >
+                        {Array.from({ length: 16 }, (_, i) => {
+                            const angle = (i / 16) * Math.PI * 2;
+                            const dist = 100 + (i % 4) * 18;
+                            return (
+                                <motion.span
+                                    key={i}
+                                    className="absolute left-1/2 top-[40%] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-[3px] bg-[#ccff00] shadow-[0_0_12px_rgba(204,255,0,0.9)]"
+                                    initial={{ opacity: 1, scale: 1, x: 0, y: 0, rotate: 0 }}
+                                    animate={{
+                                        opacity: 0,
+                                        scale: 0.15,
+                                        x: Math.cos(angle) * dist,
+                                        y: Math.sin(angle) * dist - 55,
+                                        rotate: i * 28,
+                                    }}
+                                    transition={{ duration: 0.88, ease: [0.2, 0.9, 0.2, 1] }}
+                                />
+                            );
+                        })}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Grid Aura Background solo en modo glass */}
             {isGlass && (
                 <div className="absolute inset-0 pointer-events-none">
@@ -335,6 +500,9 @@ export default function LoginPage() {
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
                             </div>
+                            {!isLogin && (
+                                <PasswordValidator password={registerPassword} />
+                            )}
 
                             <AnimatePresence>
                                 {(error || success) && (
@@ -353,7 +521,7 @@ export default function LoginPage() {
                             </AnimatePresence>
 
                             <button
-                                disabled={loading}
+                                disabled={loading || (!isLogin && !canSubmitSignup)}
                                 type="submit"
                                 className={`w-full py-6 font-black uppercase text-lg transition-all flex items-center justify-center disabled:opacity-50 mt-10 group relative outline-none cursor-pointer ${
                                     isGlass
@@ -391,6 +559,25 @@ export default function LoginPage() {
                                         className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-[0.2em] transition-colors bg-transparent border-none p-0 outline-none cursor-pointer"
                                     >
                                         ¿No recuerdas la contraseña?
+                                    </button>
+                                </div>
+                            )}
+
+                            {isLogin && passkeySupported && (
+                                <div className="flex justify-center mt-5">
+                                    <button
+                                        type="button"
+                                        onClick={handlePasskeyLogin}
+                                        disabled={passkeyLoading}
+                                        className="group relative w-20 h-20 rounded-full border-2 border-[#ccff00]/70 bg-black/60 text-[#ccff00] shadow-[0_0_24px_rgba(204,255,0,0.25)] hover:shadow-[0_0_30px_rgba(204,255,0,0.45)] hover:border-[#ccff00] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center"
+                                        aria-label="Entrar con FaceID o TouchID"
+                                        title="Entrar con FaceID / TouchID"
+                                    >
+                                        {passkeyLoading ? (
+                                            <RefreshCw className="w-8 h-8 animate-spin" />
+                                        ) : (
+                                            <Fingerprint className="w-9 h-9 group-hover:scale-105 transition-transform" />
+                                        )}
                                     </button>
                                 </div>
                             )}

@@ -1,12 +1,13 @@
 'use client';
 
-import { use, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { getAuthHeaders } from '@/lib/apiAuth';
 import { Trophy, ShieldAlert, CheckCircle2, Loader2 } from 'lucide-react';
 import { BouncingBall } from '@/components/BouncingBall';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 
 /**
  * Reporte de resultado vía QR: /match/[id]/report
@@ -14,8 +15,8 @@ import { BouncingBall } from '@/components/BouncingBall';
  * Solo uno de los 4 jugadores del partido puede cargar el resultado.
  * UI táctil (botones grandes), Dark Mode.
  */
-export default function MatchReportPage({ params }: { params: Promise<{ id: string }> }) {
-    const { id: compositeId } = use(params);
+export default function MatchReportPage() {
+    const compositeId = useRouteSegment('id');
     const router = useRouter();
     const { user, loading: authLoading } = useAuth();
     const [status, setStatus] = useState<'loading' | 'forbidden' | 'ready' | 'sending' | 'done'>('loading');

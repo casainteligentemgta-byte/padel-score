@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     User,
@@ -38,9 +38,10 @@ import Sidebar from '@/components/Sidebar';
 import { BackButton } from '@/components/BackButton';
 import BouncingBall from '@/components/BouncingBall';
 import { formatDate } from '@/lib/formatters';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 
-export default function PlayerProfilePage({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
+export default function PlayerProfilePage() {
+    const id = useRouteSegment('id');
     const router = useRouter();
     const { user, loading: authLoading, isAdmin } = useAuth();
     const [player, setPlayer] = useState<any>(null);

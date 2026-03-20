@@ -11,6 +11,24 @@ export function getAuthErrorMessage(err: any): string {
   if (!err) return 'Ocurrió un error inesperado (no payload).';
 
   const msg: string = err?.message || err?.error_description || err?.msg || (typeof err === 'string' ? err : JSON.stringify(err));
+  const domName: string = typeof err?.name === 'string' ? err.name : '';
+  const combinedLower = `${domName} ${msg}`.toLowerCase();
+
+  // WebAuthn / Passkeys (DOMException y mensajes de Supabase)
+  if (
+    combinedLower.includes('notallowederror') ||
+    combinedLower.includes('not allowed') ||
+    combinedLower.includes('cancelled') ||
+    combinedLower.includes('canceled') ||
+    combinedLower.includes('aborted') ||
+    combinedLower.includes('user cancelled') ||
+    combinedLower.includes('user canceled')
+  ) {
+    return 'Autenticación cancelada.';
+  }
+  if (combinedLower.includes('excludecredentials')) {
+    return 'Este dispositivo ya está registrado';
+  }
 
   if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
     return ERROR_MESSAGES['Invalid login credentials'];
