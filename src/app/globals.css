@@ -262,3 +262,11 @@ body {
     animation: marquee 20s linear infinite;
   }
 }
+
+/* Next.js dev-tools overlay (`nextjs-portal`) positioning fix.
+   En el preview se quitó `left/top: 0px`; al persistirlo lo dejamos en el valor
+   por defecto (`auto`) con `!important` para que no lo sobrescriba el inline CSS. */
+nextjs-portal[style*="--nextjs-dev-tools-scale"] {
+  left: auto !important;
+  top: auto !important;
+}

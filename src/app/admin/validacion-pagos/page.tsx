@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
@@ -9,7 +9,7 @@ import Sidebar from '@/components/Sidebar';
 import { BouncingBall } from '@/components/BouncingBall';
 import {
     Receipt, RefreshCw, AlertTriangle, CheckCircle, Clock, X, Eye, DollarSign, User, Trophy, Calendar, Filter,
-    Zap, Loader2, Scan, ListChecks, ChevronDown, ChevronUp
+    Zap, Loader2, Scan, ListChecks, ChevronDown, ChevronUp, MessageCircle
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -27,6 +27,21 @@ export default function AdminValidacionPagosPage() {
     const [showReconcile, setShowReconcile] = useState(false);
     const [referencesText, setReferencesText] = useState('');
     const [reconcileLoading, setReconcileLoading] = useState(false);
+    const [whatsStateByInscription, setWhatsStateByInscription] = useState<Record<string, 'idle' | 'sending' | 'success' | 'error'>>({});
+    /** Evita doble envío si el admin hace clic muy rápido antes de que React re-renderice. */
+    const whatsSendingRef = useRef<Record<string, boolean>>({});
+    const [toastState, setToastState] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+    const toast = {
+        success: (message: string) => setToastState({ type: 'success', message }),
+        error: (message: string) => setToastState({ type: 'error', message }),
+    };
+
+    useEffect(() => {
+        if (!toastState) return;
+        const t = window.setTimeout(() => setToastState(null), 3000);
+        return () => window.clearTimeout(t);
+    }, [toastState]);
 
     useEffect(() => {
         if (!authLoading && !isAdmin) router.push('/');
@@ -80,6 +95,16 @@ export default function AdminValidacionPagosPage() {
         if (filter === 'all') return true;
         return ins.paymentStatus === filter;
     });
+
+    /** Teléfono para WhatsApp de bienvenida (admin) — misma fuente que la API notify-whatsapp. */
+    const getInscriptionWhatsPhone = (ins: any): string =>
+        String(
+            ins?.paymentData?.phone ??
+            ins?.paymentData?.participantPhone ??
+            ins?.paymentData?.whatsapp ??
+            ins?.paymentData?.telefono ??
+            ''
+        ).trim();
 
     const runAutoVerification = async () => {
         const pending = inscriptions.filter(ins => ins.paymentStatus === 'pending');
@@ -198,6 +223,54 @@ export default function AdminValidacionPagosPage() {
         }
     };
 
+    /** Envía mensaje de bienvenida al jugador vía Twilio (`sendAdminWelcomeMessage` en servidor). */
+    const handleSendAdminWelcomeWhatsApp = async (ins: any) => {
+        const id = ins?.id as string;
+        if (!id) return;
+        if (whatsSendingRef.current[id] || whatsStateByInscription[id] === 'sending') return;
+
+        const phone = getInscriptionWhatsPhone(ins);
+        if (!phone) {
+            setWhatsStateByInscription((prev) => ({ ...prev, [id]: 'error' }));
+            toast.error('No hay teléfono en la inscripción');
+            window.setTimeout(() => {
+                setWhatsStateByInscription((prev) => ({ ...prev, [id]: 'idle' }));
+            }, 2500);
+            return;
+        }
+
+        whatsSendingRef.current[id] = true;
+        setWhatsStateByInscription((prev) => ({ ...prev, [id]: 'sending' }));
+        try {
+            const res = await fetch('/api/admin/inscriptions/notify-whatsapp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    inscriptionId: id,
+                    phone,
+                    playerName: ins.participantName || 'Jugador',
+                    tournamentName: ins.tournamentName || 'Torneo',
+                }),
+            });
+            if (!res.ok) {
+                throw new Error('send failed');
+            }
+            setWhatsStateByInscription((prev) => ({ ...prev, [id]: 'success' }));
+            toast.success('WhatsApp de bienvenida enviado');
+            window.setTimeout(() => {
+                setWhatsStateByInscription((prev) => ({ ...prev, [id]: 'idle' }));
+            }, 3000);
+        } catch (e) {
+            setWhatsStateByInscription((prev) => ({ ...prev, [id]: 'error' }));
+            toast.error('Error al enviar WhatsApp');
+            window.setTimeout(() => {
+                setWhatsStateByInscription((prev) => ({ ...prev, [id]: 'idle' }));
+            }, 3000);
+        } finally {
+            whatsSendingRef.current[id] = false;
+        }
+    };
+
     if (!isAdmin) return null;
 
     return (
@@ -296,7 +369,10 @@ export default function AdminValidacionPagosPage() {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {filteredInscriptions.map((ins) => (
+                        {filteredInscriptions.map((ins) => {
+                            const whatsPhone = getInscriptionWhatsPhone(ins);
+                            const whatsBusy = whatsStateByInscription[ins.id] === 'sending';
+                            return (
                             <motion.div
                                 layout
                                 initial={{ opacity: 0, y: 20 }}
@@ -366,6 +442,28 @@ export default function AdminValidacionPagosPage() {
                                             <Eye className="w-4 h-4" /> Revisar Comprobante
                                         </button>
                                         <button
+                                            type="button"
+                                            onClick={() => handleSendAdminWelcomeWhatsApp(ins)}
+                                            disabled={whatsBusy || !whatsPhone}
+                                            aria-busy={whatsBusy}
+                                            className="w-10 h-10 rounded-xl flex items-center justify-center transition-all border border-emerald-500/35 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:shadow-[0_0_18px_rgba(34,197,94,0.45)] disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed"
+                                            title={
+                                                !whatsPhone
+                                                    ? 'Sin teléfono en los datos de pago'
+                                                    : whatsBusy
+                                                      ? 'Enviando…'
+                                                      : 'WhatsApp bienvenida (jugador)'
+                                            }
+                                        >
+                                            {whatsBusy ? (
+                                                <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
+                                            ) : whatsStateByInscription[ins.id] === 'success' ? (
+                                                <CheckCircle className="w-5 h-5 text-[#22c55e]" aria-hidden />
+                                            ) : (
+                                                <MessageCircle className="w-4 h-4" aria-hidden />
+                                            )}
+                                        </button>
+                                        <button
                                             onClick={() => handleUpdateStatus(ins.id, 'paid')}
                                             disabled={ins.paymentStatus === 'paid'}
                                             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${ins.paymentStatus === 'paid' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
@@ -377,10 +475,28 @@ export default function AdminValidacionPagosPage() {
                                     </div>
                                 </div>
                             </motion.div>
-                        ))}
+                        );
+                        })}
                     </div>
                 )}
             </div>
+
+            <AnimatePresence>
+                {toastState && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className={`fixed top-6 right-6 z-[120] px-4 py-3 rounded-xl border text-xs font-black uppercase tracking-wider ${
+                            toastState.type === 'success'
+                                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                                : 'bg-red-500/15 border-red-500/30 text-red-300'
+                        }`}
+                    >
+                        {toastState.message}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Inscription Details Modal */}
             <AnimatePresence>

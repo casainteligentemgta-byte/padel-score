@@ -411,41 +411,61 @@ export default function HubPage() {
 
                         {/* Hub Grid - compacto en móvil para caber en una pantalla */}
                         <div className="grid grid-cols-2 gap-2 sm:gap-3 pb-4 sm:pb-8 w-full mt-0 sm:mt-1">
-                            {hubItems.map((item, index) => (
-                                <motion.button
-                                    key={item.name}
-                                    type="button"
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.1 }}
-                                    onClick={() => {
-                                        if (item.disabled) return;
-                                        if (item.onClick) item.onClick();
-                                        else if (item.href) router.push(item.href);
-                                    }}
-                                    className={`relative group w-full h-12 sm:h-16 rounded-[10px] sm:rounded-[14px] p-1 sm:p-1.5 flex flex-col items-center justify-center text-center transition-all overflow-hidden border backdrop-blur-xl box-border ${item.disabled
-                                        ? 'bg-white/5 border-white/10 opacity-40 cursor-not-allowed'
-                                        : `bg-white/5 ${item.border} border-white/10 hover:bg-white/10 hover:border-white/20 hover:-translate-y-0.5`
+                            {hubItems.map((item, index) => {
+                                const isProfileCard = item.name === 'Mi Perfil';
+                                return (
+                                    <motion.button
+                                        key={item.name}
+                                        type="button"
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: index * 0.1 }}
+                                        onClick={() => {
+                                            if (item.disabled) return;
+                                            if (item.onClick) item.onClick();
+                                            else if (item.href) router.push(item.href);
+                                        }}
+                                        className={`relative group isolation-isolate w-full rounded-[10px] sm:rounded-[14px] p-1 sm:p-1.5 transition-all overflow-hidden border backdrop-blur-xl box-border ${
+                                            'h-[64px] sm:h-[82px] px-2.5 flex-row items-center justify-start text-left'
+                                        } ${
+                                            item.disabled
+                                                ? 'bg-white/5 border-white/10 opacity-40 cursor-not-allowed'
+                                                : `bg-white/5 ${item.border} border-white/10 hover:bg-white/10 hover:border-white/20 hover:translate-y-0`
                                         }`}
-                                >
-                                    {/* Icon Container */}
-                                    <div className={`shrink-0 p-0.5 sm:p-1 rounded-md sm:rounded-lg mb-0 mt-1 sm:mt-2 transition-all group-hover:scale-110 shadow-lg ${item.bg} ${item.color}`}>
-                                        <item.icon className="w-2.5 h-2.5 sm:w-3 sm:h-3 block" />
-                                    </div>
+                                    >
+                                        {/* Icon Container */}
+                                        <div
+                                            className={`relative z-10 shrink-0 transition-all group-hover:scale-110 shadow-lg rounded-md sm:rounded-lg p-1 sm:p-1.5 mr-2 ${item.bg} ${item.color}`}
+                                        >
+                                            <item.icon
+                                                className="block w-6 h-6 sm:w-7 sm:h-7"
+                                            />
+                                        </div>
 
-                                    {/* Text Content */}
-                                    <div className="flex flex-col gap-0 w-full items-center justify-center min-w-0 flex-1">
-                                        <h3 className="text-[7px] sm:text-[8px] font-black uppercase italic tracking-tighter text-white group-hover:text-padel-primary transition-colors truncate w-full min-h-[0.75rem] sm:min-h-[1rem] flex items-center justify-center leading-tight">
-                                            {item.name}
-                                        </h3>
-                                        <p className="text-[4px] sm:text-[5px] font-bold text-zinc-600 uppercase tracking-widest line-clamp-1 w-full text-center -mt-0.5">{item.subtitle}</p>
-                                    </div>
+                                        {/* Text Content */}
+                                        <div
+                                            className="relative z-10 flex flex-col gap-0 min-w-0 w-auto flex-none items-start justify-center"
+                                        >
+                                            <h3
+                                                className={`font-black uppercase italic tracking-tighter text-white group-hover:text-padel-primary transition-colors truncate leading-tight min-h-[1.1rem] w-auto text-left ${
+                                                    isProfileCard ? 'text-[13px] sm:text-[16px]' : 'text-[12px] sm:text-[15px]'
+                                                }`}
+                                            >
+                                                {item.name}
+                                            </h3>
+                                            <p
+                                                className="font-bold text-zinc-600 uppercase tracking-widest line-clamp-1 text-[8px] sm:text-[10px] -mt-0.5 text-left"
+                                            >
+                                                {item.subtitle}
+                                            </p>
+                                        </div>
 
-                                    {!item.disabled && (
-                                        <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/0 to-padel-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-                                    )}
-                                </motion.button>
-                            ))}
+                                        {!item.disabled && (
+                                            <div className="absolute inset-0 z-0 bg-gradient-to-br from-padel-primary/0 to-padel-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                                        )}
+                                    </motion.button>
+                                );
+                            })}
                         </div>
 
                         {/* Logout Button */}

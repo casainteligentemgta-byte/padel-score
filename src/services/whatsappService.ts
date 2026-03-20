@@ -10,7 +10,10 @@ import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
 const LOG = '[Smart Padel · WhatsApp]';
 
-export type WhatsNotificationType = 'partner_invitation' | 'match_reminder';
+export type WhatsNotificationType =
+  | 'admin_welcome'
+  | 'partner_invitation'
+  | 'match_reminder';
 
 export type SendResult = { success: boolean; sid?: string; error?: string };
 
@@ -48,10 +51,14 @@ function getTwilioClient(): {
 } | null {
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-  const fromNumber = process.env.TWILIO_WHATSAPP_NUMBER?.trim();
+  const fromNumber =
+    process.env.TWILIO_WHATSAPP_NUMBER?.trim() ||
+    process.env.TWILIO_PHONE_NUMBER?.trim();
 
   if (!accountSid || !authToken || !fromNumber) {
-    console.error(`${LOG} Faltan TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN o TWILIO_WHATSAPP_NUMBER`);
+    console.error(
+      `${LOG} Faltan TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN o TWILIO_WHATSAPP_NUMBER (o TWILIO_PHONE_NUMBER)`
+    );
     return null;
   }
 
@@ -73,6 +80,7 @@ async function logNotification(params: {
   type: WhatsNotificationType;
   status: 'success' | 'failed';
   error_message: string | null;
+  inscription_id?: string | null;
 }): Promise<void> {
   const supabase = getSupabaseServiceClient();
   if (!supabase) {
@@ -85,6 +93,7 @@ async function logNotification(params: {
     type: params.type,
     status: params.status,
     error_message: params.error_message,
+    inscription_id: params.inscription_id ?? null,
   });
 
   if (error) {
@@ -95,7 +104,8 @@ async function logNotification(params: {
 async function sendWhatsAppMessage(
   toAddress: string,
   body: string,
-  type: WhatsNotificationType
+  type: WhatsNotificationType,
+  inscriptionId?: string | null
 ): Promise<SendResult> {
   const twilio = getTwilioClient();
   if (!twilio) {
@@ -104,6 +114,7 @@ async function sendWhatsAppMessage(
       type,
       status: 'failed',
       error_message: 'Twilio no configurado',
+      inscription_id: inscriptionId ?? null,
     });
     return { success: false, error: 'Twilio no configurado' };
   }
@@ -121,6 +132,7 @@ async function sendWhatsAppMessage(
       type,
       status: 'success',
       error_message: null,
+      inscription_id: inscriptionId ?? null,
     });
     return { success: true, sid: result.sid };
   } catch (err: unknown) {
@@ -131,6 +143,7 @@ async function sendWhatsAppMessage(
       type,
       status: 'failed',
       error_message: errorMessage,
+      inscription_id: inscriptionId ?? null,
     });
     return { success: false, error: errorMessage };
   }
@@ -165,6 +178,70 @@ export async function sendPartnerInvitation(params: {
 }
 
 /**
+ * Protocolo 1: alta manual por admin.
+ * Envía bienvenida con acceso al Hub.
+ */
+export async function sendAdminWelcomeMessage(params: {
+  phone: string;
+  playerName: string;
+  tournamentName: string;
+  inscriptionId?: string;
+}): Promise<SendResult> {
+  const toAddress = normalizeWhatsAppAddress(params.phone);
+  if (!toAddress) {
+    await logNotification({
+      recipient: params.phone,
+      type: 'admin_welcome',
+      status: 'failed',
+      error_message: 'Número de teléfono inválido',
+      inscription_id: params.inscriptionId ?? null,
+    });
+    return { success: false, error: 'Número de teléfono inválido' };
+  }
+
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://smartpadel.app').replace(/\/+$/, '');
+  const hubUrl = `${appUrl}/hub`;
+  const body =
+    `🎾 ¡Bienvenido/a ${params.playerName}!\n` +
+    `Ya estás cargado/a para ${params.tournamentName} en ANTIGRAVITY Padel Score.\n` +
+    `Ingresa aquí para ver tu actividad: ${hubUrl}`;
+
+  return sendWhatsAppMessage(toAddress, body, 'admin_welcome', params.inscriptionId ?? null);
+}
+
+/**
+ * Protocolo 2: invitación automática de pareja.
+ * Incluye link directo de confirmación.
+ */
+export async function sendPartnerInvitationMessage(params: {
+  phone: string;
+  guestName: string;
+  hostName: string;
+  tournamentName: string;
+  inscriptionId: string;
+}): Promise<SendResult> {
+  const toAddress = normalizeWhatsAppAddress(params.phone);
+  if (!toAddress) {
+    await logNotification({
+      recipient: params.phone,
+      type: 'partner_invitation',
+      status: 'failed',
+      error_message: 'Número de teléfono inválido',
+      inscription_id: params.inscriptionId,
+    });
+    return { success: false, error: 'Número de teléfono inválido' };
+  }
+
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://smartpadel.app').replace(/\/+$/, '');
+  const confirmUrl = `${appUrl}/confirmar-pareja?id=${encodeURIComponent(params.inscriptionId)}`;
+  const body =
+    `🎾 Hola ${params.guestName}, ${params.hostName} te invitó como pareja para ${params.tournamentName}.\n` +
+    `Confirma tu lugar aquí: ${confirmUrl}`;
+
+  return sendWhatsAppMessage(toAddress, body, 'partner_invitation', params.inscriptionId);
+}
+
+/**
  * Recordatorio de partido.
  */
 export async function sendMatchReminder(params: {
@@ -190,3 +267,14 @@ export async function sendMatchReminder(params: {
 
   return sendWhatsAppMessage(toAddress, body, 'match_reminder');
 }
+
+/**
+ * Objeto de conveniencia (mismo módulo que las funciones exportadas).
+ * Las rutas API deben seguir importando las funciones async directamente.
+ */
+export const whatsappService = {
+  sendAdminWelcomeMessage,
+  sendPartnerInvitationMessage,
+  sendPartnerInvitation,
+  sendMatchReminder,
+};
