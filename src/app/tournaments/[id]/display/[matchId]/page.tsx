@@ -1241,13 +1241,14 @@ export default function FullScreenDisplay() {
                                                 }
                                                 return (
                                                     <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
-                                                        <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
+                                                        <span className="font-black italic text-white tabular-nums text-center block w-full" style={{ fontSize: 'clamp(36px,6.5vh,80px)', fontVariantNumeric: 'tabular-nums' }}>{val !== '' ? val : '-'}</span>
                                                     </div>
                                                 );
                                             })}
                                             <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ backgroundColor: `${primaryColor}40` }}>
                                                 <motion.span key={ptsT1} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                                                    className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(42px,9vh,110px)' }}>{ptsT1}</motion.span>
+                                                    className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060] tabular-nums text-center block w-full"
+                                                    style={{ fontSize: 'clamp(42px,9vh,110px)', fontVariantNumeric: 'tabular-nums' }}>{ptsT1}</motion.span>
                                             </div>
                                         </div>
 
@@ -1292,13 +1293,14 @@ export default function FullScreenDisplay() {
                                                 }
                                                 return (
                                                     <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
-                                                        <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
+                                                        <span className="font-black italic text-white tabular-nums text-center block w-full" style={{ fontSize: 'clamp(36px,6.5vh,80px)', fontVariantNumeric: 'tabular-nums' }}>{val !== '' ? val : '-'}</span>
                                                     </div>
                                                 );
                                             })}
                                             <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ backgroundColor: `${primaryColor}40` }}>
                                                 <motion.span key={ptsT2} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                                                    className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(42px,9vh,110px)' }}>{ptsT2}</motion.span>
+                                                    className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060] tabular-nums text-center block w-full"
+                                                    style={{ fontSize: 'clamp(42px,9vh,110px)', fontVariantNumeric: 'tabular-nums' }}>{ptsT2}</motion.span>
                                             </div>
                                         </div>
                                     </>
