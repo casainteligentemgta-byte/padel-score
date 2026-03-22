@@ -424,18 +424,28 @@ export const checkTournamentReady = (tournament: any): TournamentReadyResult => 
   const errors: string[] = [];
   let placeholderCount = 0;
 
-  const PLACEHOLDER_RE = /pareja|jugador|placeholder/i;
+  // Patrones que indican nombre genérico / placeholder
+  const PLACEHOLDER_PATTERNS = [
+    /pareja/i,
+    /jugador/i,
+    /placeholder/i,
+    /^p\d+$/i,   // "p1", "p2", etc.
+    /^\?$/,        // exactamente "?"
+  ];
+
+  const isGeneric = (name: string) =>
+    !name || PLACEHOLDER_PATTERNS.some(re => re.test(name));
 
   teams.forEach((team: any, index: number) => {
     const p1Name = (team?.p1?.name || team?.p1Name || '').trim();
     const p2Name = (team?.p2?.name || team?.p2Name || '').trim();
 
-    const p1IsPlaceholder = !p1Name || PLACEHOLDER_RE.test(p1Name);
-    const p2IsPlaceholder = !p2Name || PLACEHOLDER_RE.test(p2Name);
+    const p1IsPlaceholder = isGeneric(p1Name);
+    const p2IsPlaceholder = isGeneric(p2Name);
 
     if (p1IsPlaceholder || p2IsPlaceholder) {
       placeholderCount++;
-      const label = team?.name || `Equipo ${index + 1}`;
+      const label = team?.name || `Pareja ${index + 1}`;
       const missing: string[] = [];
       if (p1IsPlaceholder) missing.push('J1');
       if (p2IsPlaceholder) missing.push('J2');
@@ -450,4 +460,14 @@ export const checkTournamentReady = (tournament: any): TournamentReadyResult => 
     totalTeams: teams.length,
   };
 };
+
+/**
+ * Alias de `checkTournamentReady` con retorno semántico { canLive, issues }.
+ * Útil para validar antes de arrancar un partido en vivo.
+ */
+export const validateTournamentIntegrity = (tournament: any) => {
+  const { isReady, errors } = checkTournamentReady(tournament);
+  return { canLive: isReady, issues: errors };
+};
+
 
