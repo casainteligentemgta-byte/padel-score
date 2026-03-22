@@ -27,14 +27,14 @@ import {
     ImageIcon,
     Loader2,
     Upload,
-    Link as LinkIcon
+    Link as LinkIcon,
+    DollarSign
 } from 'lucide-react';
 import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournament';
 import { MasterScheduleEngine, MasterScheduleConfig, CategoryConfig } from '@/services/MasterScheduleEngine';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { useRouter } from 'next/navigation';
-import { uploadToSupabase } from '@/lib/storage';
 
 // Colores fijos por formato (icono siempre a color)
 const FORMAT_COLORS = {
@@ -112,16 +112,18 @@ const COLORS = [
     '#a78bfa', // Purple
 ];
 
-const COMPLEXES = [
-    { name: 'Margarita Padel', courts: 6 },
-    { name: 'Tibisay', courts: 3 },
-    { name: 'Sun Sol Costa Azul', courts: 4 },
-    { name: 'Food Kart', courts: 3 },
+// Sedes ordenadas alfabéticamente — etiqueta A1, A2, A3… según posición en la lista
+const COMPLEXES_RAW = [
+    { name: 'El Bodeguero', courts: 3 },
     { name: 'Elite', courts: 4 },
-    { name: 'Bodeguero', courts: 3 },
-    { name: 'Sun Sol Pedro Gonzalez', courts: 2 },
+    { name: 'Food Kart', courts: 3 },
+    { name: 'Margarita Padel', courts: 6 },
     { name: 'Playa el Agua', courts: 3 },
+    { name: 'Sun Sol Costa Azul', courts: 4 },
+    { name: 'Sun Sol Pedro Gonzalez', courts: 2 },
+    { name: 'Tibisay', courts: 3 },
 ];
+const COMPLEXES = COMPLEXES_RAW.map((c, i) => ({ ...c, label: `A${i + 1}` }));
 
 // ── Estado inicial limpio del Generador Maestro ─────────────────────────
 const INITIAL_EVENT_DATA: MasterScheduleConfig = {
@@ -129,8 +131,8 @@ const INITIAL_EVENT_DATA: MasterScheduleConfig = {
     complexName: '',
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-    dailyStartTime: '07:00',
-    dailyEndTime: '22:00',
+    dailyStartTime: '16:00',
+    dailyEndTime: '23:30',
     numCourts: 3,
     courtNames: Array.from({ length: 3 }, (_, i) => `Pista ${i + 1}`),
     matchDurationMinutes: 60,
@@ -206,6 +208,7 @@ export default function MasterGeneratorPage() {
     const [pendingAdvanceCount, setPendingAdvanceCount] = useState<1 | 2>(2);
     const [pendingQuickQualification, setPendingQuickQualification] = useState(false);
     const [pendingConsolacionMatchFormat, setPendingConsolacionMatchFormat] = useState<'ONE_SET_9' | 'TWO_SHORT_SETS'>('TWO_SHORT_SETS');
+    const [pendingPrice, setPendingPrice] = useState<number>(0);
 
     // Sorteo aleatorio: barajar equipos antes de repartir en grupos (por defecto activado)
     const [sorteoAleatorio, setSorteoAleatorio] = useState(true);
@@ -237,6 +240,7 @@ export default function MasterGeneratorPage() {
         setPendingTournamentType('AMERICANO');
         setPendingPointsGoal(16);
         setPendingRRFormat('ONE_SET_6');
+        setPendingPrice(0);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -244,17 +248,66 @@ export default function MasterGeneratorPage() {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        const maxSize = 5 * 1024 * 1024; // 5 MB
+        if (file.size > maxSize) {
+            alert('El archivo es demasiado grande. Usa una imagen de menos de 5 MB.');
+            return;
+        }
+        const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowed.includes(file.type)) {
+            alert('Formato no válido. Usa JPG, PNG, GIF o WebP.');
+            return;
+        }
+
         setIsUploadingLogo(true);
         try {
-            // Se usa el servicio de storage de Supabase (bucket publicidad como default en lib/storage)
-            // se puede especificar un path como 'sponsors/logo.png'
-            const fileName = `sponsors/${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
-            const publicUrl = await uploadToSupabase(file, fileName);
-
+            const path = `sponsors/${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
+            const publicUrl = await dataService.uploadFile(file, path, 'patrocinantes');
             setEventData(prev => ({ ...prev, sponsorLogoUrl: publicUrl }));
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error uploading logo:', error);
-            alert('Error al subir el logo. Inténtalo de nuevo.');
+            const msg = (error?.message || String(error)).toLowerCase();
+            
+            if (msg.includes('row-level security') || msg.includes('rls') || msg.includes('policy') || msg.includes('new row violates row-level security policy')) {
+                alert('Storage bloqueado por políticas RLS. En Supabase: Storage → bucket "patrocinantes" → Policies → New policy: permite INSERT y SELECT para el bucket "patrocinantes". Mientras tanto puedes pegar la URL del logo en el campo de texto.');
+            } else if (msg.includes('bucket') || msg.includes('not found') || msg.includes('storage')) {
+                const bucket = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET?.trim() ? process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET : 'public';
+                alert(`Bucket "${bucket}" no encontrado. Comprueba en Supabase → Storage que exista un bucket con ese nombre exacto (minúsculas) y "Public bucket" activado.`);
+            } else if (msg.includes('configurado') || msg.includes('falta url') || msg.includes('falta anon key')) {
+                alert('Supabase no está configurado localmente. Revisa el archivo .env.local.');
+            } else {
+                alert(`Error al subir el logo: ${error?.message || 'Error desconocido'}. Revisa la consola para más detalles o pega directamente una URL.`);
+            }
+        } finally {
+            setIsUploadingLogo(false);
+        }
+    };
+
+    const handleSubirDesdeUrl = async () => {
+        const url = eventData.sponsorLogoUrl;
+        if (!url || !url.startsWith('http')) return;
+
+        // Evitar re-subir lo que ya está en nuestro storage
+        if (url.includes('supabase.co/storage')) return;
+
+        setIsUploadingLogo(true);
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Error al descargar la imagen');
+            const blob = await response.blob();
+
+            // Determinar extensión e imagen
+            const extension = blob.type.split('/')[1] || 'png';
+            const fileName = `logo-url-${Date.now()}.${extension}`;
+            const file = new File([blob], fileName, { type: blob.type });
+
+            const path = `sponsors/${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
+            const publicUrl = await dataService.uploadFile(file, path, 'patrocinantes');
+            setEventData(prev => ({ ...prev, sponsorLogoUrl: publicUrl }));
+            alert('¡Imagen importada con éxito a tu galería!');
+        } catch (error: any) {
+            console.error('Error al subir desde URL:', error);
+            alert('No se pudo "subir" automáticamente desde esta URL debido a protecciones de seguridad del sitio externo (CORS). El logo se usará directamente desde su enlace original.');
         } finally {
             setIsUploadingLogo(false);
         }
@@ -276,6 +329,9 @@ export default function MasterGeneratorPage() {
         QUINTA: '5ª Cat.',
         SEXTA: '6ª Cat.',
         SEPTIMA: '7ª Cat.',
+        MAS_40: '+40',
+        FEM_40: '+40',
+        MIX_40: '+40',
         MAS_45: '+45',
         MAS_50: '+50',
         SUMA_7: 'Suma 7',
@@ -293,6 +349,9 @@ export default function MasterGeneratorPage() {
         [TournamentCategory.QUINTA]: 5,
         [TournamentCategory.SEXTA]: 6,
         [TournamentCategory.SEPTIMA]: 7,
+        [TournamentCategory.MAS_40]: 7.1,
+        [TournamentCategory.FEM_40]: 7.2,
+        [TournamentCategory.MIX_40]: 7.3,
         [TournamentCategory.MAS_45]: 8,
         [TournamentCategory.MAS_50]: 9,
         [TournamentCategory.SUMA_7]: 10,
@@ -331,6 +390,7 @@ export default function MasterGeneratorPage() {
         setPendingAdvanceCount(2);
         setPendingQuickQualification(false);
         setPendingConsolacionMatchFormat('TWO_SHORT_SETS');
+        setPendingPrice(0);
     };
 
     const confirmAddCategory = () => {
@@ -358,6 +418,7 @@ export default function MasterGeneratorPage() {
                         quickQualification: pendingTournamentType === 'ROUND_ROBIN' && pendingAdvanceCount === 2 ? pendingQuickQualification : undefined,
                         type: pendingTournamentType === 'CUADRO_CONSOLACION' ? TournamentType.CUADRO_CONSOLACION : TournamentType.ROUND_ROBIN,
                         consolacionMatchFormat: pendingTournamentType === 'CUADRO_CONSOLACION' ? pendingConsolacionMatchFormat : undefined,
+                        inscriptionPrice: pendingPrice,
                         teams: Array.from({ length: pendingNumTeams }, (_, j) => ({
                             id: `team-${c.id}-${j}`,
                             p1: { id: `p1-${c.id}-${j}`, name: `Jugador ${j * 2 + 1}` },
@@ -387,6 +448,7 @@ export default function MasterGeneratorPage() {
                     advanceCount: pendingAdvanceCount,
                     quickQualification: pendingTournamentType === 'ROUND_ROBIN' && pendingAdvanceCount === 2 ? pendingQuickQualification : undefined,
                     consolacionMatchFormat: pendingTournamentType === 'CUADRO_CONSOLACION' ? pendingConsolacionMatchFormat : undefined,
+                    inscriptionPrice: pendingPrice,
                     teams: Array.from({ length: pendingNumTeams }, (_, i) => ({
                         id: `team-${id}-${i}`,
                         p1: { id: `p1-${id}-${i}`, name: `Jugador ${i * 2 + 1}` },
@@ -581,7 +643,7 @@ export default function MasterGeneratorPage() {
                     });
 
                     const tournamentToSave = {
-                        name: `${eventData.tournamentName} - ${cat.category} ${catLabels[cat.gender]}`,
+                        name: `${eventData.tournamentName} - ${catLevelLabels[cat.category] || cat.category} ${catLabels[cat.gender]}`,
                         type: cat.type ?? TournamentType.ROUND_ROBIN,
                         category: cat.category,
                         gender: cat.gender,
@@ -590,6 +652,7 @@ export default function MasterGeneratorPage() {
                         startTime: eventData.dailyStartTime,
                         endTime: eventData.dailyEndTime,
                         complexName: eventData.complexName ?? '',
+                        eventName: eventData.tournamentName ?? '',
                         totalCourts: eventData.numCourts ?? 3,
                         courtNames: eventData.courtNames ?? [],
                         bufferMinutes: eventData.bufferMinutes ?? 10,
@@ -598,6 +661,11 @@ export default function MasterGeneratorPage() {
                         groupSize: cat.groupSize,
                         advanceCount: (cat as any).advanceCount ?? 2,
                         pointsGoal: (cat as any).pointsGoal ?? 24,
+                        scoringSystem: cat.goldenPoint ? 'GOLDEN_POINT' : 'TRADITIONAL',
+                        tieBreakType: cat.setFormat === 'SUPER_TIE_BREAK' ? 'STB' : 'TB',
+                        inscriptionPrice: cat.inscriptionPrice ?? 0,
+                        maxTeams: cat.numTeams, // Añadimos el cupo máximo
+                        registrationStatus: 'open',
                         status: 'Programado',
                         ...(eventData.sponsorLogoUrl?.trim() && {
                             broadcastingSettings: {
@@ -618,7 +686,11 @@ export default function MasterGeneratorPage() {
                     results.push({ id: docRef.id, name: tournamentToSave.name });
                 } catch (catErr: any) {
                     console.error(`Error saving category ${cat.category}:`, catErr);
-                    throw new Error(`Cat ${cat.category}: ${catErr.message || catErr}`);
+                    const rawMsg =
+                        catErr?.message ||
+                        catErr?.error?.message ||
+                        (typeof catErr === 'object' ? JSON.stringify(catErr) : String(catErr));
+                    throw new Error(`Cat ${cat.category}: ${rawMsg}`);
                 }
             }
 
@@ -729,9 +801,11 @@ export default function MasterGeneratorPage() {
         const h = d.getHours();
         const m = d.getMinutes();
         const weekday = d.toLocaleDateString('es-ES', { weekday: 'long' }).toUpperCase();
+
+        // Formato pedido: "DIA, MES, AÑO" (ej: 08, MARZO, 2026)
         const fullDateStr = `${day.toString().padStart(2, '0')}, ${month.toUpperCase()}, ${year}`;
         const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} HS`;
-        return { dateStr: fullDateStr, timeStr };
+        return { dateStr: fullDateStr, timeStr, weekday };
     };
 
 
@@ -894,75 +968,37 @@ export default function MasterGeneratorPage() {
                             >
                                 {/* ── Category Configuration Content ── */}
                                 <div className="space-y-4">
-                                    {/* ── Row 1: Parejas + Grupos ── */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {/* Número de Parejas */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                <Users className="w-3 h-3 text-padel-primary" /> Número de Parejas
-                                            </label>
-                                            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
-                                                {[4, 6, 8, 10, 12, 14, 16].map(n => (
-                                                    <button
-                                                        key={n}
-                                                        type="button"
-                                                        onClick={() => setPendingNumTeams(n)}
-                                                        className={`min-h-[40px] rounded-lg text-xs font-black transition-all select-none touch-manipulation active:scale-[0.98] ${pendingNumTeams === n ? 'bg-padel-primary text-black shadow-md' : 'bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}
-                                                    >
-                                                        {n}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            <div className="flex items-center gap-3 bg-black/40 border border-zinc-800 rounded-xl px-4 py-2">
+                                    {/* ── Row 1: Número de Parejas ── */}
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                            <Users className="w-3 h-3 text-padel-primary" /> Número de Parejas
+                                        </label>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {[4, 6, 8, 10, 12, 14, 16, 20, 24, 32].map(n => (
                                                 <button
+                                                    key={n}
                                                     type="button"
-                                                    onClick={() => setPendingNumTeams(t => Math.max(2, t - 1))}
-                                                    className="min-w-[40px] min-h-[40px] rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-lg text-white transition-all active:scale-95 select-none touch-manipulation"
-                                                >−</button>
-                                                <div className="flex-1 text-center">
-                                                    <span className="text-xl font-black text-padel-primary">{pendingNumTeams}</span>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setPendingNumTeams(t => Math.min(64, t + 1))}
-                                                    className="min-w-[40px] min-h-[40px] rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-lg text-white transition-all active:scale-95 select-none touch-manipulation"
-                                                >+</button>
-                                            </div>
+                                                    onClick={() => setPendingNumTeams(n)}
+                                                    className={`min-h-[40px] px-3 rounded-lg text-xs font-black transition-all select-none touch-manipulation active:scale-[0.98] ${pendingNumTeams === n ? 'bg-padel-primary text-black shadow-md' : 'bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}
+                                                >
+                                                    {n}
+                                                </button>
+                                            ))}
                                         </div>
-
-                                        {/* Equipos por Grupo */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                <Layers className="w-3 h-3 text-padel-primary" /> Equipos por Grupo
-                                            </label>
-                                            <div className="grid grid-cols-2 gap-2 h-full max-h-[105px]">
-                                                {[
-                                                    { size: 3, desc: 'Torneo corto' },
-                                                    { size: 4, desc: 'Formato estándar' }
-                                                ].map(({ size, desc }) => {
-                                                    const isSelected = pendingGroupSize === size;
-                                                    return (
-                                                        <button
-                                                            key={size}
-                                                            type="button"
-                                                            onClick={() => setPendingGroupSize(size as 3 | 4)}
-                                                            className={`relative flex flex-col items-center justify-center p-2 rounded-xl border transition-all select-none touch-manipulation active:scale-[0.98] ${isSelected
-                                                                ? 'border-padel-primary bg-padel-primary/10'
-                                                                : 'border-zinc-800 bg-black/30 hover:border-zinc-700'
-                                                                }`}
-                                                        >
-                                                            <div className={`text-xl font-black italic leading-none ${isSelected ? 'text-padel-primary' : 'text-zinc-500'}`}>{size}</div>
-                                                            <p className={`text-[8px] font-black uppercase tracking-wider mt-1 ${isSelected ? 'text-white' : 'text-zinc-600'}`}>parejas</p>
-                                                            <p className={`text-[7px] font-bold italic mt-0.5 ${isSelected ? 'text-padel-primary/70' : 'text-zinc-700'}`}>{desc}</p>
-                                                            {isSelected && (
-                                                                <div className="absolute top-1 right-1 w-3 h-3 rounded-full bg-padel-primary flex items-center justify-center">
-                                                                    <Check className="w-2 h-2 text-black" strokeWidth={4} />
-                                                                </div>
-                                                            )}
-                                                        </button>
-                                                    );
-                                                })}
+                                        <div className="flex items-center gap-3 bg-black/40 border border-zinc-800 rounded-xl px-4 py-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setPendingNumTeams(t => Math.max(2, t - 1))}
+                                                className="min-w-[40px] min-h-[40px] rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-lg text-white transition-all active:scale-95 select-none touch-manipulation"
+                                            >−</button>
+                                            <div className="flex-1 text-center">
+                                                <span className="text-xl font-black text-padel-primary">{pendingNumTeams}</span>
                                             </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPendingNumTeams(t => Math.min(64, t + 1))}
+                                                className="min-w-[40px] min-h-[40px] rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center font-black text-lg text-white transition-all active:scale-95 select-none touch-manipulation"
+                                            >+</button>
                                         </div>
                                     </div>
 
@@ -1016,111 +1052,138 @@ export default function MasterGeneratorPage() {
                                         </div>
                                     </div>
 
-                                    {/* ── Row 3: Opciones Condicionales ── */}
+                                    {/* ── SECCIÓN DE OPCIONES DINÁMICAS ── */}
                                     <AnimatePresence mode="wait">
+                                        {/* 1. AMERICANO / DUPLA FIJA: Objetivo de Puntos y Precio */}
                                         {(pendingTournamentType === 'AMERICANO' || pendingTournamentType === 'DUPLA_FIJA') && (
                                             <motion.div
-                                                key="points-goal"
+                                                key="americano-options"
                                                 initial={{ opacity: 0, y: 10 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 exit={{ opacity: 0, y: -10 }}
-                                                className="space-y-2"
+                                                className="space-y-4"
                                             >
-                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                    <Sparkles className="w-3 h-3 text-yellow-400" /> A cuántos puntos
-                                                </label>
-                                                <div className="grid grid-cols-6 gap-2">
-                                                    {[4, 8, 12, 16, 20, 24].map(pts => {
-                                                        const isSelected = pendingPointsGoal === pts;
-                                                        return (
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                        <Trophy className="w-3 h-3 text-yellow-400" /> Objetivo de Puntos
+                                                    </label>
+                                                    <div className="grid grid-cols-6 gap-2">
+                                                        {[4, 8, 12, 16, 20, 24].map(pts => (
                                                             <button
                                                                 key={pts}
                                                                 type="button"
                                                                 onClick={() => setPendingPointsGoal(pts)}
-                                                                className={`min-h-[44px] py-2 rounded-xl border-2 font-black italic text-xs uppercase tracking-wider transition-all select-none touch-manipulation active:scale-[0.98] ${isSelected
-                                                                    ? 'bg-padel-primary border-padel-primary text-black'
-                                                                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600'
-                                                                    }`}
+                                                                className={`min-h-[44px] py-2 rounded-xl border-2 font-black italic text-xs transition-all active:scale-[0.98] ${pendingPointsGoal === pts ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600'}`}
                                                             >
-                                                                {pts} pt
+                                                                {pts}
                                                             </button>
-                                                        );
-                                                    })}
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* Precio de Inscripción */}
+                                                <div className="space-y-2 pt-2 border-t border-zinc-900/50">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                        <DollarSign className="w-3 h-3 text-emerald-400" /> Precio de Inscripción
+                                                    </label>
+                                                    <div className="relative group">
+                                                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-padel-primary transition-colors" />
+                                                        <input
+                                                            type="number"
+                                                            value={pendingPrice}
+                                                            onChange={(e) => setPendingPrice(Number(e.target.value) || 0)}
+                                                            placeholder="0.00"
+                                                            className="w-full bg-black/40 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-black italic text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
+                                                        />
+                                                    </div>
                                                 </div>
                                             </motion.div>
                                         )}
 
-                                        {pendingTournamentType === 'ROUND_ROBIN' && (
+                                        {/* 2. FORMATOS ESTÁNDAR (RR, Directa, Combinado, Cuadro) */}
+                                        {['ROUND_ROBIN', 'ELIMINACION_DIRECTA', 'COMBINADO', 'CUADRO_CONSOLACION'].includes(pendingTournamentType) && (
                                             <motion.div
-                                                key="rr-format"
+                                                key="standard-options"
                                                 initial={{ opacity: 0, y: 10 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 exit={{ opacity: 0, y: -10 }}
-                                                className="space-y-2"
+                                                className="space-y-5"
                                             >
-                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                    <Layout className="w-3 h-3 text-blue-400" /> Formato de Partido
-                                                </label>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    {([
-                                                        { val: 'ONE_SET_6' as const, label: '1 Set (6)' },
-                                                        { val: 'ONE_SET_9' as const, label: '1 Set (9)' },
-                                                        { val: 'TWO_SHORT_SETS' as const, label: '2 set cortos (4) + STB' },
-                                                        { val: 'TWO_NORMAL_SETS' as const, label: '2 set (6) + STB' },
-                                                    ]).map(opt => {
-                                                        const isSelected = pendingRRFormat === opt.val;
-                                                        return (
-                                                            <button
-                                                                key={opt.val}
-                                                                type="button"
-                                                                onClick={() => setPendingRRFormat(opt.val)}
-                                                                className={`min-h-[44px] py-2 px-3 rounded-xl border-2 font-black italic text-[10px] uppercase tracking-tighter transition-all select-none touch-manipulation active:scale-[0.98] ${isSelected
-                                                                    ? 'bg-padel-primary border-padel-primary text-black'
-                                                                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600'
-                                                                    }`}
-                                                            >
-                                                                {opt.label}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </motion.div>
-                                        )}
+                                                {/* A. Configuración de Grupos (solo RR / Combinado) */}
+                                                {(pendingTournamentType === 'ROUND_ROBIN' || pendingTournamentType === 'COMBINADO') && (
+                                                    <div className="grid grid-cols-2 gap-4 pb-2 border-b border-zinc-900/50">
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                                <Layers className="w-3 h-3 text-padel-primary" /> Tamaño de Grupos
+                                                            </label>
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                {[3, 4].map(size => (
+                                                                    <button
+                                                                        key={size}
+                                                                        type="button"
+                                                                        onClick={() => setPendingGroupSize(size as 3 | 4)}
+                                                                        className={`min-h-[36px] rounded-lg border font-black text-[10px] transition-all ${pendingGroupSize === size ? 'bg-padel-primary border-padel-primary text-black' : 'bg-black/30 border-zinc-800 text-zinc-500'}`}
+                                                                    >
+                                                                        {size} Parejas
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                                <Trophy className="w-3 h-3 text-padel-primary" /> Pasan por grupo
+                                                            </label>
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                {[1, 2].map(n => (
+                                                                    <button
+                                                                        key={n}
+                                                                        type="button"
+                                                                        onClick={() => setPendingAdvanceCount(n as 1 | 2)}
+                                                                        className={`min-h-[36px] rounded-lg border font-black text-[10px] transition-all ${pendingAdvanceCount === n ? 'bg-padel-primary border-padel-primary text-black' : 'bg-black/30 border-zinc-800 text-zinc-500'}`}
+                                                                    >
+                                                                        {n === 1 ? 'Solo 1º' : '1º y 2º'}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
 
-                                        {(pendingTournamentType === 'ROUND_ROBIN' || pendingTournamentType === 'COMBINADO') && (
-                                            <motion.div
-                                                key="advance-count"
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                exit={{ opacity: 0, y: -10 }}
-                                                className="space-y-2"
-                                            >
-                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                    <Trophy className="w-3 h-3 text-padel-primary" /> Pasan por grupo
-                                                </label>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    {[
-                                                        { val: 1 as const, label: 'Solo 1º de Grupo' },
-                                                        { val: 2 as const, label: '1º y 2º de Grupo' },
-                                                    ].map(opt => {
-                                                        const isSelected = pendingAdvanceCount === opt.val;
-                                                        return (
-                                                            <button
-                                                                key={opt.val}
-                                                                type="button"
-                                                                onClick={() => setPendingAdvanceCount(opt.val)}
-                                                                className={`min-h-[44px] py-2 px-3 rounded-xl border-2 font-black italic text-[10px] uppercase tracking-tighter transition-all select-none touch-manipulation active:scale-[0.98] ${isSelected
-                                                                    ? 'bg-padel-primary border-padel-primary text-black'
-                                                                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600'
-                                                                    }`}
-                                                            >
-                                                                {opt.label}
-                                                            </button>
-                                                        );
-                                                    })}
+                                                {/* B. Formato de Partido (A cuántos games) */}
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                        <Layout className="w-3 h-3 text-blue-400" /> A cuántos games es el partido
+                                                    </label>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {[
+                                                            { val: 'ONE_SET_6', label: 'Set Normal (6 juegos)' },
+                                                            { val: 'ONE_SET_9', label: 'Set Largo (9 juegos)' },
+                                                            { val: 'TWO_SHORT_SETS', label: '2 Sets Cortos (4) + STB' },
+                                                            { val: 'TWO_NORMAL_SETS', label: '2 Sets Largos (6) + STB' },
+                                                        ].map(opt => {
+                                                            const isSelected = pendingTournamentType === 'CUADRO_CONSOLACION'
+                                                                ? pendingConsolacionMatchFormat === opt.val
+                                                                : pendingRRFormat === opt.val;
+                                                            return (
+                                                                <button
+                                                                    key={opt.val}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        if (pendingTournamentType === 'CUADRO_CONSOLACION') setPendingConsolacionMatchFormat(opt.val as any);
+                                                                        else setPendingRRFormat(opt.val as any);
+                                                                    }}
+                                                                    className={`min-h-[44px] px-3 rounded-xl border-2 font-black italic text-[9px] uppercase transition-all active:scale-[0.98] ${isSelected ? 'bg-padel-primary border-padel-primary text-black' : 'bg-black/30 border-zinc-800 text-zinc-500'}`}
+                                                                >
+                                                                    {opt.label}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
-                                                {pendingTournamentType === 'ROUND_ROBIN' && pendingAdvanceCount === 2 && (
-                                                    <div className="space-y-1">
+
+                                                {/* C. Clasificación rápida */}
+                                                {(pendingTournamentType === 'ROUND_ROBIN' || pendingTournamentType === 'COMBINADO') && pendingAdvanceCount === 2 && (
+                                                    <div className="bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/50">
                                                         <label className="flex items-center gap-2.5 cursor-pointer group">
                                                             <input
                                                                 type="checkbox"
@@ -1128,63 +1191,68 @@ export default function MasterGeneratorPage() {
                                                                 onChange={(e) => setPendingQuickQualification(e.target.checked)}
                                                                 className="w-4 h-4 rounded border-2 border-zinc-600 bg-zinc-900 text-padel-primary focus:ring-padel-primary/50"
                                                             />
-                                                            <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 group-hover:text-zinc-300">2 juegos garantizados</span>
+                                                            <span className="text-[10px] font-black uppercase tracking-wider text-zinc-300 group-hover:text-white transition-colors">Clasificación rápida (mín. 2 partidos)</span>
                                                         </label>
-                                                        <p className="text-[9px] text-zinc-500 pl-6 leading-tight">Clasificación rápida: cada competidor juega 2 partidos en fase de grupos; clasifican 1º y 2º de cada grupo a semifinales.</p>
                                                     </div>
                                                 )}
-                                            </motion.div>
-                                        )}
 
-                                        {pendingTournamentType === 'CUADRO_CONSOLACION' && (
-                                            <motion.div
-                                                key="consolacion-options"
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                exit={{ opacity: 0, y: -10 }}
-                                                className="space-y-2"
-                                            >
-                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
-                                                    <Layout className="w-3 h-3 text-emerald-400" /> Formato de puntuación (Punto de Oro en todos)
-                                                </label>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setPendingConsolacionMatchFormat('ONE_SET_9')}
-                                                        className={`min-h-[48px] py-2 px-3 rounded-xl border-2 font-black italic text-[10px] uppercase tracking-tighter transition-all select-none touch-manipulation active:scale-[0.98] ${pendingConsolacionMatchFormat === 'ONE_SET_9'
-                                                            ? 'bg-padel-primary border-padel-primary text-black'
-                                                            : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600'}`}
-                                                    >
-                                                        Set largo a 9 (50 min)
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setPendingConsolacionMatchFormat('TWO_SHORT_SETS')}
-                                                        className={`min-h-[48px] py-2 px-3 rounded-xl border-2 font-black italic text-[10px] uppercase tracking-tighter transition-all select-none touch-manipulation active:scale-[0.98] ${pendingConsolacionMatchFormat === 'TWO_SHORT_SETS'
-                                                            ? 'bg-padel-primary border-padel-primary text-black'
-                                                            : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-600'}`}
-                                                    >
-                                                        2 sets + STB (60 min)
-                                                    </button>
+                                                {/* D. Sistema de Puntuación y Desempate */}
+                                                <div className="grid grid-cols-2 gap-4 pt-2">
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Sistema de Puntuación</label>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPendingGolden(true)}
+                                                                className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${pendingGolden ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
+                                                            >
+                                                                Punto de Oro
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPendingGolden(false)}
+                                                                className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${!pendingGolden ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
+                                                            >
+                                                                Tradicional
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Método de Desempate</label>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPendingSetFormat('TIE_BREAK')}
+                                                                className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${pendingSetFormat === 'TIE_BREAK' ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
+                                                            >
+                                                                TB (7 pts)
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPendingSetFormat('SUPER_TIE_BREAK')}
+                                                                className={`flex-1 py-3 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${pendingSetFormat === 'SUPER_TIE_BREAK' ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500'}`}
+                                                            >
+                                                                STB (10 pts)
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <p className="text-[9px] text-zinc-500 font-bold">Quien pierde en R1 del cuadro principal pasa a Consolación → mínimo 2 partidos por pareja.</p>
-                                            </motion.div>
-                                        )}
 
-                                        {pendingTournamentType === 'ELIMINACION_DIRECTA' && (
-                                            <motion.div
-                                                key="knockout-info"
-                                                initial={{ opacity: 0, scale: 0.95 }}
-                                                animate={{ opacity: 1, scale: 1 }}
-                                                exit={{ opacity: 0, scale: 0.95 }}
-                                                className="flex items-center gap-4 bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4"
-                                            >
-                                                <div className="w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 border-orange-500 bg-orange-500/10">
-                                                    <FormatIcons.ELIMINATORIO className="w-6 h-6 text-orange-500" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] font-black uppercase text-zinc-400">Eliminación Directa</p>
-                                                    <p className="text-[9px] text-zinc-600 font-bold uppercase tracking-widest">Llaves automáticas generadas</p>
+                                                {/* E. Precio de Inscripción */}
+                                                <div className="space-y-2 pt-2">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                        <DollarSign className="w-3 h-3 text-emerald-400" /> Precio de Inscripción
+                                                    </label>
+                                                    <div className="relative group">
+                                                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-padel-primary transition-colors" />
+                                                        <input
+                                                            type="number"
+                                                            value={pendingPrice}
+                                                            onChange={(e) => setPendingPrice(Number(e.target.value) || 0)}
+                                                            placeholder="0.00"
+                                                            className="w-full bg-black/40 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-black italic text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
+                                                        />
+                                                    </div>
                                                 </div>
                                             </motion.div>
                                         )}
@@ -1219,7 +1287,10 @@ export default function MasterGeneratorPage() {
                 <header className="flex items-center gap-4 mb-3 shrink-0">
                     <button
                         type="button"
-                        onClick={() => router.back()}
+                        onClick={() => {
+                            if (step > 1) setStep(step - 1);
+                            else router.back();
+                        }}
                         className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors shrink-0 p-2 -ml-2 rounded-xl hover:bg-white/5"
                         aria-label="Atrás"
                     >
@@ -1228,7 +1299,7 @@ export default function MasterGeneratorPage() {
                     </button>
                     <div className="flex items-center gap-2.5 flex-1">
                         <div className="w-8 h-8 bg-padel-primary/10 border border-padel-primary/20 rounded-xl flex items-center justify-center">
-                            <Sparkles className="w-4 h-4 text-padel-primary" />
+                            <Trophy className="w-4 h-4 text-padel-primary" />
                         </div>
                         <div>
                             <h1 className="text-lg font-black italic uppercase tracking-tighter leading-none">
@@ -1283,7 +1354,7 @@ export default function MasterGeneratorPage() {
                                                     type="text"
                                                     value={eventData.tournamentName}
                                                     onChange={(e) => setEventData({ ...eventData, tournamentName: e.target.value })}
-                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-base font-bold focus:border-padel-primary outline-none transition-all"
+                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-base font-bold text-white focus:border-padel-primary outline-none transition-all"
                                                     placeholder="Ej: Virgen del Valle Open..."
                                                 />
                                             </div>
@@ -1300,19 +1371,20 @@ export default function MasterGeneratorPage() {
                                                             courtNames: Array.from({ length: complex?.courts || eventData.numCourts }, (_, i) => `Pista ${i + 1}`)
                                                         });
                                                     }}
-                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary transition-all font-bold"
+                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary transition-all font-bold text-white"
                                                 >
                                                     <option value="" disabled>— Selecciona una sede —</option>
                                                     {COMPLEXES.map(c => (
-                                                        <option key={c.name} value={c.name}>{c.name} ({c.courts} Pistas)</option>
+                                                        <option key={c.name} value={c.name}>{c.label} — {c.name} ({c.courts} pistas)</option>
                                                     ))}
                                                 </select>
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                                            <div className="space-y-1.5 min-w-0">
+                                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
+                                                    <UserPlus className="w-3.5 h-3.5 text-padel-primary shrink-0" />
                                                     Nombre del Patrocinante
                                                 </label>
                                                 <input
@@ -1320,16 +1392,16 @@ export default function MasterGeneratorPage() {
                                                     value={eventData.sponsorName ?? ''}
                                                     onChange={(e) => setEventData({ ...eventData, sponsorName: e.target.value })}
                                                     placeholder="Ej: Banco Mercantil"
-                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-sm font-medium focus:border-padel-primary outline-none transition-all"
+                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-sm font-medium text-white focus:border-padel-primary outline-none transition-all"
                                                 />
                                             </div>
 
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
-                                                    <ImageIcon className="w-3.5 h-3.5 text-padel-primary" />
+                                            <div className="space-y-1.5 min-w-0">
+                                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
+                                                    <ImageIcon className="w-3.5 h-3.5 text-padel-primary shrink-0" />
                                                     Logo del patrocinante
                                                 </label>
-                                                <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-3 flex-wrap">
                                                     <button
                                                         type="button"
                                                         onClick={() => document.getElementById('logo-upload')?.click()}
@@ -1349,8 +1421,18 @@ export default function MasterGeneratorPage() {
                                                             value={eventData.sponsorLogoUrl || ''}
                                                             onChange={e => setEventData(prev => ({ ...prev, sponsorLogoUrl: e.target.value }))}
                                                             placeholder="O pega una URL..."
-                                                            className="w-full bg-black/40 border border-zinc-800 rounded-xl py-2.5 pl-9 pr-4 text-xs focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
+                                                            className="w-full bg-black/40 border border-zinc-800 rounded-xl py-2.5 pl-9 pr-16 text-xs text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
                                                         />
+                                                        {eventData.sponsorLogoUrl && eventData.sponsorLogoUrl.startsWith('http') && !eventData.sponsorLogoUrl.includes('supabase.co/storage') && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleSubirDesdeUrl}
+                                                                disabled={isUploadingLogo}
+                                                                className="absolute right-1 top-1 bottom-1 px-3 bg-padel-primary/20 hover:bg-padel-primary text-padel-primary hover:text-white rounded-lg transition-all text-[10px] font-bold disabled:opacity-50"
+                                                            >
+                                                                {isUploadingLogo ? '...' : 'SUBIR'}
+                                                            </button>
+                                                        )}
                                                     </div>
 
                                                     {eventData.sponsorLogoUrl && (
@@ -1377,8 +1459,11 @@ export default function MasterGeneratorPage() {
                                             </div>
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch col-span-2">
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Fecha Inicio</label>
+                                                <div className="space-y-1.5 min-w-0">
+                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
+                                                        <Calendar className="w-3.5 h-3.5 text-padel-primary shrink-0" />
+                                                        Fecha Inicio
+                                                    </label>
                                                     <div className="relative">
                                                         <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                                                         <input
@@ -1390,34 +1475,41 @@ export default function MasterGeneratorPage() {
                                                                 if (newStart && eventData.endDate && eventData.endDate < newStart) next.endDate = newStart;
                                                                 setEventData(next);
                                                             }}
-                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-9 outline-none focus:border-padel-primary"
+                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-9 outline-none focus:border-padel-primary text-white"
                                                         />
                                                     </div>
                                                 </div>
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Duración</label>
+                                                <div className="space-y-1.5 min-w-0">
+                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
+                                                        <Trophy className="w-3.5 h-3.5 text-padel-primary shrink-0" />
+                                                        Duración
+                                                    </label>
                                                     <div className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 flex items-center gap-2">
-                                                        <Sparkles className="w-4 h-4 text-padel-primary animate-pulse shrink-0" />
+                                                        <Trophy className="w-4 h-4 text-padel-primary shrink-0" />
                                                         <p className="text-sm font-bold text-white uppercase italic leading-tight">Calculada por IA</p>
                                                     </div>
                                                 </div>
                                             </div>
 
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 col-span-2 pt-2">
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Apertura</label>
+                                                <div className="space-y-1.5 min-w-0">
+                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
+                                                        <Clock className="w-3.5 h-3.5 text-padel-primary shrink-0" />
+                                                        Apertura
+                                                    </label>
                                                     <div className="relative">
                                                         <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
                                                         <input
                                                             type="time"
                                                             value={eventData.dailyStartTime}
                                                             onChange={(e) => setEventData({ ...eventData, dailyStartTime: e.target.value })}
-                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-8 outline-none focus:border-padel-primary text-sm"
+                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-8 outline-none focus:border-padel-primary text-sm text-white"
                                                         />
                                                     </div>
                                                 </div>
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                                                <div className="space-y-1.5 min-w-0">
+                                                    <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
+                                                        <Clock className="w-3.5 h-3.5 text-padel-primary shrink-0" />
                                                         Cierre{eventData.dailyEndTime < eventData.dailyStartTime && <span className="ml-1 text-padel-primary">(+1d)</span>}
                                                     </label>
                                                     <div className="relative">
@@ -1426,7 +1518,7 @@ export default function MasterGeneratorPage() {
                                                             type="time"
                                                             value={eventData.dailyEndTime}
                                                             onChange={(e) => setEventData({ ...eventData, dailyEndTime: e.target.value })}
-                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-8 outline-none focus:border-padel-primary text-sm"
+                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-8 outline-none focus:border-padel-primary text-sm text-white"
                                                         />
                                                     </div>
                                                 </div>
@@ -1437,7 +1529,7 @@ export default function MasterGeneratorPage() {
                                                         min={30} max={180} step={5}
                                                         value={eventData.matchDurationMinutes}
                                                         onChange={(e) => setEventData({ ...eventData, matchDurationMinutes: parseInt(e.target.value) || 60 })}
-                                                        className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary font-bold text-center text-base"
+                                                        className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary font-bold text-center text-base text-white"
                                                     />
                                                 </div>
                                                 <div className="space-y-1.5">
@@ -1447,7 +1539,7 @@ export default function MasterGeneratorPage() {
                                                         min={0} max={60} step={5}
                                                         value={eventData.bufferMinutes}
                                                         onChange={(e) => setEventData({ ...eventData, bufferMinutes: parseInt(e.target.value) || 10 })}
-                                                        className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary font-bold text-center text-base"
+                                                        className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary font-bold text-center text-base text-white"
                                                     />
                                                 </div>
                                             </div>
@@ -1563,23 +1655,54 @@ export default function MasterGeneratorPage() {
                                                     TournamentCategory.PRIMERA, TournamentCategory.SEGUNDA,
                                                     TournamentCategory.TERCERA, TournamentCategory.CUARTA,
                                                     TournamentCategory.QUINTA, TournamentCategory.SEXTA,
-                                                    TournamentCategory.SEPTIMA, TournamentCategory.MAS_45,
+                                                    TournamentCategory.SEPTIMA, 
+                                                    activeGender === 'MALE' ? TournamentCategory.MAS_40 : 
+                                                    activeGender === 'FEMALE' ? TournamentCategory.FEM_40 : 
+                                                    TournamentCategory.MIX_40,
+                                                    TournamentCategory.MAS_45,
                                                     TournamentCategory.MAS_50, TournamentCategory.SUMA_7,
                                                     TournamentCategory.SUMA_8, TournamentCategory.SUMA_9,
                                                     TournamentCategory.SUMA_10, TournamentCategory.SUMA_11
                                                 ].map(level => {
                                                     const exists = eventData.categories.some(c => c.gender === activeGender && c.category === level);
+
+                                                    // Colores dinámicos por género
+                                                    const isMale = activeGender === 'MALE';
+                                                    const isFemale = activeGender === 'FEMALE';
+                                                    const isMixed = activeGender === 'MIXED';
+
+                                                    let buttonClasses = "";
+                                                    if (exists) {
+                                                        if (isMale) buttonClasses = "bg-blue-500/10 border-blue-500 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.2)]";
+                                                        else if (isFemale) buttonClasses = "bg-pink-500/10 border-pink-500 text-pink-400 shadow-[0_0_15px_rgba(236,72,153,0.2)]";
+                                                        else buttonClasses = "bg-purple-500/10 border-purple-500 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]";
+                                                    } else {
+                                                        const hoverClasses = isMale ? "hover:border-blue-500 hover:text-blue-400 hover:bg-blue-500/5" :
+                                                            isFemale ? "hover:border-pink-500 hover:text-pink-400 hover:bg-pink-500/5" :
+                                                                "hover:border-purple-500 hover:text-purple-400 hover:bg-purple-500/5";
+                                                        buttonClasses = `bg-black/40 border-zinc-800 text-zinc-500 ${hoverClasses}`;
+                                                    }
+
                                                     return (
                                                         <button
                                                             key={level}
-                                                            onClick={() => exists ? null : addCategory(activeGender, level)}
-                                                            disabled={exists}
-                                                            className={`p-2.5 rounded-xl border transition-all text-center text-xs font-bold ${exists
-                                                                ? 'bg-zinc-800/50 border-zinc-700 text-zinc-600 cursor-not-allowed'
-                                                                : 'bg-black/50 border-zinc-700 hover:border-padel-primary hover:text-padel-primary'
-                                                                }`}
+                                                            onClick={() => {
+                                                                if (exists) {
+                                                                    const catObj = eventData.categories.find(c => c.gender === activeGender && c.category === level);
+                                                                    if (catObj) removeCategory(catObj.id);
+                                                                } else {
+                                                                    addCategory(activeGender, level);
+                                                                }
+                                                            }}
+                                                            className={`relative p-2.5 rounded-xl border-2 transition-all text-center text-[10px] font-black uppercase italic tracking-tighter active:scale-95 ${buttonClasses}`}
                                                         >
                                                             {catLevelLabels[level] || level}
+                                                            {exists && (
+                                                                <div className={`absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center border-2 border-[#0a0a0a] ${isMale ? 'bg-blue-500' : isFemale ? 'bg-pink-500' : 'bg-purple-500'
+                                                                    }`}>
+                                                                    <Check className="w-2.5 h-2.5 text-black" strokeWidth={4} />
+                                                                </div>
+                                                            )}
                                                         </button>
                                                     );
                                                 })}
@@ -1617,6 +1740,7 @@ export default function MasterGeneratorPage() {
                                                                     setPendingAdvanceCount((cat as any).advanceCount ?? 2);
                                                                     setPendingQuickQualification(!!(cat as any).quickQualification);
                                                                     setPendingConsolacionMatchFormat((cat as any).consolacionMatchFormat ?? 'TWO_SHORT_SETS');
+                                                                    setPendingPrice(cat.inscriptionPrice ?? 0);
                                                                 }}
                                                                 className="text-zinc-600 hover:text-padel-primary transition-colors p-1.5 hover:bg-padel-primary/10 rounded-lg"
                                                             >
@@ -1641,6 +1765,11 @@ export default function MasterGeneratorPage() {
                                                         <span className="text-[10px] font-black uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-md">
                                                             {cat.setFormat === 'TIE_BREAK' ? '🎾 Tie-Break' : cat.setFormat === 'SUPER_TIE_BREAK' ? '⚡ Super TB' : '🔁 Sin TB'}
                                                         </span>
+                                                        {cat.inscriptionPrice !== undefined && (
+                                                            <span className="ml-auto text-[10px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                                                <DollarSign className="w-3 h-3" /> {cat.inscriptionPrice}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))}
@@ -1673,7 +1802,7 @@ export default function MasterGeneratorPage() {
                                                 <select
                                                     value={eventData.matchDurationMinutes}
                                                     onChange={(e) => setEventData({ ...eventData, matchDurationMinutes: Number(e.target.value) || 60 })}
-                                                    className="w-full bg-black/50 border border-zinc-800 rounded-2xl p-4 outline-none focus:border-padel-primary transition-all font-bold"
+                                                    className="w-full bg-black/50 border border-zinc-800 rounded-2xl p-4 outline-none focus:border-padel-primary transition-all font-bold text-white"
                                                 >
                                                     <option value={60}>60 Minutos / Partido</option>
                                                     <option value={75}>75 Minutos / Partido</option>
@@ -1690,7 +1819,7 @@ export default function MasterGeneratorPage() {
                                                 <select
                                                     value={eventData.bufferMinutes}
                                                     onChange={(e) => setEventData({ ...eventData, bufferMinutes: Number(e.target.value) })}
-                                                    className="w-full bg-black/50 border border-zinc-800 rounded-2xl p-4 outline-none focus:border-blue-400 transition-all font-bold"
+                                                    className="w-full bg-black/50 border border-zinc-800 rounded-2xl p-4 outline-none focus:border-blue-400 transition-all font-bold text-white"
                                                 >
                                                     <option value={5}>5 Minutos entre juegos</option>
                                                     <option value={10}>10 Minutos entre juegos</option>
@@ -1722,7 +1851,7 @@ export default function MasterGeneratorPage() {
                                                                     newNames[i] = e.target.value;
                                                                     setEventData({ ...eventData, courtNames: newNames });
                                                                 }}
-                                                                className="bg-transparent border-none outline-none text-sm font-bold w-full focus:text-padel-primary transition-colors"
+                                                                className="bg-transparent border-none outline-none text-sm font-bold w-full focus:text-padel-primary transition-colors text-white"
                                                                 placeholder={`Pista ${i + 1}`}
                                                             />
                                                             <button
@@ -1768,7 +1897,7 @@ export default function MasterGeneratorPage() {
                                         {eventData.categories.length > 0 && (
                                             <div className="bg-padel-primary/5 border border-padel-primary/20 rounded-3xl p-6 space-y-4">
                                                 <div className="flex items-center gap-3">
-                                                    <Sparkles className="w-5 h-5 text-padel-primary" />
+                                                    <Trophy className="w-5 h-5 text-padel-primary" />
                                                     <h3 className="font-black uppercase tracking-tighter text-sm text-padel-primary">Resumen Pre-Generación</h3>
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-3">
@@ -1794,8 +1923,8 @@ export default function MasterGeneratorPage() {
                                                 <div className="space-y-1">
                                                     {eventData.categories.map((c, i) => (
                                                         <div key={c.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-black/20">
-                                                            <span className="font-bold text-zinc-300">{c.gender === 'MALE' ? '♂' : c.gender === 'FEMALE' ? '♀' : '🚻'} {c.category}</span>
-                                                            <span className="text-padel-primary font-black">{c.teams?.length || c.numTeams} parejas · {calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION, (c as any).advanceCount)} partidos</span>
+                                                            <span className="font-bold text-zinc-300">{c.gender === 'MALE' ? '♂' : c.gender === 'FEMALE' ? '♀' : '🚻'} {catLevelLabels[c.category] || c.category}</span>
+                                                            <span className="text-padel-primary font-black">{c.teams?.length || c.numTeams} parejas por inscribirse · {calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION, (c as any).advanceCount)} partidos</span>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -1828,13 +1957,14 @@ export default function MasterGeneratorPage() {
                                             </h2>
                                             <div className="flex items-center gap-3">
                                                 <div className={`px-2 py-1 rounded-lg border border-white/5 flex items-center gap-2 ${getIntensityLabel().bg}`}>
-                                                    <Sparkles className={`w-3 h-3 ${getIntensityLabel().color}`} />
+                                                    <Trophy className={`w-3 h-3 ${getIntensityLabel().color}`} />
                                                     <span className={`text-[9px] font-black uppercase tracking-widest ${getIntensityLabel().color}`}>
                                                         {getIntensityLabel().label}
                                                     </span>
                                                 </div>
                                                 <span className="text-[10px] font-bold text-zinc-500 uppercase italic">
-                                                    Finaliza el: <span className="text-white block">{getEstimatedEndDate().dateStr}</span><span className="text-white block">{getEstimatedEndDate().timeStr}</span>
+                                                    Fin Estimado: <span className="text-white block font-black">{getEstimatedEndDate().dateStr}</span>
+                                                    <span className="text-padel-primary block text-[9px] mt-0.5">{getEstimatedEndDate().weekday} · {getEstimatedEndDate().timeStr}</span>
                                                 </span>
                                             </div>
                                         </div>
@@ -1860,25 +1990,32 @@ export default function MasterGeneratorPage() {
                                                                 <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 md:gap-x-4">
                                                                     {/* Time column inside row */}
                                                                     <div
-                                                                        className={`flex flex-col shrink-0 w-14 ${((m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF')) ? 'cursor-pointer' : ''}`}
+                                                                        className={`flex flex-col shrink-0 w-min min-w-[56px] ${((m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF')) ? 'cursor-pointer hover:bg-white/5 p-1 -m-1 rounded-lg transition-colors' : ''}`}
                                                                         onDoubleClick={() => {
                                                                             const isEditable = (m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF');
                                                                             if (isEditable) {
                                                                                 setEditingMatchIdx(idx);
-                                                                                setNewMatchTime(new Date(new Date(m.scheduledTime).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16));
+                                                                                // Convertir UTC a locale para el input datetime-local
+                                                                                const dateObj = new Date(m.scheduledTime);
+                                                                                const yyyy = dateObj.getFullYear();
+                                                                                const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+                                                                                const dd = String(dateObj.getDate()).padStart(2, '0');
+                                                                                const hh = String(dateObj.getHours()).padStart(2, '0');
+                                                                                const min = String(dateObj.getMinutes()).padStart(2, '0');
+                                                                                setNewMatchTime(`${yyyy}-${mm}-${dd}T${hh}:${min}`);
                                                                             }
                                                                         }}
-                                                                        title={(m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF') ? 'Doble clic para editar horario' : ''}
+                                                                        title={(m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF') ? 'Doble clic para editar horario del partido' : ''}
                                                                     >
-                                                                        <span className="text-padel-primary font-black italic text-base leading-none">
+                                                                        <span className="text-padel-primary font-black italic text-base leading-none tracking-tighter">
                                                                             {new Date(m.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                                         </span>
-                                                                        <span className="text-xs text-zinc-500 font-bold uppercase mt-1">
+                                                                        <span className="text-[9px] text-zinc-500 font-bold uppercase mt-1 tracking-widest truncate">
                                                                             {new Date(m.scheduledTime).toLocaleDateString([], { weekday: 'short', day: 'numeric' })}
                                                                         </span>
                                                                         {((m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF')) && (
-                                                                            <span className="text-[9px] text-padel-primary/40 font-black italic uppercase tracking-tighter leading-none mt-1">
-                                                                                Doble clic p/ editar
+                                                                            <span className="text-[8px] text-padel-primary/60 font-black italic uppercase tracking-tighter leading-none mt-1">
+                                                                                EDICIÓN ⚡
                                                                             </span>
                                                                         )}
                                                                     </div>
@@ -1905,24 +2042,30 @@ export default function MasterGeneratorPage() {
                                                                     </div>
 
                                                                     {/* Team 1 — alineado a la derecha */}
-                                                                    <div className="min-w-0 text-right text-xs font-bold text-white truncate flex items-center justify-end">
-                                                                        {m.team1Index && (
-                                                                            <span className="inline-flex items-center justify-center w-5 h-5 bg-padel-primary/20 text-padel-primary text-[9px] font-black rounded-md mr-1.5 border border-padel-primary/30">
-                                                                                {m.team1Index}
-                                                                            </span>
-                                                                        )}
-                                                                        <span>{m.team1.p1.name} + {m.team1.p2.name}</span>
+                                                                    <div className="min-w-0 text-right text-[11px] font-bold text-white truncate flex items-center justify-end">
+                                                                        <div className="flex flex-col gap-0.5 mr-2">
+                                                                            <span className="text-zinc-500 text-[8px] uppercase font-black leading-none">EQUIPO</span>
+                                                                            {m.team1Index && (
+                                                                                <span className="inline-flex items-center justify-center h-5 px-1.5 bg-padel-primary text-black text-[10px] font-black rounded italic -skew-x-12">
+                                                                                    #{m.team1Index}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        <span>{m.team1Name}</span>
                                                                     </div>
                                                                     {/* VS — columna fija para alinear todos en vertical */}
                                                                     <div className="px-2 py-0.5 bg-zinc-800 rounded font-black text-[10px] text-zinc-500 italic shrink-0 justify-self-center">VS</div>
                                                                     {/* Team 2 — alineado a la izquierda */}
-                                                                    <div className="min-w-0 text-left text-xs font-bold text-white truncate flex items-center">
-                                                                        {m.team2Index && (
-                                                                            <span className="inline-flex items-center justify-center w-5 h-5 bg-padel-primary/20 text-padel-primary text-[9px] font-black rounded-md mr-1.5 border border-padel-primary/30">
-                                                                                {m.team2Index}
-                                                                            </span>
-                                                                        )}
-                                                                        <span>{m.team2.p1.name} + {m.team2.p2.name}</span>
+                                                                    <div className="min-w-0 text-left text-[11px] font-bold text-white truncate flex items-center">
+                                                                        <div className="flex flex-col gap-0.5 ml-0.5 mr-2">
+                                                                            <span className="text-zinc-500 text-[8px] uppercase font-black leading-none">EQUIPO</span>
+                                                                            {m.team2Index && (
+                                                                                <span className="inline-flex items-center justify-center h-5 px-1.5 bg-padel-primary text-black text-[10px] font-black rounded italic -skew-x-12">
+                                                                                    #{m.team2Index}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        <span>{m.team2Name}</span>
                                                                     </div>
                                                                 </div>
                                                             </td>
@@ -1936,20 +2079,8 @@ export default function MasterGeneratorPage() {
                             )}
                         </AnimatePresence>
 
-                        {/* Navigation Buttons and AI Tip */}
+                        {/* Navigation Buttons */}
                         <div className="max-w-md mx-auto mt-12 mb-16 space-y-6">
-                            {/* AI Assistant Tip */}
-                            <div className="bg-padel-primary/5 border border-padel-primary/10 rounded-2xl p-4 space-y-1.5 relative overflow-hidden group">
-                                <div className="absolute top-0 right-0 w-24 h-24 bg-padel-primary/10 blur-[50px] rounded-full pointer-events-none group-hover:bg-padel-primary/20 transition-all duration-1000"></div>
-                                <div className="flex items-center gap-1.5 text-padel-primary relative z-10">
-                                    <Sparkles className="w-4 h-4" />
-                                    <span className="text-[10px] font-black uppercase tracking-[0.2em]">Tip del Organizador</span>
-                                </div>
-                                <p className="text-xs text-zinc-400 leading-relaxed italic relative z-10">
-                                    "El sistema garantiza que ningún jugador juegue dos partidos seguidos. Las finales se agenden automáticamente al último slot disponible."
-                                </p>
-                            </div>
-
                             <div className="space-y-4">
                                 {step < 3 ? (
                                     <button
@@ -1979,7 +2110,7 @@ export default function MasterGeneratorPage() {
                                             {isGenerating ? (
                                                 <>GENERANDO...</>
                                             ) : (
-                                                <>GENERAR FIXTURE <Sparkles className="w-6 h-6 group-hover:scale-125 transition-transform" /></>
+                                                <>GENERAR FIXTURE <Trophy className="w-6 h-6 group-hover:scale-125 transition-transform" /></>
                                             )}
                                         </button>
                                     </div>
@@ -1999,23 +2130,14 @@ export default function MasterGeneratorPage() {
                                         </button>
                                         <button
                                             type="button"
-                                            onClick={() => setStep(1)}
+                                            onClick={() => router.back()}
                                             className="w-full py-4 text-zinc-500 font-bold hover:text-white transition-colors uppercase tracking-widest text-[10px]"
                                         >
-                                            Descartar y Volver
+                                            Cancelar y Salir
                                         </button>
                                     </div>
                                 ) : null}
 
-                                {step > 1 && step < 4 && (
-                                    <button
-                                        type="button"
-                                        onClick={prevStep}
-                                        className="w-full py-4 text-zinc-600 font-bold hover:text-zinc-400 transition-colors uppercase tracking-widest text-[10px]"
-                                    >
-                                        Atrás
-                                    </button>
-                                )}
                             </div>
                         </div>
                     </main>

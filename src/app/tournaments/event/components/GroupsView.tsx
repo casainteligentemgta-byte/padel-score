@@ -7,8 +7,9 @@ import {
 } from 'lucide-react';
 import { MatchStatus } from '@/types/tournament';
 import {
-    formatCategory, formatHHMM, resolveTeamNames, calcGroupStanding
+    formatCategory, formatHHMM, resolveTeamNames, calcGroupStanding, formatDisplayName
 } from '../utils';
+import { TeamPairDisplay } from '@/components/TeamPairDisplay';
 
 interface GroupsViewProps {
     tournaments: Record<string, any>;
@@ -31,20 +32,27 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
 
         const isSimple = activeTournament?.type === 'AMERICANO_INDIVIDUAL';
         let name: string;
+        let p1Name = '';
+        let p2Name = '';
+        let player2Accepted = true;
         if (team) {
-            const p1 = (team.p1Name || team.p1?.name || '').trim();
-            const p2 = (team.p2Name || team.p2?.name || '').trim();
+            const p1 = formatDisplayName((team.p1Name || team.p1?.name || '').trim());
+            const p2 = formatDisplayName((team.p2Name || team.p2?.name || '').trim());
+            p1Name = p1 || `Jugador ${tNum}`;
+            p2Name = p2 || (isSimple ? '' : `Jugador ${tNum + 1}`);
+            const isPlaceholder = (s: string) => !s || s.startsWith('Jugador ');
             if (isSimple) {
-                name = p1 || `Jugador ${tNum}`;
+                name = p1Name;
             } else {
                 name = (p1 && p2) ? `${p1} / ${p2}` : (p1 || `Pareja ${tNum}`);
+                player2Accepted = !isPlaceholder(p2);
             }
         } else {
             name = isSimple ? `Jugador ${tNum}` : `Pareja ${tNum}`;
         }
 
         const stats = calcGroupStanding(tid, tNum, allMatches);
-        return { id: tid, name, tNum, ...stats };
+        return { id: tid, name, tNum, p1Name, p2Name, player2Accepted, ...stats };
     }).sort((a, b) => {
         if (b.Pts !== a.Pts) return b.Pts - a.Pts;
         const da = a.JF - a.JC, db = b.JF - b.JC;
@@ -134,15 +142,15 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
                                 <div className="min-w-0">
                                     {isSimple ? (
                                         <p className={`text-[10px] font-black uppercase italic tracking-tight truncate leading-none ${isLeader ? 'text-[#ccff00]' : 'text-white'}`}>{row.name}</p>
-                                    ) : (() => {
-                                        const parts = row.name.split(' / ');
-                                        return (
-                                            <div className="flex flex-col min-w-0">
-                                                <p className={`text-[9px] font-black uppercase italic tracking-tight truncate leading-none ${isLeader ? 'text-[#ccff00]' : 'text-white'}`}>{parts[0]}</p>
-                                                {parts[1] && <p className="text-[8px] font-bold text-gray-500 uppercase italic tracking-tighter truncate leading-none mt-1">{parts[1]}</p>}
-                                            </div>
-                                        );
-                                    })()}
+                                    ) : (
+                                        <TeamPairDisplay
+                                            player1Name={row.p1Name || row.name.split(' / ')[0] || '—'}
+                                            player2Name={row.p2Name || row.name.split(' / ')[1] || '—'}
+                                            player2Accepted={row.player2Accepted !== false}
+                                            compact
+                                            className={isLeader ? '[&_span]:text-[#ccff00]' : '[&_span]:text-white'}
+                                        />
+                                    )}
                                 </div>
                             </div>
                             <span className="text-[10px] font-bold text-white text-center">{row.PJ}</span>
@@ -244,14 +252,9 @@ export const GroupsView: React.FC<GroupsViewProps> = ({ tournaments }) => {
     const tourList = Object.values(tournaments) as any[];
     const withGroups = tourList.filter(t => t.groupAssignments && Object.keys(t.groupAssignments).length > 0);
 
-    const [activeCatId, setActiveCatId] = useState<string>(withGroups[0]?.id ?? '');
-    const [activeGroup, setActiveGroup] = useState<string | null>(null);
-    const [activeView, setActiveView] = useState<'standings' | 'matches'>('standings');
-
-    const handleCatChange = (tid: string) => {
-        setActiveCatId(tid);
-        setActiveGroup(null);
-    };
+    // Estado para saber qué grupo está activo en cada categoría (usando un mapa id-torneo -> nombre-grupo)
+    const [activeGroupsMap, setActiveGroupsMap] = useState<Record<string, string>>({});
+    const [activeViewMap, setActiveViewMap] = useState<Record<string, 'standings' | 'matches'>>({});
 
     if (withGroups.length === 0) {
         return (
@@ -262,112 +265,92 @@ export const GroupsView: React.FC<GroupsViewProps> = ({ tournaments }) => {
         );
     }
 
-    const activeTournament = withGroups.find(t => t.id === activeCatId) ?? withGroups[0];
-    const groupAssignments: Record<string, string[]> = activeTournament?.groupAssignments ?? {};
-    const groupNames = Object.keys(groupAssignments).sort();
-    const currentGroupName = activeGroup ?? groupNames[0] ?? null;
-    const allMatches: any[] = activeTournament?.matches ?? [];
-
     return (
-        <div className="space-y-4">
-            {withGroups.length > 1 && (
-                <div className="space-y-2">
-                    <p className="text-[8px] font-black uppercase tracking-widest text-gray-600 px-1">Categoría</p>
-                    <div className="flex gap-2 overflow-x-auto hide-scrollbar flex-nowrap pb-1">
-                        {withGroups.map(t => (
-                            <button
-                                key={t.id}
-                                onClick={() => handleCatChange(t.id)}
-                                className={`flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all ${activeCatId === t.id
-                                    ? 'bg-[#ccff00] text-black shadow-[0_8px_24px_rgba(204,255,0,0.25)] scale-105'
-                                    : 'bg-white/[0.06] text-gray-400 hover:bg-white/10 border border-white/10'
-                                    }`}
-                            >
-                                <Users className="w-3 h-3" />
-                                {formatCategory(t.category)}
-                                {t.gender === 'MALE' ? ' ♂' : t.gender === 'FEMALE' ? ' ♀' : ' ⚥'}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
+        <div className="space-y-12">
+            {withGroups.map((t, tIdx) => {
+                const groupAssignments: Record<string, string[]> = t.groupAssignments ?? {};
+                const groupNames = Object.keys(groupAssignments).sort();
+                const currentGroupName = activeGroupsMap[t.id] ?? groupNames[0] ?? null;
+                const currentView = activeViewMap[t.id] ?? 'standings';
+                const allMatches: any[] = t.matches ?? [];
 
-            {groupNames.length > 0 && (
-                <div className="space-y-2">
-                    <p className="text-[8px] font-black uppercase tracking-widest text-gray-600 px-1">Grupo</p>
-                    <div className="flex gap-2 overflow-x-auto hide-scrollbar flex-nowrap pb-1">
-                        {groupNames.map(gName => {
-                            const groupLetter = gName.length === 1 ? gName : gName.replace('Grupo', '').trim();
-                            const isActive = (currentGroupName === gName);
-                            const gTeamIds = groupAssignments[gName] ?? [];
-                            const gMatches = allMatches.filter(m =>
-                                m.stage === 'GROUP_STAGE' &&
-                                gTeamIds.some((tid: string) => {
-                                    const idx = activeTournament?.teams?.findIndex((t: any) => String(t.id) === String(tid)) ?? -1;
-                                    const tNum = idx + 1;
-                                    return m.team1Index === tNum || m.team2Index === tNum;
-                                })
-                            );
-                            const done = gMatches.filter(m => m.status === MatchStatus.FINISHED).length;
-                            return (
+                return (
+                    <motion.div
+                        key={t.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: tIdx * 0.1 }}
+                        className="space-y-4"
+                    >
+                        {/* Header de Categoría */}
+                        <div className="flex items-center gap-4 px-1">
+                            <div className="flex-shrink-0 w-10 h-10 rounded-2xl bg-[#ccff00] flex items-center justify-center shadow-[0_8px_16px_rgba(204,255,0,0.2)]">
+                                <Trophy className="w-5 h-5 text-black" />
+                            </div>
+                            <div className="flex-1">
+                                <h2 className="text-lg font-black italic uppercase tracking-tighter text-[#ccff00] leading-none mb-1">
+                                    {formatCategory(t.category)}
+                                </h2>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                                    {t.gender === 'MALE' ? 'Masculino' : t.gender === 'FEMALE' ? 'Femenino' : 'Mixto'} · {groupNames.length} Grupos
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Selector de Grupo para esta categoría */}
+                        {groupNames.length > 0 && (
+                            <div className="flex gap-2 overflow-x-auto hide-scrollbar flex-nowrap pb-1">
+                                {groupNames.map(gName => {
+                                    const groupLetter = gName.length === 1 ? gName : gName.replace('Grupo', '').trim();
+                                    const isActive = (currentGroupName === gName);
+                                    return (
+                                        <button
+                                            key={gName}
+                                            onClick={() => setActiveGroupsMap(prev => ({ ...prev, [t.id]: gName }))}
+                                            className={`flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all ${isActive
+                                                ? 'bg-[#ccff00] text-black shadow-lg scale-105'
+                                                : 'bg-white/[0.06] text-gray-400 hover:bg-white/10 border border-white/10'
+                                                }`}
+                                        >
+                                            <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[8px] font-black ${isActive ? 'bg-black/20' : 'bg-white/10'}`}>{groupLetter}</span>
+                                            Grupo {groupLetter}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* Toggle de Vista */}
+                        <div className="flex justify-center pt-2">
+                            <div className="inline-flex items-center p-1 bg-white/[0.04] border border-white/[0.08] rounded-2xl">
                                 <button
-                                    key={gName}
-                                    onClick={() => setActiveGroup(gName)}
-                                    className={`flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all ${isActive
-                                        ? 'bg-[#ccff00] text-black shadow-[0_8px_24px_rgba(204,255,0,0.2)] scale-105'
-                                        : 'bg-white/[0.06] text-gray-400 hover:bg-white/10 border border-white/10'
-                                        }`}
+                                    onClick={() => setActiveViewMap(prev => ({ ...prev, [t.id]: 'standings' }))}
+                                    className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2 ${currentView === 'standings' ? 'bg-[#ccff00] text-black shadow-lg shadow-[#ccff00]/10' : 'text-gray-500 hover:text-white'}`}
                                 >
-                                    <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[8px] font-black ${isActive ? 'bg-black/20' : 'bg-white/10'}`}>{groupLetter}</span>
-                                    Grupo {groupLetter}
-                                    {gMatches.length > 0 && (
-                                        <span className={`text-[8px] font-bold ${isActive ? 'text-black/60' : 'text-gray-600'}`}>{done}/{gMatches.length}</span>
-                                    )}
+                                    <TrendingUp className="w-3 h-3" />
+                                    Tabla
                                 </button>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
+                                <button
+                                    onClick={() => setActiveViewMap(prev => ({ ...prev, [t.id]: 'matches' }))}
+                                    className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2 ${currentView === 'matches' ? 'bg-[#ccff00] text-black shadow-lg shadow-[#ccff00]/10' : 'text-gray-500 hover:text-white'}`}
+                                >
+                                    <Calendar className="w-3 h-3" />
+                                    Partidos
+                                </button>
+                            </div>
+                        </div>
 
-            <div className="flex justify-center pt-2">
-                <div className="inline-flex items-center p-1 bg-white/[0.04] border border-white/[0.08] rounded-2xl">
-                    <button
-                        onClick={() => setActiveView('standings')}
-                        className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2 ${activeView === 'standings' ? 'bg-[#ccff00] text-black shadow-lg shadow-[#ccff00]/10' : 'text-gray-500 hover:text-white'}`}
-                    >
-                        <TrendingUp className="w-3 h-3" />
-                        Tabla
-                    </button>
-                    <button
-                        onClick={() => setActiveView('matches')}
-                        className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2 ${activeView === 'matches' ? 'bg-[#ccff00] text-black shadow-lg shadow-[#ccff00]/10' : 'text-gray-500 hover:text-white'}`}
-                    >
-                        <Calendar className="w-3 h-3" />
-                        Partidos
-                    </button>
-                </div>
-            </div>
-
-            <AnimatePresence mode="wait">
-                {currentGroupName && (
-                    activeView === 'standings'
-                        ? <StandingsTable activeTournament={activeTournament} gName={currentGroupName} groupAssignments={groupAssignments} allMatches={allMatches} />
-                        : <GroupMatches gName={currentGroupName} groupAssignments={groupAssignments} activeTournament={activeTournament} allMatches={allMatches} />
-                )}
-            </AnimatePresence>
-
-            {groupNames.length > 1 && (
-                <div className="flex justify-center gap-2 pt-1">
-                    {groupNames.map(name => (
-                        <button
-                            key={name}
-                            onClick={() => setActiveGroup(name)}
-                            className={`transition-all rounded-full ${currentGroupName === name ? 'w-6 h-1.5 bg-[#ccff00]' : 'w-1.5 h-1.5 bg-white/20'}`}
-                        />
-                    ))}
-                </div>
-            )}
+                        {/* Contenido Dinámico */}
+                        <AnimatePresence mode="wait">
+                            {currentGroupName && (
+                                currentView === 'standings'
+                                    ? <StandingsTable key={`standings-${t.id}-${currentGroupName}`} activeTournament={t} gName={currentGroupName} groupAssignments={groupAssignments} allMatches={allMatches} />
+                                    : <GroupMatches key={`matches-${t.id}-${currentGroupName}`} gName={currentGroupName} groupAssignments={groupAssignments} activeTournament={t} allMatches={allMatches} />
+                            )}
+                        </AnimatePresence>
+                    </motion.div>
+                );
+            })}
         </div>
     );
 };

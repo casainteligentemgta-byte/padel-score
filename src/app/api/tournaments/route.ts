@@ -2,10 +2,14 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { TournamentType, TournamentCategory } from '@/types/tournament';
-import { requireAuth } from '@/lib/authServer';
-import { validateTournamentBody } from '@/lib/apiValidation';
+import { requireAuth } from '@/lib/authServerSupabase';
+import { validateTournamentBody, sanitizeString } from '@/lib/apiValidation';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 export async function POST(req: Request) {
+    if (!checkRateLimit(req)) {
+        return NextResponse.json({ error: 'Demasiadas peticiones. Intenta más tarde.' }, { status: 429 });
+    }
     const authResult = await requireAuth(req);
     if (authResult instanceof NextResponse) return authResult;
     try {
@@ -28,12 +32,15 @@ export async function POST(req: Request) {
         } = body;
 
         // 1. Generar el calendario primero (para el modo demo y el real)
+        const sStart = sanitizeString(clubHoursStart || '08:00');
+        const sEnd = sanitizeString(clubHoursEnd || '23:00');
+
         const schedule = ScheduleEngine.generateSchedule({
             tournamentId: 'temp',
             numTeams: teamIds.length,
             numCourts: totalCourts || 4,
-            clubHoursStart,
-            clubHoursEnd,
+            clubHoursStart: sStart,
+            clubHoursEnd: sEnd,
             type: type as TournamentType,
             matchDurationMinutes: 90,
             bufferMinutes: bufferMinutes || 15,
@@ -57,12 +64,12 @@ export async function POST(req: Request) {
         const complex = await prisma.complex.upsert({
             where: { id: complexId || 'default-complex' },
             update: {
-                name: body.complexName || 'Club Padel Default',
+                name: sanitizeString(body.complexName || 'Club Padel Default'),
                 totalCourts: totalCourts || 4
             },
             create: {
                 id: complexId || 'default-complex',
-                name: body.complexName || 'Club Padel Default',
+                name: sanitizeString(body.complexName || 'Club Padel Default'),
                 location: 'Localización Virtual',
                 totalCourts: totalCourts || 4,
                 courts: {
@@ -77,13 +84,13 @@ export async function POST(req: Request) {
         // 3.2 Crear el torneo
         const tournament = await prisma.tournament.create({
             data: {
-                name,
+                name: sanitizeString(name),
                 type: type as any,
                 category: category as any,
                 startDate: new Date(startDate),
                 endDate: new Date(startDate),
-                clubHoursStart,
-                clubHoursEnd,
+                clubHoursStart: sStart,
+                clubHoursEnd: sEnd,
                 bufferMinutes: bufferMinutes || 15,
                 complex: {
                     connect: { id: complex.id }

@@ -1,15 +1,17 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
 import { Monitor, Layout, Tv } from 'lucide-react';
 import Link from 'next/link';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 
-export default function StreamerOverlay({ params }: { params: Promise<{ id: string, matchId: string }> }) {
-    const { id, matchId } = use(params);
+export default function StreamerOverlay() {
+    const id = useRouteSegment('id');
+    const matchId = useRouteSegment('matchId');
     const [tournament, setTournament] = useState<any>(null);
     const [match, setMatch] = useState<any>(null);
     const [loading, setLoading] = useState(true);

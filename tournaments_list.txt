@@ -1,0 +1,4 @@
+﻿Tournaments:
+- ID: 51ad6434-1c68-4706-a31f-5da35399ca2c | Name: Casa Inteligente - SEXTA Femenino
+- ID: f2d283a8-0698-4532-848b-fef56e55aa02 | Name: Casa Inteligente - MAS_45 Masculino
+- ID: 92b9ffa9-197b-408c-840a-65e306d0a638 | Name: xxx - 6┬¬ Cat. Masculino

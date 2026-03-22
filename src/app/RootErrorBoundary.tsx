@@ -39,13 +39,13 @@ export default class RootErrorBoundary extends React.Component<
                         fontFamily: 'system-ui, sans-serif',
                     }}
                 >
-                    <h1 style={{ fontSize: 20, marginBottom: 12 }}>Algo falló al cargar</h1>
+                    <h1 style={{ fontSize: 20, marginBottom: 12 }}>Algo falló al cargar la aplicación</h1>
                     <p style={{ fontSize: 14, color: '#888', maxWidth: 400, marginBottom: 16 }}>
                         {this.state.error.message}
                     </p>
                     <p style={{ fontSize: 12, color: '#666' }}>
-                        Revisa la consola (F12) y que .env.local tenga NEXT_PUBLIC_SUPABASE_URL y
-                        NEXT_PUBLIC_SUPABASE_ANON_KEY.
+                        Si ya reiniciaste el servidor (npm run dev), intenta refrescar la página
+                        o limpia el caché del navegador.
                     </p>
                     <button
                         type="button"

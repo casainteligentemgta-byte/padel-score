@@ -16,8 +16,10 @@ const AutoShrinkName: React.FC<AutoShrinkNameProps> = ({ name, className = '', s
   useEffect(() => {
     const resizeText = () => {
       if (containerRef.current && textRef.current) {
-        const containerWidth = containerRef.current.offsetWidth;
-        const textWidth = textRef.current.scrollWidth;
+        // Margen de seguridad para evitar corte visual de la última letra
+        const horizontalSafePadding = 4;
+        const containerWidth = Math.max(0, containerRef.current.offsetWidth - horizontalSafePadding);
+        const textWidth = textRef.current.scrollWidth + 2;
 
         if (textWidth > containerWidth) {
           const ratio = containerWidth / textWidth;
@@ -37,13 +39,13 @@ const AutoShrinkName: React.FC<AutoShrinkNameProps> = ({ name, className = '', s
     <div
       ref={containerRef}
       className={`w-full overflow-hidden whitespace-nowrap ${className}`}
-      style={{ display: 'flex', alignItems: 'center' }}
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingInline: '2px' }}
     >
       <span
         ref={textRef}
         style={{
           display: 'inline-block',
-          transformOrigin: 'left center',
+          transformOrigin: 'center center',
           transform: `scale(${scale})`,
           transition: 'transform 0.1s ease-out',
           ...customStyle,

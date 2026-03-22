@@ -17,29 +17,67 @@ export const formatHHMM = (v: any) => {
 export const toMinute = (v: any): number => Math.floor(toMs(v) / 60000);
 
 /**
+ * Formatea un nombre para mostrar "Nombre Inicial." (e.g. Juan Perez -> Juan P.)
+ */
+export const formatDisplayName = (name: string): string => {
+    if (!name) return '';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length < 2) return name;
+
+    // Si la segunda parte es un número (ej. Jugador 13), no abreviar
+    if (/^\d+$/.test(parts[1])) return name;
+
+    // Si es "Jugador X", no abreviar
+    if (parts[0].toLowerCase() === 'jugador') return name;
+
+    // Tomar primer nombre y la inicial del primer apellido/segundo nombre
+    return `${parts[0]} ${parts[1].charAt(0).toUpperCase()}.`;
+};
+
+
+/**
  * Resuelve los nombres de jugadores de un equipo.
  */
 export const resolveTeamNames = (team: any, teamName?: string): [string, string] => {
     if (!team) return [teamName || '?', ''];
     if (team.isTBD || team.teamLabel) {
-        return [team.teamLabel || team.p1?.name || teamName || '?', ''];
+        return [team.teamLabel || formatDisplayName(team.p1?.name) || teamName || '?', ''];
     }
+
     const p1 = (team.p1Name || team.p1?.name || '').trim();
     const p2 = (team.p2Name || team.p2?.name || '').trim();
-    if (p1 || p2) return [p1 || '?', p2];
+
+    if (p1 || p2) {
+        return [
+            formatDisplayName(p1) || '?',
+            formatDisplayName(p2)
+        ];
+    }
+
     if (team.name) {
         const parts = team.name.split('/');
-        return [(parts[0] || '?').trim(), (parts[1] || '').trim()];
+        return [
+            formatDisplayName((parts[0] || '?').trim()),
+            formatDisplayName((parts[1] || '').trim())
+        ];
     }
+
     if (teamName) {
         const parts = teamName.split('/');
-        return [(parts[0] || '?').trim(), (parts[1] || '').trim()];
+        return [
+            formatDisplayName((parts[0] || '?').trim()),
+            formatDisplayName((parts[1] || '').trim())
+        ];
     }
+
     return ['?', ''];
 };
 
 // Mapeo legible de categorías
 const CAT_LABEL_MAP: Record<string, string> = {
+    MAS_40: '+40',
+    FEM_40: '+40',
+    MIX_40: '+40',
     MAS_45: '+45',
     MAS_50: '+50',
     SUMA_7: 'Suma 7',
@@ -70,12 +108,13 @@ export const formatGender = (g?: string): string => {
 };
 
 export const STATUS_COLORS: Record<string, string> = {
-    [MatchStatus.LIVE]: 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300',
-    [MatchStatus.FINISHED]: 'bg-white/[0.03] border-white/[0.07] text-gray-600',
+    [MatchStatus.LIVE]: 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/20',
+    [MatchStatus.FINISHED]: 'bg-white/[0.02] border-white/10 text-gray-500 grayscale-[0.5] opacity-80',
+    [MatchStatus.PENDING]: 'bg-yellow-400/5 border-yellow-400/30 text-yellow-200/80',
 };
 
-export const PENDING_NEXT_COLORS = 'bg-yellow-500/10 border-yellow-500/35 text-yellow-200';
-export const PENDING_LATER_COLORS = 'bg-red-900/10 border-red-800/30 text-red-300/70';
+export const PENDING_NEXT_COLORS = 'bg-yellow-400/10 border-yellow-400/40 text-yellow-200 shadow-[0_4px_20px_rgba(250,204,21,0.05)]';
+export const PENDING_LATER_COLORS = 'bg-white/[0.03] border-white/10 text-gray-400';
 
 export const CAT_COLORS: Record<string, string> = {
     MALE: 'bg-blue-500/10 border-blue-500/20 text-blue-400',
@@ -86,15 +125,15 @@ export const CAT_COLORS: Record<string, string> = {
 export const TABS = [
     { label: 'Todos', value: 'all' },
     { label: 'Grupos', value: 'groups' },
-    { label: 'Por Jugar', value: MatchStatus.PENDING },
+    { label: 'Por Comenzar', value: MatchStatus.PENDING },
     { label: 'En Vivo', value: MatchStatus.LIVE },
     { label: 'Finalizados', value: MatchStatus.FINISHED },
     { label: 'Reglas', value: 'rules' },
 ];
 
 export const KNOWN_COMPLEXES: Record<string, number> = {
-    'Casa Inteligente': 4,
-    'Casa Inteligente Padel Center': 4,
+    'El Bodeguero': 3,
+    'Food Kart': 3,
     'Hotel Tibisay': 2,
     'Tibisay Padel': 2,
     'Padel 360': 6

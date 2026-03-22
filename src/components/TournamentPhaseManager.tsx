@@ -205,17 +205,51 @@ function BracketView({
     onSaveResult: (matchId: string, g1: number, g2: number) => Promise<void>;
     tournamentId: string;
 }) {
+    const roundUpper = (m: any) => (m.roundName || '').toUpperCase();
+    const isSemifinal = (m: any) =>
+        m.stage === 'SEMIFINAL' || roundUpper(m).includes('SEMIFINAL') || (m.isKnockout && !m.isFinal);
+    const isFinal = (m: any) =>
+        m.stage === 'FINAL' || m.isFinal || (roundUpper(m) === 'FINAL' || (roundUpper(m).includes('FINAL') && !roundUpper(m).includes('SEMIFINAL')));
+
     const knockoutMatches = matches.filter(m =>
         m.stage === 'SEMIFINAL' || m.stage === 'FINAL' ||
-        m.roundName === 'SEMIFINAL' || m.roundName === 'FINAL' ||
+        m.roundName === 'SEMIFINAL' || m.roundName === 'SEMIFINALES' || m.roundName === 'FINAL' ||
+        (m.stage === 'MAIN_DRAW' && (roundUpper(m).includes('SEMIFINAL') || roundUpper(m) === 'FINAL')) ||
         m.isFinal || m.isKnockout
     );
 
-    const semis = knockoutMatches.filter(m =>
-        m.stage === 'SEMIFINAL' || m.roundName === 'SEMIFINAL' || (m.isKnockout && !m.isFinal)
-    );
-    const finals = knockoutMatches.filter(m =>
-        m.stage === 'FINAL' || m.roundName === 'FINAL' || m.isFinal
+    const semis = knockoutMatches.filter(m => isSemifinal(m));
+    const finals = knockoutMatches.filter(m => isFinal(m));
+
+    // ── Orden lógico: Octavos → Cuartos → Semis → Final (Final al final del scroll)
+    // Hooks (useMemo) deben ejecutarse siempre: NO poner return condicionales antes.
+    const getRoundOrder = (name: string): number => {
+        const upper = (name || '').toUpperCase();
+        if (upper.includes('DIECISEISAVOS') || upper.includes('16')) return 1;
+        if (upper.includes('OCTAVOS') || upper.includes('8VO')) return 2;
+        if (upper.includes('CUARTOS') || upper.includes('PRINCIPAL R1') || upper.includes('CONSOLACIÓN R1')) return 3;
+        if (upper.includes('SEMIFINAL') && !upper.includes('FINAL')) return 4;
+        if (upper.includes('CONSOLACIÓN FINAL')) return 4;
+        if (upper.includes('FINAL') && !upper.includes('SEMI') || upper.includes('PRINCIPAL FINAL')) return 5;
+        if (name === 'Principal R1' || name === 'Consolación R1') return 3;
+        if (name === 'Principal SF') return 4;
+        if (name === 'Principal FINAL' || name === 'FINAL') return 5;
+        return 10;
+    };
+
+    const rounds = useMemo(() => {
+        const byRound: Record<string, any[]> = {};
+        knockoutMatches.forEach((m) => {
+            const key = m.roundName || 'Eliminatoria';
+            if (!byRound[key]) byRound[key] = [];
+            byRound[key].push(m);
+        });
+        return Object.entries(byRound).map(([name, matches]) => ({ id: name, name, matches }));
+    }, [knockoutMatches]);
+
+    const sortedRounds = useMemo(
+        () => [...rounds].sort((a, b) => getRoundOrder(a.name) - getRoundOrder(b.name)),
+        [rounds]
     );
 
     // ── Locked state ────────────────────────────────────────────────────────
@@ -264,58 +298,28 @@ function BracketView({
         );
     }
 
-    // ── Bracket tree ─────────────────────────────────────────────────────────
+    // ── Bracket tree: flex-row para flujo izquierda→derecha (Octavos … Final)
     return (
-        <div className="space-y-6">
-            {/* Semis */}
-            {semis.length > 0 && (
-                <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-padel-primary" />
-                        <h3 className="text-[10px] font-black uppercase tracking-widest text-padel-primary">Semifinales</h3>
-                        <div className="flex-1 h-px bg-padel-primary/10" />
-                        <span className="text-[9px] text-gray-600 font-bold">
-                            {semis.filter(m => m.status === MatchStatus.FINISHED).length}/{semis.length} completados
-                        </span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {semis.map((m, i) => (
+        <div className="flex flex-row justify-start gap-8 overflow-x-auto p-4 min-h-[200px] bg-[#0a0a0a]">
+            {sortedRounds.map((round) => (
+                <div key={round.id} className="flex flex-col justify-around gap-4 flex-shrink-0">
+                    <h3 className="text-center text-[#ccff00] font-bold uppercase text-[10px] tracking-widest">
+                        {round.name}
+                    </h3>
+                    <div className="flex flex-col gap-3">
+                        {round.matches.map((match, i) => (
                             <BracketMatchCard
-                                key={m.id ?? i}
-                                match={m}
-                                roundLabel={`Semifinal ${i + 1}`}
+                                key={match.id ?? i}
+                                match={match}
+                                roundLabel={round.name}
                                 canEdit={canManage}
-                                onSave={(g1, g2) => onSaveResult(m.id, g1, g2)}
+                                onSave={(g1, g2) => onSaveResult(match.id, g1, g2)}
                                 tournamentId={tournamentId}
                             />
                         ))}
                     </div>
                 </div>
-            )}
-
-            {/* Finals */}
-            {finals.length > 0 && (
-                <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                        <h3 className="text-[10px] font-black uppercase tracking-widest text-yellow-400">Final</h3>
-                        <div className="flex-1 h-px bg-yellow-400/10" />
-                        <Trophy className="w-3.5 h-3.5 text-yellow-400" />
-                    </div>
-                    <div className="max-w-sm mx-auto">
-                        {finals.map((m, i) => (
-                            <BracketMatchCard
-                                key={m.id ?? i}
-                                match={m}
-                                roundLabel="Final"
-                                canEdit={canManage}
-                                onSave={(g1, g2) => onSaveResult(m.id, g1, g2)}
-                                tournamentId={tournamentId}
-                            />
-                        ))}
-                    </div>
-                </div>
-            )}
+            ))}
         </div>
     );
 }
@@ -333,16 +337,22 @@ export default function TournamentPhaseManager({
     const [activeTab, setActiveTab] = useState<'groups' | 'bracket'>('groups');
     const [showResetWarning, setShowResetWarning] = useState(false);
 
-    // ── Phase detection ────────────────────────────────────────────────────
+    // ── Phase detection: regla = primero fase de grupos, después semifinales y final ───────────────────
     const groupMatches = useMemo(() => matches.filter(m =>
-        m.stage === 'GROUP_STAGE' || m.groupName != null
+        m.stage === 'GROUP_STAGE' ||
+        m.roundName === 'Fase de Grupos' ||
+        m.groupName != null
     ), [matches]);
 
-    const eliminationMatches = useMemo(() => matches.filter(m =>
-        m.stage === 'SEMIFINAL' || m.stage === 'FINAL' ||
-        m.isKnockout || m.isFinal ||
-        m.roundName === 'SEMIFINAL' || m.roundName === 'FINAL'
-    ), [matches]);
+    const eliminationMatches = useMemo(() => matches.filter(m => {
+        const r = (m.roundName || '').toUpperCase();
+        return m.stage === 'SEMIFINAL' || m.stage === 'FINAL' || m.stage === 'MAIN_DRAW' ||
+            m.isKnockout || m.isFinal ||
+            m.roundName === 'SEMIFINAL' || m.roundName === 'SEMIFINALES' || m.roundName === 'FINAL' ||
+            r.includes('SEMIFINAL') || r === 'FINAL' || (r.includes('FINAL') && !r.includes('SEMIFINAL')) ||
+            m.roundName === 'Principal SF' || m.roundName === 'Principal FINAL' ||
+            m.roundName === 'CUARTOS';
+    }), [matches]);
 
     const finishedGroupMatches = groupMatches.filter(m => m.status === MatchStatus.FINISHED);
     const allGroupsDone = groupMatches.length > 0 && finishedGroupMatches.length === groupMatches.length;

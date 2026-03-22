@@ -24,11 +24,15 @@ yarn-error.log*
 
 # local env files (no subir secretos)
 .env*.local
+.env*.tmp
 .env
 !.env.example
 
 # vercel
 .vercel
+
+# proyecto ajeno (no compilar en build)
+/smart-padel
 
 # typescript
 *.tsbuildinfo

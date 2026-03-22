@@ -5,7 +5,7 @@ import { LogIn } from 'lucide-react';
 import Link from 'next/link';
 
 export default function LoginButton() {
-    const { user, logout, enableDevMode } = useAuth();
+    const { user, logout } = useAuth();
 
     if (user) {
         return (
@@ -43,12 +43,6 @@ export default function LoginButton() {
                 <LogIn className="w-4 h-4 text-padel-primary group-hover:translate-x-1 transition-transform" />
                 <span className="text-xs font-black uppercase tracking-widest">Acceder a Mi Cuenta</span>
             </Link>
-            <button
-                onClick={() => enableDevMode()}
-                className="text-[9px] text-gray-800 hover:text-padel-primary font-bold uppercase tracking-wider transition-colors"
-            >
-                Entrada Rápida (Simulación)
-            </button>
         </div>
     );
 }

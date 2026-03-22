@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAuth } from '@/lib/authServer';
+import { requireAuth } from '@/lib/authServerSupabase';
 import { validateTournamentId } from '@/lib/apiValidation';
 
 export async function GET(

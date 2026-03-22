@@ -44,6 +44,7 @@ interface GroupFixtureMatch {
     sets?: { t1: number; t2: number };
     games?: { t1: number; t2: number };
     scheduledTime?: any;
+    time?: any;
     court?: string | number;
     stage: string;
 }
@@ -166,7 +167,7 @@ function ScoreInput({
                     onClick={handleSave}
                     disabled={saving || g1 === g2}
                     title={g1 === g2 ? 'No puede ser empate' : 'Guardar resultado'}
-                    className="h-9 w-9 rounded-lg bg-padel-primary hover:bg-white text-black flex items-center justify-center transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="h-9 w-9 rounded-lg bg-padel-primary hover:opacity-90 text-black flex items-center justify-center transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     {saving
                         ? <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
@@ -213,6 +214,36 @@ export default function GroupPhaseView({
 
     const currentGroup = activeGroup ?? groupNames[0] ?? null;
 
+    const fullName = (p: any) => {
+        if (!p) return '';
+        return [p.name, p.lastName].filter(Boolean).join(' ').trim() || (typeof p.name === 'string' ? p.name : '') || '';
+    };
+
+    // Nombres de pareja extraídos de partidos (fallback cuando tournament.teams no tiene p2).
+    // Solo usamos id explícito (m.team1?.id / m.team2?.id) para no mezclar equipos de distintas categorías.
+    const namesFromMatches = useMemo(() => {
+        const map: Record<string, { p1: string; p2: string }> = {};
+        const groupStageMatches = (matches ?? []).filter((m: any) => m.stage === 'GROUP_STAGE');
+        groupStageMatches.forEach((m: any) => {
+            const add = (teamId: string | undefined, mTeam: any, fullNameStr: string | undefined) => {
+                if (!teamId) return;
+                const id = String(teamId);
+                const p1 = fullName(mTeam?.p1) || mTeam?.p1Name || (fullNameStr ? fullNameStr.split(/\s*\/\s*/)[0]?.trim() : null);
+                const p2 = fullName(mTeam?.p2) || mTeam?.p2Name || (fullNameStr ? fullNameStr.split(/\s*\/\s*/)[1]?.trim() : null);
+                if (p1 || p2) {
+                    if (!map[id]) map[id] = { p1: '', p2: '' };
+                    if (p1) map[id].p1 = p1;
+                    if (p2) map[id].p2 = p2;
+                }
+            };
+            const id1 = m.team1?.id;
+            const id2 = m.team2?.id;
+            if (id1) add(id1, m.team1, m.team1Name);
+            if (id2) add(id2, m.team2, m.team2Name);
+        });
+        return map;
+    }, [tournament?.teams, matches]);
+
     // ── Build standings per group ─────────────────────────────────────────────
     const groupStandings = useMemo(() => {
         const result: Record<string, GroupTeam[]> = {};
@@ -222,9 +253,10 @@ export default function GroupPhaseView({
                 const teamIdx = (tournament?.teams ?? []).findIndex((t: any) => String(t.id) === tid);
                 const team = teamIdx >= 0 ? tournament.teams[teamIdx] : null;
                 const tNum = teamIdx + 1;
-                const name = team
-                    ? `${team.p1?.name ?? 'J1'} / ${team.p2?.name ?? 'J2'}`
-                    : `Pareja ${tNum}`;
+                const fromMatch = namesFromMatches[tid];
+                const p1 = fullName(team?.p1)?.trim() || fromMatch?.p1 || 'J1';
+                const p2 = fullName(team?.p2)?.trim() || fromMatch?.p2 || 'J2';
+                const name = (team || fromMatch) ? `${p1} / ${p2}` : `Pareja ${tNum}`;
 
                 let PJ = 0, PG = 0, JF = 0, JC = 0;
 
@@ -257,7 +289,7 @@ export default function GroupPhaseView({
         }
 
         return result;
-    }, [tournament, matches, groupAssignments]);
+    }, [tournament, matches, groupAssignments, namesFromMatches]);
 
     // ── Build fixture per group ──────────────────────────────────────────────
     const groupFixtures = useMemo(() => {
@@ -281,8 +313,12 @@ export default function GroupPhaseView({
                     );
                     const team1 = (tournament?.teams ?? [])[t1Num - 1];
                     const team2 = (tournament?.teams ?? [])[t2Num - 1];
-                    const t1Name = team1 ? `${team1.p1?.name ?? 'J1'} / ${team1.p2?.name ?? 'J2'}` : `Pareja ${t1Num}`;
-                    const t2Name = team2 ? `${team2.p1?.name ?? 'J1'} / ${team2.p2?.name ?? 'J2'}` : `Pareja ${t2Num}`;
+                    const tid1 = team1?.id != null ? String(team1.id) : null;
+                    const tid2 = team2?.id != null ? String(team2.id) : null;
+                    const from1 = tid1 ? namesFromMatches[tid1] : null;
+                    const from2 = tid2 ? namesFromMatches[tid2] : null;
+                    const t1Name = team1 || from1 ? `${fullName(team1?.p1)?.trim() || from1?.p1 || 'J1'} / ${fullName(team1?.p2)?.trim() || from1?.p2 || 'J2'}` : `Pareja ${t1Num}`;
+                    const t2Name = team2 || from2 ? `${fullName(team2?.p1)?.trim() || from2?.p1 || 'J1'} / ${fullName(team2?.p2)?.trim() || from2?.p2 || 'J2'}` : `Pareja ${t2Num}`;
 
                     return existingMatch
                         ? { ...existingMatch, team1Name: t1Name, team2Name: t2Name }
@@ -301,7 +337,7 @@ export default function GroupPhaseView({
             result[gName] = rounds;
         }
         return result;
-    }, [tournament, matches, groupAssignments]);
+    }, [tournament, matches, groupAssignments, namesFromMatches]);
 
     // ── Progress ──────────────────────────────────────────────────────────────
     const groupMatches = matches.filter(m => m.stage === 'GROUP_STAGE');
@@ -355,7 +391,7 @@ export default function GroupPhaseView({
                             onClick={() => setActiveView(v.key)}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === v.key
                                 ? 'bg-padel-primary text-black shadow-lg shadow-padel-primary/20'
-                                : 'text-gray-500 hover:text-white'
+                                : 'text-gray-500 hover:text-padel-primary'
                                 }`}
                         >
                             <v.icon className="w-3 h-3" />
@@ -392,7 +428,7 @@ export default function GroupPhaseView({
                             onClick={() => setActiveGroup(name)}
                             className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all whitespace-nowrap flex items-center gap-1.5 ${currentGroup === name
                                 ? 'bg-padel-primary text-black shadow-[0_8px_20px_rgba(204,255,0,0.2)] scale-105'
-                                : 'bg-white/5 text-gray-500 hover:bg-white/10 border border-white/10'
+                                : 'bg-[#111] text-gray-500 hover:bg-[#1a1a1a] border border-white/5'
                                 }`}
                         >
                             <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[8px] font-black ${currentGroup === name ? 'bg-black/20' : 'bg-white/10'}`}>{name}</span>
@@ -599,8 +635,24 @@ export default function GroupPhaseView({
                                                     className={`group transition-colors ${isFinished ? 'bg-white/[0.01]' : 'hover:bg-white/[0.02]'}`}
                                                 >
                                                     <div className="flex items-center gap-3 px-5 py-3.5">
-                                                        {/* Status dot */}
-                                                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isFinished ? 'bg-green-500/40' : isLive ? 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-white/10'}`} />
+                                                        {/* Status & Time */}
+                                                        <div className="flex flex-col items-center gap-2 flex-shrink-0 min-w-[45px]">
+                                                            <div className={`w-2 h-2 rounded-full ${isFinished ? 'bg-green-500/40' : isLive ? 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-white/10'}`} />
+                                                            {(() => {
+                                                                const raw = match.scheduledTime || match.time;
+                                                                if (!raw) return null;
+                                                                const d = raw?.toDate ? raw.toDate() : new Date(raw);
+                                                                if (isNaN(d.getTime())) return null;
+                                                                const dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+                                                                const timeStr = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+                                                                return (
+                                                                    <div className="flex flex-col items-center gap-0.5">
+                                                                        <span className="text-[7px] font-black text-padel-primary/40 uppercase tracking-tighter">{dateStr}</span>
+                                                                        <span className="text-[9px] font-bold text-gray-500 tabular-nums">{timeStr}</span>
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </div>
 
                                                         {/* Team 1 & 2 */}
                                                         <div className="flex-1 min-w-0">
@@ -721,7 +773,7 @@ export default function GroupPhaseView({
                                         <p className="text-[10px] text-white font-bold mb-3">Se crearán las eliminatorias con los mejores de cada grupo.</p>
                                         <button
                                             onClick={() => { setFinishConfirm(false); onFinishGroupPhase(); }}
-                                            className="w-full py-2 bg-padel-primary hover:bg-white text-black text-[10px] font-black uppercase rounded-xl transition-all"
+                                            className="w-full py-2 bg-padel-primary hover:opacity-90 text-black text-[10px] font-black uppercase rounded-xl transition-all"
                                         >
                                             ✓ Confirmar
                                         </button>
@@ -729,7 +781,7 @@ export default function GroupPhaseView({
                                 )}
                                 <button
                                     onClick={() => setFinishConfirm(c => !c)}
-                                    className="flex items-center gap-2 px-5 py-3.5 bg-padel-primary hover:bg-white text-black font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-padel-primary/30 transition-all active:scale-95"
+                                    className="flex items-center gap-2 px-5 py-3.5 bg-padel-primary hover:opacity-90 text-black font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-padel-primary/30 transition-all active:scale-95"
                                 >
                                     <Flag className="w-4 h-4" />
                                     Finalizar Fase de Grupos

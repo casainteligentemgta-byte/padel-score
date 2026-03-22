@@ -18,8 +18,8 @@ export interface CategoryConfig {
     advanceCount?: 1 | 2;           // Clasificados por grupo (1 o 2)
     quickQualification?: boolean;   // Si true: solo 2 partidos por grupo (clasificación rápida)
     pointsGoal?: number;            // Americano/Dupla fija: a cuántos puntos (ej. 16, 24)
-    /** Cuadro con Consolación: formato de partido → 50 min (Set 9) o 60 min (2 sets + STB) */
     consolacionMatchFormat?: 'ONE_SET_9' | 'TWO_SHORT_SETS';
+    inscriptionPrice?: number;      // Precio de la inscripción por pareja/jugador en esta categoría
 }
 
 export interface MasterScheduleConfig {
@@ -43,6 +43,11 @@ export interface MasterScheduleConfig {
 
 export class MasterScheduleEngine {
 
+    /**
+     * Genera el calendario de partidos del torneo.
+     * Regla de orden: primero se juegan todos los partidos de FASE DE GRUPOS;
+     * solo después se programan y juegan SEMIFINALES y FINAL.
+     */
     static generateMasterSchedule(config: MasterScheduleConfig) {
         const {
             startDate,
@@ -119,26 +124,32 @@ export class MasterScheduleEngine {
             return { matches: [], notScheduled: 0, totalMatches: 0 };
         }
 
-        // ── 2. Separar en cubos de fase (orden: Grupos → Principal → Consolación → SEMIFINAL/FINAL RR) ─────
+        // ── 2. REGLA OFICIAL: Primero fase de grupos, después semifinales y final ─────────────────────
+        // Los partidos se agendan en este orden estricto: ningún partido de semifinal/final se programa
+        // hasta que todos los de "Fase de Grupos" estén agendados.
         const KNOCKOUT_PRIORITY: Record<string, number> = {
             SEPTIMA: 1, SEXTA: 2, QUINTA: 3, CUARTA: 4, TERCERA: 5, SEGUNDA: 6, PRIMERA: 7,
             SUMA_7: 8, SUMA_8: 9, SUMA_9: 10, SUMA_10: 11, SUMA_11: 12,
-            MAS_45: 13, MAS_50: 14, MIXED: 15, MALE: 16, FEMALE: 17,
+            MAS_40: 12.5, FEM_40: 12.6, MIX_40: 12.7, MAS_45: 13, MAS_50: 14, MIXED: 15, MALE: 16, FEMALE: 17,
         };
         const sortByKnockoutPriority = (matches: any[]): any[] =>
             [...matches].sort((a, b) => (KNOCKOUT_PRIORITY[a.category] ?? 99) - (KNOCKOUT_PRIORITY[b.category] ?? 99));
 
+        // Orden cronológico estricto: Fase de Grupos → Cuartos → Semifinales → Finales.
+        // Prohibido programar una Final en el mismo bloque o antes que las Semifinales de la misma categoría.
         const phaseOrder = [
             'Fase de Grupos',
             'Principal R1', 'Principal SF', 'Principal FINAL',
             'Consolación R1', 'Consolación FINAL',
-            'SEMIFINAL', 'FINAL',
+            'CUARTOS',      // antes que SEMIFINAL
+            'SEMIFINAL',    // antes que FINAL
+            'FINAL',
         ];
         const phases: Array<{ name: string; queue: any[] }> = phaseOrder
             .map(name => ({
                 name,
                 queue: name === 'Fase de Grupos'
-                    ? this.shuffle(allMatches.filter(m => m.roundName === name))
+                    ? allMatches.filter(m => m.roundName === name)
                     : sortByKnockoutPriority(allMatches.filter(m => m.roundName === name)),
             }))
             .filter(p => p.queue.length > 0);
@@ -248,6 +259,9 @@ export class MasterScheduleEngine {
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
+    /** Bloque horario mínimo por partido (minutos). Evita retrasos en cadena. */
+    static readonly SLOT_MINUTES = 90;
+
     private static generateTimeSlots(day: Date, startStr: string, endStr: string, duration: number, buffer: number): Date[] {
         const slots: Date[] = [];
         const [startH, startM] = startStr.split(':').map(Number);
@@ -259,13 +273,11 @@ export class MasterScheduleEngine {
         const limit = new Date(day);
         limit.setHours(endH, endM, 0, 0);
 
-        // Si el cierre es menor que la apertura → el club cierra al DÍA SIGUIENTE (cruza medianoche)
-        // Ej: abre 07:00, cierra 01:00 → limit es 01:00 del día siguiente
         if (limit.getTime() <= current.getTime()) {
             limit.setDate(limit.getDate() + 1);
         }
 
-        const slotDuration = duration + buffer; // minutos totales por franja
+        const slotDuration = Math.max(MasterScheduleEngine.SLOT_MINUTES, duration + buffer);
         while (current.getTime() + duration * 60000 <= limit.getTime()) {
             slots.push(new Date(current));
             current.setMinutes(current.getMinutes() + slotDuration);
@@ -333,13 +345,15 @@ export class MasterScheduleEngine {
      */
     private static generatePairings(cat: CategoryConfig): Array<{
         team1: any; team2: any;
-        roundName: 'Fase de Grupos' | 'SEMIFINAL' | 'FINAL';
+        roundName: 'Fase de Grupos' | 'SEMIFINAL' | 'FINAL' | 'CUARTOS' | 'OCTAVOS' | 'DIECISEISAVOS';
         isKnockout: boolean;
         isFinal: boolean;
+        team1Index?: number;
+        team2Index?: number;
     }> {
         const result: Array<{
             team1: any; team2: any;
-            roundName: 'Fase de Grupos' | 'SEMIFINAL' | 'FINAL';
+            roundName: 'Fase de Grupos' | 'SEMIFINAL' | 'FINAL' | 'CUARTOS' | 'OCTAVOS' | 'DIECISEISAVOS';
             isKnockout: boolean; isFinal: boolean;
             team1Index?: number; team2Index?: number;
         }> = [];
@@ -352,16 +366,23 @@ export class MasterScheduleEngine {
         // REGLA: el contador arranca en 1 y nunca se repite dentro de la misma cat.
         let playerCounter = 1;
         const hasRealName = (name?: string) =>
-            !!name && name.trim() !== '' && !name.startsWith('TBD') && !name.startsWith('Jugador ');
+            !!name && name.trim() !== '' && !name.startsWith('TBD') && !name.startsWith('Jugador');
 
         for (const team of teams) {
-            if (!hasRealName(team?.p1?.name)) {
-                if (!team.p1) team.p1 = { id: `auto_${cat.category}_${playerCounter}` };
-                team.p1.name = `Jugador ${playerCounter++}`;
+            if (!team.p1) {
+                team.p1 = { id: `auto_${cat.category}_${playerCounter}`, name: `Jugador ${playerCounter}` };
+                playerCounter++;
+            } else if (!hasRealName(team.p1.name)) {
+                team.p1.name = `Jugador ${playerCounter}`;
+                playerCounter++;
             }
-            if (!hasRealName(team?.p2?.name)) {
-                if (!team.p2) team.p2 = { id: `auto_${cat.category}_${playerCounter}` };
-                team.p2.name = `Jugador ${playerCounter++}`;
+
+            if (!team.p2) {
+                team.p2 = { id: `auto_${cat.category}_${playerCounter}`, name: `Jugador ${playerCounter}` };
+                playerCounter++;
+            } else if (!hasRealName(team.p2.name)) {
+                team.p2.name = `Jugador ${playerCounter}`;
+                playerCounter++;
             }
         }
 
@@ -422,52 +443,148 @@ export class MasterScheduleEngine {
         }
 
         // ── Fase eliminatoria (solo si hay más de 1 grupo) ───────────────
+        // ── Fase eliminatoria (solo si hay más de 1 grupo) ───────────────
         if (groups.length > 1) {
             const advanceCount = cat.advanceCount ?? 2;
-            const gNames = groups.map((_, i) => String.fromCharCode(65 + i)); // A, B, C…
+            const knockoutTeams: any[] = [];
+            const gNames = groups.map((_, i) => String.fromCharCode(65 + i));
 
-            // Genera un equipo TBD con etiqueta legible para la UI
-            // teamLabel: "1° Grupo A", "2° Grupo B", "Ganador SF1"...
-            const tbdTeam = (pos: string, groupLetter: string) => ({
-                p1: { id: `tbd_${pos}_${groupLetter}_p1`, name: `${pos} Grupo ${groupLetter}` },
-                p2: { id: `tbd_${pos}_${groupLetter}_p2`, name: '' },
-                isTBD: true,
-                teamLabel: `${pos} Grupo ${groupLetter}`,
-            });
-            const tbdSFTeam = (sfNum: number) => ({
-                p1: { id: `tbd_sf${sfNum}_p1`, name: `Gan. SF${sfNum}` },
-                p2: { id: `tbd_sf${sfNum}_p2`, name: '' },
-                isTBD: true,
-                teamLabel: `Ganador SF${sfNum}`,
-            });
+            // 1. Recolectar clasificados reales según disponibilidad en el grupo
+            for (let i = 0; i < groups.length; i++) {
+                const teamsInGroup = groups[i].length;
+                // Solo clasificar hasta el máximo disponible en el grupo o el advanceCount
+                const actualAdvance = Math.min(teamsInGroup, advanceCount);
 
-            if (advanceCount === 1) {
-                // Solo 1 por grupo pasan
-                if (groups.length === 2) {
-                    // Final directa: 1°A vs 1°B
-                    result.push({ team1: tbdTeam('1°', gNames[0]), team2: tbdTeam('1°', gNames[1]), roundName: 'FINAL', isKnockout: true, isFinal: true });
+                for (let rank = 1; rank <= actualAdvance; rank++) {
+                    knockoutTeams.push({
+                        p1: { id: `tbd_${rank}_${gNames[i]}_p1`, name: `${rank}° Grupo ${gNames[i]}` },
+                        p2: { id: `tbd_${rank}_${gNames[i]}_p2`, name: `(TBD)` },
+                        isTBD: true,
+                        teamLabel: `${rank}° Grupo ${gNames[i]}`,
+                    });
+                }
+            }
+
+            // 2. Generar llaves según la cantidad de clasificados
+            const nK = knockoutTeams.length;
+
+            if (nK === 2) {
+                // Final directa (Ej: 2 grupos y clasifican solo los primeros)
+                result.push({ team1: knockoutTeams[0], team2: knockoutTeams[1], roundName: 'FINAL', isKnockout: true, isFinal: true });
+            } else if (nK <= 4) {
+                // Semifinales y Final
+                // Cruce tradicional si son 2 grupos de 2 clasificados: 1A vs 2B, 1B vs 2A
+                if (groups.length === 2 && advanceCount === 2 && knockoutTeams.length === 4) {
+                    result.push({ team1: knockoutTeams[0], team2: knockoutTeams[3], roundName: 'SEMIFINAL', isKnockout: true, isFinal: false }); // 1A vs 2B
+                    result.push({ team1: knockoutTeams[2], team2: knockoutTeams[1], roundName: 'SEMIFINAL', isKnockout: true, isFinal: false }); // 1B vs 2A
                 } else {
-                    // Semifinales: 1°A vs 1°B  ·  1°C vs 1°D...
-                    for (let g = 0; g < groups.length; g += 2) {
-                        const gA = gNames[g];
-                        const gB = gNames[g + 1] ?? gNames[g];
-                        result.push({ team1: tbdTeam('1°', gA), team2: tbdTeam('1°', gB), roundName: 'SEMIFINAL', isKnockout: true, isFinal: false });
+                    // Si no están los 4 (ej: 3 equipos), emparejar los que hay
+                    for (let i = 0; i < nK; i += 2) {
+                        if (knockoutTeams[i + 1]) {
+                            result.push({ team1: knockoutTeams[i], team2: knockoutTeams[i + 1], roundName: 'SEMIFINAL', isKnockout: true, isFinal: false });
+                        } else {
+                            // Si sobra 1, darle BYE (pasa directo a la final o se agenda solo)
+                            // Por ahora, solo lo logueamos o lo agendamos contra un TBD
+                            console.log('[Pairings] Team with BYE:', knockoutTeams[i].teamLabel);
+                        }
                     }
-                    result.push({ team1: tbdSFTeam(1), team2: tbdSFTeam(2), roundName: 'FINAL', isKnockout: true, isFinal: true });
                 }
-            } else {
-                // 2 por grupo pasan (Cruces tradicionales: 1°A vs 2°B, 1°B vs 2°A)
-                for (let g = 0; g < groups.length; g += 2) {
-                    const gA = gNames[g];
-                    const gB = gNames[g + 1] ?? gNames[g];
-                    result.push({ team1: tbdTeam('1°', gA), team2: tbdTeam('2°', gB), roundName: 'SEMIFINAL', isKnockout: true, isFinal: false });
-                    result.push({ team1: tbdTeam('1°', gB), team2: tbdTeam('2°', gA), roundName: 'SEMIFINAL', isKnockout: true, isFinal: false });
-                }
-                result.push({ team1: tbdSFTeam(1), team2: tbdSFTeam(2), roundName: 'FINAL', isKnockout: true, isFinal: true });
+                result.push({
+                    team1: {
+                        p1: { id: 'tbd_sf1_p1', name: 'Gan. SF1' },
+                        p2: { id: 'tbd_sf1_p2', name: '(TBD)' },
+                        isTBD: true,
+                        teamLabel: 'Ganador SF1'
+                    },
+                    team2: {
+                        p1: { id: 'tbd_sf2_p1', name: 'Gan. SF2' },
+                        p2: { id: 'tbd_sf2_p2', name: '(TBD)' },
+                        isTBD: true,
+                        teamLabel: 'Ganador SF2'
+                    },
+                    roundName: 'FINAL', isKnockout: true, isFinal: true
+                });
+            } else if (nK <= 8) {
+                // Cuartos con cruces cruzados: nunca enfrentar parejas del mismo grupo (1ºA vs 2ºA).
+                // knockoutTeams orden: [1°A, 2°A, 1°B, 2°B, 1°C, 2°C, 1°D, 2°D] para 4 grupos.
+                // Cruces: 1°A vs 2°B, 1°B vs 2°A, 1°C vs 2°D, 1°D vs 2°C (índices 0-3, 2-1, 4-7, 6-5).
+                const quarterPairings = this.buildQuarterFinalCrossovers(knockoutTeams, groups.length, advanceCount);
+                quarterPairings.forEach(([i, j]) => {
+                    if (knockoutTeams[i] && knockoutTeams[j]) {
+                        result.push({ team1: knockoutTeams[i], team2: knockoutTeams[j], roundName: 'CUARTOS', isKnockout: true, isFinal: false });
+                    }
+                });
+                // SFs genéricas
+                result.push({
+                    team1: { p1: { id: 'tbd_c1', name: 'Gan. C1' }, p2: { id: 'tbd_c1_p2', name: '(TBD)' }, isTBD: true, teamLabel: 'Ganador C1' },
+                    team2: { p1: { id: 'tbd_c2', name: 'Gan. C2' }, p2: { id: 'tbd_c2_p2', name: '(TBD)' }, isTBD: true, teamLabel: 'Ganador C2' },
+                    roundName: 'SEMIFINAL', isKnockout: true, isFinal: false
+                });
+                result.push({
+                    team1: { p1: { id: 'tbd_c3', name: 'Gan. C3' }, p2: { id: 'tbd_c3_p2', name: '(TBD)' }, isTBD: true, teamLabel: 'Ganador C3' },
+                    team2: { p1: { id: 'tbd_c4', name: 'Gan. C4' }, p2: { id: 'tbd_c4_p2', name: '(TBD)' }, isTBD: true, teamLabel: 'Ganador C4' },
+                    roundName: 'SEMIFINAL', isKnockout: true, isFinal: false
+                });
+                // Final
+                result.push({
+                    team1: {
+                        p1: { id: 'tbd_sf1_p1', name: 'Gan. SF1' },
+                        p2: { id: 'tbd_sf1_p2', name: '(TBD)' },
+                        isTBD: true,
+                        teamLabel: 'Ganador SF1'
+                    },
+                    team2: {
+                        p1: { id: 'tbd_sf2_p1', name: 'Gan. SF2' },
+                        p2: { id: 'tbd_sf2_p2', name: '(TBD)' },
+                        isTBD: true,
+                        teamLabel: 'Ganador SF2'
+                    },
+                    roundName: 'FINAL', isKnockout: true, isFinal: true
+                });
             }
         }
 
         return result;
+    }
+
+    /**
+     * Cruces para Cuartos de Final: nunca enfrentar equipos del mismo grupo.
+     * 4 grupos (8 clasificados): 1°A vs 2°B, 1°B vs 2°A, 1°C vs 2°D, 1°D vs 2°C.
+     * 3 grupos (6 clasificados): 1°A vs 2°B, 1°B vs 2°C, 1°C vs 2°A.
+     */
+    private static buildQuarterFinalCrossovers(knockoutTeams: any[], numGroups: number, advanceCount: number): [number, number][] {
+        const pairs: [number, number][] = [];
+        const nK = knockoutTeams.length;
+        if (nK <= 4) return pairs;
+
+        // Índices por grupo: grupo g tiene clasificados en [g*advanceCount, (g+1)*advanceCount)
+        if (numGroups === 4 && nK === 8 && advanceCount === 2) {
+            // 1°A=0, 2°A=1, 1°B=2, 2°B=3, 1°C=4, 2°C=5, 1°D=6, 2°D=7
+            pairs.push([0, 3], [2, 1], [4, 7], [6, 5]);
+        } else if (numGroups === 3 && nK === 6 && advanceCount === 2) {
+            // 1°A=0, 2°A=1, 1°B=2, 2°B=3, 1°C=4, 2°C=5 → 1A vs 2B, 1B vs 2C, 1C vs 2A
+            pairs.push([0, 3], [2, 5], [4, 1]);
+        } else {
+            // Genérico: emparejar 1° del grupo i con 2° del grupo (i+1) % numGroups, etc.
+            for (let g = 0; g < numGroups; g++) {
+                const next = (g + 1) % numGroups;
+                const i1 = g * advanceCount;           // 1° del grupo g
+                const j2 = next * advanceCount + 1;   // 2° del grupo next (si advanceCount >= 2)
+                if (advanceCount >= 2 && i1 < nK && j2 < nK) {
+                    pairs.push([i1, j2]);
+                }
+            }
+            // Segundos partidos: 1° del grupo next vs 2° del grupo g
+            for (let g = 0; g < numGroups; g++) {
+                const next = (g + 1) % numGroups;
+                const i1Next = next * advanceCount;   // 1° del grupo next
+                const j2G = g * advanceCount + 1;    // 2° del grupo g
+                if (advanceCount >= 2 && i1Next < nK && j2G < nK && !pairs.some(([a, b]) => (a === i1Next && b === j2G) || (a === j2G && b === i1Next))) {
+                    pairs.push([i1Next, j2G]);
+                }
+            }
+        }
+        return pairs;
     }
 
     private static getTeamPlayerIds(t1: any, t2: any): string[] {
@@ -479,7 +596,10 @@ export class MasterScheduleEngine {
         return ids;
     }
 
-    /** Retorna true si todos los jugadores han descansado al menos 1 slot */
+    /**
+     * Descanso mínimo: un bloque horario entre partidos (60–90 min según SLOT_MINUTES).
+     * canPlay retorna false si algún jugador jugó en el slot actual o en el inmediatamente anterior.
+     */
     private static canPlay(playerIds: string[], currentSlotIdx: number, playerLastSlot: { [pid: string]: number }): boolean {
         for (const pid of playerIds) {
             if (playerLastSlot[pid] === undefined) continue;

@@ -4,14 +4,21 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
+    "dev:3000": "next dev -p 3000",
+    "dev:webpack": "next dev --webpack",
+    "clean": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\"",
     "dev:clean": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\" && next dev",
+    "dev:clean:webpack": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\" && next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "verify:ceo": "node scripts/verify-ceo.mjs",
+    "open-inscriptions": "node scripts/open-tournament-inscriptions.mjs"
   },
   "description": "",
   "dependencies": {
     "@prisma/client": "^6.19.2",
+    "@react-email/components": "^1.0.9",
     "@supabase/supabase-js": "^2.98.0",
     "clsx": "^2.1.1",
     "firebase": "^12.10.0",
@@ -19,16 +26,19 @@
     "framer-motion": "^12.34.2",
     "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
+    "lottie-web": "^5.13.0",
     "lucide-react": "^0.575.0",
+    "mercadopago": "^2.12.0",
     "next": "^16.1.6",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-dropzone": "^15.0.0",
-    "react-firebase-hooks": "^5.1.1",
     "react-player": "^3.4.0",
+    "resend": "^6.9.3",
     "tailwind-merge": "^3.5.0",
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "twilio": "^5.13.0"
   },
   "devDependencies": {
     "@types/node": "^25.3.0",

@@ -3,7 +3,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Share2, Mail, Download, X, Save, RefreshCw
+    Share2, Mail, Download, X, Save, RefreshCw, Upload, Loader2
 } from 'lucide-react';
 
 interface ShareModalProps {
@@ -97,12 +97,32 @@ interface SponsorModalProps {
     linkDraft: string;
     setLinkDraft: (val: string) => void;
     onSave: () => Promise<void>;
+    onUpload?: (file: File) => Promise<string>;
     saving: boolean;
 }
 
 export const SponsorModal: React.FC<SponsorModalProps> = ({
-    isOpen, onClose, logoDraft, setLogoDraft, nameDraft, setNameDraft, linkDraft, setLinkDraft, onSave, saving
+    isOpen, onClose, logoDraft, setLogoDraft, nameDraft, setNameDraft, linkDraft, setLinkDraft, onSave, onUpload, saving
 }) => {
+    const [uploading, setUploading] = React.useState(false);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !onUpload) return;
+
+        try {
+            setUploading(true);
+            const url = await onUpload(file);
+            setLogoDraft(url);
+        } catch (error) {
+            console.error('Error uploading file:', error);
+            alert('Error al subir el archivo');
+        } finally {
+            setUploading(false);
+        }
+    };
+
     return (
         <AnimatePresence>
             {isOpen && (
@@ -116,7 +136,7 @@ export const SponsorModal: React.FC<SponsorModalProps> = ({
                         <div className="p-6 space-y-5">
                             <div className="flex items-center justify-between">
                                 <h2 className="text-lg font-black uppercase italic tracking-tight text-[#ccff00]">
-                                    Logo del patrocinante
+                                    Configurar Patrocinante
                                 </h2>
                                 <button
                                     type="button"
@@ -126,27 +146,52 @@ export const SponsorModal: React.FC<SponsorModalProps> = ({
                                     <X className="w-4 h-4" />
                                 </button>
                             </div>
-                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-                                Configura el logo principal del evento. Pega una URL de imagen (JPG, PNG, etc.) o un enlace de Firebase/Supabase.
-                            </p>
 
-                            <div className="space-y-3">
+                            <div className="space-y-4">
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
-                                        URL del logo
+                                    <label className="block text-[10px] font-bold text-white/40 uppercase mb-1.5 ml-1">
+                                        Logo del patrocinante
                                     </label>
-                                    <input
-                                        type="text"
-                                        value={logoDraft}
-                                        onChange={(e) => setLogoDraft(e.target.value)}
-                                        placeholder="https://.../logo.jpg"
-                                        className="w-full rounded-2xl bg-black/40 border border-white/10 px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:border-[#ccff00] outline-none"
-                                    />
+                                    <div className="flex gap-2">
+                                        <div className="relative flex-1">
+                                            <input
+                                                type="text"
+                                                value={logoDraft}
+                                                onChange={(e) => setLogoDraft(e.target.value)}
+                                                placeholder="URL de la imagen o carga un archivo"
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#ccff00]/50 transition-colors"
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={uploading || saving}
+                                            className="bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl px-4 flex items-center justify-center transition-colors disabled:opacity-50"
+                                            title="Subir archivo"
+                                        >
+                                            {uploading ? (
+                                                <Loader2 className="w-5 h-5 text-[#ccff00] animate-spin" />
+                                            ) : (
+                                                <Upload className="w-5 h-5 text-white/60" />
+                                            )}
+                                        </button>
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            onChange={handleFileChange}
+                                            className="hidden"
+                                            accept="image/*"
+                                        />
+                                    </div>
+                                    <p className="mt-2 text-[10px] text-white/30 px-1">
+                                        Configura el logo principal del evento. Pega una URL de imagen (JPG, PNG, etc.) o carga un archivo local.
+                                    </p>
                                 </div>
+
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
-                                            Nombre del patrocinante
+                                            Nombre
                                         </label>
                                         <input
                                             type="text"
@@ -158,13 +203,13 @@ export const SponsorModal: React.FC<SponsorModalProps> = ({
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
-                                            Enlace (opcional)
+                                            Link (opcional)
                                         </label>
                                         <input
                                             type="text"
                                             value={linkDraft}
                                             onChange={(e) => setLinkDraft(e.target.value)}
-                                            placeholder="https://www.patrocinante.com"
+                                            placeholder="https://..."
                                             className="w-full rounded-2xl bg-black/40 border border-white/10 px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:border-[#ccff00] outline-none"
                                         />
                                     </div>
@@ -175,11 +220,11 @@ export const SponsorModal: React.FC<SponsorModalProps> = ({
                                         <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">
                                             Vista previa
                                         </p>
-                                        <div className="w-32 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
+                                        <div className="w-48 h-24 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
                                             <img
                                                 src={logoDraft}
                                                 alt={nameDraft || 'Patrocinante'}
-                                                className="w-full h-full object-contain"
+                                                className="w-full h-full object-contain p-2"
                                             />
                                         </div>
                                     </div>
@@ -189,7 +234,7 @@ export const SponsorModal: React.FC<SponsorModalProps> = ({
                             <div className="flex gap-3 mt-4">
                                 <button
                                     type="button"
-                                    disabled={saving}
+                                    disabled={saving || uploading}
                                     onClick={onSave}
                                     className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-[#ccff00] text-black font-black text-xs uppercase tracking-widest hover:bg-[#ccff00]/90 disabled:opacity-50"
                                 >
@@ -201,13 +246,13 @@ export const SponsorModal: React.FC<SponsorModalProps> = ({
                                     ) : (
                                         <>
                                             <Save className="w-4 h-4" />
-                                            Guardar logo
+                                            Guardar
                                         </>
                                     )}
                                 </button>
                                 <button
                                     type="button"
-                                    disabled={saving}
+                                    disabled={saving || uploading}
                                     onClick={onClose}
                                     className="px-6 py-3 rounded-2xl bg-white/5 text-gray-400 font-bold text-xs uppercase tracking-widest hover:bg-white/10"
                                 >

@@ -1,0 +1,2 @@
+﻿Search results in tournaments: []
+Events table might not exist or error: Could not find the table 'public.events' in the schema cache

@@ -17,7 +17,7 @@ const AppSettingsContext = createContext<AppSettingsContextValue>({
     ...DEFAULTS,
     timezone: '',
     loading: true,
-    refresh: async () => {},
+    refresh: async () => { },
 });
 
 export function AppSettingsProvider({ children }: { children: React.ReactNode }) {

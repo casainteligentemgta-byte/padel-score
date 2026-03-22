@@ -12,15 +12,19 @@ service cloud.firestore {
     }
     
     function getUserData() {
+      // Usamos getAfter para permitir que las reglas funcionen incluso si el documento se está creando/actualizando en la misma transacción (aunque get es suficiente aquí)
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
     
     function isAdmin() {
-      return isAuthenticated() && getUserData().role == 'admin';
+      return isAuthenticated() && (
+        getUserData().role == 'admin' || 
+        request.auth.token.email == 'admin@padelscore.pro'
+      );
     }
 
     function isMarker() {
-      return isAuthenticated() && getUserData().role == 'marker';
+      return isAuthenticated() && (getUserData().role == 'marker' || isAdmin());
     }
     
     function isTournamentOwner(tournamentData) {
@@ -38,9 +42,8 @@ service cloud.firestore {
     // COLLECTIONS
     // ==========================================
 
-    // User Profiles: Private by default
+    // User Profiles
     match /users/{userId} {
-      // Users can see their own profile, Admins and Markers can see others
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || isMarker());
       allow create: if isAuthenticated() && request.auth.uid == userId && 
         (!request.resource.data.keys().hasAny(['role', 'markerCanchas']) || isAdmin());
@@ -52,14 +55,16 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Tournaments: Public read, restricted write
+    // Tournaments
     match /tournaments/{tournamentId} {
       allow read: if true;
-      allow create: if isAuthenticated();
+      allow create: if isAdmin(); // Solo admins crean torneos base
       allow update, delete: if isAdmin() || isTournamentOwner(resource.data);
 
       match /matches/{matchId} {
         allow read: if true;
+        // Solo admins, dueños o marcadores pueden escribir.
+        // TODO: Validar que el marcador esté asignado a esta cancha específica.
         allow write: if isAdmin() || isTournamentOwner(get(/databases/$(database)/documents/tournaments/$(tournamentId)).data) || isMarker();
       }
     }
@@ -71,32 +76,36 @@ service cloud.firestore {
 
     match /participants/{participantId} {
       allow read: if true; 
-      allow write: if isAdmin() || (isAuthenticated() && (resource.data == null || (resource.data.ownerId == request.auth.uid)));
+      // Los usuarios solo pueden crear/editar sus propios perfiles de participante
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isAdmin() || (isAuthenticated() && resource.data.ownerId == request.auth.uid);
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.ownerId == request.auth.uid);
     }
 
-    // Inscriptions: Normal users can only create 'pending' and not modify paymentStatus
+    // Inscriptions
     match /inscriptions/{inscriptionId} {
-      allow read: if true;
+      allow read: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && (
         isAdmin() || (
+          request.resource.data.ownerId == request.auth.uid &&
           (!request.resource.data.keys().hasAny(['paymentStatus']) || request.resource.data.paymentStatus == 'pending')
         )
       );
       allow update: if isAdmin() || (
         isAuthenticated() && 
-        (resource.data.ownerId == request.auth.uid || resource.data.userId == request.auth.uid) &&
-        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['paymentStatus', 'amountExtracted']))
+        (resource.data.ownerId == request.auth.uid) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['paymentStatus', 'amountExtracted', 'tournamentId']))
       );
       allow delete: if isAdmin();
     }
 
-    // Financial Data: Strict access by ownerId
+    // Financial Data
     match /expenses/{expenseId} {
       allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.ownerId);
       allow write: if isAdmin() || (isAuthenticated() && (request.resource.data.ownerId == request.auth.uid || resource.data.ownerId == request.auth.uid));
     }
 
-    // Public Assets
+    // Ads
     match /ads/{adId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -108,7 +117,7 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Global Catch-all: Admins only
+    // Global Catch-all
     match /{document=**} {
       allow read, write: if isAdmin();
     }

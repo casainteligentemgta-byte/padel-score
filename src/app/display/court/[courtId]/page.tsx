@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState } from 'react';
 import { ref, onValue, off } from 'firebase/database';
 import { rtdb } from '@/lib/rtdb';
 import { useAdBanner } from '@/lib/useAdBanner';
 import { MonitorOff, Megaphone, Wifi, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 
-export default function CourtDisplayPage({ params }: { params: Promise<{ courtId: string }> }) {
-    const { courtId } = use(params);
+export default function CourtDisplayPage() {
+    const courtId = useRouteSegment('courtId');
     const canchaId = `cancha_${courtId}`;
 
     const [canchaData, setCanchaData] = useState<any>(null);

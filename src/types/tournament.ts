@@ -24,6 +24,9 @@ export enum TournamentCategory {
     SEPTIMA = 'SEPTIMA',
 
     // Veteranos
+    MAS_40 = 'MAS_40',
+    FEM_40 = 'FEM_40',
+    MIX_40 = 'MIX_40',
     MAS_45 = 'MAS_45',
     MAS_50 = 'MAS_50',
 
@@ -69,6 +72,7 @@ export interface Tournament {
     groupSize?: number;
     matchFormat?: 'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS';
     scoringSystem?: 'GOLDEN_POINT' | 'TRADITIONAL';
+    tieBreakType?: 'TB' | 'STB';
     groupAssignments?: { [groupName: string]: string[] }; // groupName -> list of teamIds
     broadcastingSettings?: {
         primaryColor?: string;
@@ -152,5 +156,14 @@ export interface Group {
     description?: string;
     participantIds: string[]; // Referencias a Participants
     ownerId: string;
+    createdAt: any;
+}
+
+export interface MatchAnimation {
+    id: string;
+    name: string;
+    type: 'SIDE_CHANGE' | 'GAME_WON' | 'MATCH_WON' | 'GENERAL';
+    url: string;
+    isActive: boolean;
     createdAt: any;
 }

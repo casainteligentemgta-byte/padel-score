@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/authServer';
-import { validateAiBody } from '@/lib/apiValidation';
+import { requireAuth } from '@/lib/authServerSupabase';
+import { validateAiBody, sanitizeString } from '@/lib/apiValidation';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { buildSystemPrompt } from '@/lib/padelKnowledge';
 
@@ -22,10 +22,11 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: validation.error }, { status: 400 });
         }
 
-        // Determinar formato (Agentes o Crónica)
-        let agentId = body.agentId || body.role || 'organizer';
-        let message = body.message || body.prompt || '';
-        const context = body.context;
+        const { message: rawMessage, agentId: rawAgentId, prompt, role, context } = body;
+        
+        // Sanitizar entradas
+        let message = sanitizeString(rawMessage || prompt || '');
+        let agentId = sanitizeString(rawAgentId || role || 'organizer');
 
         // Mapear roles antiguos a nuevos agentes si es necesario
         if (agentId === 'reporter') agentId = 'media';

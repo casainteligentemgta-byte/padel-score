@@ -21,42 +21,25 @@ import {
     Wallet,
     ShieldCheck,
     FileText,
-    Receipt
+    Receipt,
+    LayoutGrid,
+    ChevronRight,
+    Bell
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { useAppSettings } from '@/lib/AppSettingsContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { getCanchaLabel } from '@/lib/markerCanchas';
 import { dataService } from '@/lib/dataService';
+import BouncingBall from '@/components/BouncingBall';
 
 export default function Sidebar() {
     const [isOpen, setIsOpen] = useState(false);
     const { logout, isAdmin, markerCanchas, user } = useAuth();
     const { appTitle, clubName } = useAppSettings();
     const router = useRouter();
-
-    // App: Inicio, Torneos, Ranking, Live (solo admin/propietario), Marcador (si aplica), Datos usuario, Mi wallet (desactivado), Política de Privacidad
-    const menuItems: { name: string; href: string | null; icon: typeof Home; disabled?: boolean }[] = [
-        { name: 'Inicio', href: '/', icon: Home },
-        { name: 'Torneos', href: '/tournaments', icon: Trophy },
-        { name: 'Ranking', href: '/ranking', icon: Medal },
-        ...(isAdmin ? [{ name: 'Live', href: '/live' as string, icon: Radio }] : []),
-        ...(markerCanchas?.length > 0 ? markerCanchas.map((c) => ({ name: `Marcador ${getCanchaLabel(c)}`, href: `/marker/${c}` as string, icon: Crosshair })) : []),
-        { name: 'Mis datos', href: '/mi-cuenta', icon: User },
-        { name: 'Mi wallet', href: null, icon: Wallet, disabled: true },
-        { name: 'Política de Privacidad', href: '/politica-privacidad', icon: ShieldCheck },
-        { name: 'Términos de Inscripción', href: '/terminos-inscripcion', icon: FileText },
-    ];
-
-    const adminItems = [
-        { name: 'Generador Maestro', href: '/admin/master-generator', icon: Sparkles },
-        { name: 'Control de Gastos', href: '/expenses', icon: DollarSign },
-        { name: 'Validación de pagos', href: '/admin/validacion-pagos', icon: Receipt },
-        { name: 'Agentes AI', href: '/agents', icon: Brain },
-        { name: 'Jugadores', href: '/players', icon: Users },
-        { name: 'Publicidad', href: '/admin/publicidad', icon: Megaphone },
-    ];
+    const pathname = usePathname();
 
     const handleMisDatosClick = async () => {
         setIsOpen(false);
@@ -68,24 +51,48 @@ export default function Sidebar() {
             const mine = await dataService.getMyParticipants(user.uid);
             const player = mine?.[0];
             if (player?.id) {
-                router.push(`/players/${player.id}`);
+                // Si ya tiene ficha, vamos a MI PERFIL
+                router.push('/mi-cuenta');
             } else {
-                router.push('/players/register?mis-datos=1');
+                // Si no tiene ficha, vamos al registro inicial
+                router.push('/players/register');
             }
-        } catch (e) {
-            console.error('Sidebar: error cargando ficha de jugador', e);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            console.error('Sidebar: error cargando ficha de jugador', msg || e);
             router.push('/mi-cuenta');
         }
     };
+
+    const hubItems = [
+        { name: 'Perfil', onClick: handleMisDatosClick, icon: User, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+        { name: 'Torneos', href: '/tournaments', icon: Trophy, color: 'text-padel-primary', bg: 'bg-padel-primary/10' },
+        { name: 'Ranking', href: '/ranking', icon: Medal, color: 'text-blue-400', bg: 'bg-blue-400/10' },
+        { name: 'Wallet', onClick: () => { }, icon: Wallet, color: 'text-emerald-400', bg: 'bg-emerald-400/10', disabled: true },
+    ];
+
+    const adminItems = [
+        { name: 'Control de Gastos', href: '/expenses', icon: DollarSign },
+        { name: 'Validación de pagos', href: '/admin/validacion-pagos', icon: Receipt },
+        { name: 'Agentes AI', href: '/agents', icon: Brain },
+        { name: 'Jugadores', href: '/players', icon: Users },
+        { name: 'Publicidad', href: '/admin/publicidad', icon: Megaphone },
+    ];
+
+    const otherItems = [
+        { name: 'Inicio', href: '/', icon: Home },
+        ...(isAdmin ? [{ name: 'Live', href: '/live', icon: Radio }] : []),
+        ...(markerCanchas?.length > 0 ? markerCanchas.map((c) => ({ name: `Marcador ${getCanchaLabel(c)}`, href: `/marker/${c}`, icon: Crosshair })) : []),
+    ];
 
     return (
         <>
             {/* Hamburger Button */}
             <button
                 onClick={() => setIsOpen(true)}
-                className="fixed top-6 left-6 z-[100] w-12 h-12 bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-center hover:bg-white/10 transition-all text-white"
+                className="fixed top-6 left-6 z-[100] w-12 h-12 bg-zinc-900/60 backdrop-blur-xl border border-white/5 rounded-full flex items-center justify-center hover:bg-zinc-800 transition-all text-white shadow-2xl"
             >
-                <Menu className="w-6 h-6" />
+                <Menu className="w-5 h-5 text-padel-primary" />
             </button>
 
             {/* Sidebar Overlay */}
@@ -97,138 +104,99 @@ export default function Sidebar() {
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setIsOpen(false)}
-                            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110]"
+                            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[110]"
                         />
 
                         <motion.div
                             initial={{ x: '-100%' }}
                             animate={{ x: 0 }}
                             exit={{ x: '-100%' }}
-                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                            className="fixed top-0 left-0 bottom-0 w-[280px] bg-black/40 backdrop-blur-2xl border-r border-white/10 z-[120] p-6 flex flex-col shadow-[20px_0_50px_rgba(0,0,0,0.5)]"
+                            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                            className="fixed top-0 left-0 bottom-0 w-full sm:w-[350px] bg-[#080808] border-r border-white/5 z-[120] flex flex-col overflow-hidden"
                         >
-                            <div className="flex justify-between items-center mb-6 flex-shrink-0">
-                                <div className="flex flex-col gap-0.5">
-                                    <div className="text-xl font-black italic uppercase tracking-tighter text-white flex items-center">
-                                        <motion.div
-                                            animate={{
-                                                y: [0, -10, 0],
-                                                scaleY: [1, 0.8, 1],
-                                            }}
-                                            transition={{
-                                                duration: 0.8,
-                                                repeat: Infinity,
-                                                ease: "easeInOut"
-                                            }}
-                                            className="w-4 h-4 bg-padel-primary rounded-full mr-2 shadow-[0_4px_10px_rgba(204,255,0,0.3)] flex-shrink-0"
-                                        />
-                                        <span className="truncate">{appTitle || 'Smart Padel'}</span>
+                            {/* Decorative Background Elements */}
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-padel-primary/5 blur-[100px] rounded-full -mr-32 -mt-32 pointer-events-none" />
+
+                            <div className="p-8 pb-4 flex justify-between items-start relative z-10">
+                                <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-3">
+                                        <BouncingBall size={24} bounceHeight={1.5} />
+                                        <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white">
+                                            SMART <span className="text-padel-primary">PADEL</span>
+                                        </h2>
                                     </div>
-                                    {clubName ? (
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 truncate pl-6">{clubName}</p>
-                                    ) : null}
+                                    {clubName && (
+                                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest pl-9">
+                                            {clubName}
+                                        </p>
+                                    )}
                                 </div>
                                 <button
                                     onClick={() => setIsOpen(false)}
-                                    className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-gray-500 hover:text-white"
+                                    className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/10 transition-all"
                                 >
-                                    <X className="w-5 h-5" />
+                                    <X className="w-4 h-4" />
                                 </button>
                             </div>
 
-                            <nav className="flex-1 space-y-4 overflow-y-auto no-scrollbar pr-2 min-h-0">
-                                <div>
-                                    <p className="text-[9px] font-black uppercase text-gray-600 tracking-[0.2em] mb-2 ml-4">App</p>
-                                    <div className="space-y-1">
-                                        {menuItems.map((item) =>
-                                            item.disabled || item.href === null ? (
-                                                <div
-                                                    key={item.name}
-                                                    className="flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-600 cursor-not-allowed opacity-60"
-                                                    title="Próximamente"
-                                                >
-                                                    <item.icon className="w-4 h-4" />
-                                                    <span className="font-bold text-[12px] tracking-tight uppercase italic">{item.name}</span>
-                                                    <span className="ml-auto text-[9px] text-gray-500 uppercase">Próximamente</span>
-                                                </div>
-                                            ) : item.name === 'Mis datos' ? (
-                                                <button
-                                                    key={item.name}
-                                                    type="button"
-                                                    onClick={handleMisDatosClick}
-                                                    className="w-full text-left"
-                                                >
-                                                    <motion.div
-                                                        whileHover={{ x: 5, backgroundColor: 'rgba(204,255,0,0.1)' }}
-                                                        whileTap={{ scale: 0.95 }}
-                                                        className="flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-400 hover:text-padel-primary transition-all group"
-                                                    >
-                                                        <item.icon className="w-4 h-4 transition-transform group-hover:scale-110" />
-                                                        <span className="font-bold text-[12px] tracking-tight uppercase italic">{item.name}</span>
-                                                    </motion.div>
-                                                </button>
-                                            ) : (
-                                                <Link
-                                                    key={item.name}
-                                                    href={item.href}
-                                                    onClick={() => setIsOpen(false)}
-                                                >
-                                                    <motion.div
-                                                        whileHover={{ x: 5, backgroundColor: 'rgba(204,255,0,0.1)' }}
-                                                        whileTap={{ scale: 0.95 }}
-                                                        className="flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-400 hover:text-padel-primary transition-all group"
-                                                    >
-                                                        <item.icon className="w-4 h-4 transition-transform group-hover:scale-110" />
-                                                        <span className="font-bold text-[12px] tracking-tight uppercase italic">{item.name}</span>
-                                                    </motion.div>
-                                                </Link>
-                                            )
-                                        )}
-                                    </div>
-                                </div>
-
-                                {isAdmin && (
-                                    <div>
-                                        <p className="text-[9px] font-black uppercase text-padel-primary tracking-[0.2em] mb-2 ml-4">Admin</p>
-                                        <div className="space-y-1">
-                                            {adminItems.map((item) => (
-                                                <Link
-                                                    key={item.name}
-                                                    href={item.href}
-                                                    onClick={() => setIsOpen(false)}
-                                                    className="flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-400 hover:bg-padel-primary/10 hover:text-padel-primary transition-all group"
-                                                >
-                                                    <item.icon className="w-4 h-4 transition-transform group-hover:scale-110" />
-                                                    <span className="font-bold text-[12px] tracking-tight uppercase italic">{item.name}</span>
-                                                </Link>
-                                            ))}
+                            {/* Acciones principales: Perfil, Torneos, Ranking, Wallet */}
+                            <div className="px-8 mb-6 space-y-2 relative z-10">
+                                {hubItems.map((item) => (
+                                    <button
+                                        key={item.name}
+                                        disabled={item.disabled}
+                                        onClick={() => {
+                                            if (item.onClick) item.onClick();
+                                            else if (item.href) {
+                                                setIsOpen(false);
+                                                router.push(item.href);
+                                            }
+                                        }}
+                                        className={`w-full flex items-center gap-3 py-3 px-4 rounded-2xl text-xs font-black uppercase tracking-tight transition-all border ${item.disabled
+                                            ? 'bg-zinc-900/40 border-white/5 opacity-40 grayscale cursor-not-allowed'
+                                            : 'bg-zinc-900/60 border-white/5 hover:border-padel-primary/30 hover:bg-zinc-800'
+                                            }`}
+                                    >
+                                        <div className={`p-2 rounded-xl ${item.bg} ${item.color}`}>
+                                            <item.icon className="w-4 h-4" />
                                         </div>
-                                    </div>
-                                )}
-                            </nav>
+                                        <span className="text-zinc-300 italic">
+                                            {item.name}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
 
-                            <div className="pt-4 mt-auto border-t border-white/5 space-y-1">
+                            {/* Navigation Lists oculto por petición del usuario */}
+                            <div className="px-8 flex-1 pb-8 relative z-10" />
+
+                            {/* Footer Section */}
+                            <div className="p-8 border-t border-white/5 bg-black/40 backdrop-blur-3xl space-y-4 relative z-10">
                                 {isAdmin && (
                                     <Link
                                         href="/admin/settings"
                                         onClick={() => setIsOpen(false)}
-                                        className="w-full flex items-center gap-3 py-2.5 px-4 rounded-xl text-gray-500 hover:bg-white/5 hover:text-white transition-all"
+                                        className="w-full flex items-center gap-3 py-3 px-4 rounded-2xl text-zinc-500 hover:bg-white/5 hover:text-white transition-all group"
                                     >
                                         <Settings className="w-4 h-4" />
-                                        <span className="font-bold text-xs uppercase italic">Ajustes</span>
+                                        <span className="text-xs font-black uppercase italic tracking-tight">Ajustes del Sistema</span>
                                     </Link>
                                 )}
                                 <button
-                                    onClick={() => {
-                                        logout();
+                                    onClick={async () => {
+                                        await logout();
                                         setIsOpen(false);
-                                        router.push('/');
+                                        router.replace('/login');
                                     }}
-                                    className="w-full flex items-center gap-3 py-2.5 px-4 rounded-xl text-red-500/50 hover:bg-red-500/10 hover:text-red-500 transition-all"
+                                    className="w-full flex items-center gap-3 py-3 px-4 rounded-2xl bg-red-500/5 text-red-500 hover:bg-red-500/10 transition-all group border border-red-500/10"
                                 >
                                     <LogOut className="w-4 h-4" />
-                                    <span className="font-bold text-xs uppercase italic">Cerrar Sesión</span>
+                                    <span className="text-xs font-black uppercase italic tracking-tight">Finalizar Sesión</span>
                                 </button>
+
+                                <div className="pt-2 text-center">
+                                    <p className="text-[8px] font-black text-zinc-700 uppercase tracking-[0.5em] italic">Smart Padel v3.0 Pro</p>
+                                </div>
                             </div>
                         </motion.div>
                     </>

@@ -1,26 +1,191 @@
 'use client';
 
-import { useState, useEffect, use, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { rtdb } from '@/lib/rtdb';
+import lottie from 'lottie-web';
 import { dataService } from '@/lib/dataService';
-import { db } from '@/lib/firebase';
-import { ref, onValue, off } from 'firebase/database';
-import { doc, onSnapshot, collection } from 'firebase/firestore';
+import { createClient } from '@/lib/supabase/client';
 import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
-import { Trophy, Star, Megaphone, Thermometer, Clock } from 'lucide-react';
+import { rtdb } from '@/lib/rtdb';
+import { ref, onValue, off } from 'firebase/database';
+import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, Layers, ImageIcon, Play, Eye, Users } from 'lucide-react';
+import { BouncingBall } from '@/components/BouncingBall';
 
-export default function FullScreenDisplay({ params }: { params: Promise<{ id: string, matchId: string }> }) {
-    const { id, matchId } = use(params);
+// Lottie player para animaciones JSON (biblioteca de animaciones)
+function LottieAnimationOverlay({ url }: { url: string }) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!containerRef.current || !url) return;
+        const anim = lottie.loadAnimation({
+            container: containerRef.current,
+            renderer: 'svg',
+            loop: true,
+            autoplay: true,
+            path: url,
+        });
+        return () => anim.destroy();
+    }, [url]);
+    return <div ref={containerRef} className="w-full h-full min-h-[200px] max-w-[90vw] max-h-[90vh]" />;
+}
+
+// Utility to detect if a media object or URL is a video
+const isVideoMedia = (media: any) => {
+    if (!media) return false;
+    // Handle string URL input
+    if (typeof media === 'string') {
+        return /\.(mp4|webm|mov|m4v|ogg|flv|3gp)(\?.*)?$/i.test(media.toLowerCase());
+    }
+    // Handle media object input
+    if (!media.url) return false;
+    const tipo = (media.tipo || '').toLowerCase();
+    if (tipo.includes('video')) return true;
+    const url = (media.url || '').toLowerCase();
+    return /\.(mp4|webm|mov|m4v|ogg|flv|3gp)(\?.*)?$/i.test(url);
+};
+
+// Simulated names for professional look
+const PRO_NAMES_MALE = [
+    "Alejandro Galán", "Juan Lebrón", "Agustín Tapia", "Arturo Coello",
+    "Franco Stupaczuk", "Martín Di Nenno", "Fede Chingotto", "Paquito Navarro",
+    "Fernando Belasteguín", "Sanyo Gutiérrez", "Momo González", "Alex Ruiz",
+    "Javi Garrido", "Mike Yanguas", "Coki Nieto", "Jon Sanz"
+];
+
+const PRO_NAMES_FEMALE = [
+    "Ariana Sánchez", "Paula Josemaría", "Gemma Triay", "Marta Ortega",
+    "Delfi Brea", "Bea González", "Claudia Jensen", "Jessica Castelló",
+    "Aranza Osoro", "Lucía Sainz", "Patty Llaguno", "Victoria Iglesias"
+];
+
+// ── Reloj: actualización cada segundo solo en estos componentes (evita re-render de toda la pizarra) ──
+function DisplayClockTime({ className, style }: { className?: string, style?: any }) {
+    const [time, setTime] = useState('');
+    useEffect(() => {
+        const update = () => setTime(new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }));
+        update();
+        const id = setInterval(update, 1000);
+        return () => clearInterval(id);
+    }, []);
+    return <span className={className} style={style}>{time}</span>;
+}
+// ── Reloj: actualización cada segundo solo en estos componentes (evita re-render de toda la pizarra) ──
+function DisplayClockDate({ className, style }: { className?: string, style?: any }) {
+    const [date, setDate] = useState('');
+    useEffect(() => {
+        const update = () => setDate(new Date().toLocaleDateString('es-VE', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase());
+        update();
+        const id = setInterval(update, 1000);
+        return () => clearInterval(id);
+    }, []);
+    return <span className={className} style={style}>{date}</span>;
+}
+
+// ── Cronómetro de partido: misma lógica que el marcador del marker (score/[matchId]) ──
+function MatchDurationCounter({
+    matchStatus,
+    startTimeMs,
+    endTimeMs,
+    cronData,
+    primaryColor,
+    cronometroTipo,
+    showInPill,
+}: {
+    /** Estado del partido en BD (mismo que usa el marker) */
+    matchStatus?: string;
+    startTimeMs?: number | null;
+    endTimeMs?: number | null;
+    /** Estado del cronómetro en RTDB (pizarra_cancha_state.cronometro) escrito por el marker */
+    cronData?: { elapsedSec?: number; running?: boolean; startedAt?: number | null };
+    primaryColor: string;
+    cronometroTipo: string;
+    showInPill?: boolean;
+}) {
+    const [duration, setDuration] = useState('00:00');
+    
+    useEffect(() => {
+        const update = () => {
+            let totalSec = 0;
+            const now = Date.now();
+            const st = startTimeMs;
+            const en = endTimeMs;
+            const status = (matchStatus || '').toString();
+
+            const isFinished = status === MatchStatus.FINISHED || status === 'FINISHED';
+            const isLiveLike =
+                status === MatchStatus.LIVE ||
+                status === MatchStatus.PAUSED ||
+                status === 'live' ||
+                status === 'PAUSED' ||
+                status === 'EN_CURSO';
+
+            // 1) Si el marker está enviando cronData (RTDB), usamos exactamente ese reloj
+            if (cronData && (typeof cronData.elapsedSec === 'number' || typeof cronData.running === 'boolean')) {
+                const base = Number(cronData.elapsedSec ?? 0) || 0;
+                if (cronData.running && cronData.startedAt != null) {
+                    const stCron = Number(cronData.startedAt);
+                    const diff = !Number.isNaN(stCron) ? Math.floor((now - stCron) / 1000) : 0;
+                    totalSec = base + Math.max(0, diff);
+                } else {
+                    totalSec = base;
+                }
+            } else {
+                // 2) Respaldo: misma lógica que el marcador basada en startedAt / finishedAt
+                if (isFinished && st != null && en != null) {
+                    totalSec = Math.max(0, Math.floor((en - st) / 1000));
+                } else if (isLiveLike && st != null) {
+                    totalSec = Math.max(0, Math.floor((now - st) / 1000));
+                } else {
+                    totalSec = 0;
+                }
+            }
+
+            const h = Math.floor(totalSec / 3600);
+            const m = Math.floor((totalSec % 3600) / 60);
+            const s = totalSec % 60;
+            
+            if (h > 0) {
+                setDuration(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
+            } else {
+                setDuration(`${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
+            }
+        };
+
+        update();
+        const id = setInterval(update, 1000);
+        return () => clearInterval(id);
+    }, [matchStatus, startTimeMs, endTimeMs, cronData?.elapsedSec, cronData?.running, cronData?.startedAt]);
+    if (!duration) return null;
+    if (showInPill)
+        return (
+            <span
+                className={cronometroTipo === 'minimal' ? 'text-white/90 text-[0.6em]' : cronometroTipo === 'broadcast' ? 'text-padel-primary drop-shadow-[0_0_8px_rgba(204,255,0,0.4)]' : cronometroTipo === 'digital' ? 'text-cyan-400 font-mono tabular-nums' : 'text-padel-primary'}
+                style={{ fontSize: 'clamp(6px,0.65vw,10px)' }}
+            >
+                {duration}
+            </span>
+        );
+    return (
+        <>
+            <span className="font-bold uppercase text-white/50 tracking-[0.35em] leading-none" style={{ fontSize: 'clamp(6px,0.7vw,11px)' }}>Tiempo de juego</span>
+            <span className="font-black italic tracking-tighter leading-none mt-0.5 tabular-nums" style={{ fontSize: 'clamp(24px,3.2vw,56px)', color: primaryColor }}>{duration}</span>
+        </>
+    );
+}
+
+export default function FullScreenDisplay() {
+    const routeParams = useParams<{ id: string; matchId: string }>();
+    const id = String(routeParams?.id ?? '');
+    const matchId = String(routeParams?.matchId ?? '');
     const [tournament, setTournament] = useState<any>(null);
     const [match, setMatch] = useState<any>(null);
+    const [matchNumberInTournament, setMatchNumberInTournament] = useState<number | null>(null);
     const [nextMatch, setNextMatch] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [mode, setMode] = useState<'score' | 'ad'>('score');
     const [currentAdIdx, setCurrentAdIdx] = useState(0);
     const [recentResults, setRecentResults] = useState<any[]>([]);
-    const [clock, setClock] = useState<{ date: string; time: string }>({ date: '', time: '' });
     const [temp, setTemp] = useState<number | null>(null);
     const prevScore = useRef<string>('');
     const adBanner = useAdBanner();
@@ -28,58 +193,333 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const [carouselIdx, setCarouselIdx] = useState(0);
     const [carouselInterval, setCarouselInterval] = useState(8);
 
+    const processDisplayName = (name: any) => {
+        if (!name || typeof name !== 'string') return null;
+        const trimmed = name.trim();
+        const lower = trimmed.toLowerCase();
+        if (
+            trimmed === '' ||
+            trimmed === '?' ||
+            trimmed === 'TBD' ||
+            trimmed === 'UNDEFINED' ||
+            trimmed === 'undefined' ||
+            lower.includes('pareja') ||
+            lower.includes('equipo') ||
+            lower.includes('player') ||
+            (lower.includes('jugador') && !/\d/.test(lower))
+        ) return null;
+
+        const parts = trimmed.split(/\s+/).filter(Boolean);
+        if (parts.length <= 1) return trimmed;
+
+        const firstName = parts[0];
+        // Si viene "NOMBRE APELLIDO" (2 partes), mostramos solo primer nombre + primer apellido
+        if (parts.length === 2) {
+            return `${firstName} ${parts[1]}`;
+        }
+
+        // Caso típico: "NOMBRE SEGUNDONOMBRE APELLIDO ..."
+        const secondNameInitial = parts[1]?.[0] ? `${parts[1][0]}.` : '';
+        const firstLastName = parts[2] ?? '';
+        const formatted = [firstName, secondNameInitial, firstLastName].filter(Boolean).join(' ');
+        return formatted || trimmed;
+    };
+
     // ── Marcador en vivo del RTDB (escrito por el marker en tiempo real) ─────
     const [liveMarcador, setLiveMarcador] = useState<any>(null);
     const [sponsorIdx, setSponsorIdx] = useState(0);
-    const [matchDuration, setMatchDuration] = useState<string>('');
+    const [sponsorCarousel, setSponsorCarousel] = useState<any[]>([]);
+    const [sponsorCarouselIdx, setSponsorCarouselIdx] = useState(0);
+    const [hubMedia, setHubMedia] = useState<any>(null);
+    const [hubCarousel, setHubCarousel] = useState<any>(null);
+    const [hubLibraryVids, setHubLibraryVids] = useState<any[]>([]);
+    const [hubLibraryImgs, setHubLibraryImgs] = useState<any[]>([]);
+    const [hubLibraryVidIdx, setHubLibraryVidIdx] = useState(0);
+    const [hubLibraryImgIdx, setHubLibraryImgIdx] = useState(0);
 
-    // Ticker desde RTDB (tiempo real, configurable desde panel publicidad)
+    // Sync system clock offsets with Supabase server time
+    useEffect(() => {
+        dataService.syncSystemClock();
+    }, []);
+
+    // ── Carrusel de Patrocinadores desde Supabase ───────────────────────
+    useEffect(() => {
+        if (!tournament?.id) return;
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        if (!isUUID) return;
+
+        const loadSponsors = async () => {
+            try {
+                const data = await dataService.getSponsorsByTournament(id);
+                setSponsorCarousel(data || []);
+            } catch (err) {
+                // Silently fail if table or sponsors not found
+            }
+        };
+        loadSponsors();
+        const interval = setInterval(loadSponsors, 30000);
+        return () => clearInterval(interval);
+    }, [tournament?.id, id]);
+
+    useEffect(() => {
+        if (sponsorCarousel.length <= 1) return;
+        const currentDuration = (sponsorCarousel[sponsorCarouselIdx]?.duration_seconds || 8) * 1000;
+        const timeout = setTimeout(() => {
+            setSponsorCarouselIdx(prev => (prev + 1) % sponsorCarousel.length);
+        }, currentDuration);
+        return () => clearTimeout(timeout);
+    }, [sponsorCarousel, sponsorCarouselIdx]);
+
+    // Ticker desde RTDB
     const [tickerTexto, setTickerTexto] = useState('');
     const [tickerActivo, setTickerActivo] = useState(false);
     const [tickerVelocidad, setTickerVelocidad] = useState(30);
 
-    // Estilo del reloj y del cronómetro — desde módulo Publicidad
+    // Ticker desde Supabase (Tira Informativa TV)
+    const [supabaseTickerMessages, setSupabaseTickerMessages] = useState<any[]>([]);
+
+    // Estilo del reloj y del cronómetro
     const [relojOcasion, setRelojOcasion] = useState<string>('default');
     const [cronometroTipo, setCronometroTipo] = useState<string>('default');
-    const [animacionActual, setAnimacionActual] = useState<{ id: string; ts: number } | null>(null);
+    const [animacionActual, setAnimacionActual] = useState<{ id: string; ts: number; url?: string } | null>(null);
     const [animacionesMarcador, setAnimacionesMarcador] = useState<Record<string, { nombre: string; url: string }>>({});
 
     useEffect(() => {
-        if (!rtdb) return;
-        const relojRef = ref(rtdb, 'publicidad_master/reloj_ocasion');
-        const handler = (snap: any) => setRelojOcasion(snap.val() || 'default');
-        onValue(relojRef, handler);
-        return () => off(relojRef, 'value', handler);
-    }, []);
-    useEffect(() => {
-        if (!rtdb) return;
-        const refCron = ref(rtdb, 'publicidad_master/cronometro_tipo');
-        const h = (snap: any) => setCronometroTipo(snap.val() || 'default');
-        onValue(refCron, h);
-        return () => off(refCron, 'value', h);
-    }, []);
-    useEffect(() => {
-        if (!rtdb) return;
-        const refAnim = ref(rtdb, 'publicidad_master/animaciones_marcador');
-        const h = (snap: any) => setAnimacionesMarcador(snap.val() || {});
-        onValue(refAnim, h);
-        return () => off(refAnim, 'value', h);
+        dataService.getAnimations()
+            .then((rows: any[]) => {
+                const map: Record<string, { nombre: string; url: string }> = {};
+                (rows || []).forEach((r: any) => {
+                    map[r.id || r.name] = { nombre: r.name || r.nombre || '', url: r.url || '' };
+                });
+                setAnimacionesMarcador(map);
+            })
+            .catch(() => setAnimacionesMarcador({}));
     }, []);
 
+    // ── Marcador en vivo desde Supabase (pizarra_cancha_state) ───────────────
     useEffect(() => {
-        if (!rtdb) return;
-        const tickerRef = ref(rtdb, 'publicidad_master/ticker');
-        const handler = (snap: any) => {
-            const val = snap.val();
-            if (val) {
-                setTickerActivo(val.activo ?? false);
-                setTickerTexto(val.texto ?? '');
-                setTickerVelocidad(val.velocidad_seg ?? 30);
+        if (!match) return;
+        const courtNum = Number(match.court ?? (match.courtIndex != null ? (match.courtIndex as number) + 1 : 0));
+        if (!courtNum) return;
+
+        const canchaId = `cancha_${courtNum}`;
+        const unsub = dataService.subscribePizarraCanchaState(canchaId, (state) => {
+            const marcador = state?.data?.marcador ?? null;
+            setLiveMarcador(marcador);
+        });
+
+        // Polling de respaldo en caso de que Supabase Realtime no esté habilitado en el Dashboard
+        const pollingInterval = setInterval(() => {
+            dataService.getPizarraCanchaState(canchaId).then((state) => {
+                const marcador = state?.data?.marcador ?? null;
+                setLiveMarcador((prev: any) => {
+                    if (marcador?.ultimo_update !== prev?.ultimo_update || JSON.stringify(marcador) !== JSON.stringify(prev)) {
+                        return marcador;
+                    }
+                    return prev;
+                });
+            }).catch(() => {});
+        }, 2000);
+
+        return () => { 
+            unsub(); 
+            clearInterval(pollingInterval);
+        };
+    }, [match?.court, match?.courtIndex]);
+
+    // 5. Obtener TODA la biblioteca de imágenes activa para el carrusel automático
+    const fetchAllImages = async (sb: any) => {
+        const { data } = await sb.from('media_content').select('*').order('created_at', { ascending: false });
+        
+        if (data) {
+            const filtered = data.filter((item: any) => item.activa !== false);
+            // Split into vids and imgs
+            const vids = filtered.filter((i: any) => isVideoMedia(i));
+            const imgs = filtered.filter((i: any) => !isVideoMedia(i));
+            setHubLibraryVids(vids);
+            setHubLibraryImgs(imgs);
+        }
+    };
+
+    // ── Publicidad Hub: Sincronización con Supabase (Monitor Hub) ───────
+    useEffect(() => {
+        let supabase: any;
+        try {
+            supabase = createClient();
+        } catch (e) {
+            console.error("Supabase client creation failed:", e);
+            return;
+        }
+
+        const fetchHubMedia = async () => {
+            try {
+                // Fetch library images always
+                if (supabase) fetchAllImages(supabase);
+
+                // 1. Verificar modo master
+                const { data: modeData } = await supabase
+                    .from('display_estado')
+                    .select('media_content_id')
+                    .eq('pantalla_id', 'SYSTEM_MASTER_MODE')
+                    .maybeSingle();
+
+                const isMaster = modeData?.media_content_id === 'true';
+
+                let videoKey = '';
+                let carouselKey = '';
+                let screenFound = false;
+                let activeScreenId = null;
+
+                if (isMaster) {
+                    videoKey = 'SYSTEM_MASTER_MEDIA_video';
+                    carouselKey = 'SYSTEM_MASTER_CAROUSEL_carousel';
+                    screenFound = true;
+                } else if (match?.court) {
+                    // Buscar pantalla que coincida con la pista (buscamos cualquier nombre que contenga el número de pista)
+                    const { data: screens } = await supabase
+                        .from('pantallas')
+                        .select('id, nombre')
+                        .or(`nombre.ilike.%Pista ${match.court}%,nombre.ilike.%Cancha ${match.court}%,nombre.ilike.%${match.court}%`);
+
+                    if (screens && screens.length > 0) {
+                        const screenId = screens[0].id;
+                        activeScreenId = screenId;
+                        videoKey = `${screenId}_video`;
+                        carouselKey = `${screenId}_carousel`;
+                        screenFound = true;
+                    }
+                }
+
+                if (!screenFound) {
+                    // If no specific screen is found, reset hub selections but keep hubLibraryImages
+                    setHubMedia(null);
+                    setHubCarousel(null);
+                    // Fetch global ticker even if no screen is bound to the court
+                    try {
+                        const tickerData = await dataService.getTiraInformativa();
+                        setSupabaseTickerMessages(Array.isArray(tickerData) ? tickerData : []);
+                    } catch (_) {
+                        setSupabaseTickerMessages([]);
+                    }
+                    return;
+                }
+
+                // 2. Obtener lo que debe proyectar esta pantalla para ambos slots
+                // Buscamos: UUID_video, UUID_carousel AND the bare UUID as a fallback
+                const { data: statusData } = await supabase
+                    .from('display_estado')
+                    .select('pantalla_id, media_content_id')
+                    .in('pantalla_id', [videoKey, carouselKey, activeScreenId].filter(Boolean));
+
+                if (!statusData || statusData.length === 0) {
+                    setHubMedia(null);
+                    setHubCarousel(null);
+                    // Try to fetch ticker anyway
+                    try {
+                        const tickerData = await dataService.getTiraInformativa(activeScreenId);
+                        setSupabaseTickerMessages(Array.isArray(tickerData) ? tickerData : []);
+                    } catch (_) {
+                        setSupabaseTickerMessages([]);
+                    }
+                    return;
+                }
+
+                // 3. Resolver el contenido según los keys
+                let vidId = statusData.find((s: any) => s.pantalla_id === videoKey)?.media_content_id;
+                let carId = statusData.find((s: any) => s.pantalla_id === carouselKey)?.media_content_id;
+
+                // Fallback: If no suffix-specific record exists but a bare UUID record does, use it for video slot
+                if (!vidId && !carId) {
+                    const legacyRecord = statusData.find((s: any) => s.pantalla_id === activeScreenId);
+                    if (legacyRecord) {
+                        vidId = legacyRecord.media_content_id;
+                    }
+                }
+
+                // 4. Obtener contenidos
+                let fetchedVid: any | null = null;
+                let fetchedCar: any | null = null;
+
+                if (vidId) {
+                    const { data: v } = await supabase.from('media_content').select('*').eq('id', vidId).maybeSingle();
+                    fetchedVid = v;
+                }
+                if (carId) {
+                    const { data: c } = await supabase.from('media_content').select('*').eq('id', carId).maybeSingle();
+                    fetchedCar = c;
+                }
+
+                // Logic: Videos Left, Images Right
+                // If we have an image in vid slot and a video in car slot, swap them.
+                if (fetchedVid && !isVideoMedia(fetchedVid) && fetchedCar && isVideoMedia(fetchedCar)) {
+                    setHubMedia(fetchedCar);
+                    setHubCarousel(fetchedVid);
+                } else if (fetchedVid && !isVideoMedia(fetchedVid) && !fetchedCar) {
+                    // If only an image is assigned to the video slot, move it to carousel
+                    setHubMedia(null);
+                    setHubCarousel(fetchedVid);
+                } else if (fetchedCar && isVideoMedia(fetchedCar) && !fetchedVid) {
+                    // If only a video is assigned to the carousel slot, move it to video slot
+                    setHubMedia(fetchedCar);
+                    setHubCarousel(null);
+                } else {
+                    // Regular assignment
+                    setHubMedia(fetchedVid);
+                    setHubCarousel(fetchedCar);
+                }
+
+                // 5. Obtener Tira Informativa de Supabase - Pasar pantallaId
+                try {
+                    const tickerData = await dataService.getTiraInformativa(activeScreenId);
+                    setSupabaseTickerMessages(Array.isArray(tickerData) ? tickerData : []);
+                } catch (_) {
+                    setSupabaseTickerMessages([]);
+                }
+
+            } catch (err) {
+                console.error('Error fetching hub media:', err);
             }
         };
-        onValue(tickerRef, handler);
-        return () => off(tickerRef, 'value', handler);
-    }, []);
+
+        fetchHubMedia();
+
+        const channel = supabase
+            .channel('publicidad_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'display_estado' }, fetchHubMedia)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'media_content' }, fetchHubMedia)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tira_informativa' }, fetchHubMedia)
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [match?.court]); // Depend on match.court to re-run when court changes
+
+    // Rotación del carrusel automático de la biblioteca (VIDEOS - Izquierda)
+    useEffect(() => {
+        if (hubLibraryVids.length <= 1) return;
+        const currentItem = hubLibraryVids[hubLibraryVidIdx % hubLibraryVids.length];
+        const duration = (currentItem?.duracion_segundos || 8) * 1000;
+
+        const timeout = setTimeout(() => {
+            setHubLibraryVidIdx(prev => (prev + 1) % hubLibraryVids.length);
+        }, duration);
+
+        return () => clearTimeout(timeout);
+    }, [hubLibraryVids, hubLibraryVidIdx]);
+
+    // Rotación del carrusel automático de la biblioteca (IMÁGENES - Derecha)
+    useEffect(() => {
+        if (hubLibraryImgs.length <= 1) return;
+        const currentItem = hubLibraryImgs[hubLibraryImgIdx % hubLibraryImgs.length];
+        const duration = (currentItem?.duracion_segundos || 10) * 1000;
+
+        const timeout = setTimeout(() => {
+            setHubLibraryImgIdx(prev => (prev + 1) % hubLibraryImgs.length);
+        }, duration);
+
+        return () => clearTimeout(timeout);
+    }, [hubLibraryImgs, hubLibraryImgIdx]);
 
     // Settings
     const isFinal = match?.roundName?.toLowerCase().includes('final') || match?.roundName?.toLowerCase().includes('definición');
@@ -115,19 +555,6 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return () => clearInterval(id);
     }, [carouselImages.length, carouselInterval]);
 
-    // Clock — updates every second
-    useEffect(() => {
-        const update = () => {
-            const now = new Date();
-            const date = now.toLocaleDateString('es-VE', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase();
-            const time = now.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
-            setClock({ date, time });
-        };
-        update();
-        const id = setInterval(update, 1000);
-        return () => clearInterval(id);
-    }, []);
-
     // Sponsors Cycle
     useEffect(() => {
         const sponsors = tournament?.broadcastingSettings?.sponsors?.filter((s: any) => s.active) || [];
@@ -138,9 +565,7 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return () => clearInterval(id);
     }, [tournament?.broadcastingSettings?.sponsors]);
 
-    // Hora de inicio del partido (misma fuente que el marcador: startedAt/actualStartTime en BD)
-    const getMatchStartTimeMs = (m: any): number | null => {
-        const raw = m?.startedAt ?? m?.actualStartTime ?? m?.startTime ?? liveMarcador?.match_start_time;
+    const parseTimeFieldToMs = (raw: any): number | null => {
         if (raw == null) return null;
         if (typeof raw?.toDate === 'function') return raw.toDate().getTime();
         if (typeof raw?.seconds === 'number') return raw.seconds * 1000 + (raw.nanoseconds || 0) / 1e6;
@@ -149,29 +574,21 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return isNaN(d.getTime()) ? null : d.getTime();
     };
 
-    // Match Duration Counter — duración transcurrida desde startedAt (actualización cada segundo)
-    useEffect(() => {
-        const isLive = match?.status === MatchStatus.LIVE || match?.status === 'live' || match?.status === MatchStatus.PAUSED || match?.status === 'PAUSED';
-        if (!isLive) {
-            setMatchDuration('');
-            return;
-        }
-        const startMs = getMatchStartTimeMs(match);
-        if (startMs == null) {
-            setMatchDuration('');
-            return;
-        }
-        const update = () => {
-            const elapsedSec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
-            const h = Math.floor(elapsedSec / 3600);
-            const m = Math.floor((elapsedSec % 3600) / 60);
-            const s = elapsedSec % 60;
-            setMatchDuration(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
-        };
-        update();
-        const id = setInterval(update, 1000);
-        return () => clearInterval(id);
-    }, [match?.status, match?.startedAt, match?.actualStartTime, match?.startTime, liveMarcador?.match_start_time]);
+    /** Resolución de partidos por horario (puede usar fallbacks) */
+    const getMatchStartTimeMs = (m: any): number | null => {
+        const raw = m?.startedAt ?? m?.actualStartTime ?? m?.startTime ?? liveMarcador?.match_start_time;
+        return parseTimeFieldToMs(raw);
+    };
+
+    /**
+     * Cronómetro de la pizarra = mismo criterio que el marcador del marker (score/[matchId]):
+     * solo startedAt / actualStartTime y finishedAt / actualEndTime.
+     */
+    const getMarkerDurationStartMs = (m: any): number | null =>
+        parseTimeFieldToMs(m?.startedAt ?? m?.actualStartTime);
+
+    const getMarkerDurationEndMs = (m: any): number | null =>
+        parseTimeFieldToMs(m?.finishedAt ?? m?.actualEndTime);
 
     // Temperature (Open-Meteo) — Isla de Margarita
 
@@ -196,24 +613,17 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         prevScore.current = currentScore;
     }, [match?.points?.t1, match?.points?.t2]);
 
-    // ── Sincronizar marcador RTDB ───────────────────────────────────────
-    useEffect(() => {
-        if (!rtdb || !match?.court) return;
-        const canchaId = `cancha_${match.court}`;
-        const marcRef = ref(rtdb, `canchas/${canchaId}/marcador`);
-        const handler = (snap: any) => setLiveMarcador(snap.val());
-        onValue(marcRef, handler);
-        return () => off(marcRef, 'value', handler);
-    }, [match?.court]);
+    // Marcador en vivo y animación vienen de Supabase (pizarra_cancha_state) en el efecto anterior
 
-    // Animación actual disparada por el marker (botones debajo de los puntos)
+    // Animación actual disparada por el marker (Supabase pizarra_cancha_state)
     useEffect(() => {
-        if (!rtdb || !match?.court) return;
+        if (!match?.court) return;
         const canchaId = `cancha_${match.court}`;
-        const animRef = ref(rtdb, `canchas/${canchaId}/animacion_actual`);
-        const handler = (snap: any) => setAnimacionActual(snap.val());
-        onValue(animRef, handler);
-        return () => off(animRef, 'value', handler);
+        const unsub = dataService.subscribePizarraCanchaState(canchaId, (state) => {
+            const anim = state?.data?.animacion_actual ?? null;
+            setAnimacionActual(anim);
+        });
+        return () => unsub();
     }, [match?.court]);
 
     // Auto-ocultar overlay de animación tras 5s
@@ -231,15 +641,24 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         let currentTournament: any = null;
         let currentMatches: any[] = [];
 
-        const updateAll = (t: any, ms: any[]) => {
-            if (!t || !ms) return;
+        const updateAll = (t: any, matchesList: any[]) => {
+            if (!t) return;
             setTournament(t);
+            const ms = matchesList || [];
 
             // Resolver partido
-            let found = ms.find((m: any) => m.id === matchId);
+            let found = ms.find((m: any) => String(m.id) === String(matchId));
+
             if (!found && /^match_(\d+)$/.test(matchId)) {
                 const idx = parseInt(matchId.replace('match_', ''), 10);
                 if (idx >= 0 && idx < ms.length) found = ms[idx];
+            }
+            if (!found && /^m_(\d+)$/.test(matchId)) {
+                const ts = parseInt(matchId.replace('m_', ''), 10);
+                found = ms.find((m: any) => {
+                    const mTs = getMatchStartTimeMs(m);
+                    return mTs && Math.abs(mTs - ts) < 2000;
+                });
             }
             if (!found && matchId.startsWith('court_')) {
                 const courtNum = parseInt(matchId.replace('court_', ''), 10);
@@ -247,33 +666,101 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     found = ms.find((m: any) => (m.court ?? (m.courtIndex != null ? m.courtIndex + 1 : null)) === courtNum) ?? ms.find((m: any) => m.courtIndex === courtNum - 1);
             }
 
+            // Fallback final: Si el partido no existe en la base de datos, creamos uno simulado para demostración
+            if (!found) {
+                const isCourt = matchId.startsWith('court_');
+                const parsedCourt = isCourt ? parseInt(matchId.replace('court_', ''), 10) : 1;
+                const courtNum = isNaN(parsedCourt) ? 1 : parsedCourt;
+
+                found = {
+                    id: matchId,
+                    team1Index: 1,
+                    team2Index: 2,
+                    status: 'live',
+                    court: courtNum,
+                    courtName: isCourt ? `Pista ${courtNum}` : 'Cancha Central',
+                    scheduledTime: new Date().toISOString(),
+                    setScores: [{ t1: 6, t2: 3 }]
+                };
+            }
+
             if (found) {
-                const resolveTeam = (mTeam: any, teamIdx: number) => {
-                    // Support for embedded teams (new Master Generator)
-                    if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
-                        return {
-                            p1Name: mTeam.isTBD ? (mTeam.teamLabel || '?') : (mTeam.p1Name || mTeam.p1?.name || '?'),
-                            p2Name: mTeam.isTBD ? '' : (mTeam.p2Name || mTeam.p2?.name || '?'),
-                            p1Photo: mTeam.p1?.photo || null,
-                            p2Photo: mTeam.p2?.photo || null,
-                            name: mTeam.isTBD ? (mTeam.teamLabel || '?') : [mTeam.p1Name || mTeam.p1?.name, mTeam.p2Name || mTeam.p2?.name].filter(Boolean).join(' / ') || '?'
-                        };
-                    }
-                    // Legacy support (using indices from t.teams)
-                    const teams = t?.teams || [];
-                    const team = teamIdx > 0 ? teams[teamIdx - 1] : null;
-                    if (!team) return { p1Name: '?', p2Name: '?', p1Photo: null, p2Photo: null, name: teamIdx > 0 ? `Pareja ${teamIdx}` : '?' };
-                    return {
-                        p1Name: team.p1?.name || '?',
-                        p2Name: team.p2?.name || '?',
-                        p1Photo: team.p1?.photo || null,
-                        p2Photo: team.p2?.photo || null,
-                        name: `${team.p1?.name || '?'} / ${team.p2?.name || '?'}`
-                    };
+                const idxInTournament = ms.findIndex((m: any) => String(m?.id) === String(found?.id));
+                setMatchNumberInTournament(idxInTournament >= 0 ? idxInTournament + 1 : null);
+                const getSimulatedName = (gender: string | undefined, index: number) => {
+                    const list = gender === 'female' ? PRO_NAMES_FEMALE : PRO_NAMES_MALE;
+                    return list[index % list.length];
                 };
 
-                const t1 = resolveTeam(found.team1, found.team1Index);
-                const t2 = resolveTeam(found.team2, found.team2Index);
+                const fullName = (p: any) => {
+                    if (!p) return '';
+                    const n = [p.name, p.lastName].filter(Boolean).join(' ').trim();
+                    return n || (typeof p.name === 'string' ? p.name : '') || '';
+                };
+
+                const resolveTeam = (mTeam: any, teamIdx: number, matchRecord?: any) => {
+                    const gender = currentTournament?.gender;
+                    const seed = teamIdx || 1;
+                    const teams = currentTournament?.teams || [];
+                    const teamByIndex = teamIdx > 0 ? teams[teamIdx - 1] : null;
+
+                    // 1) Prioridad: nombres en tournament.teams (nombre + apellido si existen)
+                    const p1FromTeam = fullName(teamByIndex?.p1);
+                    const p2FromTeam = fullName(teamByIndex?.p2);
+                    const fromTournament = teamByIndex && (p1FromTeam.trim() || p2FromTeam.trim());
+                    if (fromTournament) {
+                        const p1Final = p1FromTeam && p1FromTeam !== '?' && p1FromTeam !== 'TBD' ? p1FromTeam : getSimulatedName(gender, seed * 2);
+                        const p2Final = p2FromTeam && p2FromTeam !== '?' && p2FromTeam !== 'TBD' ? p2FromTeam : getSimulatedName(gender, seed * 2 + 1);
+                        return {
+                            p1Name: p1Final,
+                            p2Name: p2Final,
+                            p1Photo: teamByIndex.p1?.photo || null,
+                            p2Photo: teamByIndex.p2?.photo || null,
+                            name: [p1Final, p2Final].filter(Boolean).join(' / ')
+                        };
+                    }
+
+                    // 2) Equipo embebido en el partido (p1/p2 con name+lastName o p1Name/p2Name)
+                    if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
+                        const p1Base = mTeam.isTBD ? (mTeam.teamLabel || 'TBD') : (mTeam.p1Name || fullName(mTeam.p1));
+                        const p2Base = mTeam.isTBD ? '' : (mTeam.p2Name || fullName(mTeam.p2));
+                        const p1Final = (!p1Base || p1Base === '?' || p1Base === 'TBD') ? getSimulatedName(gender, seed * 2) : p1Base;
+                        const p2Final = (!p2Base || p2Base === '?' || (p2Base === 'TBD' && !mTeam.isTBD)) ? (mTeam.isTBD ? '' : getSimulatedName(gender, seed * 2 + 1)) : p2Base;
+                        return {
+                            p1Name: p1Final,
+                            p2Name: p2Final,
+                            p1Photo: mTeam.p1?.photo || null,
+                            p2Photo: mTeam.p2?.photo || null,
+                            name: mTeam.isTBD ? p1Final : [p1Final, p2Final].filter(Boolean).join(' / ')
+                        };
+                    }
+
+                    // 3) team1Name / team2Name guardados en el partido (según teamIdx)
+                    const storedName = mTeam?.teamLabel || mTeam?.name || (matchRecord && teamIdx === 1 ? (matchRecord as any).team1Name : matchRecord && teamIdx === 2 ? (matchRecord as any).team2Name : null);
+                    if (storedName && typeof storedName === 'string' && storedName.trim() && !storedName.startsWith('Pareja')) {
+                        const parts = storedName.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(Boolean);
+                        if (parts.length >= 2) {
+                            return { p1Name: parts[0], p2Name: parts[1], p1Photo: null, p2Photo: null, name: storedName.trim() };
+                        }
+                        if (parts.length === 1) {
+                            return { p1Name: parts[0], p2Name: getSimulatedName(gender, seed * 2 + 1), p1Photo: null, p2Photo: null, name: `${parts[0]} / ${getSimulatedName(gender, seed * 2 + 1)}` };
+                        }
+                    }
+
+                    // 4) Fallback: equipo por índice (nombre + apellido)
+                    if (teamByIndex) {
+                        const p1 = fullName(teamByIndex.p1).trim() || getSimulatedName(gender, seed * 2);
+                        const p2 = fullName(teamByIndex.p2).trim() || getSimulatedName(gender, seed * 2 + 1);
+                        return { p1Name: p1, p2Name: p2, p1Photo: teamByIndex.p1?.photo || null, p2Photo: teamByIndex.p2?.photo || null, name: `${p1} / ${p2}` };
+                    }
+
+                    const p1Sim = getSimulatedName(gender, seed * 2);
+                    const p2Sim = getSimulatedName(gender, seed * 2 + 1);
+                    return { p1Name: p1Sim, p2Name: p2Sim, p1Photo: null, p2Photo: null, name: `${p1Sim} / ${p2Sim}` };
+                };
+
+                const t1 = resolveTeam(found.team1, found.team1Index ?? 1, found);
+                const t2 = resolveTeam(found.team2, found.team2Index ?? 2, found);
 
                 const matchData = {
                     ...found,
@@ -297,8 +784,8 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     .sort((a: any, b: any) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
                     .slice(0, 3)
                     .map((mx: any) => {
-                        const rt1 = resolveTeam(mx.team1, mx.team1Index);
-                        const rt2 = resolveTeam(mx.team2, mx.team2Index);
+                        const rt1 = resolveTeam(mx.team1, mx.team1Index, mx);
+                        const rt2 = resolveTeam(mx.team2, mx.team2Index, mx);
                         return {
                             ...mx,
                             t1Name: rt1.name,
@@ -312,14 +799,19 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     .sort((a: any, b: any) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime())[0];
 
                 if (next) {
-                    const rnt1 = resolveTeam(next.team1, next.team1Index);
-                    const rnt2 = resolveTeam(next.team2, next.team2Index);
+                    const rnt1 = resolveTeam(next.team1, next.team1Index, next);
+                    const rnt2 = resolveTeam(next.team2, next.team2Index, next);
                     setNextMatch({
                         ...next,
                         t1Name: rnt1.name,
                         t2Name: rnt2.name,
                     });
+                } else {
+                    setNextMatch(null); // Clear next match if none found
                 }
+                setLoading(false);
+            } else {
+                setMatch(null); // No match found for the given matchId
                 setLoading(false);
             }
         };
@@ -337,32 +829,21 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
             if (currentTournament) updateAll(currentTournament, currentMatches);
         });
 
-        // 2. Firestore Subscriptions (Fallback / Event view support)
-        let unsubFT = () => { };
-        let unsubFM = () => { };
+        // Polling de respaldo: cuando el partido está LIVE, refrescar cada 3s por si Realtime no dispara
+        const pollInterval = setInterval(async () => {
+            const ms = await dataService.getMatches(id);
+            if (ms?.length && currentTournament) {
+                currentMatches = ms;
+                updateAll(currentTournament, currentMatches);
+            }
+        }, 3000);
 
-        if (db) {
-            unsubFT = onSnapshot(doc(db, 'tournaments', id), (snap) => {
-                if (!snap.exists()) return;
-                currentTournament = { id: snap.id, ...snap.data() };
-                if (currentMatches.length > 0) updateAll(currentTournament, currentMatches);
-            });
-
-            unsubFM = onSnapshot(collection(db, 'tournaments', id, 'matches'), (snap) => {
-                if (snap.empty) return;
-                currentMatches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                if (currentTournament) updateAll(currentTournament, currentMatches);
-            });
-        }
-
-        // Safety timeout to stop spinner if no data found
         const timeout = setTimeout(() => setLoading(false), 10000);
 
         return () => {
             unsubT();
             unsubM();
-            unsubFT();
-            unsubFM();
+            clearInterval(pollInterval);
             clearTimeout(timeout);
         };
     }, [id, matchId]);
@@ -380,15 +861,49 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return () => clearInterval(interval);
     }, [adFreq, adDur, adMedia.length]);
 
-    if (loading || !match) return (
+    if (loading) return (
         <div className="h-screen bg-black flex items-center justify-center">
             <div className="w-12 h-12 border-4 border-padel-primary border-t-transparent rounded-full animate-spin" />
         </div>
     );
 
+    if (!match) return (
+        <div className="h-screen bg-[#050505] flex flex-col items-center justify-center p-8 text-center">
+            <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6">
+                <Trophy className="w-10 h-10 text-gray-600" />
+            </div>
+            <h1 className="text-2xl font-black italic uppercase text-white mb-2">Partido no encontrado</h1>
+            <p className="text-gray-400 max-w-md">No hemos podido encontrar la información de este partido. Por favor, verifica el enlace o vuelve al panel del torneo.</p>
+            <button
+                onClick={() => window.location.href = `/tournaments/${id}`}
+                className="mt-8 px-8 py-3 bg-white text-black rounded-xl font-black italic uppercase tracking-widest text-xs hover:scale-105 transition-all"
+            >
+                Volver al Torneo
+            </button>
+        </div>
+    );
+
     // ── Valores del marcador: preferir RTDB si hay marcador en vivo ──────────
     const lm = liveMarcador;
-    const modoPuntos: 'normal' | 'tiebreak' | 'super_tiebreak' = lm?.modo_puntos || (match?.matchFormat === 'SUPER_TIEBREAK' || match?.superTiebreak ? 'super_tiebreak' : (match?.matchFormat === 'TIEBREAK' || match?.tiebreak ? 'tiebreak' : 'normal'));
+
+    // Games en el set actual
+    const gamesT1 = lm ? (lm.games?.local ?? 0) : (match.games?.t1 ?? 0);
+    const gamesT2 = lm ? (lm.games?.visitante ?? 0) : (match.games?.t2 ?? 0);
+
+    // Sets ganados
+    const setsT1 = lm ? (lm.sets?.local ?? 0) : (match.sets?.t1 ?? 0);
+    const setsT2 = lm ? (lm.sets?.visitante ?? 0) : (match.sets?.t2 ?? 0);
+
+    // Set actual
+    const currentSet = setsT1 + setsT2 + 1;
+
+    const modoPuntos: 'normal' | 'tiebreak' | 'super_tiebreak' = lm?.modo_puntos ||
+        (match?.matchFormat === 'SUPER_TIEBREAK' || match?.superTiebreak || (currentSet === 3 && match?.matchFormat === 'SET_3_STB')
+            ? 'super_tiebreak'
+            : (match?.matchFormat === 'TIEBREAK' || match?.tiebreak || (gamesT1 === 6 && gamesT2 === 6)
+                ? 'tiebreak'
+                : 'normal'));
+
     const isTiebreak = modoPuntos === 'tiebreak';
     const isSTB = modoPuntos === 'super_tiebreak';
 
@@ -408,19 +923,10 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
     const tbT2 = lm ? Number(lm.puntos?.visitante ?? 0) : (match.tiebreakScore?.t2 ?? (Number(ptsT2Raw) || 0));
     const stbT1 = lm ? Number(lm.puntos?.local ?? 0) : (match.superTiebreakScore?.t1 ?? (Number(ptsT1Raw) || 0));
     const stbT2 = lm ? Number(lm.puntos?.visitante ?? 0) : (match.superTiebreakScore?.t2 ?? (Number(ptsT2Raw) || 0));
+
+    // Lógica Híbrida: si es tiebreak o supertiebreak, mostrar puntos numéricos. Si no, notación tenis.
     const ptsT1 = isSTB ? String(stbT1) : isTiebreak ? String(tbT1) : toTennis(ptsT1Raw);
     const ptsT2 = isSTB ? String(stbT2) : isTiebreak ? String(tbT2) : toTennis(ptsT2Raw);
-
-    // Sets ganados
-    const setsT1 = lm ? (lm.sets?.local ?? 0) : (match.sets?.t1 ?? 0);
-    const setsT2 = lm ? (lm.sets?.visitante ?? 0) : (match.sets?.t2 ?? 0);
-
-    // Games en el set actual
-    const gamesT1 = lm ? (lm.games?.local ?? 0) : (match.games?.t1 ?? 0);
-    const gamesT2 = lm ? (lm.games?.visitante ?? 0) : (match.games?.t2 ?? 0);
-
-    // Set actual (para columnas S1/S2/S3 — solo visible de Firestore)
-    const currentSet = setsT1 + setsT2 + 1;
 
     // Set boxes helper (solo Set 1 y Set 2; STB se ve en el game actual)
     const SetBoxes = ({ team }: { team: 1 | 2 }) => (
@@ -447,13 +953,13 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                         }}
                     >
                         {isCurrent && <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />}
-                        <span className="font-black uppercase text-gray-500 tracking-widest" style={{ fontSize: 'clamp(5px,0.5vw,9px)', marginBottom: '2px' }}>{`SET ${setNum}`}</span>
+                        <span className="font-black uppercase text-gray-500 tracking-widest" style={{ fontSize: 'clamp(10px,0.9vw,16px)', marginBottom: '2px' }}>{`SET ${setNum}`}</span>
                         <motion.span
                             key={isCurrent ? match.games?.[`t${team}`] : (pastVal ?? setNum)}
                             initial={isCurrent ? { scale: 1.5, opacity: 0 } : {}}
                             animate={{ scale: 1, opacity: 1 }}
                             className={`font-black italic ${isCurrent ? 'text-white' : 'text-white/40'}`}
-                            style={{ fontSize: 'clamp(16px,3vw,52px)', lineHeight: 1 }}
+                            style={{ fontSize: 'clamp(24px,3.5vw,60px)', lineHeight: 1 }}
                         >
                             {val}
                         </motion.span>
@@ -500,11 +1006,34 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
         return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
     })();
 
+    // Activa el cronómetro cuando el marker inicia el partido (status LIVE en match),
+    // y también cuando existe estado de cronómetro en pizarra_cancha_state.
+    const markerDurationStartMs = getMarkerDurationStartMs(match);
+    const markerDurationEndMs = getMarkerDurationEndMs(match);
+
+    /**
+     * Un solo indicador de saque: no mezclar lm.saque OR match.server (provoca dos destellos).
+     * Prioridad: match.server (BD, lo controla el marker) → refuerzo lm.saque si aún no hay server válido.
+     */
+    const mServer = match?.server;
+    const mTeam = Number(mServer?.team);
+    const mPlayer = Number(mServer?.player);
+    const lSaque = lm?.saque;
+    const lTeam = Number(lSaque?.equipo);
+    const lPlayer = Number(lSaque?.jugador);
+    // null = sin saque definido → ninguna pelota se muestra hasta que el marker lo seleccione
+    const displayServer: { team: 1 | 2; player: 1 | 2 } | null =
+        ((mTeam === 1 || mTeam === 2) && (mPlayer === 1 || mPlayer === 2))
+            ? { team: mTeam as 1 | 2, player: mPlayer as 1 | 2 }
+            : ((lTeam === 1 || lTeam === 2) && (lPlayer === 1 || lPlayer === 2))
+                ? { team: lTeam as 1 | 2, player: lPlayer as 1 | 2 }
+                : null;
+
     const relojTheme = relojOcasion || 'default';
 
     return (
         <div
-            className={`h-screen w-screen text-white overflow-hidden font-outfit relative flex flex-col transition-colors duration-1000 ${isFinal ? 'bg-[#000] border-8 border-[#FFD700]/20' : 'bg-[#050505]'}`}
+            className={`min-h-screen h-screen w-screen text-white overflow-hidden font-outfit relative flex flex-col transition-colors duration-1000 ${isFinal ? 'bg-[#000] border-8 border-[#FFD700]/20' : 'bg-[#050505]'}`}
             style={{ padding: 'clamp(6px,1vh,16px) clamp(8px,1.2vw,20px)', gap: 'clamp(4px,0.8vh,12px)' }}
         >
             {/* Grand Final ambient glow */}
@@ -531,479 +1060,425 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="flex flex-col h-full relative z-10"
-                        style={{ gap: 'clamp(4px,0.8vh,12px)' }}
+                        className="flex flex-col h-full w-full relative z-10"
                     >
-                        {/* ══════════════ HEADER BAR ══════════════ */}
+                        {/* ══════════════ HEADER BAR (10%) ══════════════ */}
                         <div
-                            className="flex items-center justify-between flex-shrink-0 border border-white/8 bg-white/[0.03] backdrop-blur-sm"
+                            className="flex items-center justify-between flex-shrink-0 border border-white/8 bg-white/[0.03] backdrop-blur-sm px-6"
                             style={{
-                                borderRadius: 'clamp(10px,1.4vw,22px)',
-                                padding: 'clamp(6px,1vh,14px) clamp(10px,1.8vw,28px)',
+                                height: '10vh',
+                                borderRadius: '0 0 clamp(10px,1.4vw,22px) clamp(10px,1.4vw,22px)',
+                                marginBottom: '0.5vh'
                             }}
                         >
                             {/* Left: Tournament & Match Info */}
-                            <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-4 h-full py-2">
                                 {tournament?.logo && (
-                                    <div className="w-[clamp(40px,5vw,100px)] aspect-square bg-white/5 rounded-2xl p-2 border border-white/10 flex items-center justify-center">
+                                    <div className="h-full aspect-square bg-white/5 rounded-xl p-1.5 border border-white/10 flex items-center justify-center">
                                         <img src={tournament.logo} className="w-full h-full object-contain" />
                                     </div>
                                 )}
-                                <div className="flex flex-col items-start justify-center" style={{ gap: 'clamp(1px,0.25vh,5px)' }}>
-                                    {/* Pista — grande (clamp para display TV); siempre la del partido resuelto por matchId */}
-                                    <span className="label-cancha leading-none"
-                                        style={{ fontSize: 'clamp(16px,2.2vw,38px)' }}>
+                                <div className="flex flex-col items-start justify-center">
+                                    <span className="label-cancha leading-none font-black italic uppercase"
+                                        style={{ fontSize: 'clamp(14px,1.8vw,32px)' }}>
                                         {match.courtName ?? (match.court != null ? `Pista ${match.court}` : 'Pista –')}
                                     </span>
-                                    {/* Fase / Ronda — mediana */}
-                                    {(match.roundName || match.groupName) && (
-                                        <span className="font-black italic uppercase tracking-tight leading-none"
-                                            style={{ fontSize: 'clamp(10px,1.2vw,20px)', color: 'rgba(255,255,255,0.60)' }}>
-                                            {match.roundName || match.groupName}
-                                        </span>
-                                    )}
-                                    {/* Categoría — solo categoría (sin género ni formato debajo) */}
-                                    {tournament?.category && (
-                                        <span className="font-black italic uppercase tracking-wide leading-none"
-                                            style={{ fontSize: 'clamp(10px,1.3vw,22px)', color: 'rgba(255,255,255,0.55)' }}>
-                                            {formatCategory(tournament.category)}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Center: Tiempo del partido — duración en vivo (cronómetro) o hora programada */}
-                            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center">
-                                {matchDuration ? (
-                                    <>
-                                        <span className="font-bold uppercase text-white/50 tracking-[0.35em] leading-none" style={{ fontSize: 'clamp(6px,0.7vw,11px)' }}>Tiempo de juego</span>
-                                        <span className="font-black italic tracking-tighter leading-none mt-0.5 tabular-nums" style={{ fontSize: 'clamp(24px,3.2vw,56px)', color: primaryColor }}>{matchDuration}</span>
-                                    </>
-                                ) : matchTimeDisplay ? (
-                                    <>
-                                        <span className="font-bold uppercase text-white/50 tracking-[0.35em] leading-none" style={{ fontSize: 'clamp(6px,0.7vw,11px)' }}>Partido</span>
-                                        <span className="font-black italic tracking-tighter leading-none mt-0.5" style={{ fontSize: 'clamp(20px,2.8vw,48px)', color: primaryColor }}>{matchTimeDisplay}</span>
-                                    </>
-                                ) : null}
-                                {tournament?.broadcastingSettings?.sponsors?.filter((s: any) => s.active).length > 0 && (
-                                    <div className="flex items-center gap-2 mt-2 opacity-60">
-                                        <span className="text-[7px] font-black italic text-gray-600 uppercase tracking-[0.3em]" style={{ writingMode: 'vertical-rl' }}>PATROCINA</span>
-                                        <div className="w-[clamp(40px,5vw,100px)] h-[clamp(18px,2.2vh,36px)] relative">
-                                            <AnimatePresence mode="wait">
-                                                <motion.img
-                                                    key={sponsorIdx}
-                                                    src={tournament.broadcastingSettings.sponsors.filter((s: any) => s.active)[sponsorIdx]?.logoUrl}
-                                                    initial={{ opacity: 0, y: 8 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    exit={{ opacity: 0, y: -8 }}
-                                                    transition={{ duration: 0.5 }}
-                                                    className="w-full h-full object-contain"
-                                                />
-                                            </AnimatePresence>
-                                        </div>
-                                        <span className="text-[7px] font-black italic text-gray-600 uppercase tracking-[0.3em]" style={{ writingMode: 'vertical-rl' }}>SPONSOR</span>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Right: Date / Time / Temp — horizontal pill (estilo según ocasión) */}
-
-                            {/* Right: Date / Time / Temp — horizontal pill */}
-                            <div className={`flex items-center border transition-all relative overflow-hidden ${tournament?.broadcastingSettings?.clockStyle === 'broadcast'
-                                ? 'bg-black/60 border-white/20 shadow-[0_0_30px_rgba(204,255,0,0.1)]'
-                                : 'border-white/8 bg-white/[0.04] backdrop-blur-sm'
-                                }`}
-                                style={{ borderRadius: 'clamp(10px,1.2vw,20px)' }}>
-
-                                {tournament?.broadcastingSettings?.clockStyle === 'broadcast' && tournament?.broadcastingSettings?.clockImageUrl && (
-                                    <div className="absolute inset-0 opacity-40 mix-blend-overlay">
-                                        <img src={tournament.broadcastingSettings.clockImageUrl} className="w-full h-full object-cover" />
-                                    </div>
-                                )}
-
-                                {showLive && (
-                                    <div className="flex items-center gap-1.5 px-3 py-1 bg-red-600/20 border-r border-white/5 animate-pulse">
-                                        <div className="w-1.5 h-1.5 bg-red-500 rounded-full shadow-[0_0_8px_#ef4444]" />
-                                        <span className="text-[8px] font-black uppercase tracking-widest text-red-500">LIVE</span>
-                                    </div>
-                                )}
-
-                                {/* Temperatura primero en el bloque derecho */}
-                                {temp !== null && (
-                                    <>
-                                        <div className="self-stretch w-px bg-white/[0.08]" />
-                                        <div className="flex items-center gap-[0.4vw] relative z-10"
-                                            style={{ padding: 'clamp(5px,0.9vh,12px) clamp(12px,1.6vw,24px)' }}>
-                                            <Thermometer style={{ width: 'clamp(9px,1vw,16px)', height: 'clamp(9px,1vw,16px)', color: primaryColor, flexShrink: 0 }} />
-                                            <span className="font-black italic tracking-tighter"
-                                                style={{ fontSize: 'clamp(14px,1.8vw,30px)', color: primaryColor }}>{temp}°C</span>
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* Luego hora y fecha */}
-                                <div className="flex flex-col items-center justify-center relative z-10"
-                                    style={{ padding: 'clamp(5px,0.9vh,12px) clamp(14px,1.8vw,28px)', gap: 'clamp(1px,0.2vh,3px)' }}>
-                                    <span className={`font-black italic tracking-tighter leading-none ${tournament?.broadcastingSettings?.clockStyle === 'broadcast' ? 'text-padel-primary' : 'text-white'}`}
-                                        style={{ fontSize: 'clamp(16px,2.2vw,36px)' }}>{clock.time}</span>
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-bold uppercase text-gray-500 tracking-widest leading-none"
-                                            style={{ fontSize: 'clamp(5px,0.55vw,9px)' }}>{clock.date}</span>
-                                        {matchDuration && (
-                                            <>
-                                                <div className="w-1 h-1 bg-gray-700 rounded-full" />
-                                                <span
-                                                    className={`font-black italic uppercase tracking-widest leading-none ${cronometroTipo === 'minimal' ? 'text-white/90 text-[0.6em]' :
-                                                        cronometroTipo === 'broadcast' ? 'text-padel-primary drop-shadow-[0_0_8px_rgba(204,255,0,0.4)]' :
-                                                            cronometroTipo === 'digital' ? 'text-cyan-400 font-mono tabular-nums' : 'text-padel-primary'
-                                                        }`}
-                                                    style={{ fontSize: 'clamp(6px,0.65vw,10px)' }}
-                                                >{matchDuration}</span>
-                                            </>
+                                    <div className="flex flex-col items-start leading-tight mt-1">
+                                        {(match.roundName || match.groupName) && (
+                                            <span className="font-bold italic uppercase tracking-tight"
+                                                style={{ fontSize: 'clamp(8px,0.8vh,14px)', color: 'rgba(255,255,255,0.60)' }}>
+                                                {match.roundName || match.groupName}
+                                            </span>
                                         )}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* ══════════════ MAIN GRID ══════════════ */}
-                        <div
-                            className="flex-1 grid min-h-0"
-                            style={{
-                                gridTemplateColumns: '1fr 1fr',
-                                gridTemplateRows: 'auto 1fr',
-                                gap: 'clamp(4px,0.8vh,12px)',
-                            }}
-                        >
-                            {/* ── TENNIS SCOREBOARD — spans both columns ── */}
-                            <div
-                                className="border border-white/8 bg-white/[0.025] overflow-hidden flex flex-col"
-                                style={{ gridColumn: '1 / -1', borderRadius: 'clamp(12px,1.6vw,26px)' }}
-                            >
-                                {/* Column headers — orden: PTS | G | S1 | S2 */}
-                                <div className="flex items-center border-b border-white/[0.05]">
-                                    <div className="flex-1" />
-                                    {/* Puntos del game */}
-                                    <div className="flex items-center justify-center border-l border-white/[0.05]"
-                                        style={{ width: 'clamp(68px,9vw,145px)', padding: 'clamp(4px,0.6vh,8px) 0', backgroundColor: 'rgba(255,255,255,0.06)', marginRight: 'clamp(4px,0.5vw,10px)' }}>
-                                        <span className="font-black uppercase tracking-widest text-white/50" style={{ fontSize: 'clamp(7px,0.8vw,12px)' }}>PTS</span>
-                                    </div>
-                                    {/* Games */}
-                                    <div className="flex items-center justify-center border-l border-white/[0.05]"
-                                        style={{ width: 'clamp(45px,6vw,95px)', padding: 'clamp(4px,0.6vh,8px) 0', backgroundColor: `${primaryColor}10`, marginRight: 'clamp(4px,0.5vw,10px)' }}>
-                                        <span className="font-black uppercase tracking-widest" style={{ fontSize: 'clamp(7px,0.8vw,12px)', color: primaryColor }}>G</span>
-                                    </div>
-                                    {/* Sets S1 S2 */}
-                                    {[1, 2].map(s => (
-                                        <div key={s} className="flex items-center justify-center border-l border-white/[0.05]"
-                                            style={{ width: 'clamp(45px,6vw,95px)', padding: 'clamp(4px,0.6vh,8px) 0', marginRight: s < 2 ? 'clamp(4px,0.5vw,10px)' : '0' }}>
-                                            <span className="font-black uppercase tracking-widest text-gray-600" style={{ fontSize: 'clamp(7px,0.8vw,12px)' }}>S{s}</span>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* ── Team 1 row ── */}
-                                <div className="flex-1 flex items-center relative border-b border-white/[0.05] overflow-hidden min-h-0">
-                                    <div className="flex-1 flex items-center min-w-0"
-                                        style={{ padding: 'clamp(8px,1.2vh,20px) clamp(14px,2vw,32px)', gap: 'clamp(6px,1vw,18px)' }}>
-                                        {/* Jugadores: avatares + nombres */}
-                                        <div className="flex flex-col min-w-0 flex-1" style={{ gap: 'clamp(4px,0.6vh,10px)' }}>
-                                            {/* Jugador 1 del equipo 1 */}
-                                            <div className="flex items-center min-w-0" style={{ gap: 'clamp(6px,0.8vw,14px)' }}>
-                                                {/* 🎾 Pelota saque — inline al lado del nombre */}
-                                                <AnimatePresence>
-                                                    {(lm?.saque?.equipo === 1 || match.server?.team === 1) && (
-                                                        <motion.span
-                                                            initial={{ opacity: 0, x: -6, scale: 0.5 }}
-                                                            animate={{ opacity: 1, x: 0, scale: 1 }}
-                                                            exit={{ opacity: 0, x: -6, scale: 0.5 }}
-                                                            transition={{ duration: 0.25 }}
-                                                            style={{ fontSize: 'clamp(12px,1.6vw,28px)', lineHeight: 1, flexShrink: 0 }}
-                                                        >🎾</motion.span>
-                                                    )}
-                                                </AnimatePresence>
-                                                <img
-                                                    src={match.t1p1Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t1p1)}&background=222&color=fff&bold=true`}
-                                                    className="rounded-full flex-shrink-0 object-cover"
-                                                    style={{ width: 'clamp(22px,2.8vw,48px)', height: 'clamp(22px,2.8vw,48px)', border: `2px solid ${primaryColor}55` }}
-                                                />
-                                                <p className="font-black italic uppercase tracking-tighter text-white leading-none"
-                                                    style={{ fontSize: 'clamp(13px,2vw,36px)' }}>
-                                                    {lm?.equipo_1?.nombre || match.t1p1}
-                                                </p>
-                                            </div>
-                                            {/* Jugador 2 del equipo 1 */}
-                                            <div className="flex items-center min-w-0" style={{ gap: 'clamp(6px,0.8vw,14px)' }}>
-                                                <img
-                                                    src={match.t1p2Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t1p2)}&background=333&color=fff&bold=true`}
-                                                    className="rounded-full flex-shrink-0 object-cover"
-                                                    style={{ width: 'clamp(22px,2.8vw,48px)', height: 'clamp(22px,2.8vw,48px)', border: '2px solid rgba(255,255,255,0.15)' }}
-                                                />
-                                                <p className="font-black italic uppercase tracking-tighter text-white/70 leading-none"
-                                                    style={{ fontSize: 'clamp(13px,2vw,36px)' }}>
-                                                    {match.t1p2}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {/* Puntos del game actual — Team 1 */}
-                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                        style={{ width: 'clamp(68px,9vw,145px)', backgroundColor: 'rgba(255,255,255,0.04)', marginRight: 'clamp(4px,0.5vw,10px)' }}>
-                                        <AnimatePresence mode="popLayout">
-                                            <motion.span key={ptsT1} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
-                                                className="font-black italic text-white"
-                                                style={{ fontSize: 'clamp(36px,6vw,105px)' }}>
-                                                {ptsT1}
-                                            </motion.span>
-                                        </AnimatePresence>
-                                    </div>
-                                    {/* Games */}
-                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                        style={{ width: 'clamp(45px,6vw,95px)', backgroundColor: `${primaryColor}12`, marginRight: 'clamp(4px,0.5vw,10px)' }}>
-                                        <AnimatePresence mode="popLayout">
-                                            <motion.span key={gamesT1} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}
-                                                className="font-black italic" style={{ fontSize: 'clamp(20px,3.5vw,64px)', color: primaryColor }}>
-                                                {gamesT1}
-                                            </motion.span>
-                                        </AnimatePresence>
-                                    </div>
-                                    {/* Set 1 y Set 2 */}
-                                    {[1, 2].map(s => {
-                                        const isPast = s < currentSet; const isCur = s === currentSet;
-                                        const val = isPast ? (match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? 0) : isCur ? (match.games?.t1 ?? '') : '';
-                                        return (
-                                            <div key={s} className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                                style={{ width: 'clamp(45px,6vw,95px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent', marginRight: s < 3 ? 'clamp(4px,0.5vw,10px)' : '0' }}>
-                                                <motion.span key={String(val)} initial={isCur ? { scale: 1.4, opacity: 0 } : {}} animate={{ scale: 1, opacity: 1 }}
-                                                    className={`font-black italic ${isPast || isCur ? 'text-white/80' : 'text-white/10'}`}
-                                                    style={{ fontSize: 'clamp(20px,3.5vw,64px)' }}>{val}</motion.span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* ── Team 2 row ── */}
-                                <div className="flex-1 flex items-center relative overflow-hidden min-h-0">
-                                    <div className="flex-1 flex items-center min-w-0"
-                                        style={{ padding: 'clamp(8px,1.2vh,20px) clamp(14px,2vw,32px)', gap: 'clamp(6px,1vw,18px)' }}>
-                                        {/* Jugadores: avatares + nombres */}
-                                        <div className="flex flex-col min-w-0 flex-1" style={{ gap: 'clamp(4px,0.6vh,10px)' }}>
-                                            {/* Jugador 1 del equipo 2 */}
-                                            <div className="flex items-center min-w-0" style={{ gap: 'clamp(6px,0.8vw,14px)' }}>
-                                                {/* 🎾 Pelota saque — inline al lado del nombre */}
-                                                <AnimatePresence>
-                                                    {(lm?.saque?.equipo === 2 || match.server?.team === 2) && (
-                                                        <motion.span
-                                                            initial={{ opacity: 0, x: -6, scale: 0.5 }}
-                                                            animate={{ opacity: 1, x: 0, scale: 1 }}
-                                                            exit={{ opacity: 0, x: -6, scale: 0.5 }}
-                                                            transition={{ duration: 0.25 }}
-                                                            style={{ fontSize: 'clamp(12px,1.6vw,28px)', lineHeight: 1, flexShrink: 0 }}
-                                                        >🎾</motion.span>
-                                                    )}
-                                                </AnimatePresence>
-                                                <img
-                                                    src={match.t2p1Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t2p1)}&background=222&color=fff&bold=true`}
-                                                    className="rounded-full flex-shrink-0 object-cover"
-                                                    style={{ width: 'clamp(22px,2.8vw,48px)', height: 'clamp(22px,2.8vw,48px)', border: `2px solid ${primaryColor}55` }}
-                                                />
-                                                <p className="font-black italic uppercase tracking-tighter text-white leading-none"
-                                                    style={{ fontSize: 'clamp(13px,2vw,36px)' }}>
-                                                    {lm?.equipo_2?.nombre || match.t2p1}
-                                                </p>
-                                            </div>
-                                            {/* Jugador 2 del equipo 2 */}
-                                            <div className="flex items-center min-w-0" style={{ gap: 'clamp(6px,0.8vw,14px)' }}>
-                                                <img
-                                                    src={match.t2p2Photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(match.t2p2)}&background=333&color=fff&bold=true`}
-                                                    className="rounded-full flex-shrink-0 object-cover"
-                                                    style={{ width: 'clamp(22px,2.8vw,48px)', height: 'clamp(22px,2.8vw,48px)', border: '2px solid rgba(255,255,255,0.15)' }}
-                                                />
-                                                <p className="font-black italic uppercase tracking-tighter text-white/70 leading-none"
-                                                    style={{ fontSize: 'clamp(13px,2vw,36px)' }}>
-                                                    {match.t2p2}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {/* Puntos del game actual — Team 2 */}
-                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                        style={{ width: 'clamp(68px,9vw,145px)', backgroundColor: 'rgba(255,255,255,0.04)', marginRight: 'clamp(4px,0.5vw,10px)' }}>
-                                        <AnimatePresence mode="popLayout">
-                                            <motion.span key={ptsT2} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
-                                                className="font-black italic text-white"
-                                                style={{ fontSize: 'clamp(36px,6vw,105px)' }}>
-                                                {ptsT2}
-                                            </motion.span>
-                                        </AnimatePresence>
-                                    </div>
-                                    {/* Games */}
-                                    <div className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                        style={{ width: 'clamp(45px,6vw,95px)', backgroundColor: `${primaryColor}12`, marginRight: 'clamp(4px,0.5vw,10px)' }}>
-                                        <AnimatePresence mode="popLayout">
-                                            <motion.span key={gamesT2} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}
-                                                className="font-black italic" style={{ fontSize: 'clamp(20px,3.5vw,64px)', color: primaryColor }}>
-                                                {gamesT2}
-                                            </motion.span>
-                                        </AnimatePresence>
-                                    </div>
-                                    {/* Set 1 y Set 2 */}
-                                    {[1, 2].map(s => {
-                                        const isPast = s < currentSet; const isCur = s === currentSet;
-                                        const val = isPast ? (match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? 0) : isCur ? (match.games?.t2 ?? '') : '';
-                                        return (
-                                            <div key={s} className="flex items-center justify-center border-l border-white/[0.05] self-stretch"
-                                                style={{ width: 'clamp(45px,6vw,95px)', background: isCur ? 'rgba(255,255,255,0.04)' : 'transparent', marginRight: s < 3 ? 'clamp(4px,0.5vw,10px)' : '0' }}>
-                                                <motion.span key={String(val)} initial={isCur ? { scale: 1.4, opacity: 0 } : {}} animate={{ scale: 1, opacity: 1 }}
-                                                    className={`font-black italic ${isPast || isCur ? 'text-white/80' : 'text-white/10'}`}
-                                                    style={{ fontSize: 'clamp(20px,3.5vw,64px)' }}>{val}</motion.span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* ── Cell 3: Banner Publicitario (bottom-left) ── */}
-                            <div
-                                className="border border-white/8 bg-white/[0.02] relative overflow-hidden flex items-center justify-center"
-                                style={{ borderRadius: 'clamp(12px,1.6vw,26px)' }}
-                            >
-                                <AnimatePresence mode="wait">
-                                    {adBanner.isVisible && adBanner.currentImageUrl ? (
-                                        adBanner.currentImageUrl.endsWith('.mp4') ? (
-                                            <motion.video key={adBanner.currentImageUrl} src={adBanner.currentImageUrl}
-                                                autoPlay muted loop initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                                transition={{ duration: 0.6 }} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <motion.img key={adBanner.currentImageUrl} src={adBanner.currentImageUrl}
-                                                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                                transition={{ duration: 0.6 }} className="w-full h-full object-contain"
-                                                style={{ padding: 'clamp(10px,1.5vh,24px) clamp(14px,2vw,32px)' }} />
-                                        )
-                                    ) : (
-                                        <motion.div key="ad-placeholder" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                            className="flex flex-col items-center justify-center gap-3 w-full h-full">
-                                            <motion.div animate={{ opacity: [0.3, 0.7, 0.3] }} transition={{ repeat: Infinity, duration: 2.5 }}>
-                                                <Megaphone style={{ width: 'clamp(20px,3vw,50px)', height: 'clamp(20px,3vw,50px)', color: primaryColor, opacity: 0.25 }} />
-                                            </motion.div>
-                                            <span className="font-black italic uppercase tracking-[0.3em] text-gray-700" style={{ fontSize: 'clamp(6px,0.7vw,12px)' }}>
-                                                ESPACIO PUBLICITARIO
+                                        <div className="flex flex-col items-start mt-0.5">
+                                            <span className="font-bold italic uppercase leading-none mb-1"
+                                                style={{ fontSize: 'clamp(8px,0.8vh,14px)', color: 'rgba(255,255,255,0.5)' }}>
+                                                {tournament?.gender === 'female' ? 'Femenino' : tournament?.gender === 'mixed' ? 'Mixto' : 'Masculino'}
                                             </span>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-
-                            {/* ── Cell 4: Carrusel de Imágenes (bottom-right) ── */}
-                            <div
-                                className="border border-white/8 bg-white/[0.02] relative overflow-hidden flex items-center justify-center"
-                                style={{ borderRadius: 'clamp(12px,1.6vw,26px)' }}
-                            >
-                                <AnimatePresence mode="wait">
-                                    {carouselImages.length > 0 ? (
-                                        <motion.img
-                                            key={carouselImages[carouselIdx % carouselImages.length]?.url}
-                                            src={carouselImages[carouselIdx % carouselImages.length]?.url}
-                                            initial={{ opacity: 0, scale: 1.04 }} animate={{ opacity: 1, scale: 1 }}
-                                            exit={{ opacity: 0, scale: 0.97 }} transition={{ duration: 0.7 }}
-                                            className="w-full h-full object-contain"
-                                            style={{ padding: 'clamp(10px,1.5vh,24px) clamp(14px,2vw,32px)' }}
-                                        />
-                                    ) : (
-                                        <motion.div key="carousel-placeholder" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                                            className="flex flex-col items-center justify-center gap-3 w-full h-full">
-                                            <div className="flex items-end gap-[clamp(3px,0.5vw,8px)]">
-                                                {[0.5, 0.75, 1].map((h, i) => (
-                                                    <motion.div key={i} animate={{ scaleY: [h, 1, h] }}
-                                                        transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }}
-                                                        className="rounded-full"
-                                                        style={{ width: 'clamp(4px,0.5vw,8px)', height: `clamp(${Math.round(h * 14)}px,${h * 1.6}vw,${Math.round(h * 26)}px)`, backgroundColor: primaryColor, opacity: 0.2 + i * 0.1 }} />
-                                                ))}
-                                            </div>
-                                            <span className="font-black italic uppercase tracking-[0.3em] text-gray-700" style={{ fontSize: 'clamp(6px,0.7vw,12px)' }}>
-                                                CARRUSEL IMÁGENES
-                                            </span>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-                        </div>
-
-                        {/* ══════════════ FOOTER BAR ══════════════ */}
-                        {tickerActivo && tickerTexto ? (
-                            <div
-                                className="flex-shrink-0 overflow-hidden border border-white/10 bg-[#0d0d0d] relative"
-                                style={{
-                                    borderRadius: 'clamp(10px,1.2vw,18px)',
-                                    height: 'clamp(38px,6.5vh,72px)',
-                                }}>
-                                {/* Etiqueta izquierda fija */}
-                                <div
-                                    className="absolute left-0 top-0 bottom-0 z-10 flex items-center px-[clamp(8px,1.2vw,18px)] gap-[clamp(4px,0.5vw,8px)] border-r border-white/10"
-                                    style={{ background: `linear-gradient(90deg, #0d0d0d 70%, transparent)` }}>
-                                    <div
-                                        className="rounded-full animate-pulse"
-                                        style={{ width: 'clamp(6px,0.7vw,10px)', height: 'clamp(6px,0.7vw,10px)', backgroundColor: primaryColor, boxShadow: `0 0 8px ${primaryColor}` }}
-                                    />
-                                    <span
-                                        className="font-black italic uppercase tracking-widest whitespace-nowrap"
-                                        style={{ fontSize: 'clamp(7px,0.8vw,13px)', color: primaryColor }}>
-                                        EN VIVO
-                                    </span>
-                                </div>
-
-                                {/* Scroll continuo */}
-                                <div
-                                    className="flex items-center h-full"
-                                    style={{
-                                        paddingLeft: 'clamp(80px,12vw,160px)',
-                                        animation: `ticker-scroll ${tickerVelocidad}s linear infinite`,
-                                        whiteSpace: 'nowrap',
-                                    }}>
-                                    {/* Dos copias del texto = loop continuo sin salto */}
-                                    {[0, 1].map(i => (
-                                        <span
-                                            key={i}
-                                            className="font-black italic uppercase tracking-tighter inline-block"
-                                            style={{
-                                                fontSize: 'clamp(10px,1.4vw,22px)',
-                                                color: i === 0 ? 'white' : 'rgba(255,255,255,0.5)',
-                                                paddingRight: 'clamp(40px,8vw,120px)',
-                                            }}>
-                                            {tickerTexto}
-                                            {recentResults.length > 0 && recentResults.map((res: any, idx: number) => (
-                                                <span key={`res-${idx}`} className="font-bold opacity-60" style={{ marginLeft: 'clamp(20px,3.5vw,100px)' }}>
-                                                    &nbsp;&bull;&nbsp;RESULTADO: {res.t1Name} {res.games_sets?.[0]?.t1 ?? 0}-{res.games_sets?.[0]?.t2 ?? 0} {res.t2Name}
-                                                </span>
-                                            ))}
-                                            {nextMatch && (
-                                                <span
-                                                    className="font-bold"
-                                                    style={{ color: primaryColor, marginLeft: 'clamp(20px,3.5vw,100px)' }}>
-                                                    &nbsp;&bull;&nbsp;A CONTINUACIÓN: {nextMatch.t1Name} vs {nextMatch.t2Name}
+                                            {tournament?.category && (
+                                                <span className="font-bold italic uppercase tracking-wide leading-none"
+                                                    style={{ fontSize: 'clamp(10px,1vh,16px)', color: 'rgba(255,255,255,0.9)' }}>
+                                                    {formatCategory(tournament.category)}
                                                 </span>
                                             )}
-                                        </span>
-                                    ))}
+                                        </div>
+                                    </div>
                                 </div>
+                            </div>
 
-                                {/* Gradiente que se desvanece a la derecha */}
-                                <div
-                                    className="absolute right-0 top-0 bottom-0 pointer-events-none"
-                                    style={{ width: 'clamp(40px,6vw,80px)', background: 'linear-gradient(to left, #0d0d0d, transparent)' }}
+                            {/* Center: Match Control (Timer/Clock) */}
+                            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center">
+                                <MatchDurationCounter
+                                    matchStatus={match?.status}
+                                    startTimeMs={markerDurationStartMs}
+                                    endTimeMs={markerDurationEndMs}
+                                    cronData={lm?.cronometro}
+                                    primaryColor={primaryColor}
+                                    cronometroTipo={cronometroTipo}
                                 />
                             </div>
-                        ) : (
-                            /* Footer placeholder (mismo alto para no saltar) */
-                            <div
-                                className="flex-shrink-0 border border-white/[0.04] bg-white/[0.01]"
-                                style={{ borderRadius: 'clamp(10px,1.2vw,18px)', height: 'clamp(38px,6.5vh,72px)' }}
-                            />
-                        )}
+
+                            {/* Right: Clock Box (Time / Date + Temp) */}
+                            <div className="flex items-center gap-3">
+
+
+                                <div className={`flex flex-col items-center justify-center border transition-all duration-700 relative overflow-hidden ${tournament?.broadcastingSettings?.clockStyle === 'broadcast'
+                                    ? 'bg-black/60 border-white/15'
+                                    : 'border-white/8 bg-white/[0.04] backdrop-blur-md'
+                                    }`}
+                                    style={{
+                                        borderRadius: 'clamp(10px,1.4vw,22px)',
+                                        paddingTop: '0.5vw',
+                                        paddingLeft: '1.2vw',
+                                        paddingRight: '1.2vw',
+                                        paddingBottom: '1.0vw',
+                                        minWidth: 'fit-content'
+                                    }}>
+                                    <div className="flex flex-col items-center w-full">
+                                        <DisplayClockTime className="font-black italic tracking-tighter leading-none"
+                                            style={{
+                                                fontSize: 'clamp(20px,2.6vw,44px)',
+                                                color: tournament?.broadcastingSettings?.clockStyle === 'broadcast' ? primaryColor : 'white',
+                                                textShadow: tournament?.broadcastingSettings?.clockStyle === 'broadcast' ? `0 0 20px ${primaryColor}40` : 'none'
+                                            }}
+                                        />
+
+                                        <div className="flex items-center justify-between w-full mt-1.5 pt-1.5 border-t border-white/10 gap-3">
+                                            <DisplayClockDate className="font-bold uppercase text-white/40 tracking-tight whitespace-nowrap"
+                                                style={{ fontSize: 'clamp(10px,1.1vw,18px)' }}
+                                            />
+
+                                            {temp !== null && (
+                                                <div className="flex items-center gap-1 pl-3 border-l border-white/10">
+                                                    <Thermometer style={{ width: 'clamp(8px,0.8vw,14px)', height: 'clamp(8px,0.8vw,14px)', color: primaryColor }} />
+                                                    <span className="font-black italic tracking-tighter" style={{ fontSize: 'clamp(10px,1vw,16px)', color: primaryColor }}>{temp}°C</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ══════════════ MARCADOR / PIZARRA (30%) ══════════════ */}
+                        <div
+                            className="flex-shrink-0 border border-white/10 bg-black/60 overflow-hidden flex flex-col mb-[0.8vh] relative shadow-2xl"
+                            style={{ height: '30.5vh', borderRadius: 'clamp(12px,1.6vw,26px)' }}
+                        >
+                            {/* Match Title Bar (FINAL - TOURNAMENT NAME) */}
+                            <div className="h-[20%] flex items-center justify-center bg-black relative border-b border-white/[0.05]">
+                                <div className="absolute bottom-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#ccff00] to-transparent opacity-50" />
+                                <h2 className="font-black italic uppercase tracking-[0.2em] text-white flex items-center gap-4" style={{ fontSize: 'clamp(12px,2.2vh,32px)' }}>
+                                    <span style={{ color: primaryColor }}>{match.roundName || 'Partido'}</span>
+                                    {tournament?.nombre && (
+                                        <span>{tournament.nombre}</span>
+                                    )}
+                                </h2>
+                            </div>
+
+                            {/* Column headers dynámicos: SET 3 solo si formato es mejor-de-3 */}
+                            {(() => {
+                                const fmt = (match?.matchFormat || tournament?.matchFormat || '') as string;
+                                const has3rdSet = fmt === 'BEST_OF_3' || fmt === '3SETS' || fmt === 'THREE_SETS';
+                                const setCols = has3rdSet ? [1, 2, 3] : [1, 2];
+                                const grid = has3rdSet ? 'grid-cols-[1fr_8%_8%_8%_12%]' : 'grid-cols-[1fr_8%_8%_12%]';
+                                return (
+                                    <>
+                                        <div className={`grid ${grid} items-center border-b border-white/[0.1] bg-black/40 h-[10%] px-6`}>
+                                            <div />
+                                            {setCols.map(s => (
+                                                <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
+                                                    <span className="font-black uppercase tracking-widest text-white/40 leading-none text-center w-full" style={{ fontSize: 'clamp(12px,1.2vw,20px)' }}>
+                                                        SET {s}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                            <div className="flex items-center justify-center border-l border-white/[0.15] h-full" style={{ backgroundColor: `${primaryColor}20` }}>
+                                                <span className="font-black uppercase tracking-widest leading-none text-center w-full" style={{ fontSize: 'clamp(12px,1.2vw,20px)', color: primaryColor }}>
+                                                    PTS
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Team 1 row */}
+                                        <div className={`flex-1 grid ${grid} items-center relative border-b border-white/[0.1] overflow-hidden px-6`}>
+                                            <div className="flex flex-col justify-center h-full pr-6 relative">
+                                                <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden shadow-2xl">
+                                                    <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
+                                                    <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
+                                                        <span className="flex items-center">
+                                                            <AnimatePresence>
+                                                                {(displayServer?.team === 1 && displayServer?.player === 1) && (
+                                                                    <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
+                                                                        className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
+                                                                        <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
+                                                            {processDisplayName(match.t1p1) || match.t1p1}
+                                                        </span>
+                                                        <span className="text-white/30 mx-3">/</span>
+                                                        <span className="flex items-center">
+                                                            <AnimatePresence>
+                                                                {(displayServer?.team === 1 && displayServer?.player === 2) && (
+                                                                    <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
+                                                                        className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
+                                                                        <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
+                                                            {processDisplayName(match.t1p2) || match.t1p2}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {setCols.map((s: number) => {
+                                                let val: string | number = '';
+                                                if (s < currentSet) {
+                                                    val = lm?.historico_sets?.[s - 1]?.local ?? match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? 0;
+                                                } else if (s === currentSet) {
+                                                    val = gamesT1;
+                                                }
+                                                return (
+                                                    <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
+                                                        <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                            <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ backgroundColor: `${primaryColor}40` }}>
+                                                <motion.span key={ptsT1} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                                                    className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(42px,9vh,110px)' }}>{ptsT1}</motion.span>
+                                            </div>
+                                        </div>
+
+                                        {/* Team 2 row */}
+                                        <div className={`flex-1 grid ${grid} items-center relative overflow-hidden px-6`}>
+                                            <div className="flex flex-col justify-center h-full pr-6 relative">
+                                                <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden">
+                                                    <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
+                                                    <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
+                                                        <span className="flex items-center">
+                                                            <AnimatePresence>
+                                                                {(displayServer?.team === 2 && displayServer?.player === 1) && (
+                                                                    <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
+                                                                        className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
+                                                                        <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
+                                                            {processDisplayName(match.t2p1) || match.t2p1}
+                                                        </span>
+                                                        <span className="text-white/30 mx-3">/</span>
+                                                        <span className="flex items-center">
+                                                            <AnimatePresence>
+                                                                {(displayServer?.team === 2 && displayServer?.player === 2) && (
+                                                                    <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
+                                                                        className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
+                                                                        <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
+                                                            {processDisplayName(match.t2p2) || match.t2p2}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {setCols.map((s: number) => {
+                                                let val: string | number = '';
+                                                if (s < currentSet) {
+                                                    val = lm?.historico_sets?.[s - 1]?.visitante ?? match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? 0;
+                                                } else if (s === currentSet) {
+                                                    val = gamesT2;
+                                                }
+                                                return (
+                                                    <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
+                                                        <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                            <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ backgroundColor: `${primaryColor}40` }}>
+                                                <motion.span key={ptsT2} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                                                    className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(42px,9vh,110px)' }}>{ptsT2}</motion.span>
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+
+                        {/* ══════════════ PUBLICIDAD (50%) ══════════════ */}
+                        <div
+                            className="flex-shrink-0 flex flex-row gap-2 mb-[1vh] px-6"
+                            style={{ height: '49vh' }}
+                        >
+                            {/* Video Ad / Hub Media (takes the left half) */}
+                            <div className="w-1/2 border border-white/8 bg-white/[0.02] relative overflow-hidden rounded-3xl">
+                                <AnimatePresence mode="wait">
+                                    {hubMedia ? (
+                                        hubMedia.tipo === 'url_web' ? (
+                                            <motion.iframe
+                                                key={hubMedia.url}
+                                                src={hubMedia.url}
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
+                                                className="w-full h-full border-none pointer-events-none"
+                                                loading="lazy"
+                                            />
+                                        ) : isVideoMedia(hubMedia) ? (
+                                            <motion.video
+                                                key={hubMedia.url}
+                                                src={hubMedia.url}
+                                                autoPlay
+                                                muted
+                                                loop
+                                                playsInline
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            <motion.img
+                                                key={hubMedia.url}
+                                                src={hubMedia.url}
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
+                                                className="w-full h-full object-contain p-4"
+                                            />
+                                        )
+                                    ) : hubLibraryVids.length > 0 ? (
+                                        (() => {
+                                            const currentVid = hubLibraryVids[hubLibraryVidIdx % hubLibraryVids.length];
+                                            return (
+                                                <motion.video
+                                                    key={currentVid.url}
+                                                    src={currentVid.url}
+                                                    autoPlay
+                                                    muted
+                                                    loop
+                                                    playsInline
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    exit={{ opacity: 0 }}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            );
+                                        })()
+                                    ) : adBanner.isVisible && adBanner.currentImageUrl ? (
+                                        isVideoMedia(adBanner.currentImageUrl) ? (
+                                            <motion.video key={adBanner.currentImageUrl} src={adBanner.currentImageUrl} autoPlay muted loop playsInline initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <motion.img key={adBanner.currentImageUrl} src={adBanner.currentImageUrl} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full object-contain p-4" />
+                                        )
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center h-full opacity-20">
+                                            <Megaphone className="w-12 h-12 mb-2" style={{ color: primaryColor }} />
+                                            <span className="font-black italic uppercase tracking-widest text-[10px]">Espacio Publicitario Hub</span>
+                                        </div>
+                                    )}
+
+                                </AnimatePresence>
+                            </div>
+                            {/* Carousel Ad / Sponsors (takes the right half) */}
+                            <div className="w-1/2 border border-white/10 bg-white/[0.03] relative overflow-hidden rounded-2xl">
+                                <AnimatePresence mode="wait">
+                                    {hubCarousel ? (
+                                        hubCarousel.tipo === 'url_web' ? (
+                                            <motion.iframe
+                                                key={hubCarousel.url}
+                                                src={hubCarousel.url}
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
+                                                className="w-full h-full border-none pointer-events-none"
+                                                loading="lazy"
+                                            />
+                                        ) : isVideoMedia(hubCarousel) ? (
+                                            <motion.video
+                                                key={hubCarousel.url}
+                                                src={hubCarousel.url}
+                                                autoPlay
+                                                muted
+                                                loop
+                                                playsInline
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            <motion.img
+                                                key={hubCarousel.url}
+                                                src={hubCarousel.url}
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
+                                                className="w-full h-full object-contain p-4"
+                                            />
+                                        )
+                                    ) : hubLibraryImgs.length > 0 ? (
+                                        (() => {
+                                            const currentImg = hubLibraryImgs[hubLibraryImgIdx % hubLibraryImgs.length];
+                                            return (
+                                                <motion.img
+                                                    key={currentImg.url}
+                                                    src={currentImg.url}
+                                                    initial={{ opacity: 0, x: 20 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    exit={{ opacity: 0, x: -20 }}
+                                                    transition={{ duration: 0.5 }}
+                                                    className="w-full h-full object-contain p-4"
+                                                />
+                                            );
+                                        })()
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center h-full opacity-20">
+                                            <Megaphone className="w-12 h-12 mb-2" style={{ color: primaryColor }} />
+                                            <span className="font-black italic uppercase tracking-widest text-[10px]">Carrusel de Imágenes Hub</span>
+                                        </div>
+                                    )}
+
+                                </AnimatePresence>
+                            </div>
+                        </div>
+
+                        {/* ══════════════ FOOTER BAR (10%) ══════════════ */}
+                        <div
+                            className="flex-shrink-0 overflow-hidden border-t border-white/10 bg-black/40 backdrop-blur-md relative flex items-center mb-[0.8vh]"
+                            style={{
+                                height: '9.5vh',
+                                borderRadius: 'clamp(10px,1.2vw,18px) clamp(10px,1.2vw,18px) 0 0',
+                            }}>
+                            <div className="w-full overflow-hidden relative py-2">
+                                <div className="flex whitespace-nowrap animate-marquee">
+                                    {(supabaseTickerMessages.length > 0 ? supabaseTickerMessages : [{ mensaje: 'tira informativa TV a la espera de contenido.' }]).map((msg: any, idx: number) => (
+                                        <div key={idx} className="flex items-center px-12">
+                                            <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
+                                            <span className="text-3xl font-black italic uppercase tracking-widest text-white">
+                                                {msg.mensaje || msg.texto}
+                                            </span>
+                                            <Star className="w-5 h-5 text-padel-primary ml-16 fill-padel-primary/20" />
+                                        </div>
+                                    ))}
+                                    {/* Duplicate for infinite scroll */}
+                                    {(supabaseTickerMessages.length > 0 ? supabaseTickerMessages : [{ mensaje: 'tira informativa TV a la espera de contenido.' }]).map((msg: any, idx: number) => (
+                                        <div key={`dup-${idx}`} className="flex items-center px-12">
+                                            <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
+                                            <span className="text-3xl font-black italic uppercase tracking-widest text-white">
+                                                {msg.mensaje || msg.texto}
+                                            </span>
+                                            <Star className="w-5 h-5 text-padel-primary ml-16 fill-padel-primary/20" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
 
                         {/* Overlay animación disparada por el marker (debajo de los puntos) */}
                         <AnimatePresence>
-                            {animacionActual?.id && animacionesMarcador[animacionActual.id]?.url && (
+                            {animacionActual?.id && (animacionActual.url || animacionesMarcador[animacionActual.id]?.url) && (
                                 <motion.div
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
@@ -1011,15 +1486,21 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     transition={{ duration: 0.3 }}
                                     className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 pointer-events-none"
                                 >
-                                    {/\.(gif|webp|mp4|webm|mov)(\?|$)/i.test(animacionesMarcador[animacionActual.id].url) ? (
-                                        animacionesMarcador[animacionActual.id].url.match(/\.(mp4|webm|mov)(\?|$)/i) ? (
-                                            <video src={animacionesMarcador[animacionActual.id].url} autoPlay muted playsInline className="max-w-full max-h-full object-contain" />
-                                        ) : (
-                                            <img src={animacionesMarcador[animacionActual.id].url} alt="" className="max-w-full max-h-full object-contain" />
-                                        )
-                                    ) : (
-                                        <img src={animacionesMarcador[animacionActual.id].url} alt="" className="max-w-full max-h-full object-contain" />
-                                    )}
+                                    {(() => {
+                                        const url = animacionActual.url || animacionesMarcador[animacionActual.id]?.url;
+                                        if (!url) return null;
+                                        const isVideo = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url);
+                                        const isLottie = /\.(json)(\?|$)/i.test(url) || url.toLowerCase().includes('lottie');
+                                        const isImage = /\.(gif|webp|png|jpg|jpeg)(\?|$)/i.test(url);
+
+                                        if (isVideo) {
+                                            return <video src={url} autoPlay muted playsInline className="max-w-full max-h-full object-contain" />;
+                                        }
+                                        if (isLottie) {
+                                            return <LottieAnimationOverlay url={url} />;
+                                        }
+                                        return <img src={url} alt="" className="max-w-full max-h-full object-contain" />;
+                                    })()}
                                 </motion.div>
                             )}
                         </AnimatePresence>
@@ -1028,8 +1509,8 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                     /* ══════════════ AD MODE ══════════════ */
                     <motion.div key="ad" initial={{ opacity: 0, scale: 1.1 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
                         className="h-full w-full bg-black flex items-center justify-center relative">
-                        {adMedia[currentAdIdx]?.endsWith('.mp4') ? (
-                            <video src={adMedia[currentAdIdx]} autoPlay muted loop className="w-full h-full object-cover" />
+                        {adMedia[currentAdIdx] && /\.(mp4|webm|mov|m4v)(\?|$)/i.test(adMedia[currentAdIdx]) ? (
+                            <video src={adMedia[currentAdIdx]} autoPlay muted loop playsInline className="w-full h-full object-cover" />
                         ) : adMedia[currentAdIdx] ? (
                             <img src={adMedia[currentAdIdx]} className="w-full h-full object-contain p-12 lg:p-32" />
                         ) : (
@@ -1040,11 +1521,20 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                                     <Megaphone className="w-24 h-24 text-padel-primary filter drop-shadow-[0_0_20px_rgba(204,255,0,0.5)]" />
                                 </motion.div>
                                 <div className="space-y-4">
-                                    <h1 className="text-8xl font-black italic uppercase tracking-tighter text-white leading-none">
-                                        Espacio <span className="text-padel-primary">Publicitario</span><br />
-                                        <span className="text-5xl opacity-40">Disponible</span>
-                                    </h1>
-                                    <p className="text-2xl font-bold uppercase tracking-[0.5em] text-[#fb923c] animate-pulse">
+                                    <div className="relative mb-12 flex justify-center scale-75 lg:scale-100">
+                                        <div className="absolute -inset-20 bg-padel-primary/10 blur-[100px] rounded-full animate-pulse" />
+                                        <h1 className="text-8xl font-black italic uppercase tracking-tighter flex items-center gap-6 relative z-10 leading-none">
+                                            <span className="text-padel-primary drop-shadow-[0_0_50px_rgba(204,255,0,0.3)]">SMART</span>
+                                            <div className="mb-4">
+                                                <BouncingBall size={80} />
+                                            </div>
+                                            <span className="text-white">PADEL</span>
+                                        </h1>
+                                    </div>
+                                    <h2 className="text-5xl font-black italic uppercase tracking-tighter text-white leading-none opacity-40">
+                                        Espacio <span className="text-padel-primary opacity-100">Publicitario</span> Disponible
+                                    </h2>
+                                    <p className="text-xl font-bold uppercase tracking-[0.5em] text-[#fb923c] animate-pulse">
                                         Tu marca aquí • Padel Smart TV
                                     </p>
                                 </div>
@@ -1065,14 +1555,29 @@ export default function FullScreenDisplay({ params }: { params: Promise<{ id: st
                 )}
             </AnimatePresence>
 
+            {/* Botón Fullscreen forzado para Firestick (y trigger para autoplay de video) */}
+            <button 
+                onClick={() => {
+                    if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen().catch(err => {
+                            console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+                        });
+                    } else {
+                        document.exitFullscreen();
+                    }
+                }}
+                className="absolute bottom-2 right-2 z-[9999] opacity-0 hover:opacity-100 focus:opacity-100 transition-opacity p-3 backdrop-blur-md bg-black/50 rounded-xl border border-white/20"
+                title="Pantalla Completa"
+            >
+                <div className="w-5 h-5 text-white/50 hover:text-white flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" /></svg>
+                </div>
+            </button>
+
             <style jsx global>{`
                 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
                 .font-outfit { font-family: 'Outfit', sans-serif; }
                 body { background: black; margin: 0; padding: 0; }
-                @keyframes ticker-scroll {
-                    0%   { transform: translateX(0); }
-                    100% { transform: translateX(-50%); }
-                }
             `}</style>
         </div>
     );

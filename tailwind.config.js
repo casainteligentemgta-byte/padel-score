@@ -1,5 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+    corePlugins: {
+        preflight: false, // Evita que Tailwind resetee el fondo y deje todo blanco
+    },
     content: [
         "./src/**/*.{js,ts,jsx,tsx,mdx}",
     ],
@@ -8,6 +11,9 @@ export default {
             colors: {
                 primary: '#ec5b13',
                 neon: '#CCFF00',
+                brand: '#ccff00',
+                surface: '#0a0a0a',
+                surfaceCard: '#111111',
                 padel: {
                     primary: '#ccff00',
                     secondary: '#1a1a1a',

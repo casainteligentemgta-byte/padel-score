@@ -75,6 +75,7 @@ export default function AdminTournamentMasterView({ tournamentId, isAdmin }: Adm
     const [tournament, setTournament] = useState<any>(null);
     const [matches, setMatches] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [testMyWhatsAppLoading, setTestMyWhatsAppLoading] = useState(false);
 
     useEffect(() => {
         if (!tournamentId) return;
@@ -138,6 +139,35 @@ export default function AdminTournamentMasterView({ tournamentId, isAdmin }: Adm
         await dataService.updateMatch(tournamentId, matchId, { needsReferee: !currentStatus });
     };
 
+    // Prueba temporal: WhatsApp de fuego para confirmar Twilio/Sandbox/envs.
+    const testMyWhatsApp = async () => {
+        if (testMyWhatsAppLoading) return;
+        setTestMyWhatsAppLoading(true);
+
+        try {
+            const res = await fetch('/api/admin/inscriptions/notify-whatsapp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phone: '+584122117270',
+                    playerName: 'Admin Pro',
+                    tournamentName: 'Torneo de Prueba Antigravity',
+                }),
+            });
+
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                console.error('[AdminTournamentMasterView] testMyWhatsApp failed:', data);
+            } else {
+                console.log('[AdminTournamentMasterView] testMyWhatsApp success:', data);
+            }
+        } catch (err) {
+            console.error('[AdminTournamentMasterView] testMyWhatsApp error:', err);
+        } finally {
+            setTestMyWhatsAppLoading(false);
+        }
+    };
+
     if (!isAdmin) {
         return (
             <div className="h-screen bg-[#0a0a0a] flex items-center justify-center p-10">
@@ -175,6 +205,15 @@ export default function AdminTournamentMasterView({ tournamentId, isAdmin }: Adm
                             </div>
                             <PadelRallyAnimation />
                         </div>
+                        <button
+                            type="button"
+                            onClick={testMyWhatsApp}
+                            disabled={testMyWhatsAppLoading}
+                            className="mt-4 w-full md:w-auto px-5 py-2.5 rounded-2xl border border-white/10 bg-white/5 text-[10px] font-black italic uppercase tracking-widest hover:bg-white/10 transition-all disabled:opacity-50 disabled:pointer-events-none"
+                            title="Enviar WhatsApp de prueba (admin)"
+                        >
+                            {testMyWhatsAppLoading ? 'Enviando...' : '🚀 PROBAR MI WHATSAPP'}
+                        </button>
                         <h1 className="text-5xl font-black italic uppercase tracking-tighter">
                             TOURNEY <span className="text-[#ccff00]">ADMIN CONTROL</span>
                         </h1>

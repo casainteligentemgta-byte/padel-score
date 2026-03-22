@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Tv,
@@ -42,12 +42,13 @@ import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import type { MediaContent } from '@/lib/supabase/publicidad';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────────────────────────────────────────
-export default function AdsManagement({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
+export default function AdsManagement() {
+    const id = useRouteSegment('id');
     const router = useRouter();
     const { user, isAdmin, loading: authLoading } = useAuth();
     const [tournament, setTournament] = useState<any>(null);
@@ -1163,8 +1164,6 @@ export default function AdsManagement({ params }: { params: Promise<{ id: string
             <style jsx global>{`
                 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
                 .font-outfit { font-family: 'Outfit', sans-serif; }
-                @keyframes marquee { 0%{ transform: translateX(0) } 100%{ transform: translateX(-50%) } }
-                .animate-marquee { animation: marquee 18s linear infinite; }
             `}</style>
         </div>
     );

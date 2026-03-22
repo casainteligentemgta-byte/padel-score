@@ -2,7 +2,7 @@
  * Tipos y constantes para el sistema de publicidad y pantallas (Supabase)
  */
 
-export type MediaTipo = 'video_url' | 'video_file' | 'imagen';
+export type MediaTipo = 'video_url' | 'video_file' | 'imagen' | 'animacion' | 'url_web';
 
 export interface MediaContent {
   id: string;
@@ -11,6 +11,7 @@ export interface MediaContent {
   nombre_sponsor: string | null;
   duracion_segundos: number | null;
   nombre: string | null;
+  activa: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -41,6 +42,7 @@ export interface TiraInformativa {
   mensaje: string;
   activo: boolean;
   orden: number;
+  pantalla_id?: string | null;
   created_at: string;
   updated_at: string;
 }

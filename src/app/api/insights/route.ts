@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { collection, getDocs } from 'firebase/firestore';
-import { requireAuth } from '@/lib/authServer';
+import { requireAuth } from '@/lib/authServerSupabase';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 export async function GET(req: Request) {
+    if (!checkRateLimit(req)) {
+        return NextResponse.json({ error: 'Demasiadas solicitudes de informes. Intenta más tarde.' }, { status: 429 });
+    }
     const authResult = await requireAuth(req);
     if (authResult instanceof NextResponse) return authResult;
     try {

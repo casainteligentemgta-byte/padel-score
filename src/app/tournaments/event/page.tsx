@@ -1,14 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     RefreshCw, Trophy, ArrowLeft, Tv, FileText, Share2, Calendar, Clock
 } from 'lucide-react';
-import { onSnapshot, doc, updateDoc, collection } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { dataService } from '@/lib/dataService';
 import { useAuth } from '@/lib/AuthContext';
 import { MatchStatus } from '@/types/tournament';
 import jsPDF from 'jspdf';
@@ -25,6 +24,21 @@ import { ShareModal, SponsorModal, RulesModal } from './components/Modals';
 import {
     formatCategory, formatHHMM, toMs, toMinute, TABS, KNOWN_COMPLEXES
 } from './utils';
+
+function getFaseLabel(match: any): string {
+    if (!match) return '';
+    if (match.stage === 'GROUP_STAGE') return 'Fase de grupos';
+    if (match.stage !== 'MAIN_DRAW') return 'Eliminatoria';
+    if (match.roundName) {
+        const name = String(match.roundName).toUpperCase();
+        if (name.includes('SEMIFINAL')) return 'Semifinales';
+        if (name.includes('CUARTOS')) return 'Cuartos';
+        if (name.includes('OCTAVOS') || name.includes('8VO')) return 'Octavos';
+        if (name.includes('FINAL') && !name.includes('SEMI') && !name.includes('CUARTOS') && !name.includes('OCTAVOS')) return 'Final';
+        return match.roundName;
+    }
+    return 'Eliminatoria';
+}
 
 // ── Main component (wrapped in Suspense below) ──────────────────────────────
 function EventView() {
@@ -49,6 +63,23 @@ function EventView() {
     const [activeTab, setActiveTab] = useState<string>('all');
     const [loading, setLoading] = useState(true);
 
+    // Fechas únicas con partidos (para selector de día)
+    const availableDates = useMemo(() => {
+        const dates = new Set<string>();
+        allMatches.forEach((m) => {
+            const raw = m.scheduledTime || m.time || '';
+            const datePart = typeof raw === 'string' ? raw.split('T')[0] : (raw && new Date(raw).toISOString().split('T')[0]);
+            if (datePart) dates.add(datePart);
+        });
+        return Array.from(dates).sort();
+    }, [allMatches]);
+    const [selectedDate, setSelectedDate] = useState<string>(availableDates[0] ?? '');
+    useEffect(() => {
+        if (availableDates.length > 0 && !availableDates.includes(selectedDate)) {
+            setSelectedDate(availableDates[0]);
+        }
+    }, [availableDates, selectedDate]);
+
     // Modals state
     const [showShareModal, setShowShareModal] = useState(false);
     const [isSponsorEditOpen, setIsSponsorEditOpen] = useState(false);
@@ -65,10 +96,7 @@ function EventView() {
     const generateMatchesPDF = () => {
         const doc = new jsPDF() as any;
         const firstT = Object.values(tournaments)[0];
-        const eventName = firstT?.complexName ?? 'Evento de Padel';
-        const eventDate = firstT?.startDate
-            ? new Date(firstT.startDate).toLocaleDateString('es-ES')
-            : '';
+        const eventName = firstT?.eventName ?? firstT?.name ?? firstT?.complexName ?? 'Evento de Padel';
 
         doc.setFillColor(10, 10, 10);
         doc.rect(0, 0, 210, 20, 'F');
@@ -79,20 +107,41 @@ function EventView() {
 
         doc.setTextColor(100, 100, 100);
         doc.setFontSize(10);
-        doc.text(`PLANILLA DE JUEGOS - ${eventDate}`, 150, 14);
+        doc.text('PLANILLA DE JUEGOS', 150, 14);
+        doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}`, 15, 22);
 
-        const tableData = allMatches.map(m => [
-            formatHHMM(m.scheduledTime),
-            `Pista ${m.court}`,
-            formatCategory(m._category),
-            m.team1.name,
-            m.team2.name,
-            m.status === MatchStatus.FINISHED ? `${m.score1} - ${m.score2}` : (m.status === MatchStatus.LIVE ? 'En Vivo' : 'Pendiente')
-        ]);
+        const formatFecha = (v: any) => {
+            if (v == null || v === '') return '-';
+            const d = typeof v === 'string' ? new Date(v) : (v?.toDate ? v.toDate() : new Date(v));
+            return isNaN(d.getTime()) ? '-' : d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        };
+        // Una fila por partido (todas las categorías): 3 categorías × 7 partidos = 21 filas. Solo se evitan duplicados reales (mismo torneo + mismo id).
+        const seenMatchKeys = new Set<string>();
+        const list: any[] = [];
+        for (const m of allMatches) {
+            const matchKey = `${m._tournamentId ?? ''}_${m.id ?? m.matchId ?? ''}`;
+            if (seenMatchKeys.has(matchKey)) continue;
+            seenMatchKeys.add(matchKey);
+            list.push(m);
+        }
+        list.sort((a, b) => toMs(a.scheduledTime) - toMs(b.scheduledTime) || (Number(a.court ?? a.courtIndex ?? 0) - Number(b.court ?? b.courtIndex ?? 0)));
+        const tableData: string[][] = [];
+        for (const m of list) {
+            const hora = formatHHMM(m.scheduledTime ?? m.time);
+            const pista = String(m.court ?? m.courtIndex ?? '-').trim();
+            tableData.push([
+                hora,
+                pista === '-' ? '-' : `Pista ${pista}`,
+                formatCategory(m._category),
+                getFaseLabel(m),
+                m.team1?.name ?? m.team1Name ?? '?',
+                m.team2?.name ?? m.team2Name ?? '?'
+            ]);
+        }
 
         autoTable(doc, {
-            startY: 25,
-            head: [['Hora', 'Pista', 'Categoría', 'Equipo 1', 'Equipo 2', 'Resultado']],
+            startY: 28,
+            head: [['Hora', 'Pista', 'Categoría', 'Fase', 'Equipo 1', 'Equipo 2']],
             body: tableData,
             styles: { fontSize: 8, font: 'helvetica', cellPadding: 4, valign: 'middle' },
             headStyles: { fillColor: [0, 0, 0], textColor: [204, 255, 0], fontStyle: 'bold', minCellHeight: 10 },
@@ -105,7 +154,8 @@ function EventView() {
     };
 
     const handleShare = (type: 'whatsapp' | 'email' | 'download') => {
-        const eventName = Object.values(tournaments)[0]?.complexName ?? 'Evento de Padel';
+        const firstT = Object.values(tournaments)[0];
+        const eventName = firstT?.eventName ?? firstT?.name ?? firstT?.complexName ?? 'Evento de Padel';
         const shareUrl = window.location.href;
         const text = `Te comparto la planilla de juegos del evento *${eventName}*.\nPuedes ver los resultados en tiempo real aquí: ${shareUrl}`;
 
@@ -119,9 +169,14 @@ function EventView() {
         setShowShareModal(false);
     };
 
-    // Subscribe to all tournaments and their matches in parallel via onSnapshot
+    // Subscribe to all tournaments and their matches in parallel via dataService
     useEffect(() => {
         if (tournamentIds.length === 0) { setLoading(false); return; }
+
+        // Reset al entrar (o al cambiar ids) para no mostrar 14 partidos de una visita anterior
+        setTournaments({});
+        setAllMatches([]);
+        setLoading(true);
 
         const loaded: Record<string, boolean> = {};
         const unsubs: (() => void)[] = [];
@@ -130,27 +185,26 @@ function EventView() {
             loaded[tid] = false;
 
             // 1. Suscripción al Torneo (Metadatos)
-            const tRef = doc(db, 'tournaments', tid);
-            const unsubT = onSnapshot(tRef, snap => {
-                setTournaments(prev => {
-                    const next = { ...prev };
-                    if (snap.exists()) {
-                        const existing = next[tid] || {};
-                        next[tid] = { ...existing, id: tid, ...snap.data() };
-                    } else {
+            const unsubT = dataService.subscribeToTournament(tid, (tourneyData) => {
+                if (!tourneyData) {
+                    setTournaments(prev => {
+                        const next = { ...prev };
                         delete next[tid];
-                    }
-                    return next;
-                });
+                        return next;
+                    });
+                } else {
+                    setTournaments(prev => ({
+                        ...prev,
+                        [tid]: { ...(prev[tid] || {}), ...tourneyData, id: tid }
+                    }));
+                }
                 loaded[tid] = true;
                 if (Object.values(loaded).every(Boolean)) setLoading(false);
             });
             unsubs.push(unsubT);
 
-            // 2. Suscripción a la Sub-colección de Partidos
-            const mRef = collection(db, 'tournaments', tid, 'matches');
-            const unsubM = onSnapshot(mRef, snap => {
-                const tournamentMatches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            // 2. Suscripción a los Partidos
+            const unsubM = dataService.subscribeToMatches(tid, (tournamentMatches) => {
                 setTournaments(prev => ({
                     ...prev,
                     [tid]: { ...(prev[tid] || {}), id: tid, matches: tournamentMatches }
@@ -163,12 +217,19 @@ function EventView() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [idsParam]);
 
-    // Flatten + enrich all matches
+    // Flatten + enrich all matches (sin duplicados: un partido por torneo solo una vez)
     useEffect(() => {
         const flat: any[] = [];
-        Object.values(tournaments).forEach((t: any) => {
+        const seenKeys = new Set<string>();
+        // Solo torneos que pidió la URL, para no arrastrar datos viejos de otra visita
+        const tournamentsToList = Object.values(tournaments).filter((t: any) => t.id && tournamentIds.includes(t.id));
+        tournamentsToList.forEach((t: any) => {
             if (!t.matches) return;
             t.matches.forEach((m: any) => {
+                const matchKey = `${t.id}_${m.id ?? m.matchId ?? ''}`;
+                if (seenKeys.has(matchKey)) return;
+                seenKeys.add(matchKey);
+
                 let team1Obj: any = null;
                 let team2Obj: any = null;
 
@@ -194,13 +255,15 @@ function EventView() {
                 };
 
                 const genderValue = t.gender || (['MALE', 'FEMALE', 'MIXED'].includes(String(t.category)) ? t.category : undefined);
+                const court = m.court ?? (m.courtIndex !== undefined ? m.courtIndex + 1 : '-');
                 flat.push({
                     ...m,
                     _tournamentId: t.id,
                     _tournamentName: t.name,
                     _category: t.category,
                     _gender: genderValue,
-                    court: m.court ?? (m.courtIndex !== undefined ? m.courtIndex + 1 : '-'),
+                    _complexName: t.complexName ?? '',
+                    court: typeof court === 'number' ? court : (Number(court) || court),
                     team1: buildTeam(team1Obj, m.team1Index, m.team1Name),
                     team2: buildTeam(team2Obj, m.team2Index, m.team2Name),
                     team1Name: m.team1Name,
@@ -212,11 +275,11 @@ function EventView() {
         flat.sort((a, b) => {
             const td = toMs(a.scheduledTime) - toMs(b.scheduledTime);
             if (td !== 0) return td;
-            return (a.courtIndex ?? 0) - (b.courtIndex ?? 0);
+            return (a.courtIndex ?? Number(a.court) ?? 0) - (b.courtIndex ?? Number(b.court) ?? 0);
         });
 
         setAllMatches(flat);
-    }, [tournaments]);
+    }, [tournaments, tournamentIds]);
 
     const numCanchas = (() => {
         const t = Object.values(tournaments)[0];
@@ -241,16 +304,20 @@ function EventView() {
         return 1;
     })();
 
-    const allPending = allMatches.filter(m => m.status === MatchStatus.PENDING);
-    const earliestMinute = allPending.length > 0 ? toMinute(allPending[0].scheduledTime) : null;
+    const isMatchLive = (status: any) => status === 'LIVE' || status === 'IN_PROGRESS' || status === 'STARTED';
+    const isMatchPending = (status: any) => status === 'PENDING' || !status;
+    const isMatchFinished = (status: any) => status === 'FINISHED' || status === 'COMPLETED';
+
+    const allPending = allMatches.filter(m => isMatchPending(m.status));
     const numSlotsPorComenzar = Math.min(numCanchas, allPending.length);
     const nextUpMatches = allPending.slice(0, numSlotsPorComenzar);
 
     const effectiveLiveMatches = allMatches
-        .filter(m => m.status === MatchStatus.LIVE)
+        .filter(m => isMatchLive(m.status))
         .sort((a, b) => Number(a.court ?? 99) - Number(b.court ?? 99))
         .slice(0, numCanchas);
 
+    const nextUpIds = new Set(nextUpMatches.map(m => m.id));
     const effectiveLiveIds = new Set(effectiveLiveMatches.map(m => m.id));
 
     const liveCnt = Math.min(numCanchas, allMatches.filter(m => m.status === MatchStatus.LIVE).length);
@@ -260,19 +327,24 @@ function EventView() {
     const filtered = allMatches.filter(m => {
         if (activeTab === 'all') return true;
         if (activeTab === 'groups' || activeTab === 'rules') return false;
+        if (activeTab === 'live') return isMatchLive(m.status);
+        if (activeTab === MatchStatus.PENDING) return isMatchPending(m.status);
+        if (activeTab === MatchStatus.FINISHED) return isMatchFinished(m.status);
         return m.status === activeTab;
     });
 
     const handleSaveSponsor = async () => {
         setSavingSponsor(true);
         try {
-            await Promise.all(tournamentIds.map(tid =>
-                updateDoc(doc(db, 'tournaments', tid), {
+            await Promise.all(tournamentIds.map(tid => {
+                const existing = tournaments[tid] || {};
+                return dataService.updateTournament(tid, {
+                    ...existing,
                     sponsorLogoUrl: sponsorLogoDraft || null,
                     sponsorName: sponsorNameDraft || null,
                     sponsorLink: sponsorLinkDraft || null,
-                })
-            ));
+                });
+            }));
             setIsSponsorEditOpen(false);
         } catch (e) {
             console.error('[saveSponsor]', e);
@@ -282,17 +354,28 @@ function EventView() {
         }
     };
 
+    const handleUploadSponsorLogo = async (file: File) => {
+        const path = `logos/${Date.now()}_${file.name}`;
+        return await dataService.uploadFile(file, path, 'patrocinantes');
+    };
+
+
     const handleSaveEventRules = async () => {
         setSavingEventRules(true);
         try {
             const first = Object.values(tournaments)[0];
             const manuals = first?.rules?.manuals ?? [];
-            await Promise.all(tournamentIds.map(tid =>
-                updateDoc(doc(db, 'tournaments', tid), {
-                    'rules.content': eventRulesDraft,
-                    'rules.manuals': manuals
-                })
-            ));
+            await Promise.all(tournamentIds.map(tid => {
+                const existing = tournaments[tid] || {};
+                return dataService.updateTournament(tid, {
+                    ...existing,
+                    rules: {
+                        ...(existing.rules || {}),
+                        content: eventRulesDraft,
+                        manuals: manuals
+                    }
+                });
+            }));
             setIsEventRulesEditOpen(false);
         } catch (e) {
             console.error(e);
@@ -324,7 +407,13 @@ function EventView() {
     return (
         <div className="min-h-screen bg-[#0a0a0a] text-white font-outfit flex flex-col">
             <TournamentHeader
-                eventName={firstT?.name ?? firstT?.complexName ?? 'Evento'}
+                eventName={(() => {
+                    const raw = firstT?.eventName ?? firstT?.name ?? firstT?.complexName ?? 'Evento';
+                    return raw;
+                })()}
+                complexName={firstT?.complexName}
+                category={firstT?.category}
+                gender={firstT?.gender}
                 eventDate={firstT?.startDate}
                 allMatchesCount={allMatches.length}
                 liveCnt={liveCnt}
@@ -375,11 +464,14 @@ function EventView() {
                         filteredMatches={filtered}
                         allMatches={allMatches}
                         effectiveLiveIds={effectiveLiveIds}
-                        earliestMinute={earliestMinute}
+                        nextUpIds={nextUpIds}
                         numCanchas={numCanchas}
                         numSlotsPorComenzar={numSlotsPorComenzar}
                         tournaments={tournaments}
                         canManageTournament={!!canManageTournament}
+                        availableDates={availableDates}
+                        selectedDate={selectedDate}
+                        onSelectDate={setSelectedDate}
                         onEditRules={() => {
                             setEventRulesDraft(firstT?.rules?.content ?? '');
                             setIsEventRulesEditOpen(true);
@@ -404,8 +496,10 @@ function EventView() {
                 linkDraft={sponsorLinkDraft}
                 setLinkDraft={setSponsorLinkDraft}
                 onSave={handleSaveSponsor}
+                onUpload={handleUploadSponsorLogo}
                 saving={savingSponsor}
             />
+
 
             <RulesModal
                 isOpen={isEventRulesEditOpen}

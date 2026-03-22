@@ -2,24 +2,21 @@
 
 import { useEffect } from 'react';
 
+function hideOverlay() {
+    try {
+        const el = document.getElementById('root-loading');
+        if (el) el.style.setProperty('display', 'none');
+    } catch (_) {}
+}
+
 /**
- * Oculta el overlay #root-loading en cuanto el cliente hidrata.
- * Así la app se ve en local aunque AuthProvider tarde en resolver.
- * No elimina el nodo (evita insertBefore NotFoundError con React).
+ * Oculta el overlay #root-loading en cuanto React monta en el cliente.
  */
 export default function HideRootLoading() {
     useEffect(() => {
-        const hide = () => {
-            const el = document.getElementById('root-loading');
-            if (el) el.style.setProperty('display', 'none');
-        };
-        hide();
-        const id = requestAnimationFrame(hide);
-        const tid = setTimeout(hide, 50);
-        return () => {
-            cancelAnimationFrame(id);
-            clearTimeout(tid);
-        };
+        hideOverlay();
+        const tid = setTimeout(hideOverlay, 400);
+        return () => clearTimeout(tid);
     }, []);
     return null;
 }

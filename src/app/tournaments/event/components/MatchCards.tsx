@@ -6,13 +6,36 @@ import { motion } from 'framer-motion';
 import {
     Trophy, Gamepad2, Monitor, Camera, Tv
 } from 'lucide-react';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { dataService } from '@/lib/dataService';
+import { useAuth } from '@/lib/AuthContext';
 import { MatchStatus } from '@/types/tournament';
 import {
     resolveTeamNames, formatHHMM, formatCategory, formatGender,
     STATUS_COLORS, PENDING_NEXT_COLORS, PENDING_LATER_COLORS, CAT_COLORS
 } from '../utils';
+
+// Sedes ordenadas alfabéticamente (igual que en el generador),
+// mapeadas a su índice S1, S2, S3… para la URL corta de pizarra.
+const SEDE_INDEX: Record<string, number> = {
+    'El Bodeguero': 1,
+    'Elite': 2,
+    'Food Kart': 3,
+    'Margarita Padel': 4,
+    'Playa el Agua': 5,
+    'Sun Sol Costa Azul': 6,
+    'Sun Sol Pedro Gonzalez': 7,
+    'Tibisay': 8,
+};
+
+/** Construye la ruta corta: S{sedeIndex}/C{court}  */
+function buildShortPath(complexName: string | undefined, court: number | string | undefined): string {
+    const sIdx = (complexName && SEDE_INDEX[complexName]) ? SEDE_INDEX[complexName] : null;
+    const cNum = court != null ? Number(court) || court : null;
+    if (sIdx && cNum) return `S${sIdx}/C${cNum}`;
+    if (sIdx) return `S${sIdx}`;
+    if (cNum) return `C${cNum}`;
+    return '';
+}
 
 // ── Placeholder para pistas vacías ──────────────────────────────────────────
 export function PlaceholderMatchCard({ rank, mode = 'pending' }: { rank: number; mode?: 'pending' | 'live' }) {
@@ -40,6 +63,7 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
     const [t1p1, t1p2] = resolveTeamNames(match.team1, match.team1Name);
     const [t2p1, t2p2] = resolveTeamNames(match.team2, match.team2Name);
     const isLive = match.status === MatchStatus.LIVE;
+    const { isAdmin } = useAuth();
 
     const rankColors = isLive
         ? ['text-emerald-400', 'text-emerald-400', 'text-emerald-400', 'text-emerald-400', 'text-emerald-400', 'text-emerald-400']
@@ -47,15 +71,15 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
 
     const rankBg = isLive
         ? [
-            'bg-emerald-500/10 border-emerald-500/30',
-            'bg-emerald-500/10 border-emerald-500/25',
+            'bg-emerald-500/10 border-emerald-500/30 shadow-[0_4px_24px_rgba(16,185,129,0.1)]',
+            'bg-emerald-500/5 border-emerald-500/25',
             'bg-emerald-500/5 border-emerald-500/20',
             'bg-emerald-500/5 border-emerald-500/15',
             'bg-emerald-500/5 border-emerald-500/10',
             'bg-emerald-500/5 border-emerald-500/10',
         ]
         : [
-            'bg-[#ccff00]/10 border-[#ccff00]/30',
+            'bg-yellow-400/10 border-yellow-400/30 shadow-[0_4px_24px_rgba(250,204,21,0.08)]',
             'bg-white/5 border-white/15',
             'bg-white/[0.03] border-white/10',
             'bg-white/[0.02] border-white/[0.07]',
@@ -70,13 +94,37 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
 
     const safeRank = Math.min(rank, rankColors.length - 1);
 
-    const matchKey = match.id || (match.court ? `court_${match.court}` : (match.courtIndex != null ? `court_${match.courtIndex + 1}` : 'court_1'));
-    const controlHref = `/tournaments/${match._tournamentId}/score/${matchKey}`;
-    const pizarraHref = match.id
-        ? `/tournaments/${match._tournamentId}/display/${match.id}`
-        : `/tournaments/${match._tournamentId}/control`;
+    const matchKey = match.id || (match.court ? `court_${match.court}` : (match.courtIndex != null ? `court_${match.courtIndex + 1}` : `court_${rank + 1}`));
+    const canchaId = `cancha_${match.court ?? (match.courtIndex != null ? match.courtIndex + 1 : rank + 1)}`;
+
+    // Extraer los 4 jugadores individuales para pasarlos al marker
+    const p1Name = match.team1?.p1?.name ?? match.team1?.p1 ?? '';
+    const p2Name = match.team1?.p2?.name ?? match.team1?.p2 ?? '';
+    const p3Name = match.team2?.p1?.name ?? match.team2?.p1 ?? '';
+    const p4Name = match.team2?.p2?.name ?? match.team2?.p2 ?? '';
+    // Fallback: si no hay jugadores individuales, usar el nombre del equipo completo
+    const t1Display = (p1Name || p2Name) ? [p1Name, p2Name].filter(Boolean).join(' / ') : (match.team1?.name ?? match.team1Name ?? '');
+    const t2Display = (p3Name || p4Name) ? [p3Name, p4Name].filter(Boolean).join(' / ') : (match.team2?.name ?? match.team2Name ?? '');
+
+    const controlParams = new URLSearchParams();
+    if (p1Name) controlParams.set('p1', p1Name);
+    if (p2Name) controlParams.set('p2', p2Name);
+    if (p3Name) controlParams.set('p3', p3Name);
+    if (p4Name) controlParams.set('p4', p4Name);
+    // Fallback cuando no hay jugadores individuales
+    if (!p1Name && !p2Name) controlParams.set('team1', t1Display);
+    if (!p3Name && !p4Name) controlParams.set('team2', t2Display);
+
+    const controlHref = `/marker/${encodeURIComponent(canchaId)}?${controlParams.toString()}`;
+    const pizarraHref = `/tournaments/${match._tournamentId}/display/${encodeURIComponent(match.id || matchKey)}`;
     const camasHref = `/tournaments/${match._tournamentId}/control/broadcasting`;
-    const adsHref = `/tournaments/${match._tournamentId}/control/broadcasting`;
+    const adsHref = `/admin/publicidad`;
+
+    // URL corta para la pizarra: www.smartpadel58.com/S1/C1
+    const courtNum = match.court ?? (match.courtIndex != null ? match.courtIndex + 1 : rank + 1);
+    const shortPath = buildShortPath(match._complexName, courtNum);
+    const shortUrl = shortPath ? `smartpadel58.com/pizarra/${shortPath}` : '';
+
 
     if (compact) {
         return (
@@ -90,85 +138,136 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                 {/* Franja superior */}
                 <div className="px-2 pt-2 pb-1.5 flex items-center justify-between gap-1 border-b-2 border-[#ccff00]/50 bg-[#ccff00]/10 flex-wrap">
                     <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                        {matchNumber != null && (
-                            <>
-                                <span className="text-[7px] font-black uppercase tracking-widest text-[#ccff00]/80 flex-shrink-0">Partido {matchNumber}</span>
-                                <span className="text-[#ccff00]/50 text-[6px]">·</span>
-                            </>
-                        )}
-                        <span className="text-[7px] font-bold text-[#ccff00]/90 italic flex-shrink-0">
+                        {/* 1) Hora estimada / score si está en vivo */}
+                        <span className="text-[8px] font-bold text-[#ccff00]/90 italic flex-shrink-0">
                             {isLive ? `${match.score1 ?? 0} - ${match.score2 ?? 0}` : formatHHMM(match.scheduledTime)}
                         </span>
-                        <span className="text-[#ccff00]/50 text-[6px]">·</span>
-                        <span className="text-[8px] font-black uppercase tracking-widest text-[#ccff00]">
-                            {isLive ? (match.courtName ?? (match.court != null ? `Pista ${match.court}` : 'Pista –')) : rankLabel[safeRank]}
-                        </span>
+
+                        {/* 2) Número de partido */}
+                        {matchNumber != null && (
+                            <>
+                                <span className="text-[#ccff00]/50 text-[8px]">·</span>
+                                <span className="text-[8px] font-black uppercase tracking-widest text-[#ccff00]/80 flex-shrink-0">
+                                    Partido {matchNumber}
+                                </span>
+                            </>
+                        )}
+
+                        {/* 3) Juego */}
+                        {!isLive && gameNumber != null && (
+                            <>
+                                <span className="text-[#ccff00]/50 text-[8px]">·</span>
+                                <span className="text-[8px] font-black text-[#ccff00]/90 italic">{gameNumber}º Juego</span>
+                            </>
+                        )}
+
+                        {/* 4) Nivel/Categoría */}
                         {match._category && (
                             <>
-                                <span className="text-[#ccff00]/50 text-[6px]">·</span>
-                                <span className="text-[7px] font-bold text-[#ccff00]/90 uppercase tracking-tight">
+                                <span className="text-[#ccff00]/50 text-[8px]">·</span>
+                                <span className="text-[8px] font-bold text-[#ccff00]/90 uppercase tracking-tight">
                                     {formatCategory(match._category)}
                                 </span>
                             </>
                         )}
-                        <span className="text-[#ccff00]/50 text-[6px]">·</span>
-                        <span className={`text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${CAT_COLORS[match._gender] ?? 'bg-white/10 border-white/20 text-[#ccff00]/90'}`}>
+
+                        {/* 5) Género */}
+                        <span className="text-[#ccff00]/50 text-[8px]">·</span>
+                        <span
+                            className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${CAT_COLORS[match._gender] ?? 'bg-white/10 border-white/20 text-[#ccff00]/90'}`}
+                        >
                             {formatGender(match._gender) || '—'}
                         </span>
-                        {!isLive && gameNumber != null && (
-                            <>
-                                <span className="text-[#ccff00]/50 text-[6px]">·</span>
-                                <span className="text-[7px] font-black text-[#ccff00]/90 italic">{gameNumber}º juego</span>
-                            </>
-                        )}
                     </div>
                 </div>
 
                 {/* Jugadores compactos */}
-                <div className="px-2 py-2 flex-1 flex flex-col gap-1 bg-[#ccff00]/5 border-y-2 border-[#ccff00]/30">
-                    <div className="text-center">
-                        <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t1p1}</p>
-                    </div>
-                    <div className="text-[8px] font-black text-[#ccff00]/70 text-center italic leading-none">vs</div>
-                    <div className="text-center">
-                        <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t2p1}</p>
+                <div className="px-2 py-2 flex-1 bg-[#ccff00]/5 border-y-2 border-[#ccff00]/30 flex items-center justify-center">
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 w-full">
+                        <div className="text-center min-w-0">
+                            <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t1p1}</p>
+                            <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t1p2 || '—'}</p>
+                        </div>
+                        <div className="text-[9px] font-black text-[#ccff00]/40 text-center italic leading-none px-1">
+                            VS
+                        </div>
+                        <div className="text-center min-w-0">
+                            <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t2p1}</p>
+                            <p className="text-[9px] font-black uppercase tracking-tight leading-tight truncate text-[#ccff00]">{t2p2 || '—'}</p>
+                        </div>
                     </div>
                 </div>
 
-                {/* Action Dock */}
-                <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40">
-                    <Link
-                        href={controlHref}
-                        className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
-                    >
-                        <Gamepad2 className="w-3.5 h-3.5" />
-                        <span className="text-[6px] font-black uppercase tracking-tight">Control</span>
-                    </Link>
-                    <Link
-                        href={pizarraHref}
-                        target="_blank"
-                        className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
-                    >
-                        <Monitor className="w-3.5 h-3.5" />
-                        <span className="text-[6px] font-black uppercase tracking-tight">Pizarra</span>
-                    </Link>
-                    <Link
-                        href={camasHref}
-                        target="_blank"
-                        className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
-                    >
-                        <Camera className="w-3.5 h-3.5" />
-                        <span className="text-[6px] font-black uppercase tracking-tight">Cámaras</span>
-                    </Link>
-                    <Link
-                        href={adsHref}
-                        target="_blank"
-                        className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
-                    >
-                        <Tv className="w-3.5 h-3.5" />
-                        <span className="text-[6px] font-black uppercase tracking-tight">Ads</span>
-                    </Link>
-                </div>
+
+                {/* Dock para PLAYERS: solo botón Pizarra + dirección corta */}
+                {!isAdmin && match._tournamentId && (
+                    <div className="border-t-2 border-[#ccff00]/30">
+                        <Link
+                            href={pizarraHref}
+                            target="_blank"
+                            className="flex items-center justify-center gap-2 py-2.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95 w-full"
+                        >
+                            <Monitor className="w-3.5 h-3.5 shrink-0" />
+                            <span className="text-[7px] font-black uppercase tracking-tight leading-none">Pizarra</span>
+                            {shortUrl && (
+                                <span className="text-[6px] font-mono text-[#ccff00]/60 ml-1 truncate">{shortUrl}</span>
+                            )}
+                        </Link>
+                    </div>
+                )}
+
+                {/* Action Dock — solo visible para admin/marker */}
+                {isAdmin && (
+                    <div className={`grid ${(!isLive && match._tournamentId) ? 'grid-cols-3 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4'} gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40 overflow-hidden`}>
+                        {!isLive && match._tournamentId && (
+                            <button
+                                onClick={async () => {
+                                    if (!confirm('¿Comenzar este partido ahora?')) return;
+                                    try {
+                                        await dataService.updateMatch(match._tournamentId, match.id, { status: MatchStatus.LIVE });
+                                    } catch (err) { console.error(err); }
+                                }}
+                                className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00] text-black hover:bg-white transition-all active:scale-95"
+                            >
+                                <Gamepad2 className="w-3.5 h-3.5" />
+                                <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Comenzar</span>
+                            </button>
+                        )}
+                        <Link
+                            href={controlHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                        >
+                            <Gamepad2 className="w-3.5 h-3.5" />
+                            <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Control</span>
+                        </Link>
+                        <Link
+                            href={pizarraHref}
+                            target="_blank"
+                            className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                        >
+                            <Monitor className="w-3.5 h-3.5" />
+                            <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Pizarra</span>
+                        </Link>
+                        <Link
+                            href={camasHref}
+                            target="_blank"
+                            className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                        >
+                            <Camera className="w-3.5 h-3.5" />
+                            <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Cámaras</span>
+                        </Link>
+                        <Link
+                            href={adsHref}
+                            target="_blank"
+                            className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                        >
+                            <Tv className="w-3.5 h-3.5" />
+                            <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Ads</span>
+                        </Link>
+                    </div>
+                )}
             </motion.div>
         );
     }
@@ -223,39 +322,61 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                 </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40">
-                <Link
-                    href={controlHref}
-                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
-                >
-                    <Gamepad2 className="w-4 h-4" />
-                    <span className="text-[8px] font-black uppercase tracking-widest">Control</span>
-                </Link>
-                <Link
-                    href={pizarraHref}
-                    target="_blank"
-                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
-                >
-                    <Monitor className="w-4 h-4" />
-                    <span className="text-[8px] font-black uppercase tracking-widest">Pizarra</span>
-                </Link>
-                <Link
-                    href={camasHref}
-                    target="_blank"
-                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
-                >
-                    <Camera className="w-4 h-4" />
-                    <span className="text-[8px] font-black uppercase tracking-widest">Cámaras</span>
-                </Link>
-                <Link
-                    href={adsHref}
-                    target="_blank"
-                    className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
-                >
-                    <Tv className="w-4 h-4" />
-                    <span className="text-[8px] font-black uppercase tracking-widest">Publicidad</span>
-                </Link>
-            </div>
+            {/* Dock para PLAYERS: solo botón Pizarra + dirección corta */}
+            {!isAdmin && match._tournamentId && (
+                <div className="border-t-2 border-[#ccff00]/30">
+                    <Link
+                        href={pizarraHref}
+                        target="_blank"
+                        className="flex items-center justify-center gap-2 py-3 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95 w-full"
+                    >
+                        <Monitor className="w-4 h-4 shrink-0" />
+                        <span className="text-[8px] font-black uppercase tracking-widest leading-none">Pizarra</span>
+                        {shortUrl && (
+                            <span className="text-[7px] font-mono text-[#ccff00]/60 ml-1">{shortUrl}</span>
+                        )}
+                    </Link>
+                </div>
+            )}
+
+            {/* Action Dock full — solo visible para admin/marker */}
+            {isAdmin && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40">
+                    <Link
+                        href={controlHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                    >
+                        <Gamepad2 className="w-4 h-4" />
+                        <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Control</span>
+                    </Link>
+                    <Link
+                        href={pizarraHref}
+                        target="_blank"
+                        className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                    >
+                        <Monitor className="w-4 h-4" />
+                        <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Pizarra</span>
+                    </Link>
+                    <Link
+                        href={camasHref}
+                        target="_blank"
+                        className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                    >
+                        <Camera className="w-4 h-4" />
+                        <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Cámaras</span>
+                    </Link>
+                    <Link
+                        href={adsHref}
+                        target="_blank"
+                        className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                    >
+                        <Tv className="w-4 h-4" />
+                        <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Publicidad</span>
+                    </Link>
+                </div>
+            )}
         </motion.div>
     );
 }
@@ -280,18 +401,24 @@ export function MatchCard({ match, idx, isNextUp, isEffectivelyLive, matchNumber
         if (!confirm('¿Terminar este partido ahora?')) return;
         setEnding(true);
         try {
-            const tournRef = doc(db, 'tournaments', match._tournamentId);
-            const snap = await getDoc(tournRef);
-            if (!snap.exists()) throw new Error('Torneo no encontrado');
-            const data = snap.data();
-            const matches: any[] = data.matches ?? [];
-            const updated = matches.map((m: any) =>
-                m.id === match.id ? { ...m, status: MatchStatus.FINISHED } : m
-            );
-            await updateDoc(tournRef, { matches: updated });
+            await dataService.updateMatch(match._tournamentId, match.id, { status: MatchStatus.FINISHED });
         } catch (e) {
             console.error('[endMatch]', e);
-            alert('Error al terminar el partido. Revisa la consola.');
+            alert('Error al terminar el partido.');
+        } finally {
+            setEnding(false);
+        }
+    };
+
+    const startMatch = async () => {
+        if (!match._tournamentId) return;
+        if (!confirm('¿Comenzar este partido ahora?')) return;
+        setEnding(true);
+        try {
+            await dataService.updateMatch(match._tournamentId, match.id, { status: MatchStatus.LIVE });
+        } catch (e) {
+            console.error('[startMatch]', e);
+            alert('Error al comenzar el partido.');
         } finally {
             setEnding(false);
         }

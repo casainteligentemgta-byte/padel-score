@@ -8,9 +8,27 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export function getAuthErrorMessage(err: any): string {
-  if (!err) return 'Ocurrió un error inesperado.';
+  if (!err) return 'Ocurrió un error inesperado (no payload).';
 
-  const msg: string = err?.message || err?.error_description || (typeof err === 'string' ? err : '');
+  const msg: string = err?.message || err?.error_description || err?.msg || (typeof err === 'string' ? err : JSON.stringify(err));
+  const domName: string = typeof err?.name === 'string' ? err.name : '';
+  const combinedLower = `${domName} ${msg}`.toLowerCase();
+
+  // WebAuthn / Passkeys (DOMException y mensajes de Supabase)
+  if (
+    combinedLower.includes('notallowederror') ||
+    combinedLower.includes('not allowed') ||
+    combinedLower.includes('cancelled') ||
+    combinedLower.includes('canceled') ||
+    combinedLower.includes('aborted') ||
+    combinedLower.includes('user cancelled') ||
+    combinedLower.includes('user canceled')
+  ) {
+    return 'Autenticación cancelada.';
+  }
+  if (combinedLower.includes('excludecredentials')) {
+    return 'Este dispositivo ya está registrado';
+  }
 
   if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
     return ERROR_MESSAGES['Invalid login credentials'];
@@ -25,13 +43,6 @@ export function getAuthErrorMessage(err: any): string {
     return ERROR_MESSAGES['Password should be at least 6 characters'];
   }
 
-  // Errores de red o configuración
-  if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
-    return 'Error de red. Comprueba tu conexión.';
-  }
-  if (msg.includes('Supabase') && msg.includes('configurado')) {
-    return 'Error de configuración del sistema (Supabase).';
-  }
-
-  return msg ? `Error: ${msg}` : 'Error en la autenticación. Intenta de nuevo.';
+  // To debug exactly what NEXT is reading/failing on:
+  return `Raw Auth Error: ${msg}`;
 }

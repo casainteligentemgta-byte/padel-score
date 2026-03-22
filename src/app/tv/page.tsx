@@ -1,249 +1,283 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query } from 'firebase/firestore';
-import { Trophy, Zap, Radio, Clock } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { MatchStatus } from '@/types/tournament';
+import { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { QRCodeSVG } from 'qrcode.react';
+import { Monitor, Tv, Zap } from 'lucide-react';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
-export default function TVKioskPage() {
-    const [liveMatch, setLiveMatch] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [currentTime, setCurrentTime] = useState(new Date());
+type TvSession = {
+    id: string;
+    short_id: number;
+    status: 'waiting' | 'active';
+    current_view: string;
+    tournament_id: string | null;
+    updated_at?: string;
+};
 
-    // Reloj digital para el TV
-    useEffect(() => {
-        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-        return () => clearInterval(timer);
-    }, []);
+const ADMIN_BIND_BASE = 'https://www.smartpadel58.com/admin/screens?bind=';
 
-    // Escuchar partidos en vivo globalmente
-    useEffect(() => {
-        const q = query(collection(db, 'tournaments'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            let foundMatch: any = null;
+function randomShortId(): number {
+    // 4 dígitos (1000–9999)
+    return Math.floor(1000 + Math.random() * 9000);
+}
 
-            snapshot.docs.forEach(docSnap => {
-                if (foundMatch) return; // Ya encontramos uno principal
-                const tournament = docSnap.data();
+function getIframeSrc(session: TvSession | null): string | null {
+    if (!session) return null;
+    if (session.current_view === 'ads') return '/display/ads';
 
-                if (tournament.matches) {
-                    const active = tournament.matches.find((m: any) =>
-                        m.status === MatchStatus.LIVE ||
-                        m.status === 'LIVE' ||
-                        m.status === 'IN_PROGRESS'
-                    );
-
-                    if (active) {
-                        const team1 = active.team1Index > 0 ? tournament.teams?.[active.team1Index - 1] : null;
-                        const team2 = active.team2Index > 0 ? tournament.teams?.[active.team2Index - 1] : null;
-
-                        foundMatch = {
-                            ...active,
-                            tournamentName: tournament.name,
-                            tournamentId: docSnap.id,
-                            category: tournament.category,
-                            t1Name: team1 ? `${team1.p1.name} / ${team1.p2.name}` : 'TBD',
-                            t2Name: team2 ? `${team2.p1.name} / ${team2.p2.name}` : 'TBD',
-                            primaryColor: tournament.broadcastingSettings?.primaryColor || '#ccff00',
-                            bannerText: tournament.broadcastingSettings?.bannerText || 'SMART PADEL PRO TV'
-                        };
-                    }
-                }
-            });
-
-            setLiveMatch(foundMatch);
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, []);
-
-    if (loading) {
-        return (
-            <div className="h-screen bg-black flex items-center justify-center">
-                <div className="w-20 h-20 border-t-4 border-padel-primary rounded-full animate-spin" />
-            </div>
-        );
+    if (session.current_view === 'bracket') {
+        if (!session.tournament_id) return null;
+        return `/tournaments/${session.tournament_id}/display/bracket`;
     }
 
+    if (session.current_view === 'score_court_1') {
+        if (!session.tournament_id) return null;
+        return `/tournaments/${session.tournament_id}/display/court/1`;
+    }
+
+    if (session.current_view === 'score_court_2') {
+        if (!session.tournament_id) return null;
+        return `/tournaments/${session.tournament_id}/display/court/2`;
+    }
+
+    // Fallback si mandan un valor genérico.
+    if (session.current_view === 'score') {
+        if (!session.tournament_id) return null;
+        return `/tournaments/${session.tournament_id}/display/court/1`;
+    }
+
+    return null;
+}
+
+export default function TVKioskPage() {
+    const supabase = useMemo(() => {
+        try {
+            return getSupabaseClient();
+        } catch {
+            return null;
+        }
+    }, []);
+
+    const [shortId, setShortId] = useState<number | null>(null);
+    const [session, setSession] = useState<TvSession | null>(null);
+    const [syncError, setSyncError] = useState<string | null>(null);
+
+    // 1) Crear/asegurar fila de esta TV.
+    useEffect(() => {
+        if (!supabase) {
+            setSyncError('Supabase no configurado (revisar env NEXT_PUBLIC_SUPABASE_URL/ANON_KEY).');
+            return;
+        }
+
+        let cancelled = false;
+
+        const init = async () => {
+            setSyncError(null);
+
+            for (let attempt = 0; attempt < 6; attempt++) {
+                const candidate = randomShortId();
+                try {
+                    const res = await supabase
+                        .from('tv_sessions')
+                        .upsert(
+                            {
+                                short_id: candidate,
+                                status: 'waiting',
+                                current_view: 'ads',
+                                tournament_id: null,
+                            },
+                            { onConflict: 'short_id' }
+                        )
+                        .select('*')
+                        .maybeSingle();
+
+                    if (cancelled) return;
+                    if (res?.data?.short_id) {
+                        setShortId(res.data.short_id);
+                        setSession(res.data as TvSession);
+                        return;
+                    }
+                } catch {
+                    // Puede ser colisión de short_id o RLS.
+                    continue;
+                }
+            }
+
+            if (!cancelled) {
+                setSyncError('No se pudo generar un short_id válido para esta TV.');
+            }
+        };
+
+        init();
+        return () => {
+            cancelled = true;
+        };
+    }, [supabase]);
+
+    // 2) Realtime (Realtime por fila con filter = short_id).
+    useEffect(() => {
+        if (!supabase || !shortId) return;
+
+        let channel: any = null;
+        let cancelled = false;
+
+        const start = async () => {
+            try {
+                const { data } = await supabase
+                    .from('tv_sessions')
+                    .select('*')
+                    .eq('short_id', shortId)
+                    .maybeSingle();
+                if (!cancelled) setSession(data as TvSession | null);
+            } catch {
+                // ignore
+            }
+
+            channel = supabase
+                .channel(`tv_sessions_${shortId}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'tv_sessions',
+                        filter: `short_id=eq.${shortId}`,
+                    },
+                    (payload: any) => {
+                        if (cancelled) return;
+                        const next = payload?.new as TvSession | null;
+                        setSession(next);
+                    }
+                )
+                .subscribe();
+        };
+
+        start();
+
+        return () => {
+            cancelled = true;
+            if (channel) supabase.removeChannel(channel);
+        };
+    }, [supabase, shortId]);
+
+    const isActive = session?.status === 'active';
+    const iframeSrc = useMemo(() => getIframeSrc(session), [session]);
+    const qrValue = useMemo(() => (shortId ? `${ADMIN_BIND_BASE}${shortId}` : ''), [shortId]);
+
     return (
-        <div className="h-screen w-screen bg-[#050505] text-white overflow-hidden font-outfit select-none">
+        <div className="fixed inset-0 bg-black text-white overflow-hidden select-none font-outfit">
+            <style jsx global>{`
+                @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
+                @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap');
+                body {
+                    margin: 0;
+                    padding: 0;
+                    background: #000;
+                }
+                .font-digital {
+                    font-family: 'Orbitron', sans-serif;
+                    letter-spacing: 0.02em;
+                }
+            `}</style>
+
             <AnimatePresence mode="wait">
-                {!liveMatch ? (
-                    /* PANTALLA DE ESPERA (KIOSKO) */
+                {!shortId || !session ? (
                     <motion.div
-                        key="waiting"
+                        key="loading"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="h-full w-full flex flex-col items-center justify-center p-20 text-center relative"
+                        className="h-full w-full flex flex-col items-center justify-center p-10 text-center"
                     >
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-padel-primary/10 via-transparent to-transparent opacity-50" />
-
-                        <motion.div
-                            animate={{ scale: [1, 1.05, 1], opacity: [0.5, 1, 0.5] }}
-                            transition={{ repeat: Infinity, duration: 4 }}
-                            className="mb-12"
-                        >
-                            <Trophy className="w-40 h-40 text-padel-primary opacity-20" />
-                        </motion.div>
-
-                        <h1 className="text-7xl font-black italic uppercase tracking-tighter mb-4">
-                            SISTEMA <span className="text-padel-primary">PADEL SCORE</span>
-                        </h1>
-                        <p className="text-2xl font-bold text-gray-500 uppercase tracking-[0.5em] mb-12">
-                            Esperando partidos en vivo
+                        <Zap className="w-12 h-12 text-[#ccff00] animate-pulse" />
+                        <p className="mt-4 text-xs font-black uppercase tracking-[0.4em] text-gray-500">
+                            Generando TV…
                         </p>
-
-                        <div className="flex gap-8 items-center bg-white/5 px-10 py-5 rounded-3xl border border-white/10">
-                            <Clock className="w-8 h-8 text-padel-primary" />
-                            <span className="text-5xl font-black tabular-nums tabular-nums">
-                                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                        </div>
+                        {syncError && <p className="mt-6 text-sm text-red-400 max-w-xl">{syncError}</p>}
+                    </motion.div>
+                ) : isActive ? (
+                    <motion.div
+                        key={`active_${session.current_view}`}
+                        initial={{ opacity: 0, scale: 1.02 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.98 }}
+                        transition={{ duration: 0.6, ease: 'easeOut' }}
+                        className="absolute inset-0"
+                    >
+                        {iframeSrc ? (
+                            <iframe
+                                title="TV Display"
+                                src={iframeSrc}
+                                className="absolute inset-0 w-full h-full border-0 bg-black"
+                                allowFullScreen
+                            />
+                        ) : (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center p-10 text-center">
+                                <Monitor className="w-14 h-14 text-[#ccff00] opacity-60" />
+                                <h2 className="mt-6 text-2xl font-black italic uppercase">
+                                    Falta configuración (tournament_id)
+                                </h2>
+                                <p className="mt-3 text-gray-500 max-w-xl">
+                                    Admin debe activar la pantalla con un torneo válido.
+                                </p>
+                            </div>
+                        )}
                     </motion.div>
                 ) : (
-                    /* MARCADOR EN VIVO AUTOMÁTICO */
                     <motion.div
-                        key="active-tv"
-                        initial={{ opacity: 0, scale: 1.1 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        className="h-full w-full flex flex-col p-12 lg:p-16 relative"
+                        key="qr"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.5, ease: 'easeOut' }}
+                        className="h-full w-full flex flex-col items-center justify-center p-10 relative"
                     >
-                        {/* Background FX */}
-                        <div className="absolute top-0 right-0 w-[50%] h-[50%] opacity-20 blur-[150px] rounded-full" style={{ backgroundColor: liveMatch.primaryColor }} />
-                        <div className="absolute bottom-0 left-0 w-[40%] h-[40%] bg-blue-600 opacity-10 blur-[150px] rounded-full" />
-
-                        {/* Top Bar TV Style */}
-                        <div className="flex justify-between items-center mb-10 relative z-10 border-b-2 border-white/10 pb-8">
-                            <div className="flex items-center gap-6">
-                                <div className="bg-red-600 px-6 py-2 rounded-xl flex items-center gap-3 shadow-[0_10px_30px_rgba(220,38,38,0.4)]">
-                                    <Radio className="w-6 h-6 text-white animate-pulse" />
-                                    <span className="text-2xl font-black uppercase italic tracking-widest text-white">LIVE TV</span>
-                                </div>
-                                <div>
-                                    <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white">{liveMatch.tournamentName}</h2>
-                                    <p className="label-cancha text-xl text-padel-primary">Pista {liveMatch.court} • {liveMatch.category}</p>
-                                </div>
-                            </div>
-                            <div className="text-right">
-                                <div className="text-5xl font-black italic tracking-tighter tabular-nums text-white">
-                                    {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                </div>
-                                <p className="text-sm font-black uppercase tracking-widest text-gray-500 mt-2">Margarita Padel Club</p>
-                            </div>
+                        <div className="absolute inset-0 opacity-25">
+                            <div className="absolute top-[-30%] left-[-20%] w-[55%] h-[55%] rounded-full blur-[90px] bg-[#ccff00]/30" />
+                            <div className="absolute bottom-[-30%] right-[-20%] w-[55%] h-[55%] rounded-full blur-[110px] bg-blue-600/15" />
                         </div>
 
-                        {/* Main Match Graphics */}
-                        <div className="flex-1 flex flex-col justify-center relative z-10">
-                            <div className="grid grid-cols-12 items-center gap-4">
-                                {/* Team 1 Name */}
-                                <div className="col-span-4 text-right">
-                                    <motion.h3
-                                        key={liveMatch.t1Name}
-                                        initial={{ x: -50, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
-                                        className="text-6xl lg:text-8xl font-black italic uppercase tracking-tighter leading-none"
-                                    >
-                                        {liveMatch.t1Name.split(' / ').map((name: string, i: number) => (
-                                            <span key={i} className={i === 1 ? 'block' : ''} style={i === 1 ? { color: liveMatch.primaryColor } : {}}>{name}{i === 0 ? ' ' : ''}</span>
-                                        ))}
-                                    </motion.h3>
-                                </div>
-
-                                {/* SCORE CENTER */}
-                                <div className="col-span-4 flex flex-col items-center justify-center p-8">
-                                    <div className="bg-black/80 border-4 border-white/10 rounded-[4rem] p-10 flex flex-col items-center justify-center shadow-[0_50px_100px_rgba(0,0,0,0.6)] w-full relative overflow-hidden">
-                                        {/* Point indicator Glow */}
-                                        <div className="absolute inset-x-0 top-0 h-1 bg-padel-primary opacity-30 shadow-[0_0_20px_#ccff00]" />
-
-                                        <div className="flex items-center gap-12 mb-6">
-                                            <AnimatePresence mode="wait">
-                                                <motion.span key={liveMatch.points?.t1} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                                                    className="text-[12rem] lg:text-[16rem] font-black italic leading-none tabular-nums text-white tracking-tighter"
-                                                >
-                                                    {liveMatch.points?.t1 || '0'}
-                                                </motion.span>
-                                            </AnimatePresence>
-                                            <span className="text-8xl font-black italic opacity-20 text-white">:</span>
-                                            <AnimatePresence mode="wait">
-                                                <motion.span key={liveMatch.points?.t2} initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                                                    className="text-[12rem] lg:text-[16rem] font-black italic leading-none tabular-nums text-white tracking-tighter"
-                                                >
-                                                    {liveMatch.points?.t2 || '0'}
-                                                </motion.span>
-                                            </AnimatePresence>
-                                        </div>
-
-                                        {/* Set Summary */}
-                                        <div className="flex gap-4">
-                                            {[1, 2, 3].map(setNum => {
-                                                const currentSet = (liveMatch.sets?.t1 || 0) + (liveMatch.sets?.t2 || 0) + 1;
-                                                return (
-                                                    <div key={setNum} className={`px-6 py-3 rounded-2xl border-2 transition-all flex flex-col items-center ${setNum === currentSet ? 'bg-padel-primary/20 border-padel-primary' : 'bg-white/5 border-white/5 opacity-30'}`}>
-                                                        <span className="text-[10px] font-black uppercase mb-1">SET {setNum}</span>
-                                                        <div className="flex gap-3 text-2xl font-black">
-                                                            <span>{liveMatch.games_sets?.[setNum - 1]?.t1 || (setNum === currentSet ? liveMatch.games?.t1 : 0) || 0}</span>
-                                                            <span className="opacity-30">-</span>
-                                                            <span>{liveMatch.games_sets?.[setNum - 1]?.t2 || (setNum === currentSet ? liveMatch.games?.t2 : 0) || 0}</span>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-
-                                    {/* Serve / Punto de Oro */}
-                                    <div className="mt-8 flex items-center gap-20">
-                                        <motion.div animate={liveMatch.server?.team === 1 ? { scale: [1, 1.5, 1], opacity: 1 } : { opacity: 0.1 }} transition={{ repeat: Infinity, duration: 1 }} className="w-8 h-8 rounded-full shadow-[0_0_40px_rgba(204,255,0,0.8)]" style={{ backgroundColor: liveMatch.primaryColor }} />
-                                        <div className="text-padel-primary font-black uppercase text-xs tracking-[0.5em] italic">Servicio</div>
-                                        <motion.div animate={liveMatch.server?.team === 2 ? { scale: [1, 1.5, 1], opacity: 1 } : { opacity: 0.1 }} transition={{ repeat: Infinity, duration: 1 }} className="w-8 h-8 rounded-full shadow-[0_0_40px_rgba(204,255,0,0.8)]" style={{ backgroundColor: liveMatch.primaryColor }} />
-                                    </div>
-                                </div>
-
-                                {/* Team 2 Name */}
-                                <div className="col-span-4 text-left">
-                                    <motion.h3
-                                        key={liveMatch.t2Name}
-                                        initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
-                                        className="text-6xl lg:text-8xl font-black italic uppercase tracking-tighter leading-none"
-                                    >
-                                        {liveMatch.t2Name.split(' / ').map((name: string, i: number) => (
-                                            <span key={i} className={i === 1 ? 'block' : ''} style={i === 1 ? { color: liveMatch.primaryColor } : {}}>{name}{i === 0 ? ' ' : ''}</span>
-                                        ))}
-                                    </motion.h3>
-                                </div>
+                        <div className="relative z-10 w-full max-w-[980px] flex flex-col items-center">
+                            <div className="flex items-center gap-4 mb-10">
+                                <Tv className="w-8 h-8 text-[#ccff00] opacity-70" />
+                                <span className="text-xs font-black uppercase tracking-[0.5em] text-gray-500">
+                                    Conectar TV
+                                </span>
                             </div>
-                        </div>
 
-                        {/* News Ticker / Footer Branding */}
-                        <div className="h-28 bg-white/5 -mx-16 -mb-16 border-t border-white/10 flex items-center overflow-hidden">
-                            <div className="flex items-center gap-16 animate-tv-ticker whitespace-nowrap px-16">
-                                <Zap className="w-8 h-8 text-padel-primary" />
-                                <span className="text-4xl font-black italic uppercase italic tracking-widest">{liveMatch.bannerText}</span>
-                                <div className="w-3 h-3 bg-padel-primary rounded-full" />
-                                <span className="text-4xl font-black italic uppercase italic tracking-widest text-gray-500">SÍGUENOS EN @PADELSMART.IO</span>
-                                <div className="w-3 h-3 bg-padel-primary rounded-full" />
-                                <span className="text-4xl font-black italic uppercase italic tracking-widest text-padel-primary">EL MEJOR PADEL DEL CARIBE</span>
-                                <Zap className="w-8 h-8 text-padel-primary" />
+                            <div className="text-[clamp(72px,10vw,170px)] leading-none font-digital font-black uppercase tracking-tighter text-[#ccff00] drop-shadow-[0_0_30px_rgba(204,255,0,0.25)]">
+                                {shortId}
+                            </div>
+
+                            <div className="mt-6 text-center">
+                                <p className="text-[clamp(16px,2.2vw,28px)] font-bold uppercase tracking-widest text-white/80">
+                                    Escanea el QR desde el Admin
+                                </p>
+                                <p className="mt-2 text-xs font-black uppercase tracking-[0.4em] text-gray-500">
+                                    smartpadel58.com
+                                </p>
+                            </div>
+
+                            <div className="mt-10 bg-white/5 border border-white/10 rounded-[2.5rem] p-8">
+                                <div className="flex items-center justify-center">
+                                    <QRCodeSVG
+                                        value={qrValue}
+                                        size={320}
+                                        bgColor="#000000"
+                                        fgColor="#ccff00"
+                                        level="M"
+                                        includeMargin={false}
+                                    />
+                                </div>
+                                <p className="mt-6 text-sm font-black uppercase tracking-[0.3em] text-gray-500">
+                                    Código: {shortId}
+                                </p>
                             </div>
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
-
-            <style jsx global>{`
-                @keyframes tvTicker {
-                    0% { transform: translateX(0); }
-                    100% { transform: translateX(-50%); }
-                }
-                .animate-tv-ticker {
-                    animation: tvTicker 25s linear infinite;
-                }
-                body { overflow: hidden; background: black; }
-            `}</style>
         </div>
     );
 }

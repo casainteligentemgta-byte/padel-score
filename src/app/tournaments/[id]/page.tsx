@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -15,6 +15,7 @@ import {
     ChevronRight,
     RefreshCw,
     User,
+    ArrowLeft,
     Link as LinkIcon,
     Share2,
     Copy,
@@ -28,7 +29,8 @@ import {
     Camera,
     Trash2,
     Download,
-    Zap
+    Zap,
+    FileText
 } from 'lucide-react';
 import Link from 'next/link';
 import { MatchStatus, TournamentType, ScheduleConfig } from '@/types/tournament';
@@ -36,18 +38,23 @@ import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 // Supabase is now used for data management.
 import GroupPhaseView from '@/components/GroupPhaseView';
 import TournamentPhaseManager from '@/components/TournamentPhaseManager';
+import { TournamentGridView, type Group, type Team } from '@/components/TournamentGridView';
 import Sidebar from '@/components/Sidebar';
+import { BackButton } from '@/components/BackButton';
 import AutoShrinkName from '@/components/AutoShrinkName';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { getAuthHeaders } from '@/lib/apiAuth';
 
 
 
-export default function TournamentDashboard({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
+export default function TournamentDashboard() {
+    type ParticipantOption = { id: string; name?: string; lastName?: string; email?: string; phone?: string };
+    const id = useRouteSegment('id');
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user, profile, isAdmin, markerCanchas, loading: authLoading } = useAuth();
@@ -68,6 +75,27 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [isSavingRules, setIsSavingRules] = useState(false);
     const [isMigrating, setIsMigrating] = useState(false);
+    const [syncAcceptedLoading, setSyncAcceptedLoading] = useState(false);
+    const [syncAcceptedMessage, setSyncAcceptedMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [inscriptions, setInscriptions] = useState<Array<{ id: string; participantName?: string; isPlaceholder?: boolean; groupName?: string | null; data?: Record<string, unknown> }>>([]);
+    const [isManualInscriptionOpen, setIsManualInscriptionOpen] = useState(false);
+    const [manualTeamId, setManualTeamId] = useState<string | null>(null);
+    const [savingManualInscription, setSavingManualInscription] = useState(false);
+    const [manualError, setManualError] = useState<string | null>(null);
+    const [p1Query, setP1Query] = useState('');
+    const [p2Query, setP2Query] = useState('');
+    const [p1Matches, setP1Matches] = useState<ParticipantOption[]>([]);
+    const [p2Matches, setP2Matches] = useState<ParticipantOption[]>([]);
+    const [p1Selected, setP1Selected] = useState<ParticipantOption | null>(null);
+    const [p2Selected, setP2Selected] = useState<ParticipantOption | null>(null);
+    const [p1LastName, setP1LastName] = useState('');
+    const [p2LastName, setP2LastName] = useState('');
+    const [p1Email, setP1Email] = useState('');
+    const [p2Email, setP2Email] = useState('');
+    const [p1Phone, setP1Phone] = useState('');
+    const [p2Phone, setP2Phone] = useState('');
+    const p1SearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const p2SearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isOwner = user && tournament && (
         tournament.ownerId === user.uid ||
@@ -84,15 +112,62 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         else if (tab === 'por-comenzar') setActiveTab('Por Comenzar');
     }, [searchParams]);
 
-    // En Vivo oculto para no admin/propietario: si estaban en En Vivo, pasar a Por Comenzar
+    // En Vivo visible para todos
     useEffect(() => {
-        if (!canManageTournament && activeTab === 'En Vivo') setActiveTab('Por Comenzar');
-    }, [canManageTournament, activeTab]);
+        // No longer forcing redirect to 'Por Comenzar' for non-admins
+    }, [activeTab]);
 
     // We allow guests to view the dashboard
     useEffect(() => {
         // Only redirect if specifically needed, but dashboard is public
     }, [user, authLoading, router]);
+
+    // Inscripciones por torneo (para TournamentGridView agrupado por group_name)
+    useEffect(() => {
+        if (!id) return;
+        dataService.getInscriptionsByTournament(id).then(setInscriptions).catch(() => setInscriptions([]));
+    }, [id]);
+
+    // Búsqueda realtime de participantes para inscripción manual (siempre antes de cualquier return de render).
+    useEffect(() => {
+        if (!isManualInscriptionOpen) return;
+        if (p1SearchRef.current) clearTimeout(p1SearchRef.current);
+        p1SearchRef.current = setTimeout(async () => {
+            if (p1Selected || p1Query.trim().length < 2) {
+                setP1Matches([]);
+                return;
+            }
+            try {
+                const results = await dataService.searchParticipants(p1Query.trim(), 8);
+                setP1Matches(results);
+            } catch {
+                setP1Matches([]);
+            }
+        }, 220);
+        return () => {
+            if (p1SearchRef.current) clearTimeout(p1SearchRef.current);
+        };
+    }, [p1Query, p1Selected, isManualInscriptionOpen]);
+
+    useEffect(() => {
+        if (!isManualInscriptionOpen) return;
+        if (p2SearchRef.current) clearTimeout(p2SearchRef.current);
+        p2SearchRef.current = setTimeout(async () => {
+            if (p2Selected || p2Query.trim().length < 2) {
+                setP2Matches([]);
+                return;
+            }
+            try {
+                const results = await dataService.searchParticipants(p2Query.trim(), 8);
+                setP2Matches(results);
+            } catch {
+                setP2Matches([]);
+            }
+        }, 220);
+        return () => {
+            if (p2SearchRef.current) clearTimeout(p2SearchRef.current);
+        };
+    }, [p2Query, p2Selected, isManualInscriptionOpen]);
 
     useEffect(() => {
         if (!id || authLoading) return;
@@ -153,6 +228,23 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
             const rawTeam = m[side];
             const rawName = side === 'team1' ? m.team1Name : m.team2Name;
 
+            // Si tenemos info más fresca en teamsRef (después de aceptar invitaciones),
+            // usamos siempre esos nombres y dejamos fotos/teléfonos del rawTeam si existen.
+            if (teamFromIdx) {
+                const p1Name = getPlayerName(teamFromIdx.p1, idx, 1);
+                const p2Name = getPlayerName(teamFromIdx.p2, idx, 2);
+                return {
+                    id: teamFromIdx.id != null ? String(teamFromIdx.id) : undefined,
+                    name: `${p1Name} / ${p2Name}`,
+                    p1Name,
+                    p2Name,
+                    photo1: rawTeam?.p1?.photo ?? teamFromIdx.p1?.photo ?? null,
+                    photo2: rawTeam?.p2?.photo ?? teamFromIdx.p2?.photo ?? null,
+                    phone1: rawTeam?.p1?.phone ?? teamFromIdx.p1?.phone ?? null,
+                    phone2: rawTeam?.p2?.phone ?? teamFromIdx.p2?.phone ?? null
+                };
+            }
+
             if (rawTeam && (rawTeam.teamLabel || rawTeam.p1 || rawTeam.p2)) {
                 const name = rawName || rawTeam.teamLabel || (rawTeam.p1?.name && rawTeam.p2?.name ? `${rawTeam.p1.name} / ${rawTeam.p2.name}` : '?');
                 return {
@@ -165,17 +257,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                     phone2: rawTeam.p2?.phone ?? null
                 };
             }
-            if (teamFromIdx) {
-                return {
-                    name: `${getPlayerName(teamFromIdx.p1, idx, 1)} / ${getPlayerName(teamFromIdx.p2, idx, 2)}`,
-                    p1Name: getPlayerName(teamFromIdx.p1, idx, 1),
-                    p2Name: getPlayerName(teamFromIdx.p2, idx, 2),
-                    photo1: teamFromIdx.p1?.photo ?? null,
-                    photo2: teamFromIdx.p2?.photo ?? null,
-                    phone1: teamFromIdx.p1?.phone ?? null,
-                    phone2: teamFromIdx.p2?.phone ?? null
-                };
-            }
+
             return {
                 name: (typeof idx === 'number' && idx <= 0) ? 'Por definir' : (rawName || 'Por definir'),
                 p1Name: null, p2Name: null, photo1: null, photo2: null, phone1: null, phone2: null
@@ -277,7 +359,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                     return { ...m, status: MatchStatus.FINISHED, actualEndTime: new Date(), score: finalScore };
                 }
 
-                // Si es un partido de cuadro y es el siguiente del ganador
+                // Cuadro con bracketPosition (ScheduleEngine / Master)
                 if (finishedMatch.stage === 'MAIN_DRAW' && m.stage === 'MAIN_DRAW' && finishedMatch.bracketPosition) {
                     const nextRound = finishedMatch.bracketPosition.round + 1;
                     const nextPos = Math.ceil(finishedMatch.bracketPosition.position / 2);
@@ -289,6 +371,19 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                             [isTeam1 ? 'team1Index' : 'team2Index']: winnerIndex
                         };
                     }
+                }
+
+                // Semifinales + Final sin bracketPosition (flujo new-tournament: 2 grupos → SEMIFINALES → FINAL)
+                const roundUpper = (x: any) => (x.roundName || '').toUpperCase();
+                const isSemi = (x: any) => roundUpper(x).includes('SEMIFINAL') || x.stage === 'SEMIFINAL';
+                const isFinalMatch = (x: any) => x.roundName === 'FINAL' || (roundUpper(x) === 'FINAL') || x.stage === 'FINAL';
+                if (finishedMatch.stage === 'MAIN_DRAW' && isSemi(finishedMatch) && !finishedMatch.bracketPosition && isFinalMatch(m)) {
+                    const semis = matches.filter((mx: any) => isSemi(mx)).sort((a: any, b: any) =>
+                        new Date(a.scheduledTime || 0).getTime() - new Date(b.scheduledTime || 0).getTime() || (a.id || '').localeCompare(b.id || '')
+                    );
+                    const semiIndex = semis.findIndex((s: any) => s.id === matchId);
+                    if (semiIndex === 0) return { ...m, team1Index: winnerIndex };
+                    if (semiIndex === 1) return { ...m, team2Index: winnerIndex };
                 }
 
                 return m;
@@ -449,13 +544,23 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         const complexName = tournament.complexName || 'Margarita Padel';
         const category = formatCat(tournament.category);
         const gender = tournament.gender ? formatGender(tournament.gender) : '';
+        const startD = tournament.startDate ? (typeof tournament.startDate === 'string' ? new Date(tournament.startDate) : tournament.startDate) : null;
+        const endD = tournament.endDate ? (typeof tournament.endDate === 'string' ? new Date(tournament.endDate) : tournament.endDate) : null;
+        const fechaTorneoStr = startD && !isNaN(startD.getTime())
+            ? (endD && !isNaN(endD.getTime()) && endD.getTime() !== startD.getTime()
+                ? `${startD.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })} - ${endD.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
+                : startD.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }))
+            : '';
 
         pdf.setFontSize(20);
         pdf.text(tournamentName, 14, 22);
         pdf.setFontSize(10);
         pdf.setTextColor(100);
         pdf.text(`${complexName} | Categoría: ${category}${gender ? ` | ${gender}` : ''}`, 14, 30);
-        pdf.text(`Fecha de exportación: ${new Date().toLocaleDateString('es-ES')}`, 14, 35);
+        if (fechaTorneoStr) pdf.text(`Fecha del torneo: ${fechaTorneoStr}`, 14, 35);
+        pdf.text(`Fecha de exportación: ${new Date().toLocaleDateString('es-ES')}`, 14, fechaTorneoStr ? 40 : 35);
+
+        const defaultDateStr = startD && !isNaN(startD.getTime()) ? startD.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
 
         const tableData = matches.length > 0
             ? [...matches].sort((a, b) => {
@@ -465,33 +570,41 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
             }).map((m, idx) => {
                 const timeRaw = m.time || m.scheduledTime;
                 const d = timeRaw?.toDate ? timeRaw.toDate() : new Date(timeRaw);
-                const time = isNaN(d.getTime()) ? String(timeRaw) : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                const dateStr = isNaN(d.getTime()) ? defaultDateStr : d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const time = isNaN(d.getTime()) ? (timeRaw ? String(timeRaw) : '-') : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                // Misma prioridad que las tarjetas del dashboard: team1/team2 vienen enriquecidos
+                // con buildTeamDisplay (nombres desde tournament.teams); team1Name en Firebase puede quedar desactualizado.
+                const label1 = m.team1?.name ?? m.team1Name ?? 'Por definir';
+                const label2 = m.team2?.name ?? m.team2Name ?? 'Por definir';
                 return [
                     idx + 1,
+                    dateStr,
                     time,
-                    m.court || m.courtIndex + 1 || '-',
-                    m.team1?.name || 'Por definir',
+                    m.court ?? (m.courtIndex != null ? m.courtIndex + 1 : '-'),
+                    label1,
                     m.status === MatchStatus.FINISHED ? (m.score || '-') : 'VS',
-                    m.team2?.name || 'Por definir',
+                    label2,
                     getStageLabel(m)
                 ];
             })
             : [];
 
+        const startY = fechaTorneoStr ? 50 : 45;
+
         if (tableData.length > 0) {
             autoTable(pdf, {
-                startY: 45,
-                head: [['#', 'Hora', 'Pista', 'Equipo 1', 'Resultado', 'Equipo 2', 'Etapa']],
+                startY,
+                head: [['#', 'Fecha', 'Hora', 'Pista', 'Equipo 1', 'Resultado', 'Equipo 2', 'Fase']],
                 body: tableData,
                 theme: 'striped',
                 headStyles: { fillColor: [204, 255, 0], textColor: [0, 0, 0], fontStyle: 'bold' },
                 alternateRowStyles: { fillColor: [245, 245, 245] },
-                margin: { top: 45 },
+                margin: { top: startY },
             });
         } else {
             pdf.setFontSize(11);
             pdf.setTextColor(80);
-            pdf.text('Aún no hay partidos en el cuadro.', 14, 45);
+            pdf.text('Aún no hay partidos en el cuadro.', 14, startY);
         }
         return pdf;
     };
@@ -673,7 +786,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
 
     // ── Etiquetas legibles para categorías ────────────────────────────────
     const CAT_LABEL: Record<string, string> = {
-        MAS_45: '+45', MAS_50: '+50',
+        MAS_40: '+40', FEM_40: '+40', MIX_40: '+40', MAS_45: '+45', MAS_50: '+50',
         SUMA_7: 'Suma 7', SUMA_8: 'Suma 8', SUMA_9: 'Suma 9',
         SUMA_10: 'Suma 10', SUMA_11: 'Suma 11',
         PRIMERA: '1ª Cat.', SEGUNDA: '2ª Cat.', TERCERA: '3ª Cat.',
@@ -701,8 +814,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     // Reglas solo en evento (event page), no por categoría
     const deduped = [...new Set(tabs)];
     const uniqueTabs = deduped;
-    // En Vivo solo visible para administradores y propietarios del torneo
-    const visibleTabs = canManageTournament ? uniqueTabs : uniqueTabs.filter(t => t !== 'En Vivo');
+    const visibleTabs = uniqueTabs;
 
     // ── Pre-compute "Por Comenzar" data ONCE (fuera del .filter) ─────────────
     const _toMsT = (v: any): number => {
@@ -719,7 +831,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     // Esta es la fuente MÁS fiable (supera a courtNames que puede estar desactualizado)
     const _KNOWN: Record<string, number> = {
         'Margarita Padel': 6, 'Tibisay': 3, 'Sun Sol Costa Azul': 4,
-        'Food Kart': 3, 'Elite': 4, 'Bodeguero': 3,
+        'Food Kart': 3, 'Elite': 4, 'El Bodeguero': 3,
         'Sun Sol Pedro Gonzalez': 2, 'Playa el Agua': 3,
     };
 
@@ -769,19 +881,12 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const _nextSlot = _earliestMin !== null && _earliestMin > 0
         ? _pending.filter(p => _toMin(p.scheduledTime) === _earliestMin)
         : _pending;
-    // Clave compuesta estable aunque el ID sea undefined (matches se regeneran en cada render)
-    const _mkKey = (p: any) => `${_toMin(p.scheduledTime)}_${p.court ?? p.courtIndex ?? ''}`;
     const _courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
+    // Clave compuesta estable aunque el ID sea undefined (matches se regeneran en cada render)
+    const _mkKey = (p: any) => `${_toMin(p.scheduledTime)}_${_courtNum(p)}`;
 
-    // Por Comenzar: un solo partido por pista (el más próximo en el tiempo para esa pista)
-    const _nextByCourt = new Map<number, any>();
-    for (const p of _pending) {
-        const c = _courtNum(p);
-        if (c < 1 || c > _numCanchas) continue;
-        const existing = _nextByCourt.get(c);
-        if (!existing || _toMsT(p.scheduledTime) < _toMsT(existing.scheduledTime)) _nextByCourt.set(c, p);
-    }
-    const _nextUpKeys = new Set([..._nextByCourt.values()].map(_mkKey));
+    // Por Comenzar: mostrar exactamente los partidos que caben en las pistas disponibles (ej: 3 en El Bodeguero)
+    const _nextUpKeys = new Set(_pending.slice(0, _numCanchas).map(_mkKey));
 
     // En Vivo: un solo partido por pista (no puede haber dos en vivo en la misma pista)
     const _liveByCourt = new Map<number, any>();
@@ -806,7 +911,9 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const filteredMatches = matches.filter(m => {
         if (activeTab === 'Todos') return true;
         if (activeTab === 'En Vivo') return _allowedLiveIds.has(m.id);
-        if (activeTab === 'Por Comenzar') return _nextUpKeys.has(_mkKey(m));
+        if (activeTab === 'Por Comenzar') {
+            return _nextUpKeys.has(_mkKey(m));
+        }
 
         if (activeTab === 'Finalizados') return m.status === MatchStatus.FINISHED;
         if (activeTab === 'Grupos' || activeTab === 'Ranking') return false;
@@ -819,6 +926,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
     const displayMatches = activeTab === 'En Vivo' ? _liveSorted : filteredMatches;
 
     const isLiveDashboard = activeTab === 'En Vivo' && filteredMatches.length > 0 && filteredMatches.length <= _numCanchas;
+    const enableCourtScroll = _numCanchas > 3 && (activeTab === 'Por Comenzar' || isLiveDashboard);
 
     const getLiveConfig = (count: number) => {
         // Uniform config for rows of three as requested
@@ -974,6 +1082,554 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
         return groupStandings;
     };
 
+    const isPlaceholderName = (name?: string) => /^jugador\s+\d+$/i.test((name || '').trim());
+
+    const updateTournamentTeams = async (
+        updater: (teams: any[], groupAssignments: Record<string, string[]>) => { teams: any[]; groupAssignments: Record<string, string[]> }
+    ) => {
+        if (!tournament) return;
+        const currentTeams = Array.isArray(tournament.teams) ? [...tournament.teams] : [];
+        const currentAssignments = { ...(tournament.groupAssignments || {}) } as Record<string, string[]>;
+        const next = updater(currentTeams, currentAssignments);
+        const updatedTournament = {
+            ...tournament,
+            teams: next.teams,
+            groupAssignments: next.groupAssignments,
+            updatedAt: new Date().toISOString(),
+        };
+        await dataService.updateTournament(id, updatedTournament);
+        setTournament(updatedTournament);
+    };
+
+    const fullName = (name?: string, lastName?: string) => `${(name || '').trim()} ${(lastName || '').trim()}`.trim();
+
+    const resetManualInscriptionForm = () => {
+        setManualError(null);
+        setSavingManualInscription(false);
+        setP1Query('');
+        setP2Query('');
+        setP1Matches([]);
+        setP2Matches([]);
+        setP1Selected(null);
+        setP2Selected(null);
+        setP1LastName('');
+        setP2LastName('');
+        setP1Email('');
+        setP2Email('');
+        setP1Phone('');
+        setP2Phone('');
+    };
+
+    const openManualInscriptionModal = (teamId: string) => {
+        setManualTeamId(teamId);
+        resetManualInscriptionForm();
+        setIsManualInscriptionOpen(true);
+    };
+
+    const pickParticipant = (slot: 1 | 2, participant: ParticipantOption) => {
+        const name = fullName(participant.name, participant.lastName);
+        if (slot === 1) {
+            setP1Selected(participant);
+            setP1Query(name || '');
+            setP1LastName(participant.lastName || '');
+            setP1Email(participant.email || '');
+            setP1Phone(participant.phone || '');
+            setP1Matches([]);
+        } else {
+            setP2Selected(participant);
+            setP2Query(name || '');
+            setP2LastName(participant.lastName || '');
+            setP2Email(participant.email || '');
+            setP2Phone(participant.phone || '');
+            setP2Matches([]);
+        }
+    };
+
+    const handleQuickFillPlaceholder = async (teamId: string) => {
+        if (!canManageTournament) return;
+        openManualInscriptionModal(teamId);
+    };
+
+    const saveManualInscription = async () => {
+        if (!manualTeamId || !tournament || !user?.uid) return;
+        setManualError(null);
+
+        const p1Name = (p1Selected?.name || p1Query || '').trim();
+        const p2Name = (p2Selected?.name || p2Query || '').trim();
+        const p1Last = (p1Selected?.lastName || p1LastName || '').trim();
+        const p2Last = (p2Selected?.lastName || p2LastName || '').trim();
+        const p1Full = fullName(p1Name, p1Last);
+        const p2Full = fullName(p2Name, p2Last);
+        if (!p1Name || !p2Name) {
+            setManualError('Debes indicar ambos jugadores.');
+            return;
+        }
+
+        setSavingManualInscription(true);
+        try {
+            const ownerId = tournament?.ownerId || user.uid;
+            const p1Id = p1Selected?.id || (await dataService.addParticipant({
+                name: p1Name,
+                lastName: p1Last,
+                email: p1Email || null,
+                phone: p1Phone || null,
+                category: tournament?.category || null,
+                gender: tournament?.gender || null
+            }, ownerId)).id;
+            const p2Id = p2Selected?.id || (await dataService.addParticipant({
+                name: p2Name,
+                lastName: p2Last,
+                email: p2Email || null,
+                phone: p2Phone || null,
+                category: tournament?.category || null,
+                gender: tournament?.gender || null
+            }, ownerId)).id;
+
+            if (String(p1Id) === String(p2Id)) {
+                setManualError('No puedes vincular el mismo participante dos veces en la misma pareja.');
+                setSavingManualInscription(false);
+                return;
+            }
+
+            const team = (tournament?.teams || []).find((t: any) => String(t.id) === String(manualTeamId));
+            const previousPlaceholderLabel = (team?.p1?.name || '').trim();
+
+            await updateTournamentTeams((teams, groupAssignments) => {
+                const idx = teams.findIndex((t: any) => String(t.id) === String(manualTeamId));
+                if (idx < 0) return { teams, groupAssignments };
+                teams[idx] = {
+                    ...teams[idx],
+                    p1: { ...(teams[idx]?.p1 || {}), id: p1Id, name: p1Full || p1Name },
+                    p2: { ...(teams[idx]?.p2 || {}), id: p2Id, name: p2Full || p2Name },
+                };
+                return { teams, groupAssignments };
+            });
+
+            // Sincroniza la inscripción placeholder para que participant_name refleje nombre oficial.
+            if (previousPlaceholderLabel) {
+                await dataService.replacePlaceholderInscriptionByLabel(
+                    id,
+                    previousPlaceholderLabel,
+                    { id: p1Id, fullName: p1Full || p1Name, email: p1Email || p1Selected?.email || null },
+                    { id: p2Id, fullName: p2Full || p2Name, email: p2Email || p2Selected?.email || null },
+                    tournament?.category
+                );
+                const fresh = await dataService.getInscriptionsByTournament(id);
+                setInscriptions(fresh);
+            }
+
+            setIsManualInscriptionOpen(false);
+            resetManualInscriptionForm();
+        } catch (e: any) {
+            setManualError(e?.message || 'No se pudo completar la inscripción manual.');
+        } finally {
+            setSavingManualInscription(false);
+        }
+    };
+
+    const handleEditTeamFromGrid = async (teamId: string) => {
+        if (!canManageTournament) return;
+        const team = (tournament?.teams || []).find((t: any) => String(t.id) === String(teamId));
+        if (!team) return;
+        const currentP1 = team?.p1?.name || '';
+        const currentP2 = team?.p2?.name || '';
+        const p1 = window.prompt('Editar jugador 1', currentP1);
+        if (p1 == null) return;
+        const p2 = window.prompt('Editar jugador 2', currentP2);
+        if (p2 == null) return;
+        try {
+            await updateTournamentTeams((teams, groupAssignments) => {
+                const idx = teams.findIndex((t: any) => String(t.id) === String(teamId));
+                if (idx < 0) return { teams, groupAssignments };
+                teams[idx] = {
+                    ...teams[idx],
+                    p1: { ...(teams[idx]?.p1 || {}), name: p1.trim() || currentP1 },
+                    p2: { ...(teams[idx]?.p2 || {}), name: p2.trim() || currentP2 },
+                };
+                return { teams, groupAssignments };
+            });
+        } catch (e: any) {
+            alert(e?.message || 'No se pudo editar la pareja');
+        }
+    };
+
+    const handleMoveTeamToGroup = async (teamId: string, targetGroup: string) => {
+        if (!canManageTournament || !targetGroup) return;
+        try {
+            await updateTournamentTeams((teams, groupAssignments) => {
+                const normalizedAssignments: Record<string, string[]> = {};
+                Object.entries(groupAssignments).forEach(([groupName, ids]) => {
+                    normalizedAssignments[groupName] = (ids || []).filter((tid) => String(tid) !== String(teamId));
+                });
+                if (!normalizedAssignments[targetGroup]) normalizedAssignments[targetGroup] = [];
+                if (!normalizedAssignments[targetGroup].some((tid) => String(tid) === String(teamId))) {
+                    normalizedAssignments[targetGroup].push(String(teamId));
+                }
+                return { teams, groupAssignments: normalizedAssignments };
+            });
+        } catch (e: any) {
+            alert(e?.message || 'No se pudo mover la pareja de grupo');
+        }
+    };
+
+    const gruposTabContent = (() => {
+        let gridGroups: Group[] = [];
+        const assignments = (tournament?.groupAssignments ?? {}) as Record<string, string[]>;
+        const assignmentNames = Object.keys(assignments).sort();
+
+        if (assignmentNames.length > 0 && Array.isArray(tournament?.teams) && tournament.teams.length > 0) {
+            gridGroups = assignmentNames.map((groupName) => ({
+                name: groupName,
+                teams: (assignments[groupName] || [])
+                    .map((teamId) => {
+                        const team = (tournament.teams || []).find((t: any) => String(t.id) === String(teamId));
+                        if (!team) return null;
+                        const p1 = String(team?.p1?.name || '').trim();
+                        const p2 = String(team?.p2?.name || '').trim();
+                        const isPlaceholder = !p1 || !p2 || isPlaceholderName(p1) || isPlaceholderName(p2);
+                        return {
+                            id: String(team.id),
+                            player1_name: p1 || 'Jugador por definir',
+                            player2_name: p2 || 'Jugador por definir',
+                            is_placeholder: isPlaceholder,
+                            player2_accepted: !isPlaceholder,
+                            group_name: groupName,
+                        } satisfies Team;
+                    })
+                    .filter(Boolean) as Team[],
+            }));
+        }
+
+        if (gridGroups.length === 0) {
+            const groupNames = [...new Set(inscriptions.map(ins => ins.groupName ?? 'Sin grupo'))].filter(Boolean).sort();
+            gridGroups = groupNames.length > 0
+                ? groupNames.map(name => ({
+                    name: name === 'Sin grupo' ? 'Sin grupo' : name,
+                    teams: inscriptions
+                        .filter(ins => (ins.groupName ?? 'Sin grupo') === name)
+                        .map(ins => {
+                            const partnerName = (ins.data?.partnerName as string) ?? '';
+                            return {
+                                id: ins.id,
+                                player1_name: ins.participantName ?? '',
+                                player2_name: partnerName,
+                                is_placeholder: ins.isPlaceholder === true,
+                                player2_accepted: !ins.isPlaceholder && !!partnerName,
+                                group_name: name,
+                            } satisfies Team;
+                        }),
+                }))
+                : [];
+        }
+
+        if (gridGroups.length > 0) {
+            return (
+                <TournamentGridView
+                    groups={gridGroups}
+                    canManage={!!canManageTournament}
+                    onQuickFillPlaceholder={handleQuickFillPlaceholder}
+                    onEditTeam={handleEditTeamFromGrid}
+                    onMoveTeam={handleMoveTeamToGroup}
+                />
+            );
+        }
+        if (isCruzado) {
+            const ga = (tournament?.groupAssignments ?? {}) as Record<string, string[]>;
+            const groupAIds: string[] = ga['A'] ?? [];
+            const groupBIds: string[] = ga['B'] ?? [];
+            const crossFinished = matches.filter((m: any) => m.status === MatchStatus.FINISHED && m.stage === 'GROUP_STAGE');
+            const buildGroupStanding = (teamIds: string[]) => {
+                return teamIds.map((tid) => {
+                    const teamIdx = tournament?.teams?.findIndex((t: any) => String(t.id) === tid);
+                    const team = teamIdx !== undefined && teamIdx >= 0 ? tournament?.teams?.[teamIdx] : null;
+                    const tNum = (teamIdx ?? -1) + 1;
+                    let mWon = 0, mPlayed = 0, sWon = 0, sLost = 0, gWon = 0, gLost = 0;
+                    crossFinished.forEach((m: any) => {
+                        const side = m.team1Index === tNum ? 't1' : m.team2Index === tNum ? 't2' : null;
+                        if (!side) return;
+                        const opp = side === 't1' ? 't2' : 't1';
+                        mPlayed++;
+                        gWon += m.games?.[side] ?? 0;
+                        gLost += m.games?.[opp] ?? 0;
+                        sWon += m.sets?.[side] ?? 0;
+                        sLost += m.sets?.[opp] ?? 0;
+                        if ((m.sets?.[side] ?? 0) > (m.sets?.[opp] ?? 0)) mWon++;
+                        else if (m.sets?.[side] === m.sets?.[opp] && (m.games?.[side] ?? 0) > (m.games?.[opp] ?? 0)) mWon++;
+                    });
+                    return { id: tid, tNum, name: team ? `${team.p1?.name ?? 'J1'} / ${team.p2?.name ?? 'J2'}` : `Pareja ${tNum}`, mWon, mPlayed, sWon, sLost, gWon, gLost };
+                }).sort((a, b) => b.mWon - a.mWon || (b.sWon - b.sLost) - (a.sWon - a.sLost) || (b.gWon - b.gLost) - (a.gWon - a.gLost));
+            };
+            const standA = buildGroupStanding(groupAIds);
+            const standB = buildGroupStanding(groupBIds);
+            const qfPairings = [
+                { label: 'QF 1', t1: standA[0]?.name ?? 'TBD', t2: standB[1]?.name ?? 'TBD', desc: '1° A vs 2° B' },
+                { label: 'QF 2', t1: standB[0]?.name ?? 'TBD', t2: standA[1]?.name ?? 'TBD', desc: '1° B vs 2° A' },
+                { label: 'QF 3', t1: standA[2]?.name ?? 'TBD', t2: standB[3]?.name ?? 'TBD', desc: '3° A vs 4° B' },
+                { label: 'QF 4', t1: standB[2]?.name ?? 'TBD', t2: standA[3]?.name ?? 'TBD', desc: '3° B vs 4° A' },
+            ];
+            const GroupPanel = ({ title, color, rows }: { title: string; color: string; rows: typeof standA }) => (
+                <div className={`flex-1 bg-white/5 rounded-2xl border ${color} overflow-hidden`}>
+                    <div className={`px-4 py-3 border-b ${color} flex items-center gap-2`}>
+                        <span className={`text-xs font-black uppercase tracking-widest ${title === 'Grupo A' ? 'text-[#ccff00]' : 'text-blue-400'}`}>{title}</span>
+                    </div>
+                    <div className="divide-y divide-white/5">
+                        {rows.map((row, idx) => (
+                            <div key={row.id} className="flex items-center gap-3 px-4 py-3">
+                                <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black ${idx === 0 ? 'bg-[#ccff00] text-black' : idx === 1 ? 'bg-white/20 text-white' : 'bg-white/5 text-gray-500'}`}>{idx + 1}</span>
+                                <span className="flex-1 text-xs font-bold text-white truncate">{row.name}</span>
+                                <div className="flex gap-3 text-[10px] font-mono text-gray-400">
+                                    <span title="Pts">{row.mWon}P</span>
+                                    <span title="Sets">{row.sWon}-{row.sLost}</span>
+                                    <span title="Games">{row.gWon}-{row.gLost}</span>
+                                </div>
+                            </div>
+                        ))}
+                                {rows.length === 0 && <p className="text-[10px] text-gray-600 text-center py-6 italic">Sin resultados aún</p>}
+                    </div>
+                </div>
+            );
+            return (
+                <div className="space-y-5">
+                    <div className="flex gap-3">
+                        <GroupPanel title="Grupo A" color="border-[#ccff00]/20" rows={standA} />
+                        <GroupPanel title="Grupo B" color="border-blue-500/20" rows={standB} />
+                    </div>
+                    <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+                            <Trophy className="w-3 h-3 text-[#ccff00]" />
+                            <span className="text-xs font-black uppercase tracking-widest text-[#ccff00]">Cuartos de Final</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-0 divide-x divide-y divide-white/5">
+                            {qfPairings.map((qf) => (
+                                <div key={qf.label} className="p-4 space-y-2">
+                                    <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest">{qf.desc}</p>
+                                    <div className="space-y-1">
+                                        <div className="text-[11px] font-bold text-white truncate">{qf.t1}</div>
+                                        <div className="text-[9px] text-gray-600 font-black uppercase">vs</div>
+                                        <div className="text-[11px] font-bold text-white truncate">{qf.t2}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        if (isRoundRobin) {
+            const handleSaveGroupResult = async (matchId: string, gamesT1: number, gamesT2: number) => {
+                const match = matches.find(m => m.id === matchId);
+                if (!match) return;
+                const teamAWon = gamesT1 > gamesT2;
+                await dataService.updateMatch(id, matchId, {
+                    status: MatchStatus.FINISHED,
+                    games: { t1: gamesT1, t2: gamesT2 },
+                    sets: { t1: teamAWon ? 1 : 0, t2: teamAWon ? 0 : 1 },
+                    score: `${gamesT1}-${gamesT2}`,
+                    actualEndTime: new Date().toISOString(),
+                });
+            };
+            return (
+                <div className="space-y-4">
+                    {tournament?.groupAssignments && Object.keys(tournament.groupAssignments).length > 0 && (() => {
+                        const ga = (tournament.groupAssignments ?? {}) as Record<string, string[]>;
+                        const groupNames = Object.keys(ga).sort();
+                        const allIds: string[] = [];
+                        groupNames.forEach(g => { (ga[g] || []).forEach((id: string) => allIds.push(id)); });
+                        const uniqueIds = new Set(allIds);
+                        const okNoDuplicates = allIds.length === uniqueIds.size;
+                        const totalTeams = tournament.teams?.length ?? 0;
+                        const okTotal = allIds.length === totalTeams;
+                        return (
+                            <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+                                <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+                                    <span className="text-xs font-black uppercase tracking-widest text-gray-400">Verificación del sorteo</span>
+                                    {(okNoDuplicates && okTotal) ? <CheckCircle2 className="w-4 h-4 text-green-500" aria-label="Sorteo correcto" /> : <AlertTriangle className="w-4 h-4 text-amber-500" aria-label="Revisar asignación" />}
+                                </div>
+                                <div className="p-4 space-y-3">
+                                    {groupNames.map(g => {
+                                        const teamIds = ga[g] ?? [];
+                                        const names = teamIds.map((tid: string) => {
+                                            const t = tournament.teams?.find((te: any) => String(te?.id) === tid);
+                                            return t ? `${t.p1?.name ?? '?'} / ${t.p2?.name ?? '?'}` : tid;
+                                        });
+                                        return (
+                                            <div key={g}>
+                                                <span className="text-[10px] font-black uppercase text-padel-primary">Grupo {g}</span>
+                                                <ul className="text-xs text-white mt-1 space-y-0.5">{names.map((n, i) => <li key={i}>{n}</li>)}</ul>
+                                            </div>
+                                        );
+                                    })}
+                                    <p className="text-[10px] text-gray-500">
+                                        {okNoDuplicates && okTotal ? '✓ Cada equipo en un solo grupo. Total correcto.' : !okNoDuplicates ? '⚠ Un equipo aparece en más de un grupo.' : `⚠ Total equipos en grupos (${allIds.length}) no coincide con inscritos (${totalTeams}).`}
+                                    </p>
+                                    {canManageTournament && (
+                                        <div className="pt-3 border-t border-white/10">
+                                            <button
+                                                type="button"
+                                                disabled={syncAcceptedLoading}
+                                                onClick={async () => {
+                                                    setSyncAcceptedMessage(null);
+                                                    setSyncAcceptedLoading(true);
+                                                    try {
+                                                        const headers = await getAuthHeaders();
+                                                        const res = await fetch(`/api/tournaments/${id}/sync-accepted-teams`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' } });
+                                                        const data = await res.json().catch(() => ({}));
+                                                        if (!res.ok) {
+                                                            setSyncAcceptedMessage({ type: 'error', text: data?.error || 'Error al sincronizar' });
+                                                            return;
+                                                        }
+                                                        const n = data.synced ?? 0;
+                                                        const errs = data.errors ?? [];
+                                                        if (errs.length > 0) {
+                                                            setSyncAcceptedMessage({ type: 'error', text: `${n} sincronizados. Errores: ${errs.slice(0, 2).join('; ')}${errs.length > 2 ? '...' : ''}` });
+                                                        } else {
+                                                            setSyncAcceptedMessage({ type: 'success', text: n > 0 ? `Se sincronizaron ${n} pareja(s) en la grilla.` : 'No había parejas pendientes de sincronizar.' });
+                                                        }
+                                                    } catch (e: any) {
+                                                        setSyncAcceptedMessage({ type: 'error', text: e?.message || 'Error de conexión' });
+                                                    } finally {
+                                                        setSyncAcceptedLoading(false);
+                                                    }
+                                                }}
+                                                className="flex gap-2 text-xs font-bold uppercase tracking-widest text-padel-primary hover:text-padel-primary/90 disabled:opacity-50"
+                                            >
+                                                <RefreshCw className={`w-3.5 h-3.5 ${syncAcceptedLoading ? 'animate-spin' : ''}`} />
+                                                Sincronizar parejas aceptadas
+                                            </button>
+                                            {syncAcceptedMessage && (
+                                                <p className={`mt-2 text-[10px] ${syncAcceptedMessage.type === 'success' ? 'text-green-400' : 'text-amber-400'}`}>{syncAcceptedMessage.text}</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
+                    <TournamentPhaseManager
+                        tournament={tournament}
+                        matches={matches}
+                        canManage={!!canManageTournament}
+                        onSaveResult={handleSaveGroupResult}
+                        onFinishGroupPhase={() => generateMainDraw()}
+                        onResetElimination={async () => {
+                            const eliminationMatches = matches.filter(m => m.stage !== 'GROUP_STAGE' && m.groupName == null);
+                            for (const m of eliminationMatches) {
+                                await dataService.deleteMatch(id, m.id);
+                            }
+                            await dataService.updateTournament(id, { ...tournament, mainDrawGenerated: false });
+                        }}
+                    />
+                </div>
+            );
+        }
+        const isIndividual = tournament?.type === TournamentType.AMERICANO_INDIVIDUAL;
+        const typeLabel = isIndividual ? 'Clasificación Individual' : 'Clasificación por Parejas';
+        const entityLabel = isIndividual ? 'Jugador' : 'Pareja';
+        const computed = calculateStandings();
+        const computedMap: Record<string, any> = {};
+        computed.forEach((s: any) => { computedMap[s.id] = s; });
+        const zeroStats = { matchesPlayed: 0, matchesWon: 0, setsWon: 0, setsLost: 0, gamesWon: 0, gamesLost: 0 };
+        const extra: any[] = [];
+        const seenIds = new Set(Object.keys(computedMap));
+        if (isIndividual) {
+            tournament?.teams?.forEach((team: any, idx: number) => {
+                const pid1 = team.p1?.id || `p-${idx + 1}-1`;
+                const pid2 = team.p2?.id || `p-${idx + 1}-2`;
+                if (!seenIds.has(pid1) && team.p1?.name) { extra.push({ id: pid1, name: team.p1.name, photo: team.p1.photo || null, ...zeroStats }); seenIds.add(pid1); }
+                if (!seenIds.has(pid2) && team.p2?.name && team.p2.name !== team.p1?.name) { extra.push({ id: pid2, name: team.p2.name, photo: team.p2.photo || null, ...zeroStats }); seenIds.add(pid2); }
+            });
+        } else {
+            tournament?.teams?.forEach((team: any, idx: number) => {
+                const tid = `team-${idx + 1}`;
+                if (!seenIds.has(tid)) extra.push({ id: tid, name: `${team.p1?.name || 'J1'} / ${team.p2?.name || 'J2'}`, photo: null, ...zeroStats });
+            });
+        }
+        const allEntries = [...computed, ...extra].sort((a: any, b: any) => {
+            if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;
+            const dSA = a.setsWon - a.setsLost, dSB = b.setsWon - b.setsLost;
+            if (dSB !== dSA) return dSB - dSA;
+            const dGA = a.gamesWon - a.gamesLost, dGB = b.gamesWon - b.gamesLost;
+            if (dGB !== dGA) return dGB - dGA;
+            return b.gamesWon - a.gamesWon;
+        });
+        const getPoints = (s: any) => s.matchesWon * 3 + s.setsWon;
+        if (allEntries.length === 0) {
+            return (
+                <div className="py-20 text-center space-y-4 bg-white/5 rounded-[2.5rem] border border-dashed border-white/10">
+                    <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto opacity-20">
+                        <Trophy className="w-8 h-8 text-white" />
+                    </div>
+                    <p className="text-xs font-black italic uppercase text-gray-600 tracking-widest">Sin participantes registrados</p>
+                </div>
+            );
+        }
+        return (
+            <div className="space-y-4">
+                <div className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
+                    <div className="bg-padel-primary px-8 py-5 flex justify-between items-center">
+                        <div>
+                            <h3 className="text-black font-black italic uppercase text-base tracking-tighter">{typeLabel}</h3>
+                            <p className="text-[9px] text-black/60 font-black uppercase tracking-widest mt-0.5">{allEntries.length} {isIndividual ? 'jugadores' : 'parejas'} · Puntos: PG×3 + Sets×1</p>
+                        </div>
+                        <Trophy className="w-7 h-7 text-black opacity-20" />
+                    </div>
+                    <div className="p-3">
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="text-[9px] font-black uppercase tracking-widest text-gray-500 border-b border-white/[0.06]">
+                                        <th className="text-left py-3 px-2 w-8">#</th>
+                                        <th className="text-left py-3 px-2">{entityLabel}</th>
+                                        <th className="text-center py-3 px-1.5 whitespace-nowrap">PJ</th>
+                                        <th className="text-center py-3 px-1.5 whitespace-nowrap text-green-500">PG</th>
+                                        <th className="text-center py-3 px-1.5 whitespace-nowrap text-red-500">PP</th>
+                                        <th className="text-center py-3 px-1.5 whitespace-nowrap">Sets</th>
+                                        <th className="text-center py-3 px-1.5 whitespace-nowrap">Games</th>
+                                        <th className="text-right py-3 px-3 whitespace-nowrap">Pts</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/[0.04]">
+                                    {allEntries.map((entry: any, idx: number) => {
+                                        const pts = getPoints(entry);
+                                        const pp = entry.matchesPlayed - entry.matchesWon;
+                                        const isPodium = idx < 3;
+                                        const posColor = idx === 0 ? 'bg-padel-primary text-black' : idx === 1 ? 'bg-white/30 text-white' : idx === 2 ? 'bg-white/15 text-white/80' : 'bg-white/5 text-gray-600';
+                                        return (
+                                            <tr key={entry.id} className={`group hover:bg-white/[0.03] transition-colors ${isPodium ? 'border-l-2 border-padel-primary/40' : ''}`}>
+                                                <td className="py-3 px-2">
+                                                    <span className={`w-5 h-5 flex items-center justify-center rounded-md text-[8px] font-black italic ${posColor}`}>{idx + 1}</span>
+                                                </td>
+                                                <td className="py-3 px-2 min-w-[120px]">
+                                                    <div className="flex items-center gap-2">
+                                                        {entry.photo ? <img src={entry.photo} className="w-6 h-6 rounded-full object-cover border border-white/10 flex-shrink-0" /> : <div className="w-6 h-6 rounded-full bg-white/5 border border-white/[0.06] flex items-center justify-center text-[8px] font-bold text-gray-500 uppercase flex-shrink-0">{(entry.name || '?')[0]}</div>}
+                                                        <span className="text-[10px] font-black italic uppercase tracking-tighter group-hover:text-padel-primary transition-colors leading-tight">{entry.name}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="py-3 px-1.5 text-center text-[10px] font-bold text-gray-400">{entry.matchesPlayed}</td>
+                                                <td className="py-3 px-1.5 text-center text-[10px] font-bold text-green-400">{entry.matchesWon}</td>
+                                                <td className="py-3 px-1.5 text-center text-[10px] font-bold text-red-400">{pp}</td>
+                                                <td className="py-3 px-1.5 text-center"><span className="text-[9px] font-bold text-gray-400 tabular-nums">{entry.setsWon}<span className="text-gray-600">-</span>{entry.setsLost}</span></td>
+                                                <td className="py-3 px-1.5 text-center"><span className="text-[9px] font-bold text-gray-400 tabular-nums">{entry.gamesWon}<span className="text-gray-600">-</span>{entry.gamesLost}</span></td>
+                                                <td className="py-3 px-3 text-right"><span className={`text-sm font-black italic tabular-nums ${pts > 0 ? 'text-padel-primary' : 'text-gray-600'}`}>{pts}</span></td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex flex-wrap gap-3 px-2">
+                    {[['PJ', 'Partidos Jugados'], ['PG', 'Partidos Ganados'], ['PP', 'Partidos Perdidos'], ['Sets', 'Sets G–P'], ['Games', 'Juegos G–P'], ['Pts', 'Puntos (PG×3 + Sets×1)']].map(([k, v]) => (
+                        <span key={k} className="text-[8px] font-bold uppercase tracking-widest text-gray-700">
+                            <span className="text-gray-500">{k}</span> {v}
+                        </span>
+                    ))}
+                </div>
+            </div>
+        );
+    })();
+
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit">
             <Sidebar />
@@ -983,13 +1639,18 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                 <div className="max-w-4xl mx-auto px-6 pt-6 pb-4 flex justify-between items-center">
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-3 ml-12 md:ml-0">
-                            <Link href="/tournaments" className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors">
-                                <span className="material-symbols-outlined text-sm">arrow_back</span>
-                            </Link>
+                            <BackButton href="/tournaments" />
                             <div>
-                                <h1 className="text-lg font-bold leading-tight">
-                                    {tournament?.name || ''}
+                                <h1 className="text-lg font-black uppercase italic tracking-tighter leading-tight">
+                                    {tournament.name}
                                 </h1>
+                                {(tournament.category || tournament.gender) && (
+                                    <div className="flex items-center gap-1.5 mt-0.5 text-[11px] font-black uppercase italic tracking-widest text-padel-primary/90">
+                                        {tournament.category && <span>{formatCat(tournament.category)}</span>}
+                                        {tournament.category && tournament.gender && <span className="text-white/30">•</span>}
+                                        {tournament.gender && <span>{formatGender(tournament.gender)}</span>}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -998,7 +1659,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                             <button
                                 type="button"
                                 onClick={() => setActiveTab('Todos')}
-                                className="flex items-center gap-2 px-4 py-2 rounded-full bg-padel-primary/20 border border-padel-primary/40 text-padel-primary hover:bg-padel-primary/30 transition-colors text-xs font-bold uppercase tracking-widest"
+                                className="flex items-center gap-2 px-4 py-2 rounded-full bg-padel-primary text-black hover:ring-2 hover:ring-padel-primary/30 transition-all text-xs font-black italic uppercase tracking-widest active:scale-95"
                                 title="Ver cuadro de partidos"
                             >
                                 Siguiente
@@ -1006,20 +1667,85 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                 <span className="hidden sm:inline">Cuadro</span>
                             </button>
                         )}
+
+                        {canManageTournament && (
+                            <button
+                                type="button"
+                                onClick={async (e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (!tournament) return;
+                                    const nextStatus = (tournament.registrationStatus || 'open') === 'open' ? 'closed' : 'open';
+                                    try {
+                                        await dataService.updateTournament(id, {
+                                            ...tournament,
+                                            registrationStatus: nextStatus,
+                                            updatedAt: new Date().toISOString()
+                                        });
+                                        setTournament((prev: any) => prev ? { ...prev, registrationStatus: nextStatus } : prev);
+                                    } catch (err) {
+                                        console.error('Error toggling registration status:', err);
+                                        alert('No se pudo actualizar el estado de inscripciones.');
+                                    }
+                                }}
+                                className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${
+                                    (tournament?.registrationStatus || 'open') === 'open'
+                                        ? 'bg-red-500/10 border-red-500/40 text-red-400 hover:bg-red-500/20'
+                                        : 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20'
+                                }`}
+                            >
+                                {(tournament?.registrationStatus || 'open') === 'open' ? 'Cerrar Inscripciones' : 'Abrir Inscripciones'}
+                            </button>
+                        )}
+
                         <button
                             type="button"
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsShareModalOpen(true); }}
-                            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
+                            className="w-10 h-10 flex items-center justify-center rounded-full bg-padel-primary text-black hover:ring-2 hover:ring-padel-primary/30 transition-all active:scale-90"
                             title="Compartir"
                         >
-                            <Share2 className="w-4 h-4 text-padel-primary" />
+                            <Share2 className="w-5 h-5" />
                         </button>
                     </div>
                 </div>
             </header>
 
+            {/* Tabs for content switching - Moved to top as requested */}
+            {!isLiveDashboard && (
+                <nav className="bg-[#0a0a0a]/60 backdrop-blur-md border-b border-white/5 py-3 sticky top-[4.5rem] z-50">
+                    <div className="max-w-4xl mx-auto px-4 overflow-x-auto hide-scrollbar">
+                        <div className="flex flex-nowrap items-center gap-2">
+                            {visibleTabs.map((tab, tabIdx) => {
+                                const isLive = tab === 'En Vivo';
+                                const isActive = activeTab === tab;
+                                return (
+                                    <button
+                                        key={`tab-top-${tabIdx}-${tab}`}
+                                        onClick={() => setActiveTab(tab)}
+                                        className={`flex-1 min-w-[90px] px-4 py-2.5 rounded-xl text-[10px] font-black italic uppercase tracking-widest transition-all duration-300 transform active:scale-95 border
+                                            ${isActive
+                                                ? isLive
+                                                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 border-red-500/50'
+                                                    : 'bg-padel-primary text-black shadow-lg shadow-padel-primary/20 border-padel-primary/50'
+                                                : 'bg-white/5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300 border-white/5'
+                                            }`}
+                                    >
+                                        {isLive ? (
+                                            <span className="flex items-center justify-center gap-1.5">
+                                                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : 'bg-red-500'} animate-pulse`} />
+                                                {tab}
+                                            </span>
+                                        ) : tab}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </nav>
+            )}
+
             {/* Content Area (pizarra / cuadro / listados) */}
-            <div className={`ipad-scroll-area pb-20 ${isLiveDashboard ? 'overflow-hidden !pr-0' : (activeTab === 'Por Comenzar' ? 'overflow-hidden' : '')}`}>
+            <div className={`ipad-scroll-area pb-20 ${isLiveDashboard ? (enableCourtScroll ? 'overflow-y-auto !pr-0' : 'overflow-hidden !pr-0') : (activeTab === 'Por Comenzar' ? (enableCourtScroll ? 'overflow-y-auto' : 'overflow-hidden') : '')}`}>
                 <main className={`${isLiveDashboard ? 'max-w-none w-full h-full p-2' : activeTab === 'Por Comenzar' ? 'max-w-4xl mx-auto w-full px-4 py-6 h-full flex flex-col' : 'max-w-4xl mx-auto w-full px-4 py-10'} transition-all duration-500`}>
                     <AnimatePresence mode="wait">
                         {activeTab === 'Grupos' ? (
@@ -1030,362 +1756,7 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 className="space-y-4"
                             >
-                                {isCruzado ? (() => {
-                                    // ── CRUZADO: Grupo A / Grupo B + Cuartos de final ────
-                                    const ga = (tournament?.groupAssignments ?? {}) as Record<string, string[]>;
-                                    const groupAIds: string[] = ga['A'] ?? [];
-                                    const groupBIds: string[] = ga['B'] ?? [];
-
-                                    // Calcular standings por grupo usando solo partidos cruzados finalizados
-                                    const crossFinished = matches.filter((m: any) => m.status === MatchStatus.FINISHED && m.stage === 'GROUP_STAGE');
-
-                                    const buildGroupStanding = (teamIds: string[]) => {
-                                        return teamIds.map((tid) => {
-                                            const teamIdx = tournament?.teams?.findIndex((t: any) => String(t.id) === tid);
-                                            const team = teamIdx !== undefined && teamIdx >= 0 ? tournament?.teams?.[teamIdx] : null;
-                                            const tNum = (teamIdx ?? -1) + 1; // 1-based index used in matches
-
-                                            let mWon = 0, mPlayed = 0, sWon = 0, sLost = 0, gWon = 0, gLost = 0;
-                                            crossFinished.forEach((m: any) => {
-                                                const side = m.team1Index === tNum ? 't1' : m.team2Index === tNum ? 't2' : null;
-                                                if (!side) return;
-                                                const opp = side === 't1' ? 't2' : 't1';
-                                                mPlayed++;
-                                                gWon += m.games?.[side] ?? 0;
-                                                gLost += m.games?.[opp] ?? 0;
-                                                sWon += m.sets?.[side] ?? 0;
-                                                sLost += m.sets?.[opp] ?? 0;
-                                                if ((m.sets?.[side] ?? 0) > (m.sets?.[opp] ?? 0)) mWon++;
-                                                else if (m.sets?.[side] === m.sets?.[opp] && (m.games?.[side] ?? 0) > (m.games?.[opp] ?? 0)) mWon++;
-                                            });
-
-                                            return {
-                                                id: tid,
-                                                tNum,
-                                                name: team ? `${team.p1?.name ?? 'J1'} / ${team.p2?.name ?? 'J2'}` : `Pareja ${tNum}`,
-                                                mWon, mPlayed, sWon, sLost, gWon, gLost,
-                                            };
-                                        }).sort((a, b) =>
-                                            b.mWon - a.mWon ||
-                                            (b.sWon - b.sLost) - (a.sWon - a.sLost) ||
-                                            (b.gWon - b.gLost) - (a.gWon - a.gLost)
-                                        );
-                                    };
-
-                                    const standA = buildGroupStanding(groupAIds);
-                                    const standB = buildGroupStanding(groupBIds);
-
-                                    // QF pairing: 1°A vs 2°B | 1°B vs 2°A | 3°A vs 4°B | 3°B vs 4°A
-                                    const qfPairings = [
-                                        { label: 'QF 1', t1: standA[0]?.name ?? 'TBD', t2: standB[1]?.name ?? 'TBD', desc: '1° A vs 2° B' },
-                                        { label: 'QF 2', t1: standB[0]?.name ?? 'TBD', t2: standA[1]?.name ?? 'TBD', desc: '1° B vs 2° A' },
-                                        { label: 'QF 3', t1: standA[2]?.name ?? 'TBD', t2: standB[3]?.name ?? 'TBD', desc: '3° A vs 4° B' },
-                                        { label: 'QF 4', t1: standB[2]?.name ?? 'TBD', t2: standA[3]?.name ?? 'TBD', desc: '3° B vs 4° A' },
-                                    ];
-
-                                    const GroupPanel = ({ title, color, rows }: { title: string; color: string; rows: typeof standA }) => (
-                                        <div className={`flex-1 bg-white/5 rounded-2xl border ${color} overflow-hidden`}>
-                                            <div className={`px-4 py-3 border-b ${color} flex items-center gap-2`}>
-                                                <span className={`text-xs font-black uppercase tracking-widest ${title === 'Grupo A' ? 'text-[#ccff00]' : 'text-blue-400'}`}>{title}</span>
-                                            </div>
-                                            <div className="divide-y divide-white/5">
-                                                {rows.map((row, idx) => (
-                                                    <div key={row.id} className="flex items-center gap-3 px-4 py-3">
-                                                        <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black ${idx === 0 ? 'bg-[#ccff00] text-black' :
-                                                            idx === 1 ? 'bg-white/20 text-white' :
-                                                                'bg-white/5 text-gray-500'
-                                                            }`}>{idx + 1}</span>
-                                                        <span className="flex-1 text-xs font-bold text-white truncate">{row.name}</span>
-                                                        <div className="flex gap-3 text-[10px] font-mono text-gray-400">
-                                                            <span title="Pts">{row.mWon}P</span>
-                                                            <span title="Sets">{row.sWon}-{row.sLost}</span>
-                                                            <span title="Games">{row.gWon}-{row.gLost}</span>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                                {rows.length === 0 && (
-                                                    <p className="text-[10px] text-gray-600 text-center py-6 italic">Sin resultados aún</p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-
-                                    return (
-                                        <div className="space-y-5">
-                                            {/* Header */}
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 bg-[#ccff00]/10 rounded-full flex items-center justify-center">
-                                                    <span className="text-[#ccff00] text-base">⚡</span>
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-sm font-black uppercase tracking-tighter text-white">Formato Cruzado</h3>
-                                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Grupo A vs Grupo B · 2 juegos por pareja · Top 4 avanzan</p>
-                                                </div>
-                                            </div>
-
-                                            {/* Grupos lado a lado */}
-                                            <div className="flex gap-3">
-                                                <GroupPanel title="Grupo A" color="border-[#ccff00]/20" rows={standA} />
-                                                <GroupPanel title="Grupo B" color="border-blue-500/20" rows={standB} />
-                                            </div>
-
-                                            {/* Cuartos de final */}
-                                            <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
-                                                <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
-                                                    <Trophy className="w-3 h-3 text-[#ccff00]" />
-                                                    <span className="text-xs font-black uppercase tracking-widest text-[#ccff00]">Cuartos de Final</span>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-0 divide-x divide-y divide-white/5">
-                                                    {qfPairings.map((qf) => (
-                                                        <div key={qf.label} className="p-4 space-y-2">
-                                                            <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest">{qf.desc}</p>
-                                                            <div className="space-y-1">
-                                                                <div className="text-[11px] font-bold text-white truncate">{qf.t1}</div>
-                                                                <div className="text-[9px] text-gray-600 font-black uppercase">vs</div>
-                                                                <div className="text-[11px] font-bold text-white truncate">{qf.t2}</div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })() : isRoundRobin ? (() => {
-                                    // ── ROUND ROBIN: orquestador de fases con timeline y bracket ─
-                                    const handleSaveGroupResult = async (matchId: string, gamesT1: number, gamesT2: number) => {
-                                        const match = matches.find(m => m.id === matchId);
-                                        if (!match) return;
-                                        const teamAWon = gamesT1 > gamesT2;
-
-                                        await dataService.updateMatch(id, matchId, {
-                                            status: MatchStatus.FINISHED,
-                                            games: { t1: gamesT1, t2: gamesT2 },
-                                            sets: { t1: teamAWon ? 1 : 0, t2: teamAWon ? 0 : 1 },
-                                            score: `${gamesT1}-${gamesT2}`,
-                                            actualEndTime: new Date().toISOString(),
-                                        });
-                                    };
-                                    return (
-                                        <div className="space-y-4">
-                                            {/* Verificación del sorteo: muestra qué equipos están en cada grupo y comprueba coherencia */}
-                                            {tournament?.groupAssignments && Object.keys(tournament.groupAssignments).length > 0 && (() => {
-                                                const ga = (tournament.groupAssignments ?? {}) as Record<string, string[]>;
-                                                const groupNames = Object.keys(ga).sort();
-                                                const allIds: string[] = [];
-                                                groupNames.forEach(g => { (ga[g] || []).forEach((id: string) => allIds.push(id)); });
-                                                const uniqueIds = new Set(allIds);
-                                                const okNoDuplicates = allIds.length === uniqueIds.size;
-                                                const totalTeams = tournament.teams?.length ?? 0;
-                                                const okTotal = allIds.length === totalTeams;
-                                                return (
-                                                    <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
-                                                        <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-                                                            <span className="text-xs font-black uppercase tracking-widest text-gray-400">Verificación del sorteo</span>
-                                                            {(okNoDuplicates && okTotal) ? <CheckCircle2 className="w-4 h-4 text-green-500" aria-label="Sorteo correcto" /> : <AlertTriangle className="w-4 h-4 text-amber-500" aria-label="Revisar asignación" />}
-                                                        </div>
-                                                        <div className="p-4 space-y-3">
-                                                            {groupNames.map(g => {
-                                                                const teamIds = ga[g] ?? [];
-                                                                const names = teamIds.map((tid: string) => {
-                                                                    const t = tournament.teams?.find((te: any) => String(te?.id) === tid);
-                                                                    return t ? `${t.p1?.name ?? '?'} / ${t.p2?.name ?? '?'}` : tid;
-                                                                });
-                                                                return (
-                                                                    <div key={g}>
-                                                                        <span className="text-[10px] font-black uppercase text-padel-primary">Grupo {g}</span>
-                                                                        <ul className="text-xs text-white mt-1 space-y-0.5">{names.map((n, i) => <li key={i}>{n}</li>)}</ul>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                            <p className="text-[10px] text-gray-500">
-                                                                {okNoDuplicates && okTotal ? '✓ Cada equipo en un solo grupo. Total correcto.' : !okNoDuplicates ? '⚠ Un equipo aparece en más de un grupo.' : `⚠ Total equipos en grupos (${allIds.length}) no coincide con inscritos (${totalTeams}).`}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })()}
-                                            <TournamentPhaseManager
-                                                tournament={tournament}
-                                                matches={matches}
-                                                canManage={!!canManageTournament}
-                                                onSaveResult={handleSaveGroupResult}
-                                                onFinishGroupPhase={() => generateMainDraw()}
-                                                onResetElimination={async () => {
-                                                    // Eliminar partidos de llave de la tabla
-                                                    const eliminationMatches = matches.filter(m =>
-                                                        m.stage !== 'GROUP_STAGE' && m.groupName == null
-                                                    );
-                                                    for (const m of eliminationMatches) {
-                                                        await dataService.deleteMatch(id, m.id);
-                                                    }
-
-                                                    await dataService.updateTournament(id, {
-                                                        ...tournament,
-                                                        mainDrawGenerated: false
-                                                    });
-                                                }}
-                                            />
-                                        </div>
-                                    );
-                                })() : (() => {
-                                    // ── AMERICANO / KNOCKOUT: clasificación general ────────
-                                    const isIndividual = tournament?.type === TournamentType.AMERICANO_INDIVIDUAL;
-                                    const typeLabel = isIndividual ? 'Clasificación Individual' : 'Clasificación por Parejas';
-                                    const entityLabel = isIndividual ? 'Jugador' : 'Pareja';
-
-                                    // Standings from finished matches
-                                    const computed = calculateStandings();
-                                    const computedMap: Record<string, any> = {};
-                                    computed.forEach((s: any) => { computedMap[s.id] = s; });
-
-                                    // Add participants who haven't played yet (zero stats)
-                                    const zeroStats = { matchesPlayed: 0, matchesWon: 0, setsWon: 0, setsLost: 0, gamesWon: 0, gamesLost: 0 };
-                                    const extra: any[] = [];
-                                    const seenIds = new Set(Object.keys(computedMap));
-
-                                    if (isIndividual) {
-                                        tournament?.teams?.forEach((team: any, idx: number) => {
-                                            const pid1 = team.p1?.id || `p-${idx + 1}-1`;
-                                            const pid2 = team.p2?.id || `p-${idx + 1}-2`;
-                                            if (!seenIds.has(pid1) && team.p1?.name) {
-                                                extra.push({ id: pid1, name: team.p1.name, photo: team.p1.photo || null, ...zeroStats });
-                                                seenIds.add(pid1);
-                                            }
-                                            if (!seenIds.has(pid2) && team.p2?.name && team.p2.name !== team.p1?.name) {
-                                                extra.push({ id: pid2, name: team.p2.name, photo: team.p2.photo || null, ...zeroStats });
-                                                seenIds.add(pid2);
-                                            }
-                                        });
-                                    } else {
-                                        tournament?.teams?.forEach((team: any, idx: number) => {
-                                            const tid = `team-${idx + 1}`;
-                                            if (!seenIds.has(tid)) {
-                                                extra.push({
-                                                    id: tid,
-                                                    name: `${team.p1?.name || 'J1'} / ${team.p2?.name || 'J2'}`,
-                                                    photo: null,
-                                                    ...zeroStats
-                                                });
-                                            }
-                                        });
-                                    }
-
-                                    const allEntries = [...computed, ...extra].sort((a: any, b: any) => {
-                                        if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;
-                                        const dSA = a.setsWon - a.setsLost, dSB = b.setsWon - b.setsLost;
-                                        if (dSB !== dSA) return dSB - dSA;
-                                        const dGA = a.gamesWon - a.gamesLost, dGB = b.gamesWon - b.gamesLost;
-                                        if (dGB !== dGA) return dGB - dGA;
-                                        return b.gamesWon - a.gamesWon;
-                                    });
-
-                                    const getPoints = (s: any) => s.matchesWon * 3 + s.setsWon;
-
-                                    if (allEntries.length === 0) {
-                                        return (
-                                            <div className="py-20 text-center space-y-4 bg-white/5 rounded-[2.5rem] border border-dashed border-white/10">
-                                                <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto opacity-20">
-                                                    <Trophy className="w-8 h-8 text-white" />
-                                                </div>
-                                                <p className="text-xs font-black italic uppercase text-gray-600 tracking-widest">Sin participantes registrados</p>
-                                            </div>
-                                        );
-                                    }
-
-                                    return (
-                                        <div className="space-y-4">
-                                            {/* Header card */}
-                                            <div className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
-                                                <div className="bg-padel-primary px-8 py-5 flex justify-between items-center">
-                                                    <div>
-                                                        <h3 className="text-black font-black italic uppercase text-base tracking-tighter">{typeLabel}</h3>
-                                                        <p className="text-[9px] text-black/60 font-black uppercase tracking-widest mt-0.5">
-                                                            {allEntries.length} {isIndividual ? 'jugadores' : 'parejas'} · Puntos: PG×3 + Sets×1
-                                                        </p>
-                                                    </div>
-                                                    <Trophy className="w-7 h-7 text-black opacity-20" />
-                                                </div>
-
-                                                <div className="p-3">
-                                                    <div className="overflow-x-auto">
-                                                        <table className="w-full">
-                                                            <thead>
-                                                                <tr className="text-[9px] font-black uppercase tracking-widest text-gray-500 border-b border-white/[0.06]">
-                                                                    <th className="text-left py-3 px-2 w-8">#</th>
-                                                                    <th className="text-left py-3 px-2">{entityLabel}</th>
-                                                                    <th className="text-center py-3 px-1.5 whitespace-nowrap">PJ</th>
-                                                                    <th className="text-center py-3 px-1.5 whitespace-nowrap text-green-500">PG</th>
-                                                                    <th className="text-center py-3 px-1.5 whitespace-nowrap text-red-500">PP</th>
-                                                                    <th className="text-center py-3 px-1.5 whitespace-nowrap">Sets</th>
-                                                                    <th className="text-center py-3 px-1.5 whitespace-nowrap">Games</th>
-                                                                    <th className="text-right py-3 px-3 whitespace-nowrap">Pts</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody className="divide-y divide-white/[0.04]">
-                                                                {allEntries.map((entry: any, idx: number) => {
-                                                                    const pts = getPoints(entry);
-                                                                    const pp = entry.matchesPlayed - entry.matchesWon;
-                                                                    const isPodium = idx < 3;
-                                                                    const posColor = idx === 0
-                                                                        ? 'bg-padel-primary text-black'
-                                                                        : idx === 1
-                                                                            ? 'bg-white/30 text-white'
-                                                                            : idx === 2
-                                                                                ? 'bg-white/15 text-white/80'
-                                                                                : 'bg-white/5 text-gray-600';
-                                                                    return (
-                                                                        <tr key={entry.id} className={`group hover:bg-white/[0.03] transition-colors ${isPodium ? 'border-l-2 border-padel-primary/40' : ''}`}>
-                                                                            <td className="py-3 px-2">
-                                                                                <span className={`w-5 h-5 flex items-center justify-center rounded-md text-[8px] font-black italic ${posColor}`}>
-                                                                                    {idx + 1}
-                                                                                </span>
-                                                                            </td>
-                                                                            <td className="py-3 px-2 min-w-[120px]">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    {entry.photo ? (
-                                                                                        <img src={entry.photo} className="w-6 h-6 rounded-full object-cover border border-white/10 flex-shrink-0" />
-                                                                                    ) : (
-                                                                                        <div className="w-6 h-6 rounded-full bg-white/5 border border-white/[0.06] flex items-center justify-center text-[8px] font-bold text-gray-500 uppercase flex-shrink-0">
-                                                                                            {(entry.name || '?')[0]}
-                                                                                        </div>
-                                                                                    )}
-                                                                                    <span className="text-[10px] font-black italic uppercase tracking-tighter group-hover:text-padel-primary transition-colors leading-tight">
-                                                                                        {entry.name}
-                                                                                    </span>
-                                                                                </div>
-                                                                            </td>
-                                                                            <td className="py-3 px-1.5 text-center text-[10px] font-bold text-gray-400">{entry.matchesPlayed}</td>
-                                                                            <td className="py-3 px-1.5 text-center text-[10px] font-bold text-green-400">{entry.matchesWon}</td>
-                                                                            <td className="py-3 px-1.5 text-center text-[10px] font-bold text-red-400">{pp}</td>
-                                                                            <td className="py-3 px-1.5 text-center">
-                                                                                <span className="text-[9px] font-bold text-gray-400 tabular-nums">{entry.setsWon}<span className="text-gray-600">-</span>{entry.setsLost}</span>
-                                                                            </td>
-                                                                            <td className="py-3 px-1.5 text-center">
-                                                                                <span className="text-[9px] font-bold text-gray-400 tabular-nums">{entry.gamesWon}<span className="text-gray-600">-</span>{entry.gamesLost}</span>
-                                                                            </td>
-                                                                            <td className="py-3 px-3 text-right">
-                                                                                <span className={`text-sm font-black italic tabular-nums ${pts > 0 ? 'text-padel-primary' : 'text-gray-600'}`}>{pts}</span>
-                                                                            </td>
-                                                                        </tr>
-                                                                    );
-                                                                })}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Legend */}
-                                            <div className="flex flex-wrap gap-3 px-2">
-                                                {[['PJ', 'Partidos Jugados'], ['PG', 'Partidos Ganados'], ['PP', 'Partidos Perdidos'], ['Sets', 'Sets G–P'], ['Games', 'Juegos G–P'], ['Pts', 'Puntos (PG×3 + Sets×1)']].map(([k, v]) => (
-                                                    <span key={k} className="text-[8px] font-bold uppercase tracking-widest text-gray-700">
-                                                        <span className="text-gray-500">{k}</span> {v}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
+                                {gruposTabContent}
                             </motion.div>
                         ) : activeTab === 'Ranking' ? (
                             <motion.div
@@ -1476,7 +1847,8 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                         const cols = _numCanchas <= 1 ? 1 : _numCanchas <= 2 ? 2 : 3;
                                         const gridCols = cols === 1 ? 'grid-cols-1' : cols === 2 ? 'grid-cols-2' : 'grid-cols-3';
                                         if (isLiveDashboard) return `grid ${gridCols} gap-4 h-full items-start`;
-                                        if (activeTab === 'Por Comenzar') return `grid ${gridCols} gap-3 flex-1 min-h-0 items-start`;
+                                        if (activeTab === 'Por Comenzar') return `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 flex-1 min-h-0 items-start`;
+
                                         return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start';
                                     })()}>
                                         {displayMatches.filter((match: any) => match && match.team1 && match.team2).map((match: any, idx: number) => {
@@ -1542,8 +1914,15 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                                                 return <span className="text-[11px] font-bold text-orange-400 tracking-wider flex-shrink-0">{estTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>;
                                                                             }
                                                                             const d = raw?.toDate ? raw.toDate() : new Date(raw);
-                                                                            const hhmm = isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
-                                                                            return <span className="text-[11px] font-bold text-gray-400 tracking-wider flex-shrink-0">{hhmm}</span>;
+                                                                            if (isNaN(d.getTime())) return <span className="text-[11px] font-bold text-gray-400 tracking-wider flex-shrink-0">—</span>;
+                                                                            const dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+                                                                            const timeStr = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+                                                                            return (
+                                                                                <div className="flex flex-col items-start gap-0.5 flex-shrink-0">
+                                                                                    <span className="text-[10px] font-black text-padel-primary/60 tracking-tighter uppercase">{dateStr}</span>
+                                                                                    <span className="text-[11px] font-bold text-gray-400 tracking-wider">{timeStr}</span>
+                                                                                </div>
+                                                                            );
                                                                         })()}
                                                                         <span className="text-white/30 flex-shrink-0">·</span>
                                                                         <span className={`text-[11px] font-black uppercase tracking-widest italic flex-shrink-0 ${match.status === MatchStatus.LIVE ? 'text-padel-primary' : 'text-gray-500'}`}>
@@ -1791,37 +2170,39 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
 
                                                                 {/* Nav bar fijo abajo: Control, Pizarra, Cámaras, ADS — Por Comenzar y En Vivo */}
                                                                 {(activeTab === 'Por Comenzar' || activeTab === 'En Vivo') && (
-                                                                    <nav className="shrink-0 grid grid-cols-4 border-t border-white/[0.12] bg-black/70 py-2.5">
-                                                                        <Link
-                                                                            href={match?.id ? `/tournaments/${id}/score/${match.id}` : `/tournaments/${id}/control`}
-                                                                            className="flex flex-col items-center justify-center gap-1 py-1.5 text-gray-400 hover:text-padel-primary hover:bg-white/[0.08] transition-all active:scale-95 border-r border-white/10"
-                                                                        >
-                                                                            <Zap className="w-4 h-4" />
-                                                                            <span className="text-[8px] font-black uppercase tracking-widest">Control</span>
-                                                                        </Link>
-                                                                        <Link
-                                                                            href={id && match?.id ? `/tournaments/${id}/display/${match.id}` : id ? `/tournaments/${id}/monitor` : '#'}
-                                                                            target={id ? '_blank' : undefined}
-                                                                            className="flex flex-col items-center justify-center gap-1 py-1.5 text-gray-400 hover:text-white hover:bg-white/[0.08] transition-all active:scale-95 border-r border-white/10"
-                                                                        >
-                                                                            <Monitor className="w-4 h-4" />
-                                                                            <span className="text-[8px] font-black uppercase tracking-widest">Pizarra</span>
-                                                                        </Link>
-                                                                        <Link
-                                                                            href={id ? `/tournaments/${id}/control/broadcasting` : '#'}
-                                                                            className="flex flex-col items-center justify-center gap-1 py-1.5 text-gray-400 hover:text-orange-400 hover:bg-white/[0.08] transition-all active:scale-95 border-r border-white/10"
-                                                                        >
-                                                                            <Camera className="w-4 h-4" />
-                                                                            <span className="text-[8px] font-black uppercase tracking-widest">Cámaras</span>
-                                                                        </Link>
-                                                                        <Link
-                                                                            href={id ? `/tournaments/${id}/control/ads` : '#'}
-                                                                            className="flex flex-col items-center justify-center gap-1 py-1.5 text-gray-400 hover:text-yellow-400 hover:bg-white/[0.08] transition-all active:scale-95"
-                                                                        >
-                                                                            <Tv className="w-4 h-4" />
-                                                                            <span className="text-[8px] font-black uppercase tracking-widest">ADS</span>
-                                                                        </Link>
-                                                                    </nav>
+                                                                    <div className="px-2 pb-2 shrink-0">
+                                                                        <nav className="grid grid-cols-4 border border-white/5 bg-white/5 backdrop-blur-md py-1.5 rounded-xl shadow-lg">
+                                                                            <Link
+                                                                                href={match?.id ? `/tournaments/${id}/score/${match.id}` : `/tournaments/${id}/control`}
+                                                                                className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-padel-primary transition-all active:scale-90 border-r border-white/5"
+                                                                            >
+                                                                                <Zap className="w-3.5 h-3.5" />
+                                                                                <span className="text-[7px] font-black uppercase tracking-widest leading-none">Control</span>
+                                                                            </Link>
+                                                                            <Link
+                                                                                href={id && match?.id ? `/tournaments/${id}/display/${match.id}` : id ? `/tournaments/${id}/monitor` : '#'}
+                                                                                target={id ? '_blank' : undefined}
+                                                                                className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-white transition-all active:scale-90 border-r border-white/5"
+                                                                            >
+                                                                                <Monitor className="w-3.5 h-3.5" />
+                                                                                <span className="text-[7px] font-black uppercase tracking-widest leading-none">Pizarra</span>
+                                                                            </Link>
+                                                                            <Link
+                                                                                href={id ? `/tournaments/${id}/control/broadcasting` : '#'}
+                                                                                className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-orange-400 transition-all active:scale-90 border-r border-white/5"
+                                                                            >
+                                                                                <Camera className="w-3.5 h-3.5" />
+                                                                                <span className="text-[7px] font-black uppercase tracking-widest leading-none">Cámaras</span>
+                                                                            </Link>
+                                                                            <Link
+                                                                                href={`/admin/publicidad`}
+                                                                                className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-yellow-400 transition-all active:scale-90"
+                                                                            >
+                                                                                <Tv className="w-3.5 h-3.5" />
+                                                                                <span className="text-[7px] font-black uppercase tracking-widest leading-none">ADS</span>
+                                                                            </Link>
+                                                                        </nav>
+                                                                    </div>
                                                                 )}
                                                             </div>
                                                         </div>
@@ -1837,38 +2218,122 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                 </main>
             </div>
 
-            {/* Navbar debajo de la pizarra: pestañas fijas al fondo */}
-            <nav className="fixed bottom-0 left-0 right-0 z-[50] bg-[#0a0a0a]/95 backdrop-blur-xl border-t border-white/10 safe-area-pb">
-                <div className="max-w-4xl mx-auto px-2 py-2 overflow-x-auto hide-scrollbar flex justify-center">
-                    <div className="flex flex-wrap justify-center gap-x-1 gap-y-1">
-                        {visibleTabs.map((tab, tabIdx) => {
-                            const isLive = tab === 'En Vivo';
-                            return (
+
+
+            <AnimatePresence>
+                {isManualInscriptionOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm p-4 flex items-center justify-center"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="w-full max-w-2xl rounded-3xl border border-white/10 bg-[#0f0f0f] p-5 md:p-6"
+                        >
+                            <div className="flex items-center justify-between gap-4 mb-4">
+                                <div>
+                                    <h3 className="text-lg font-black uppercase tracking-tight">Inscripción Manual</h3>
+                                    <p className="text-[10px] text-gray-400 uppercase tracking-widest">Vinculación con participants + inscriptions</p>
+                                </div>
                                 <button
-                                    key={`tab-${tabIdx}-${tab}`}
-                                    onClick={() => setActiveTab(tab)}
-                                    className={`min-w-[80px] px-3 py-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap
-                                        ${activeTab === tab
-                                            ? isLive
-                                                ? 'border-red-500 text-red-400'
-                                                : 'border-padel-primary text-padel-primary'
-                                            : isLive
-                                                ? 'border-transparent text-red-600 hover:text-red-400'
-                                                : 'border-transparent text-gray-500 hover:text-gray-300'
-                                        }`}
+                                    type="button"
+                                    onClick={() => { setIsManualInscriptionOpen(false); resetManualInscriptionForm(); }}
+                                    className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center"
                                 >
-                                    {isLive ? (
-                                        <span className="flex items-center justify-center gap-1">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-                                            {tab}
-                                        </span>
-                                    ) : tab}
+                                    <X className="w-4 h-4 text-gray-300" />
                                 </button>
-                            );
-                        })}
-                    </div>
-                </div>
-            </nav>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {([
+                                    { slot: 1 as const, query: p1Query, setQuery: setP1Query, selected: p1Selected, matches: p1Matches, lastName: p1LastName, setLastName: setP1LastName, email: p1Email, setEmail: setP1Email, phone: p1Phone, setPhone: setP1Phone },
+                                    { slot: 2 as const, query: p2Query, setQuery: setP2Query, selected: p2Selected, matches: p2Matches, lastName: p2LastName, setLastName: setP2LastName, email: p2Email, setEmail: setP2Email, phone: p2Phone, setPhone: setP2Phone },
+                                ]).map((cfg) => {
+                                    const locked = !!cfg.selected;
+                                    return (
+                                        <div key={cfg.slot} className="rounded-2xl border border-white/10 bg-white/[0.02] p-3 space-y-2">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-padel-primary">Jugador {cfg.slot}</p>
+                                            <input
+                                                value={cfg.query}
+                                                onChange={(e) => {
+                                                    cfg.setQuery(e.target.value);
+                                                    if (cfg.slot === 1) setP1Selected(null);
+                                                    else setP2Selected(null);
+                                                }}
+                                                placeholder="Nombre del jugador (buscar por nombre o email)"
+                                                className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-padel-primary/60"
+                                            />
+                                            {!locked && cfg.matches.length > 0 && (
+                                                <div className="max-h-40 overflow-y-auto rounded-xl border border-white/10 bg-black/40">
+                                                    {cfg.matches.map((m) => (
+                                                        <button
+                                                            key={m.id}
+                                                            type="button"
+                                                            onClick={() => pickParticipant(cfg.slot, m)}
+                                                            className="w-full text-left px-3 py-2 hover:bg-white/10 border-b border-white/5 last:border-b-0"
+                                                        >
+                                                            <p className="text-xs font-semibold">{fullName(m.name, m.lastName) || 'Sin nombre'}</p>
+                                                            <p className="text-[10px] text-gray-400">{m.email || 'Sin email'}</p>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {locked && (
+                                                <p className="text-[10px] text-emerald-400">Jugador existente vinculado. Email/Teléfono bloqueados.</p>
+                                            )}
+                                            <input
+                                                value={cfg.lastName}
+                                                onChange={(e) => cfg.setLastName(e.target.value)}
+                                                readOnly={locked}
+                                                placeholder="Apellido"
+                                                className={`w-full rounded-xl border px-3 py-2 text-sm outline-none ${locked ? 'border-white/10 bg-white/5 text-gray-400' : 'border-white/15 bg-black/30 focus:border-padel-primary/60'}`}
+                                            />
+                                            <input
+                                                value={cfg.email}
+                                                onChange={(e) => cfg.setEmail(e.target.value)}
+                                                readOnly={locked}
+                                                placeholder="Email"
+                                                className={`w-full rounded-xl border px-3 py-2 text-sm outline-none ${locked ? 'border-white/10 bg-white/5 text-gray-400' : 'border-white/15 bg-black/30 focus:border-padel-primary/60'}`}
+                                            />
+                                            <input
+                                                value={cfg.phone}
+                                                onChange={(e) => cfg.setPhone(e.target.value)}
+                                                readOnly={locked}
+                                                placeholder="Teléfono"
+                                                className={`w-full rounded-xl border px-3 py-2 text-sm outline-none ${locked ? 'border-white/10 bg-white/5 text-gray-400' : 'border-white/15 bg-black/30 focus:border-padel-primary/60'}`}
+                                            />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {manualError && <p className="mt-3 text-sm text-red-400">{manualError}</p>}
+
+                            <div className="mt-5 flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => { setIsManualInscriptionOpen(false); resetManualInscriptionForm(); }}
+                                    className="px-4 py-2 rounded-xl border border-white/15 bg-white/5 text-xs font-black uppercase tracking-widest"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={saveManualInscription}
+                                    disabled={savingManualInscription}
+                                    className="px-4 py-2 rounded-xl bg-padel-primary text-black text-xs font-black uppercase tracking-widest disabled:opacity-60"
+                                >
+                                    {savingManualInscription ? 'Guardando...' : 'Guardar Pareja'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Score Management Modal */}
             <AnimatePresence>
@@ -2050,14 +2515,12 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                     <div className="p-6 space-y-4">
                                         <button
                                             onClick={sharePDFCuadro}
-                                            className="w-full flex items-center justify-center gap-3 p-4 rounded-2xl bg-padel-primary/20 border border-padel-primary/40 hover:bg-padel-primary/30 transition-all group"
+                                            className="w-full flex items-center justify-center gap-3 p-4 rounded-2xl bg-padel-primary hover:opacity-90 text-black transition-all transform active:scale-95 group"
                                         >
-                                            <div className="w-10 h-10 rounded-full bg-padel-primary flex items-center justify-center text-black">
-                                                <Download className="w-5 h-5" />
-                                            </div>
+                                            <Download className="w-5 h-5" />
                                             <div className="text-left">
-                                                <span className="text-sm font-black uppercase tracking-tight text-padel-primary block">Compartir PDF del cuadro</span>
-                                                <span className="text-[10px] text-white/70 font-bold uppercase tracking-widest">Descarga o comparte el cuadro del torneo</span>
+                                                <span className="text-sm font-black italic uppercase tracking-tight block">Compartir PDF del cuadro</span>
+                                                <span className="text-[10px] opacity-70 font-bold uppercase tracking-widest">Descarga el cuadro del torneo</span>
                                             </div>
                                         </button>
                                         <div className="grid grid-cols-2 gap-3">
@@ -2101,24 +2564,24 @@ export default function TournamentDashboard({ params }: { params: Promise<{ id: 
                                                     setCopied(true);
                                                     setTimeout(() => setCopied(false), 2000);
                                                 }}
-                                                className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-padel-primary/10 border border-padel-primary/20 hover:bg-padel-primary/20 transition-all group"
+                                                className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all transform active:scale-95 group ${copied ? 'bg-padel-primary border-padel-primary text-black' : 'bg-[#111] border-white/10 hover:bg-[#1a1a1a] text-padel-primary'}`}
                                             >
-                                                <div className="w-10 h-10 rounded-full bg-padel-primary flex items-center justify-center text-black">
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${copied ? 'bg-black text-padel-primary' : 'bg-padel-primary text-black'}`}>
                                                     {copied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
                                                 </div>
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-padel-primary">{copied ? 'Copiado' : 'Copiar link'}</span>
+                                                <span className={`text-[9px] font-black uppercase tracking-widest ${copied ? 'text-black' : 'text-padel-primary'}`}>{copied ? 'Copiado' : 'Link'}</span>
                                             </button>
 
                                             <button
                                                 onClick={generatePDF}
-                                                className="col-span-2 flex items-center justify-center gap-3 p-4 rounded-2xl bg-white/10 border border-white/20 hover:bg-white/20 transition-all group"
+                                                className="col-span-2 flex items-center justify-center gap-3 p-4 rounded-2xl bg-zinc-900 border border-white/5 hover:border-padel-primary/50 transition-all transform active:scale-[0.98] group"
                                             >
-                                                <div className="w-10 h-10 rounded-full bg-[#ccff00] flex items-center justify-center text-black">
-                                                    <Download className="w-5 h-5" />
+                                                <div className="w-10 h-10 rounded-full bg-padel-primary flex items-center justify-center text-black shadow-lg shadow-padel-primary/20">
+                                                    <FileText className="w-5 h-5" />
                                                 </div>
                                                 <div className="text-left">
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-white block">Descargar Planilla</span>
-                                                    <span className="text-[8px] text-gray-500 font-bold uppercase tracking-widest">Documento PDF (A4)</span>
+                                                    <span className="text-xs font-black italic uppercase tracking-widest text-white block">Descargar Planilla de Control</span>
+                                                    <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Documento PDF Oficial (A4)</span>
                                                 </div>
                                             </button>
                                         </div>

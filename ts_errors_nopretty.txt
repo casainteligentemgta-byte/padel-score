@@ -1,0 +1,2 @@
+src/app/tournaments/[id]/display/[matchId]/page.tsx(337,33): error TS2304: Cannot find name 'MediaContent'.
+src/app/tournaments/[id]/display/[matchId]/page.tsx(338,33): error TS2304: Cannot find name 'MediaContent'.

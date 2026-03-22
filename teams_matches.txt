@@ -1,0 +1,9 @@
+361: teams: Array.from({ length: pendingNumTeams }, (_, j) => ({
+390: teams: Array.from({ length: pendingNumTeams }, (_, i) => ({
+421: teams: Array.from({ length: newCount }, (_, i) => ({
+436: const totalTeams = eventData.categories.reduce((acc, c) => acc + (c.teams?.length || 0), 0);
+451: teams: (() => {
+452: const list = [...(cat.teams ?? [])];
+546: const teamsFromCat = cat.teams ?? [];
+594: teams: cat.teams ?? [],
+1793: <span className="text-padel-primary font-black">{c.teams?.length || c.numTeams} parejas · {calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION, (c as any).advanceCount)} partidos</span>

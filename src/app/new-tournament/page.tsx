@@ -20,12 +20,14 @@ import {
     ChevronDown,
     Search,
     X,
-    Info
+    Info,
+    DollarSign
 } from 'lucide-react';
 import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
+import { TournamentStepper } from '@/components/TournamentStepper';
 import { useEffect } from 'react';
 
 // ── Estado inicial del formulario ─────────────────────────────────────────
@@ -38,11 +40,12 @@ const INITIAL_DATA = {
     groupSize: 3,
     matchFormat: 'ONE_SET_6' as 'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS',
     scoringSystem: 'GOLDEN_POINT' as 'GOLDEN_POINT' | 'TRADITIONAL',
+    tieBreakType: 'TB' as 'TB' | 'STB',
     startDate: new Date().toISOString().split('T')[0],
-    startTime: '08:00',
-    endTime: '22:00',
+    startTime: '16:00',
+    endTime: '23:30',
     complexName: '',
-    totalCourts: 4,
+    totalCourts: 3,
     courtNames: [] as string[],
     bufferMinutes: 2,
     advanceCount: 2,
@@ -51,7 +54,11 @@ const INITIAL_DATA = {
         id: number;
         p1: { id: string; name: string; lastName: string; age: string; photo: string; phone: string };
         p2: { id: string; name: string; lastName: string; age: string; photo: string; phone: string };
-    }[]
+    }[],
+    /** Categorías para que los jugadores se inscriban desde la app (varias categorías, evita choques de horario). ageMin/ageMax opcionales; maxSlots = cupo por categoría. */
+    inscriptionCategories: [] as { key: string; name: string; price: number; gender?: 'MALE' | 'FEMALE' | 'MIXED'; ageMin?: number; ageMax?: number; maxSlots?: number }[],
+    /** Estado de inscripciones: open | closed */
+    registrationStatus: 'open' as 'open' | 'closed',
 };
 
 export default function NewTournamentPage() {
@@ -120,7 +127,7 @@ export default function NewTournamentPage() {
 
     const getDaysInMonth = (year: number, month: number) => {
         const date = new Date(year, month, 1);
-        const days = [];
+        const days: (Date | null)[] = [];
         const firstDay = (date.getDay() + 6) % 7; // Adjust to start on Monday
 
         for (let i = 0; i < firstDay; i++) {
@@ -142,6 +149,9 @@ export default function NewTournamentPage() {
         { id: TournamentCategory.QUINTA, label: '5ª Categoría' },
         { id: TournamentCategory.SEXTA, label: '6ª Categoría' },
         { id: TournamentCategory.SEPTIMA, label: '7ª Categoría' },
+        { id: TournamentCategory.MAS_40, label: '+40 Masc.' },
+        { id: TournamentCategory.FEM_40, label: '+40 Fem.' },
+        { id: TournamentCategory.MIX_40, label: '+40 Mixto' },
         { id: TournamentCategory.MAS_45, label: '+45' },
         { id: TournamentCategory.MAS_50, label: '+50' },
         { id: TournamentCategory.SUMA_7, label: 'Suma 7' },
@@ -152,12 +162,12 @@ export default function NewTournamentPage() {
     ];
 
     const COMPLEXES = [
+        { name: 'Food Kart', courts: 3 },
+        { name: 'El Bodeguero', courts: 3 },
         { name: 'Margarita Padel', courts: 6 },
         { name: 'Tibisay', courts: 3 },
         { name: 'Sun Sol Costa Azul', courts: 4 },
-        { name: 'Food Kart', courts: 3 },
         { name: 'Elite', courts: 4 },
-        { name: 'Bodeguero', courts: 3 },
         { name: 'Sun Sol Pedro Gonzalez', courts: 2 },
         { name: 'Playa el Agua', courts: 3 },
     ];
@@ -330,7 +340,7 @@ export default function NewTournamentPage() {
                 // ── Asignación directa de tiempos/canchas a los pairings ──────────────────
                 // No usamos generateSchedule (que trunca por horario) sino que asignamos
                 // slots directamente sobre los allPairings para garantizar TODOS los partidos.
-                const numCourts = Math.max(1, tournamentData.courtNames.length);
+                const numCourts = tournamentData.courtNames.length > 0 ? tournamentData.courtNames.length : Math.max(1, tournamentData.totalCourts);
                 const [startH, startMin] = (tournamentData.startTime || "08:00").split(':').map(Number);
                 const slotMinutes = matchDuration + 2; // duración + buffer
 
@@ -490,6 +500,15 @@ export default function NewTournamentPage() {
                 return;
             }
 
+            const defaultInscriptionCategories = (tournamentData.inscriptionCategories?.length ?? 0) > 0
+                ? tournamentData.inscriptionCategories
+                : [{
+                    key: tournamentData.category || 'PRIMERA',
+                    name: `${tournamentData.category || 'Primera'}${tournamentData.gender ? ' ' + (tournamentData.gender === 'MALE' ? 'Masculino' : tournamentData.gender === 'FEMALE' ? 'Femenino' : 'Mixto') : ''}`,
+                    price: 0,
+                    gender: tournamentData.gender || undefined,
+                }];
+
             const tournamentToSave = {
                 name: tournamentData.name,
                 type: tournamentData.type,
@@ -509,11 +528,14 @@ export default function NewTournamentPage() {
                 isReduced: tournamentData.isReduced,
                 matchFormat: tournamentData.matchFormat,
                 scoringSystem: tournamentData.scoringSystem,
+                tieBreakType: tournamentData.tieBreakType,
                 groupAssignments: groupAssignments,
                 advancementRule: tournamentData.type === TournamentType.ROUND_ROBIN
                     ? { teamsPerGroup: tournamentData.groupSize, advanceCount: tournamentData.advanceCount, nextRound: Object.keys(groupAssignments).length === 2 ? 'QF' : 'SF' }
                     : null,
-                status: 'En Curso'
+                status: 'En Curso',
+                inscriptionCategories: defaultInscriptionCategories,
+                registrationStatus: 'open',
             };
 
             console.log('[NewTournament] Saving to Firestore...');
@@ -535,7 +557,7 @@ export default function NewTournamentPage() {
     };
 
     const nextStep = () => {
-        if (step === 3 && tournamentData.type !== TournamentType.ROUND_ROBIN) {
+        if (step === 3 && ![TournamentType.ROUND_ROBIN, TournamentType.KNOCKOUT, TournamentType.CRUZADO].includes(tournamentData.type as any)) {
             setStep(5);
         } else {
             setStep(s => Math.min(s + 1, 7));
@@ -543,7 +565,7 @@ export default function NewTournamentPage() {
     };
 
     const prevStep = () => {
-        if (step === 5 && tournamentData.type !== TournamentType.ROUND_ROBIN) {
+        if (step === 5 && ![TournamentType.ROUND_ROBIN, TournamentType.KNOCKOUT, TournamentType.CRUZADO].includes(tournamentData.type as any)) {
             setStep(3);
         } else {
             setStep(s => Math.max(s - 1, 1));
@@ -671,11 +693,10 @@ export default function NewTournamentPage() {
                             {[1, 2, 3, 4, 5, 6, 7].map(i => {
                                 let isActive = step >= i;
                                 // Handle visual skip for non-Round Robin
-                                if (tournamentData.type !== TournamentType.ROUND_ROBIN) {
+                                if (![TournamentType.ROUND_ROBIN, TournamentType.KNOCKOUT, TournamentType.CRUZADO].includes(tournamentData.type as any)) {
                                     if (step === 3 && i === 4) isActive = false;
                                     if (step >= 5 && i === 4) isActive = true;
-                                }
-                                return (
+                                } return (
                                     <div
                                         key={i}
                                         className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${isActive ? 'bg-padel-primary shadow-[0_0_10px_rgba(204,255,0,0.5)]' : 'bg-white/10'}`}
@@ -792,6 +813,125 @@ export default function NewTournamentPage() {
                                             </motion.button>
                                         ))}
                                     </div>
+
+                                    <div className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] p-6 space-y-4">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1 flex items-center gap-2">
+                                            <User className="w-3.5 h-3.5 text-padel-primary" /> Categorías de inscripción
+                                        </label>
+                                        <p className="text-xs text-gray-500">
+                                            Los jugadores podrán inscribirse desde la app. Indica el <strong>nº de parejas</strong> por categoría y los cupos se crearán solos (parejas × 2 plazas). El horario evitará choques entre categorías.
+                                        </p>
+                                        {(tournamentData.inscriptionCategories?.length ?? 0) > 0 && (
+                                            <ul className="space-y-2">
+                                                {tournamentData.inscriptionCategories.map((cat, idx) => (
+                                                    <li key={cat.key + idx} className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-black/30 border border-white/5">
+                                                        <input
+                                                            type="text"
+                                                            value={cat.name}
+                                                            onChange={(e) => {
+                                                                const next = [...(tournamentData.inscriptionCategories || [])];
+                                                                next[idx] = { ...next[idx], name: e.target.value };
+                                                                setTournamentData({ ...tournamentData, inscriptionCategories: next });
+                                                            }}
+                                                            placeholder="Nombre (ej. Primera Masculino)"
+                                                            className="flex-1 min-w-[120px] bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm font-bold text-white"
+                                                        />
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            value={cat.price}
+                                                            onChange={(e) => {
+                                                                const next = [...(tournamentData.inscriptionCategories || [])];
+                                                                next[idx] = { ...next[idx], price: parseFloat(e.target.value) || 0 };
+                                                                setTournamentData({ ...tournamentData, inscriptionCategories: next });
+                                                            }}
+                                                            placeholder="0"
+                                                            className="w-20 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-sm font-bold text-white"
+                                                        />
+                                                        <span className="text-[10px] text-gray-500">$</span>
+                                                        <span className="text-[10px] text-gray-500">Edad:</span>
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            max={99}
+                                                            value={cat.ageMin ?? ''}
+                                                            onChange={(e) => {
+                                                                const next = [...(tournamentData.inscriptionCategories || [])];
+                                                                const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                                                                next[idx] = { ...next[idx], ageMin: v === undefined || Number.isNaN(v) ? undefined : v };
+                                                                setTournamentData({ ...tournamentData, inscriptionCategories: next });
+                                                            }}
+                                                            placeholder="mín"
+                                                            className="w-14 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-xs font-bold text-white"
+                                                            title="Edad mínima (opcional)"
+                                                        />
+                                                        <span className="text-[10px] text-gray-500">–</span>
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            max={99}
+                                                            value={cat.ageMax ?? ''}
+                                                            onChange={(e) => {
+                                                                const next = [...(tournamentData.inscriptionCategories || [])];
+                                                                const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                                                                next[idx] = { ...next[idx], ageMax: v === undefined || Number.isNaN(v) ? undefined : v };
+                                                                setTournamentData({ ...tournamentData, inscriptionCategories: next });
+                                                            }}
+                                                            placeholder="máx"
+                                                            className="w-14 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-xs font-bold text-white"
+                                                            title="Edad máxima (opcional)"
+                                                        />
+                                                        <span className="text-[10px] text-gray-500">Parejas:</span>
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            value={cat.maxSlots != null ? Math.floor(cat.maxSlots / 2) : ''}
+                                                            onChange={(e) => {
+                                                                const next = [...(tournamentData.inscriptionCategories || [])];
+                                                                const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                                                                const numParejas = v === undefined || Number.isNaN(v) || v < 1 ? undefined : v;
+                                                                next[idx] = { ...next[idx], maxSlots: numParejas != null ? numParejas * 2 : undefined };
+                                                                setTournamentData({ ...tournamentData, inscriptionCategories: next });
+                                                            }}
+                                                            placeholder="sin límite"
+                                                            className="w-16 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-xs font-bold text-white"
+                                                            title="Nº de parejas: los cupos se crean automáticamente (parejas × 2 plazas)"
+                                                        />
+                                                        {cat.maxSlots != null && (
+                                                            <span className="text-[10px] text-gray-500">= {cat.maxSlots} plazas</span>
+                                                        )}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const next = (tournamentData.inscriptionCategories || []).filter((_, i) => i !== idx);
+                                                                setTournamentData({ ...tournamentData, inscriptionCategories: next });
+                                                            }}
+                                                            className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 text-xs font-bold"
+                                                        >
+                                                            Quitar
+                                                        </button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const key = `CAT_${(tournamentData.inscriptionCategories?.length ?? 0) + 1}`;
+                                                const name = tournamentData.gender === 'MALE' ? 'Masculino' : tournamentData.gender === 'FEMALE' ? 'Femenino' : 'Mixto';
+                                                setTournamentData({
+                                                    ...tournamentData,
+                                                    inscriptionCategories: [...(tournamentData.inscriptionCategories || []), { key, name: `Categoría ${name}`, price: 0, gender: tournamentData.gender || undefined, ageMin: undefined, ageMax: undefined, maxSlots: undefined }],
+                                                });
+                                            }}
+                                            className="text-sm font-bold uppercase tracking-widest text-padel-primary hover:underline"
+                                        >
+                                            + Añadir categoría de inscripción
+                                        </button>
+                                        {(!tournamentData.inscriptionCategories || tournamentData.inscriptionCategories.length === 0) && (
+                                            <p className="text-[10px] text-gray-600">Si no añades ninguna, se creará una por defecto con el género del torneo.</p>
+                                        )}
+                                    </div>
                                 </div>
 
                             </motion.div>
@@ -832,7 +972,7 @@ export default function NewTournamentPage() {
                                                     ...tournamentData,
                                                     complexName: c.name,
                                                     totalCourts: c.courts,
-                                                    courtNames: []
+                                                    courtNames: Array.from({ length: c.courts }, (_, i) => `Pista ${i + 1}`)
                                                 });
                                             }}
                                             className={`p-4 rounded-xl border text-left transition-all ${tournamentData.complexName === c.name ? 'border-padel-primary bg-padel-primary/10' : 'border-white/5 bg-white/5 hover:border-white/10'}`}
@@ -1001,7 +1141,7 @@ export default function NewTournamentPage() {
                                             key={type.id}
                                             onClick={() => {
                                                 setTournamentData({ ...tournamentData, type: type.id as any });
-                                                if (type.id === TournamentType.ROUND_ROBIN) setStep(4);
+                                                if ([TournamentType.ROUND_ROBIN, TournamentType.KNOCKOUT, TournamentType.CRUZADO].includes(type.id as any)) setStep(4);
                                                 else setStep(5);
                                             }}
                                             className={`group relative overflow-hidden rounded-3xl border-2 transition-all p-6 flex items-center justify-between gap-4 ${tournamentData.type === type.id
@@ -1373,13 +1513,37 @@ export default function NewTournamentPage() {
                                             </div>
                                         </div>
 
+                                        {/* Tie-break Type */}
+                                        <div className="space-y-4">
+                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Desempate (Tie-break)</label>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                {[
+                                                    { id: 'TB', label: 'Tie-break (7)', desc: 'Desempate a 7 puntos' },
+                                                    { id: 'STB', label: 'Super Tie-break (10)', desc: 'Desempate a 10 puntos' },
+                                                ].map(tb => (
+                                                    <button
+                                                        key={tb.id}
+                                                        onClick={() => setTournamentData({ ...tournamentData, tieBreakType: tb.id as any })}
+                                                        className={`p-4 rounded-xl text-left transition-all border ${tournamentData.tieBreakType === tb.id
+                                                            ? 'bg-padel-primary border-padel-primary text-black shadow-lg scale-[1.02]'
+                                                            : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
+                                                    >
+                                                        <span className="block font-black italic text-xs uppercase mb-1">{tb.label}</span>
+                                                        <span className={`block text-[8px] font-bold uppercase opacity-60 ${tournamentData.tieBreakType === tb.id ? 'text-black' : 'text-gray-600'}`}>
+                                                            {tb.desc}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
                                         {/* Scoring System */}
                                         <div className="space-y-4">
                                             <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Sistema de Puntuación</label>
                                             <div className="grid grid-cols-1 gap-2">
                                                 {[
-                                                    { id: 'GOLDEN_POINT', label: 'Punto de Oro', desc: 'Sin ventaja en el 40-40' },
-                                                    { id: 'TRADITIONAL', label: 'Ventaja Tradicional', desc: 'Sistema clásico de ventajas' },
+                                                    { id: 'GOLDEN_POINT', label: 'Punto de Oro', desc: 'Sin ventaja (al primero en ganar)' },
+                                                    { id: 'TRADITIONAL', label: 'Con Ventaja (Deuce)', desc: 'Sistema clásico (V-40, etc.)' },
                                                 ].map(sys => (
                                                     <button
                                                         key={sys.id}
@@ -1536,9 +1700,9 @@ export default function NewTournamentPage() {
                                         {LEVEL_CATEGORIES.map((cat) => (
                                             <button
                                                 key={cat.id}
+                                                type="button"
                                                 onClick={() => {
                                                     setTournamentData({ ...tournamentData, category: cat.id });
-                                                    setStep(7);
                                                 }}
                                                 className={`p-5 rounded-[1.5rem] border-2 text-center transition-all group flex flex-col items-center gap-2 ${tournamentData.category === cat.id
                                                     ? 'border-padel-primary bg-padel-primary/10 shadow-[0_0_20px_rgba(204,255,0,0.15)]'
@@ -1552,6 +1716,54 @@ export default function NewTournamentPage() {
                                             </button>
                                         ))}
                                     </div>
+
+                                    {tournamentData.category && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="mt-6 p-6 rounded-[2rem] bg-white/5 border border-white/10 space-y-4"
+                                        >
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-10 h-10 rounded-full bg-padel-primary/10 flex items-center justify-center">
+                                                    <DollarSign className="w-5 h-5 text-padel-primary" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-black uppercase italic text-white leading-none">Precio de Inscripción</h4>
+                                                    <p className="text-[10px] text-gray-500 mt-1 uppercase font-bold tracking-tighter">Establece el costo para esta categoría</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="relative">
+                                                <input
+                                                    type="number"
+                                                    value={tournamentData.inscriptionCategories?.[0]?.price ?? 0}
+                                                    onChange={(e) => {
+                                                        const price = parseFloat(e.target.value) || 0;
+                                                        const cat = LEVEL_CATEGORIES.find(c => c.id === tournamentData.category);
+                                                        setTournamentData({
+                                                            ...tournamentData,
+                                                            inscriptionCategories: [{
+                                                                key: tournamentData.category,
+                                                                name: cat?.label || tournamentData.category,
+                                                                price: price
+                                                            }]
+                                                        });
+                                                    }}
+                                                    placeholder="0.00"
+                                                    className="w-full bg-black/40 border-2 border-white/10 rounded-2xl p-4 pl-12 text-white font-bold focus:border-padel-primary transition-all outline-none"
+                                                />
+                                                <span className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500 font-bold">$</span>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => setStep(7)}
+                                                className="w-full py-4 mt-2 bg-padel-primary text-black font-black uppercase italic rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_10px_20px_rgba(204,255,0,0.2)]"
+                                            >
+                                                Continuar
+                                            </button>
+                                        </motion.div>
+                                    )}
                                 </div>
                             </motion.div>
                         )}
@@ -1854,6 +2066,38 @@ export default function NewTournamentPage() {
                                         )))
                                     }
                                 </div>
+
+                                {/* Lanzar torneo con cupos placeholder (inscripciones + Round Robin) */}
+                                {(tournamentData.inscriptionCategories?.length ?? 0) > 0 && user?.uid && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="pt-6 border-t border-white/10"
+                                    >
+                                        <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-3">
+                                            O bien: crear cupos automáticos por categoría
+                                        </p>
+                                        <TournamentStepper
+                                            formData={{
+                                                name: tournamentData.name,
+                                                startDate: tournamentData.startDate,
+                                                startTime: tournamentData.startTime,
+                                                endTime: tournamentData.endTime,
+                                                complexName: tournamentData.complexName,
+                                                totalCourts: tournamentData.totalCourts,
+                                                courtNames: tournamentData.courtNames,
+                                                inscriptionCategories: tournamentData.inscriptionCategories,
+                                                maxTeamsByCategory: (tournamentData.inscriptionCategories || []).reduce<Record<string, number>>((acc, c) => {
+                                                    acc[c.key] = c.maxSlots ?? 8;
+                                                    return acc;
+                                                }, {}),
+                                            }}
+                                            userId={user.uid}
+                                            onError={(e) => alert(`Error: ${e.message}`)}
+                                            redirectTo={(id) => `/tournaments/${id}`}
+                                        />
+                                    </motion.div>
+                                )}
                             </motion.div>
                         )}
                     </AnimatePresence>

@@ -5,9 +5,10 @@ import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import {
     Users,
-    UserPlus,
     Search,
     Trash2,
+    Copy,
+    Check,
     ExternalLink,
     RefreshCw,
     Edit2,
@@ -32,6 +33,7 @@ function PlayersListContent() {
     const [editingPlayer, setEditingPlayer] = useState<any>(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [copiedPlayerId, setCopiedPlayerId] = useState<string | null>(null);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -41,18 +43,31 @@ function PlayersListContent() {
 
     useEffect(() => {
         const loadPlayers = async () => {
-            if (user) {
-                try {
-                    // Si es admin, traemos TODOS los participantes del sistema
-                    const data = isAdmin
-                        ? await dataService.getAllParticipants()
-                        : await dataService.getMyParticipants(user.uid);
+            if (!user) return;
+            try {
+                if (isAdmin) {
+                    const res = await fetch('/api/participants');
+                    if (res.ok) {
+                        const data = await res.json();
+                        setPlayers(Array.isArray(data) ? data : []);
+                        setLoading(false);
+                        return;
+                    }
+                    if (res.status === 501) {
+                        const data = await dataService.getAllParticipants();
+                        setPlayers(data);
+                    } else {
+                        setPlayers([]);
+                    }
+                } else {
+                    const data = await dataService.getMyParticipants(user.uid);
                     setPlayers(data);
-                } catch (err) {
-                    console.error(err);
-                } finally {
-                    setLoading(false);
                 }
+            } catch (err) {
+                console.error(err);
+                setPlayers([]);
+            } finally {
+                setLoading(false);
             }
         };
         if (!authLoading && user) loadPlayers();
@@ -70,6 +85,7 @@ function PlayersListContent() {
     }, [editId, players]);
 
     const handleDelete = async (id: string) => {
+        if (!isAdmin) return;
         if (!confirm('¿Estás seguro de eliminar este jugador? Esta acción es irreversible.')) return;
         try {
             await dataService.deleteParticipant(id);
@@ -83,6 +99,17 @@ function PlayersListContent() {
     const handleEdit = (player: any) => {
         setEditingPlayer({ ...player });
         setIsEditModalOpen(true);
+    };
+
+    const handleCopyCode = async (playerId: string, code?: string) => {
+        if (!code) return;
+        try {
+            await navigator.clipboard.writeText(String(code));
+            setCopiedPlayerId(playerId);
+            setTimeout(() => setCopiedPlayerId(prev => (prev === playerId ? null : prev)), 1400);
+        } catch (e) {
+            console.error('No se pudo copiar el código', e);
+        }
     };
 
     const closeCamera = () => {
@@ -168,19 +195,11 @@ function PlayersListContent() {
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
             <Sidebar />
 
-            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-3 flex-shrink-0 pl-24 md:pl-28">
-                <div>
-                    <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
-                        <span className="text-padel-primary">Jugadores</span>
-                    </h1>
-                    <p className="text-gray-500 mt-2 font-medium">Gestiona los perfiles y estadísticas de tus jugadores.</p>
-                </div>
-                <Link
-                    href="/players/register"
-                    className="bg-padel-primary text-black px-8 py-4 rounded-2xl font-black text-sm flex items-center gap-3 hover:scale-105 transition-transform uppercase italic"
-                >
-                    REGISTRAR NUEVO <UserPlus className="w-5 h-5" />
-                </Link>
+            <header className="mb-3 flex-shrink-0 pl-24 md:pl-28">
+                <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
+                    <span className="text-padel-primary">Jugadores</span>
+                </h1>
+                <p className="text-gray-500 mt-2 font-medium">Gestiona los perfiles y estadísticas de tus jugadores.</p>
             </header>
 
             <div className="mb-3 relative flex-shrink-0">
@@ -217,22 +236,32 @@ function PlayersListContent() {
                                     <tr key={player.id} className="hover:bg-white/[0.02] transition-colors group">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center overflow-hidden border-2 border-white/5 group-hover:border-padel-primary/30 transition-all">
+                                                <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center overflow-hidden border-2 border-white/5 group-hover:border-padel-primary/30 transition-all">
                                                     {player.photo ? (
                                                         <img src={player.photo} className="w-full h-full object-cover" />
                                                     ) : (
-                                                        <Users className="w-6 h-6 text-gray-600" />
+                                                        <Users className="w-7 h-7 text-gray-600" />
                                                     )}
                                                 </div>
                                                 <div>
-                                                    <p className="font-bold text-sm tracking-tight">{player.name} {player.lastName}</p>
-                                                    <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase">{player.dni || 'SIN DNI'}</p>
+                                                    <p className="font-bold text-base tracking-tight">{player.name} {player.lastName}</p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleCopyCode(player.id, player.uniqueCode)}
+                                                        onTouchStart={() => handleCopyCode(player.id, player.uniqueCode)}
+                                                        className="mt-0.5 inline-flex items-center gap-1.5 text-[11px] text-gray-400 font-black tracking-widest uppercase hover:text-padel-primary transition-colors"
+                                                        title="Tocar para copiar código"
+                                                    >
+                                                        Código: <span className="text-white">{player.uniqueCode || '------'}</span>
+                                                        <Copy className="w-3.5 h-3.5" />
+                                                        {copiedPlayerId === player.id && <Check className="w-3.5 h-3.5 text-padel-primary" />}
+                                                    </button>
                                                 </div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col gap-1">
-                                                <div className="inline-flex items-center px-2 py-0.5 rounded-full bg-padel-primary/10 text-padel-primary text-[10px] font-bold w-fit uppercase italic tracking-tighter">
+                                                <div className="inline-flex items-center px-3 py-1 rounded-full bg-padel-primary/10 text-padel-primary text-xs font-bold w-fit uppercase italic tracking-tighter">
                                                     Nivel {player.level || '4'}
                                                 </div>
                                                 <span className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">{player.position}</span>
@@ -240,29 +269,35 @@ function PlayersListContent() {
                                         </td>
                                         <td className="px-6 py-4 text-xs font-medium">
                                             <div className="space-y-1">
-                                                <p className="text-gray-300">{player.phone || 'S/N'}</p>
+                                                <p className="text-gray-300 text-sm"><span className="text-gray-500">WhatsApp:</span> {player.phone || 'S/N'}</p>
                                                 <p className="text-gray-500 italic">{player.instagram ? `@${player.instagram}` : player.email || 'N/A'}</p>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    onClick={() => handleDelete(player.id)}
-                                                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-lg"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
+                                                {isAdmin && (
+                                                    <button
+                                                        onClick={() => handleDelete(player.id)}
+                                                        className="h-10 px-3 flex items-center justify-center gap-1.5 rounded-xl bg-red-600 text-white hover:bg-red-500 transition-all shadow-lg font-black text-[10px] uppercase tracking-widest"
+                                                        title="Borrar jugador"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                        <span>Borrar</span>
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => handleEdit(player)}
-                                                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-padel-primary/10 text-padel-primary hover:bg-padel-primary hover:text-black transition-all shadow-lg"
+                                                    className="h-10 px-3 flex items-center justify-center gap-1.5 rounded-xl bg-padel-primary/10 text-padel-primary hover:bg-padel-primary hover:text-black transition-all shadow-lg font-black text-[10px] uppercase tracking-widest"
                                                 >
                                                     <Edit2 className="w-4 h-4" />
+                                                    <span>Modificar</span>
                                                 </button>
                                                 <Link
                                                     href={`/players/${player.id}`}
-                                                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 text-gray-400 hover:bg-padel-primary hover:text-black transition-all shadow-lg"
+                                                    className="h-10 px-3 flex items-center justify-center gap-1.5 rounded-xl bg-white/5 text-gray-300 hover:bg-padel-primary hover:text-black transition-all shadow-lg font-black text-[10px] uppercase tracking-widest"
                                                 >
                                                     <ExternalLink className="w-4 h-4" />
+                                                    <span>Perfil</span>
                                                 </Link>
                                             </div>
                                         </td>

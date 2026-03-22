@@ -8,8 +8,8 @@ export class ScheduleEngine {
     /**
    * Genera los matches para un torneo basándose en la configuración.
    */
-    /** Slot fijo entre partidos en la misma cancha (minutos) */
-    static readonly SLOT_MINUTES = 85;
+    /** Slot fijo entre partidos en la misma cancha (minutos). 90 min evita retrasos en cadena. */
+    static readonly SLOT_MINUTES = 90;
 
     static generateSchedule(config: ScheduleConfig) {
         if (config.numTeams < 2) {
@@ -45,11 +45,13 @@ export class ScheduleEngine {
             pairings = this.generateBasicPairings(numTeams);
         }
 
-        // Shuffle Fisher-Yates
+        // No shuffle to preserve logical order of games
+        /*
         for (let i = pairings.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [pairings[i], pairings[j]] = [pairings[j], pairings[i]];
         }
+        */
 
         console.log(`[ScheduleEngine] ${pairings.length} pairings for ${numTeams} teams, ${numCourts} courts`);
 
