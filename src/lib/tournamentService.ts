@@ -398,3 +398,56 @@ export async function handleRealInscription(
     return { success: false, error };
   }
 }
+
+// ─── Tipos ──────────────────────────────────────────────────────────────────
+
+export interface TournamentReadyResult {
+  isReady: boolean;
+  errors: string[];
+  placeholderCount: number;
+  totalTeams: number;
+}
+
+/**
+ * Verifica si un torneo está listo para comenzar comprobando que todos los
+ * equipos tienen nombres reales (no placeholders genéricos).
+ *
+ * Un equipo se considera "placeholder" si:
+ * - Su p1.name contiene "Pareja", "Jugador" o "Placeholder" (case-insensitive)
+ * - Su p1.name está vacío o ausente
+ *
+ * @param tournament - Objeto del torneo (viene de dataService, puede tener campo `teams`)
+ * @returns { isReady, errors, placeholderCount, totalTeams }
+ */
+export const checkTournamentReady = (tournament: any): TournamentReadyResult => {
+  const teams: any[] = Array.isArray(tournament?.teams) ? tournament.teams : [];
+  const errors: string[] = [];
+  let placeholderCount = 0;
+
+  const PLACEHOLDER_RE = /pareja|jugador|placeholder/i;
+
+  teams.forEach((team: any, index: number) => {
+    const p1Name = (team?.p1?.name || team?.p1Name || '').trim();
+    const p2Name = (team?.p2?.name || team?.p2Name || '').trim();
+
+    const p1IsPlaceholder = !p1Name || PLACEHOLDER_RE.test(p1Name);
+    const p2IsPlaceholder = !p2Name || PLACEHOLDER_RE.test(p2Name);
+
+    if (p1IsPlaceholder || p2IsPlaceholder) {
+      placeholderCount++;
+      const label = team?.name || `Equipo ${index + 1}`;
+      const missing: string[] = [];
+      if (p1IsPlaceholder) missing.push('J1');
+      if (p2IsPlaceholder) missing.push('J2');
+      errors.push(`${label}: sin nombre real en ${missing.join(' y ')}.`);
+    }
+  });
+
+  return {
+    isReady: errors.length === 0,
+    errors,
+    placeholderCount,
+    totalTeams: teams.length,
+  };
+};
+
