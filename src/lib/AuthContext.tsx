@@ -111,10 +111,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         let subscription: { unsubscribe: () => void } | null = null;
         try {
             const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (event, session) => {
+                // Token inválido o expirado sin posibilidad de renovar → limpiar sesión silenciosamente
+                if ((event as string) === 'TOKEN_REFRESHED' && !session) {
+                    console.warn('AuthContext: TOKEN_REFRESHED sin session, forzando signOut.');
+                    await supabase.auth.signOut();
+                    setUser(null);
+                    setProfile(null);
+                    setLoading(false);
+                    setProfileLoading(false);
+                    return;
+                }
+
                 if (event === 'SIGNED_OUT' || (event as string) === 'USER_DELETED') {
                     setUser(null);
                     setProfile(null);
                     setLoading(false);
+                    setProfileLoading(false);
                     return;
                 }
 
@@ -154,9 +166,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             })
             .catch((e: any) => {
                 console.error('AuthContext: getSession failed', e);
-                // Si el error es de token de refresco inválido, forzamos logout para limpiar
-                if (e?.message?.includes('Refresh Token') || e?.status === 400) {
-                    supabase.auth.signOut();
+                // Si el error es de token de refresco inválido, forzamos logout y limpiamos storage
+                const isTokenError = e?.message?.includes('Refresh Token') ||
+                    e?.message?.includes('refresh_token') ||
+                    e?.status === 400 || e?.status === 401;
+                if (isTokenError) {
+                    supabase.auth.signOut().catch(() => { });
+                    // Limpiar claves de Supabase en localStorage como respaldo
+                    if (typeof window !== 'undefined') {
+                        Object.keys(localStorage).forEach(k => {
+                            if (k.startsWith('sb-')) localStorage.removeItem(k);
+                        });
+                    }
                 }
                 setLoading(false);
                 setProfileLoading(false);

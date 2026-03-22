@@ -118,15 +118,15 @@ export default function HubPage() {
             const mine = await dataService.getMyParticipants(user.uid);
             const player = mine?.[0];
             if (player?.id) {
-                // Si ya tiene ficha, vamos a MI PERFIL
-                router.push('/mi-cuenta');
+                // Si ya tiene ficha, vamos al perfil del jugador
+                router.push(`/players/${player.id}`);
             } else {
                 // Si no tiene ficha, vamos al registro inicial
                 router.push('/players/register');
             }
         } catch (e) {
             console.error('HubPage: error loading player profile', e);
-            router.push('/mi-cuenta');
+            router.push('/players/register');
         }
     };
 
@@ -136,8 +136,10 @@ export default function HubPage() {
             subtitle: 'VER MI FICHA',
             icon: User,
             color: 'text-purple-400',
-            bg: 'bg-purple-400/10',
-            border: 'border-purple-400/10',
+            glow: 'shadow-purple-400/20',
+            bg: 'bg-purple-400/15',
+            border: 'border-purple-400/40',
+            hoverBorder: 'hover:border-purple-400/70',
             onClick: handlePlayerClick
         },
         {
@@ -145,26 +147,21 @@ export default function HubPage() {
             subtitle: 'EXPLORAR EVENTOS',
             icon: Trophy,
             color: 'text-padel-primary',
-            bg: 'bg-padel-primary/10',
-            border: 'border-padel-primary/10',
+            glow: 'shadow-padel-primary/20',
+            bg: 'bg-padel-primary/15',
+            border: 'border-padel-primary/40',
+            hoverBorder: 'hover:border-padel-primary/70',
             href: '/tournaments'
-        },
-        {
-            name: 'Ranking',
-            subtitle: 'TABLA DE POSICIONES',
-            icon: Medal,
-            color: 'text-blue-400',
-            bg: 'bg-blue-400/10',
-            border: 'border-blue-400/10',
-            href: '/ranking'
         },
         {
             name: 'Tarjeta de victoria',
             subtitle: 'DESCARGAR IMAGEN',
             icon: ImageIcon,
             color: 'text-amber-400',
-            bg: 'bg-amber-400/10',
-            border: 'border-amber-400/10',
+            glow: 'shadow-amber-400/20',
+            bg: 'bg-amber-400/15',
+            border: 'border-amber-400/40',
+            hoverBorder: 'hover:border-amber-400/70',
             href: '/hub/victory-card'
         },
         {
@@ -172,8 +169,10 @@ export default function HubPage() {
             subtitle: 'PRÓXIMAMENTE',
             icon: Wallet,
             color: 'text-emerald-400',
-            bg: 'bg-emerald-400/10',
-            border: 'border-emerald-400/10',
+            glow: 'shadow-emerald-400/20',
+            bg: 'bg-emerald-400/15',
+            border: 'border-emerald-400/40',
+            hoverBorder: 'hover:border-emerald-400/40',
             disabled: true
         }
     ];
@@ -409,63 +408,54 @@ export default function HubPage() {
                             </motion.div>
                         )}
 
-                        {/* Hub Grid - compacto en móvil para caber en una pantalla */}
-                        <div className="grid grid-cols-2 gap-2 sm:gap-3 pb-4 sm:pb-8 w-full mt-0 sm:mt-1">
-                            {hubItems.map((item, index) => {
-                                const isProfileCard = item.name === 'Mi Perfil';
-                                return (
-                                    <motion.button
-                                        key={item.name}
-                                        type="button"
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: index * 0.1 }}
-                                        onClick={() => {
-                                            if (item.disabled) return;
-                                            if (item.onClick) item.onClick();
-                                            else if (item.href) router.push(item.href);
-                                        }}
-                                        className={`relative group isolation-isolate w-full rounded-[10px] sm:rounded-[14px] p-1 sm:p-1.5 transition-all overflow-hidden border backdrop-blur-xl box-border ${
-                                            'h-[64px] sm:h-[82px] px-2.5 flex-row items-center justify-start text-left'
-                                        } ${
+                        {/* Hub Grid — botones visibles pero no exagerados */}
+                        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 pb-4 sm:pb-8 w-full mt-1 sm:mt-2">
+                            {hubItems.map((item, index) => (
+                                <motion.button
+                                    key={item.name}
+                                    type="button"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: index * 0.08 }}
+                                    onClick={() => {
+                                        if (item.disabled) return;
+                                        if (item.onClick) item.onClick();
+                                        else if (item.href) router.push(item.href);
+                                    }}
+                                    className={`relative group flex flex-col items-center justify-center gap-1.5 w-full
+                                        rounded-2xl p-3 sm:p-4 border-2 backdrop-blur-xl
+                                        transition-all duration-200 active:scale-[0.97]
+                                        min-h-[80px] sm:min-h-[100px]
+                                        shadow-md ${item.glow}
+                                        ${
                                             item.disabled
-                                                ? 'bg-white/5 border-white/10 opacity-40 cursor-not-allowed'
-                                                : `bg-white/5 ${item.border} border-white/10 hover:bg-white/10 hover:border-white/20 hover:translate-y-0`
+                                                ? 'bg-white/3 border-white/10 opacity-40 cursor-not-allowed'
+                                                : `bg-[#111] ${item.border} ${item.hoverBorder} hover:bg-[#181818]`
                                         }`}
-                                    >
-                                        {/* Icon Container */}
-                                        <div
-                                            className={`relative z-10 shrink-0 transition-all group-hover:scale-110 shadow-lg rounded-md sm:rounded-lg p-1 sm:p-1.5 mr-2 ${item.bg} ${item.color}`}
-                                        >
-                                            <item.icon
-                                                className="block w-6 h-6 sm:w-7 sm:h-7"
-                                            />
-                                        </div>
+                                >
+                                    {/* Icono */}
+                                    <div className={`rounded-xl p-2 sm:p-2.5 ${item.bg} ${item.color} transition-transform group-hover:scale-110`}>
+                                        <item.icon className="w-6 h-6 sm:w-7 sm:h-7" strokeWidth={1.8} />
+                                    </div>
 
-                                        {/* Text Content */}
-                                        <div
-                                            className="relative z-10 flex flex-col gap-0 min-w-0 w-auto flex-none items-start justify-center"
-                                        >
-                                            <h3
-                                                className={`font-black uppercase italic tracking-tighter text-white group-hover:text-padel-primary transition-colors truncate leading-tight min-h-[1.1rem] w-auto text-left ${
-                                                    isProfileCard ? 'text-[13px] sm:text-[16px]' : 'text-[12px] sm:text-[15px]'
-                                                }`}
-                                            >
-                                                {item.name}
-                                            </h3>
-                                            <p
-                                                className="font-bold text-zinc-600 uppercase tracking-widest line-clamp-1 text-[8px] sm:text-[10px] -mt-0.5 text-left"
-                                            >
-                                                {item.subtitle}
-                                            </p>
-                                        </div>
+                                    {/* Texto */}
+                                    <div className="flex flex-col items-center gap-0">
+                                        <h3 className={`font-black uppercase italic tracking-tight text-white text-center leading-tight
+                                            text-[13px] sm:text-[15px]`}>
+                                            {item.name}
+                                        </h3>
+                                        <p className={`font-bold uppercase tracking-widest text-center
+                                            text-[8px] sm:text-[10px] ${item.disabled ? 'text-zinc-600' : item.color} opacity-70`}>
+                                            {item.subtitle}
+                                        </p>
+                                    </div>
 
-                                        {!item.disabled && (
-                                            <div className="absolute inset-0 z-0 bg-gradient-to-br from-padel-primary/0 to-padel-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-                                        )}
-                                    </motion.button>
-                                );
-                            })}
+                                    {/* Glow hover overlay */}
+                                    {!item.disabled && (
+                                        <div className={`absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${item.bg}`} />
+                                    )}
+                                </motion.button>
+                            ))}
                         </div>
 
                         {/* Logout Button */}

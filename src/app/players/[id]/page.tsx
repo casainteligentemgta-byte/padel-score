@@ -117,7 +117,7 @@ export default function PlayerProfilePage() {
 
             {/* Back Button Fixed Below Menu */}
             <div className="fixed top-24 left-6 z-[100]">
-                <BackButton />
+                <BackButton href="/hub" />
             </div>
 
             {/* Background Decorative Elements */}
@@ -210,7 +210,7 @@ export default function PlayerProfilePage() {
                                         </div>
                                         <div className="flex flex-col gap-1 items-center md:items-start">
                                             <h2 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.4)] truncate">
-                                                {player.name} <span className="text-padel-primary drop-shadow-[0_0_15px_rgba(204,255,0,0.6)]">{player.lastName}</span>
+                                                {player.name} {player.lastName}
                                             </h2>
                                             <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex flex-wrap items-center gap-2 justify-center md:justify-start">
                                                 <span>DNI: {player.dni || 'S/R'}</span>

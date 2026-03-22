@@ -1021,12 +1021,13 @@ export default function FullScreenDisplay() {
     const lSaque = lm?.saque;
     const lTeam = Number(lSaque?.equipo);
     const lPlayer = Number(lSaque?.jugador);
-    const displayServer =
+    // null = sin saque definido → ninguna pelota se muestra hasta que el marker lo seleccione
+    const displayServer: { team: 1 | 2; player: 1 | 2 } | null =
         ((mTeam === 1 || mTeam === 2) && (mPlayer === 1 || mPlayer === 2))
             ? { team: mTeam as 1 | 2, player: mPlayer as 1 | 2 }
             : ((lTeam === 1 || lTeam === 2) && (lPlayer === 1 || lPlayer === 2))
                 ? { team: lTeam as 1 | 2, player: lPlayer as 1 | 2 }
-                : { team: 1 as const, player: 1 as const };
+                : null;
 
     const relojTheme = relojOcasion || 'default';
 
@@ -1175,128 +1176,134 @@ export default function FullScreenDisplay() {
                                 </h2>
                             </div>
 
-                            {/* Column headers (Names -> S1 -> S2 -> S3 -> PTS) */}
-                            <div className="grid grid-cols-[1fr_8%_8%_8%_12%] items-center border-b border-white/[0.1] bg-black/40 h-[10%] px-6">
-                                <div />
-                                {[1, 2, 3].map(s => (
-                                    <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
-                                        <span className="font-black uppercase tracking-widest text-white/40 leading-none text-center w-full" style={{ fontSize: 'clamp(12px,1.2vw,20px)' }}>
-                                            SET {s}
-                                        </span>
-                                    </div>
-                                ))}
-                                <div className="flex items-center justify-center border-l border-white/[0.15] h-full" style={{ backgroundColor: `${primaryColor}20` }}>
-                                    <span className="font-black uppercase tracking-widest leading-none text-center w-full" style={{ fontSize: 'clamp(12px,1.2vw,20px)', color: primaryColor }}>
-                                        PTS
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Team 1 row */}
-                            <div className="flex-1 grid grid-cols-[1fr_8%_8%_8%_12%] items-center relative border-b border-white/[0.1] overflow-hidden px-6">
-                                <div className="flex flex-col justify-center h-full pr-6 relative">
-                                    <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden shadow-2xl">
-                                        <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
-                                        <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
-                                            <span className="flex items-center">
-                                                <AnimatePresence>
-                                                    {(displayServer.team === 1 && displayServer.player === 1) && (
-                                                        <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
-                                                            className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
-                                                            <span style={{ fontSize: '0.6em' }}>🎾</span>
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
-                                                {processDisplayName(match.t1p1) || match.t1p1}
-                                            </span>
-                                            <span className="text-white/30 mx-3">/</span>
-                                            <span className="flex items-center">
-                                                <AnimatePresence>
-                                                    {(displayServer.team === 1 && displayServer.player === 2) && (
-                                                        <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
-                                                            className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
-                                                            <span style={{ fontSize: '0.6em' }}>🎾</span>
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
-                                                {processDisplayName(match.t1p2) || match.t1p2}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                                {/* Sets History & Current Game */}
-                                    {[1, 2, 3].map((s: number) => {
-                                        let val: string | number = '';
-                                        if (s < currentSet) {
-                                            val = lm?.historico_sets?.[s - 1]?.local ?? match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? 0;
-                                        } else if (s === currentSet) {
-                                            val = gamesT1;
-                                        }
-                                        return (
-                                            <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
-                                                <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
+                            {/* Column headers dynámicos: SET 3 solo si formato es mejor-de-3 */}
+                            {(() => {
+                                const fmt = (match?.matchFormat || tournament?.matchFormat || '') as string;
+                                const has3rdSet = fmt === 'BEST_OF_3' || fmt === '3SETS' || fmt === 'THREE_SETS';
+                                const setCols = has3rdSet ? [1, 2, 3] : [1, 2];
+                                const grid = has3rdSet ? 'grid-cols-[1fr_8%_8%_8%_12%]' : 'grid-cols-[1fr_8%_8%_12%]';
+                                return (
+                                    <>
+                                        <div className={`grid ${grid} items-center border-b border-white/[0.1] bg-black/40 h-[10%] px-6`}>
+                                            <div />
+                                            {setCols.map(s => (
+                                                <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
+                                                    <span className="font-black uppercase tracking-widest text-white/40 leading-none text-center w-full" style={{ fontSize: 'clamp(12px,1.2vw,20px)' }}>
+                                                        SET {s}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                            <div className="flex items-center justify-center border-l border-white/[0.15] h-full" style={{ backgroundColor: `${primaryColor}20` }}>
+                                                <span className="font-black uppercase tracking-widest leading-none text-center w-full" style={{ fontSize: 'clamp(12px,1.2vw,20px)', color: primaryColor }}>
+                                                    PTS
+                                                </span>
                                             </div>
-                                        );
-                                    })}
-                                {/* Game Points */}
-                                <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ backgroundColor: `${primaryColor}40` }}>
-                                    <motion.span key={ptsT1} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                                        className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(42px,9vh,110px)' }}>{ptsT1}</motion.span>
-                                </div>
-                            </div>
-
-                            {/* Team 2 row */}
-                            <div className="flex-1 grid grid-cols-[1fr_8%_8%_8%_12%] items-center relative overflow-hidden px-6">
-                                <div className="flex flex-col justify-center h-full pr-6 relative">
-                                    <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden">
-                                        <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
-                                        <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
-                                            <span className="flex items-center">
-                                                <AnimatePresence>
-                                                    {(displayServer.team === 2 && displayServer.player === 1) && (
-                                                        <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
-                                                            className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
-                                                            <span style={{ fontSize: '0.6em' }}>🎾</span>
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
-                                                {processDisplayName(match.t2p1) || match.t2p1}
-                                            </span>
-                                            <span className="text-white/30 mx-3">/</span>
-                                            <span className="flex items-center">
-                                                <AnimatePresence>
-                                                    {(displayServer.team === 2 && displayServer.player === 2) && (
-                                                        <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
-                                                            className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
-                                                            <span style={{ fontSize: '0.6em' }}>🎾</span>
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
-                                                {processDisplayName(match.t2p2) || match.t2p2}
-                                            </span>
                                         </div>
-                                    </div>
-                                </div>
-                                {/* Sets History & Current Game */}
-                                    {[1, 2, 3].map((s: number) => {
-                                        let val: string | number = '';
-                                        if (s < currentSet) {
-                                            val = lm?.historico_sets?.[s - 1]?.visitante ?? match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? 0;
-                                        } else if (s === currentSet) {
-                                            val = gamesT2;
-                                        }
-                                        return (
-                                            <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
-                                                <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
+
+                                        {/* Team 1 row */}
+                                        <div className={`flex-1 grid ${grid} items-center relative border-b border-white/[0.1] overflow-hidden px-6`}>
+                                            <div className="flex flex-col justify-center h-full pr-6 relative">
+                                                <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden shadow-2xl">
+                                                    <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
+                                                    <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
+                                                        <span className="flex items-center">
+                                                            <AnimatePresence>
+                                                                {(displayServer?.team === 1 && displayServer?.player === 1) && (
+                                                                    <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
+                                                                        className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
+                                                                        <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
+                                                            {processDisplayName(match.t1p1) || match.t1p1}
+                                                        </span>
+                                                        <span className="text-white/30 mx-3">/</span>
+                                                        <span className="flex items-center">
+                                                            <AnimatePresence>
+                                                                {(displayServer?.team === 1 && displayServer?.player === 2) && (
+                                                                    <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
+                                                                        className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
+                                                                        <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
+                                                            {processDisplayName(match.t1p2) || match.t1p2}
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        );
-                                    })}
-                                {/* Game Points */}
-                                <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ backgroundColor: `${primaryColor}40` }}>
-                                    <motion.span key={ptsT2} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                                        className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(42px,9vh,110px)' }}>{ptsT2}</motion.span>
-                                </div>
-                            </div>
+                                            {setCols.map((s: number) => {
+                                                let val: string | number = '';
+                                                if (s < currentSet) {
+                                                    val = lm?.historico_sets?.[s - 1]?.local ?? match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? 0;
+                                                } else if (s === currentSet) {
+                                                    val = gamesT1;
+                                                }
+                                                return (
+                                                    <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
+                                                        <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                            <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ backgroundColor: `${primaryColor}40` }}>
+                                                <motion.span key={ptsT1} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                                                    className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(42px,9vh,110px)' }}>{ptsT1}</motion.span>
+                                            </div>
+                                        </div>
+
+                                        {/* Team 2 row */}
+                                        <div className={`flex-1 grid ${grid} items-center relative overflow-hidden px-6`}>
+                                            <div className="flex flex-col justify-center h-full pr-6 relative">
+                                                <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden">
+                                                    <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
+                                                    <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
+                                                        <span className="flex items-center">
+                                                            <AnimatePresence>
+                                                                {(displayServer?.team === 2 && displayServer?.player === 1) && (
+                                                                    <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
+                                                                        className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
+                                                                        <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
+                                                            {processDisplayName(match.t2p1) || match.t2p1}
+                                                        </span>
+                                                        <span className="text-white/30 mx-3">/</span>
+                                                        <span className="flex items-center">
+                                                            <AnimatePresence>
+                                                                {(displayServer?.team === 2 && displayServer?.player === 2) && (
+                                                                    <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
+                                                                        className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
+                                                                        <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
+                                                            {processDisplayName(match.t2p2) || match.t2p2}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {setCols.map((s: number) => {
+                                                let val: string | number = '';
+                                                if (s < currentSet) {
+                                                    val = lm?.historico_sets?.[s - 1]?.visitante ?? match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? 0;
+                                                } else if (s === currentSet) {
+                                                    val = gamesT2;
+                                                }
+                                                return (
+                                                    <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
+                                                        <span className="font-black italic text-white drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]" style={{ fontSize: 'clamp(36px,6.5vh,80px)' }}>{val}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                            <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ backgroundColor: `${primaryColor}40` }}>
+                                                <motion.span key={ptsT2} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                                                    className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060]" style={{ fontSize: 'clamp(42px,9vh,110px)' }}>{ptsT2}</motion.span>
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
                         </div>
 
                         {/* ══════════════ PUBLICIDAD (50%) ══════════════ */}

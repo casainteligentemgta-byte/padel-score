@@ -262,6 +262,7 @@ function EventView() {
                     _tournamentName: t.name,
                     _category: t.category,
                     _gender: genderValue,
+                    _complexName: t.complexName ?? '',
                     court: typeof court === 'number' ? court : (Number(court) || court),
                     team1: buildTeam(team1Obj, m.team1Index, m.team1Name),
                     team2: buildTeam(team2Obj, m.team2Index, m.team2Name),

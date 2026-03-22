@@ -16,6 +16,19 @@ const supabase = () => {
     return c;
 };
 
+/**
+ * Convierte el objeto error de Supabase en un Error nativo para que
+ * los stack traces muestren el mensaje real en lugar de "[object Object]".
+ */
+function throwIfError(error: any): void {
+    if (!error) return;
+    if (error instanceof Error) throw error;
+    const msg = error?.message || error?.details || error?.hint || JSON.stringify(error);
+    const err = new Error(msg);
+    if (error?.code) (err as any).code = error.code;
+    throw err;
+}
+
 const now = () => new Date().toISOString();
 
 /** Valida UUID v4 (y variantes comunes en Supabase) para IDs de inscripción en URL. */
@@ -149,7 +162,7 @@ export const dataService = {
             .from('pantallas')
             .select('*')
             .order('nombre', { ascending: true });
-        if (error) throw error;
+        throwIfError(error);
         return data || [];
     },
 
@@ -158,7 +171,7 @@ export const dataService = {
             .from('display_estado')
             .select('*, media_content(*)')
             .ilike('pantalla_id', `${pantallaId}%`);
-        if (error) throw error;
+        throwIfError(error);
         return data || [];
     },
 
@@ -174,7 +187,7 @@ export const dataService = {
             })
             .select('id')
             .single();
-        if (error) throw error;
+        throwIfError(error);
         return { id: row.id };
     },
 
@@ -187,7 +200,7 @@ export const dataService = {
                 updated_at: now(),
             })
             .eq('id', id);
-        if (error) throw error;
+        throwIfError(error);
     },
 
     async getMyTournaments(ownerId: string) {
@@ -196,13 +209,13 @@ export const dataService = {
             .select('*')
             .eq('owner_id', ownerId)
             .order('created_at', { ascending: false });
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
     },
 
     async listAllTournaments() {
         const { data, error } = await supabase().from('tournaments').select('*').order('created_at', { ascending: false });
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
     },
 
@@ -216,7 +229,7 @@ export const dataService = {
         const db = supabase();
         await db.from('tournament_matches').delete().eq('tournament_id', id);
         const { error } = await db.from('tournaments').delete().eq('id', id);
-        if (error) throw error;
+        throwIfError(error);
     },
 
     async getMatches(tournamentId: string) {
@@ -224,7 +237,7 @@ export const dataService = {
             .from('tournament_matches')
             .select('*')
             .eq('tournament_id', tournamentId);
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
     },
 
@@ -241,7 +254,7 @@ export const dataService = {
             .update({ data: merged, updated_at: now() })
             .eq('tournament_id', tournamentId)
             .eq('id', matchId);
-        if (error) throw error;
+        throwIfError(error);
     },
 
     async deleteMatch(tournamentId: string, matchId: string) {
@@ -250,7 +263,7 @@ export const dataService = {
             .delete()
             .eq('tournament_id', tournamentId)
             .eq('id', matchId);
-        if (error) throw error;
+        throwIfError(error);
     },
 
     async deleteTournamentMatches(tournamentId: string, filter?: any) {
@@ -262,7 +275,7 @@ export const dataService = {
             });
         }
         const { error } = await query;
-        if (error) throw error;
+        throwIfError(error);
     },
 
     async createMatch(tournamentId: string, data: any) {
@@ -277,7 +290,7 @@ export const dataService = {
                 created_at: now(),
                 updated_at: now(),
             });
-        if (error) throw error;
+        throwIfError(error);
         return { id };
     },
 
@@ -296,7 +309,7 @@ export const dataService = {
             };
         });
         const { error } = await supabase().from('tournament_matches').insert(rows);
-        if (error) throw error;
+        throwIfError(error);
         return { inserted: rows.length };
     },
 
@@ -543,7 +556,7 @@ export const dataService = {
             .insert({ owner_id: ownerId, data: sanitized, created_at: now(), updated_at: now() })
             .select('id')
             .single();
-        if (error) throw error;
+        throwIfError(error);
         return { id: row.id };
     },
 
@@ -553,7 +566,7 @@ export const dataService = {
             .select('*')
             .eq('owner_id', ownerId)
             .order('created_at', { ascending: false });
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
     },
 
@@ -564,7 +577,7 @@ export const dataService = {
             .insert({ owner_id: ownerId, data: sanitized, created_at: now(), updated_at: now() })
             .select('id')
             .single();
-        if (error) throw error;
+        throwIfError(error);
         return { id: row.id };
     },
 
@@ -576,13 +589,13 @@ export const dataService = {
             .select('*')
             .eq('owner_id', ownerId)
             .order('created_at', { ascending: false });
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
     },
 
     async getAllParticipants() {
         const { data, error } = await supabase().from('participants').select('*').order('created_at', { ascending: false });
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
     },
 
@@ -597,7 +610,7 @@ export const dataService = {
             .or(`data->>name.ilike.${ilikePattern},data->>lastName.ilike.${ilikePattern},data->>email.ilike.${ilikePattern}`)
             .order('created_at', { ascending: false })
             .limit(Math.max(1, Math.min(25, limit)));
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
     },
 
@@ -609,7 +622,7 @@ export const dataService = {
             .from('participants')
             .update({ data: merged, updated_at: now() })
             .eq('id', id);
-        if (error) throw error;
+        throwIfError(error);
     },
 
     async getParticipant(id: string) {
@@ -623,7 +636,7 @@ export const dataService = {
             .from('participants')
             .select('id')
             .eq(`data->>${field}`, value);
-        if (error) throw error;
+        throwIfError(error);
         if (!data || data.length === 0) return false;
         if (excludeId) {
             return data.some(p => p.id !== excludeId);
@@ -643,7 +656,7 @@ export const dataService = {
                 .from('tournament_matches')
                 .select('*');
 
-            if (error) throw error;
+            throwIfError(error);
 
             let played = 0;
             let won = 0;
@@ -702,7 +715,7 @@ export const dataService = {
 
     async deleteParticipant(id: string) {
         const { error } = await supabase().from('participants').delete().eq('id', id);
-        if (error) throw error;
+        throwIfError(error);
     },
 
     async addGroup(data: any, ownerId: string) {
@@ -711,7 +724,7 @@ export const dataService = {
             .insert({ owner_id: ownerId, data, created_at: now(), updated_at: now() })
             .select('id')
             .single();
-        if (error) throw error;
+        throwIfError(error);
         return { id: row.id };
     },
 
@@ -721,13 +734,13 @@ export const dataService = {
             .select('*')
             .eq('owner_id', ownerId)
             .order('created_at', { ascending: false });
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
     },
 
     async deleteGroup(id: string) {
         const { error } = await supabase().from('groups').delete().eq('id', id);
-        if (error) throw error;
+        throwIfError(error);
     },
 
     async getUserProfile(uid: string) {
@@ -937,7 +950,7 @@ export const dataService = {
             .eq('tournament_id', tournamentId)
             .eq('category', category);
 
-        if (error) throw error;
+        throwIfError(error);
 
         const occupied = (data || []).filter(t => {
             if (t.status === 'accepted') return true;
@@ -962,7 +975,7 @@ export const dataService = {
             .eq('player_b_id', userId)
             .eq('status', 'pending');
 
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((inv: any) => ({
             ...inv,
             tournament_name: inv.tournaments?.data?.name || 'Torneo Sin Nombre',
@@ -975,7 +988,7 @@ export const dataService = {
             .from('teams')
             .select('tournament_id, status, expires_at');
 
-        if (error) throw error;
+        throwIfError(error);
 
         const counts: Record<string, number> = {};
         const now = new Date();
@@ -997,7 +1010,7 @@ export const dataService = {
                 .from('teams')
                 .delete()
                 .eq('id', teamId);
-            if (error) throw error;
+            throwIfError(error);
         } else {
             // Verificar si ha expirado antes de aceptar
             const { data: team, error: fetchError } = await supabase()
@@ -1020,7 +1033,7 @@ export const dataService = {
                 .from('teams')
                 .update({ status: 'accepted', updated_at: now() })
                 .eq('id', teamId);
-            if (error) throw error;
+            throwIfError(error);
 
             // Sincronizar nombres en el torneo (rellenar pareja completa en la categoría/grupo)
             try {
@@ -1077,7 +1090,7 @@ export const dataService = {
             .eq('player_a_id', playerAId)
             .eq('status', 'pending');
 
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((inv: any) => ({
             ...inv,
             partner_name: inv.player_b?.name || 'Jugador'
@@ -1095,7 +1108,7 @@ export const dataService = {
             .eq('tournament_id', tournamentId)
             .eq('status', 'accepted');
 
-        if (error) throw error;
+        throwIfError(error);
         if (!acceptedTeams?.length) return { synced: 0, errors: [] };
 
         const errors: string[] = [];
@@ -1136,19 +1149,19 @@ export const dataService = {
             .insert({ owner_id: ownerId, data: sanitized, created_at: now(), updated_at: now() })
             .select('id')
             .single();
-        if (error) throw error;
+        throwIfError(error);
         return { id: row.id };
     },
 
     async getAds() {
         const { data, error } = await supabase().from('ads').select('*').order('created_at', { ascending: false });
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
     },
 
     async deleteAd(id: string) {
         const { error } = await supabase().from('ads').delete().eq('id', id);
-        if (error) throw error;
+        throwIfError(error);
     },
 
     async uploadFile(file: File, path: string, bucketName?: string) {
@@ -1240,7 +1253,7 @@ export const dataService = {
             })
             .select('id')
             .single();
-        if (error) throw error;
+        throwIfError(error);
         return { id: row.id };
     },
 
@@ -1346,7 +1359,7 @@ export const dataService = {
             .from('inscriptions')
             .select('*')
             .eq('tournament_id', tournamentId);
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((r: any) => ({
             id: r.id,
             tournamentId: r.tournament_id,
@@ -1373,7 +1386,7 @@ export const dataService = {
             .from('inscriptions')
             .select('*')
             .order('created_at', { ascending: false });
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((r: any) => ({
             id: r.id,
             tournamentId: r.tournament_id,
@@ -1400,7 +1413,7 @@ export const dataService = {
             .select('*')
             .eq('id', id.trim())
             .maybeSingle();
-        if (error) throw error;
+        throwIfError(error);
         if (!data) return null;
         const r = data as any;
         return {
@@ -1589,7 +1602,7 @@ export const dataService = {
             .from('inscriptions')
             .select('*')
             .eq('payment_status', 'alert');
-        if (error) throw error;
+        throwIfError(error);
         return (data || []).map((r: any) => ({
             id: r.id,
             tournamentId: r.tournament_id,
@@ -1605,7 +1618,7 @@ export const dataService = {
         if (data.alertMessage !== undefined) upd.alert_message = data.alertMessage ?? null;
         if (data.receiptUrl != null) upd.receipt_url = data.receiptUrl;
         const { error } = await supabase().from('inscriptions').update(upd).eq('id', id);
-        if (error) throw error;
+        throwIfError(error);
     },
 
     /**
@@ -1705,7 +1718,7 @@ export const dataService = {
         let query = supabase().from('match_animations').select('*').eq('is_active', true);
         if (type) query = query.eq('type', type);
         const { data, error } = await query;
-        if (error) throw error;
+        throwIfError(error);
         return data || [];
     },
 
@@ -1799,7 +1812,7 @@ export const dataService = {
             .select('*')
             .eq('is_active', true)
             .order('created_at', { ascending: true });
-        if (error) throw error;
+        throwIfError(error);
         return data || [];
     },
 
@@ -1825,7 +1838,7 @@ export const dataService = {
             { cancha_id: canchaId, data, updated_at: now() },
             { onConflict: 'cancha_id' }
         );
-        if (error) throw error;
+        throwIfError(error);
     },
 
     subscribePizarraCanchaState(canchaId: string, callback: (state: { cancha_id: string; data: any } | null) => void): () => void {

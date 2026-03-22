@@ -120,13 +120,15 @@ export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
                         </button>
                     </div>
                 )}
-                <button
-                    onClick={onShare}
-                    className="w-10 h-10 rounded-2xl bg-[#ccff00] text-black shadow-[0_4px_16px_rgba(204,255,0,0.3)] flex items-center justify-center transition-all hover:scale-105 active:scale-95 flex-shrink-0"
-                    title="Compartir planilla"
-                >
-                    <Share2 className="w-5 h-5" />
-                </button>
+                {canManageTournament && (
+                    <button
+                        onClick={onShare}
+                        className="w-10 h-10 rounded-2xl bg-[#ccff00] text-black shadow-[0_4px_16px_rgba(204,255,0,0.3)] flex items-center justify-center transition-all hover:scale-105 active:scale-95 flex-shrink-0"
+                        title="Compartir planilla"
+                    >
+                        <Share2 className="w-5 h-5" />
+                    </button>
+                )}
             </div>
 
             {/* Meta row: partidos (fecha ya va debajo del título) */}

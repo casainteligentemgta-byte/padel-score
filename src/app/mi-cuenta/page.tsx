@@ -429,35 +429,7 @@ export default function MiCuentaPage() {
                         </div>
                     )}
 
-                    {/* Tarjeta de cuenta (correo, rol) oculta por solicitud del usuario */}
-                    {passkeySupported && (
-                        <div className="w-full max-w-full min-w-0 bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8">
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <h2 className="text-sm sm:text-base font-black uppercase tracking-widest text-padel-primary flex items-center gap-2">
-                                        <Fingerprint className="w-4 h-4" />
-                                        Seguridad Biométrica
-                                    </h2>
-                                    <p className="text-[11px] text-gray-400 mt-1">
-                                        Activa FaceID / TouchID en este dispositivo para iniciar sesión sin contraseña.
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="mt-4 flex flex-wrap items-center gap-3">
-                                <button
-                                    type="button"
-                                    onClick={handleEnableBiometric}
-                                    disabled={biometricLoading}
-                                    className="px-4 py-2.5 rounded-xl border border-[#ccff00]/40 bg-[#ccff00]/10 text-[#ccff00] text-[10px] font-black uppercase tracking-widest hover:bg-[#ccff00]/20 transition-all disabled:opacity-60"
-                                >
-                                    {biometricLoading ? 'Activando...' : 'Activar FaceID / TouchID en este dispositivo'}
-                                </button>
-                                {biometricMsg && (
-                                    <p className="text-[11px] text-gray-300">{biometricMsg}</p>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                    {/* FaceID / TouchID: oculto por solicitud - {passkeySupported && (...)} */}
                 </div>
 
                 {/* Botón de Cerrar Sesión */}

@@ -18,7 +18,7 @@ export const validateSignupPassword = (password: string): { valid: boolean; erro
     return { valid: false, error: 'Debe contener al menos un número' };
   }
   if (!/[^a-zA-Z0-9]/.test(password)) {
-    return { valid: false, error: 'Debe contener al menos un carácter especial' };
+    return { valid: false, error: 'Debe contener al menos un carácter especial (ej. - _ @ # $)' };
   }
   return { valid: true };
 };

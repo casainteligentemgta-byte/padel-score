@@ -32,8 +32,14 @@ export default function MarkerControlPage() {
     const [cronSeconds, setCronSeconds] = useState(0);
 
     const searchParams = useSearchParams();
-    const team1Raw = searchParams.get('team1');
-    const team2Raw = searchParams.get('team2');
+    // Soporte para jugadores individuales (p1/p2 = equipo 1, p3/p4 = equipo 2)
+    const p1Raw = searchParams.get('p1') || '';
+    const p2Raw = searchParams.get('p2') || '';
+    const p3Raw = searchParams.get('p3') || '';
+    const p4Raw = searchParams.get('p4') || '';
+    // Fallback legacy: team1 / team2 como nombre de equipo completo
+    const team1Raw = searchParams.get('team1') || '';
+    const team2Raw = searchParams.get('team2') || '';
 
     // Formatea nombres como: "Nombre1 Nombre2 Apellido1 Apellido2..." -> "Nombre1 N. Apellido1 Apellido2..."
     // Si solo hay 2 partes, deja el nombre tal cual.
@@ -65,16 +71,34 @@ export default function MarkerControlPage() {
 
     // Migrar nombres desde el torneo (vienen por querystring al abrir el marker)
     useEffect(() => {
-        if (team1Raw) {
-            const formatted = formatTeamNameForMarker(team1Raw);
-            if (formatted) setEquipo1(prev => (prev.nombre === formatted ? prev : { ...prev, nombre: formatted }));
-        }
-        if (team2Raw) {
-            const formatted = formatTeamNameForMarker(team2Raw);
-            if (formatted) setEquipo2(prev => (prev.nombre === formatted ? prev : { ...prev, nombre: formatted }));
+        const hasIndividual = p1Raw || p2Raw || p3Raw || p4Raw;
+        if (hasIndividual) {
+            // Construir nombre del equipo a partir de jugadores individuales
+            const e1 = [p1Raw, p2Raw].filter(Boolean).map(formatPlayerForMarker).join(' / ');
+            const e2 = [p3Raw, p4Raw].filter(Boolean).map(formatPlayerForMarker).join(' / ');
+            if (e1) setEquipo1(prev => (prev.nombre === e1 ? prev : { ...prev, nombre: e1 }));
+            if (e2) setEquipo2(prev => (prev.nombre === e2 ? prev : { ...prev, nombre: e2 }));
+        } else {
+            // Fallback legacy: usar team1/team2 como nombre de equipo
+            if (team1Raw) {
+                const formatted = formatTeamNameForMarker(team1Raw);
+                if (formatted) setEquipo1(prev => (prev.nombre === formatted ? prev : { ...prev, nombre: formatted }));
+            }
+            if (team2Raw) {
+                const formatted = formatTeamNameForMarker(team2Raw);
+                if (formatted) setEquipo2(prev => (prev.nombre === formatted ? prev : { ...prev, nombre: formatted }));
+            }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [team1Raw, team2Raw]);
+    }, [p1Raw, p2Raw, p3Raw, p4Raw, team1Raw, team2Raw]);
+
+    // Jugadores individuales formateados (para el card de saque)
+    const jugadores = [
+        { equipo: 1, jugador: 1, nombre: p1Raw ? formatPlayerForMarker(p1Raw) : '', side: 'local' as const },
+        { equipo: 1, jugador: 2, nombre: p2Raw ? formatPlayerForMarker(p2Raw) : '', side: 'local' as const },
+        { equipo: 2, jugador: 1, nombre: p3Raw ? formatPlayerForMarker(p3Raw) : '', side: 'visitante' as const },
+        { equipo: 2, jugador: 2, nombre: p4Raw ? formatPlayerForMarker(p4Raw) : '', side: 'visitante' as const },
+    ].filter(j => j.nombre);
 
     // ── Guard: solo admin o marcador autorizado para esta cancha ───────────
     useEffect(() => {
@@ -639,39 +663,81 @@ export default function MarkerControlPage() {
                 {/* ── ESTADO: EN VIVO → Controles de marcador ── */}
                 {isEnVivo && marcador && (
                     <div className="space-y-5">
-                        {/* Equipos */}
+                        {/* Tarjetas de equipo con jugadores clicables para saque */}
                         <div className="grid grid-cols-2 gap-3">
                             {(['local', 'visitante'] as const).map((lado, i) => {
                                 const equipo = i === 0 ? marcador.equipo_1 : marcador.equipo_2;
+                                const equipoNum = i + 1;
+                                // Jugadores de este equipo
+                                const jList = jugadores.filter(j => j.equipo === equipoNum);
+                                const hasIndividual = jList.length > 0;
+
                                 return (
                                     <div
                                         key={lado}
-                                        className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center relative"
-                                        style={{ borderColor: equipo?.color + '40' }}
+                                        className="bg-white/5 border border-white/10 rounded-2xl p-3 flex flex-col gap-2 relative"
+                                        style={{ borderColor: (equipo?.color ?? '#fff') + '40' }}
                                     >
-                                        <div className="absolute top-2 right-2 flex gap-1">
-                                            <button 
-                                                onClick={() => actualizarMarcadorLocal({ saque: { equipo: i + 1, jugador: 1 }})}
-                                                className={`w-7 h-7 rounded-full flex items-center justify-center text-[12px] transition-all bg-black border ${marcador.saque?.equipo === i + 1 && marcador.saque?.jugador === 1 ? 'border-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.5)] opacity-100 grayscale-0' : 'border-white/10 opacity-50 grayscale hover:opacity-100 hover:grayscale-0'}`}
-                                                title="Saca Jugador 1"
-                                            >
-                                                🎾
-                                            </button>
-                                            <button 
-                                                onClick={() => actualizarMarcadorLocal({ saque: { equipo: i + 1, jugador: 2 }})}
-                                                className={`w-7 h-7 rounded-full flex items-center justify-center text-[12px] transition-all bg-black border ${marcador.saque?.equipo === i + 1 && marcador.saque?.jugador === 2 ? 'border-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.5)] opacity-100 grayscale-0' : 'border-white/10 opacity-50 grayscale hover:opacity-100 hover:grayscale-0'}`}
-                                                title="Saca Jugador 2"
-                                            >
-                                                🎾
-                                            </button>
-                                        </div>
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 mb-1">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">
                                             {lado === 'local' ? 'Equipo 1' : 'Equipo 2'}
                                         </p>
-                                        <p className="font-black italic uppercase tracking-tight text-sm truncate"
-                                            style={{ color: equipo?.color || '#fff' }}>
-                                            {equipo?.nombre || `Equipo ${i + 1}`}
-                                        </p>
+
+                                        {hasIndividual ? (
+                                            /* Jugadores individuales — cada uno es el botón de saque */
+                                            <div className="flex flex-col gap-1.5">
+                                                {jList.map(j => {
+                                                    const isServing = marcador.saque?.equipo === j.equipo && marcador.saque?.jugador === j.jugador;
+                                                    return (
+                                                        <button
+                                                            key={`${j.equipo}-${j.jugador}`}
+                                                            onClick={() => actualizarMarcadorLocal({ saque: { equipo: j.equipo, jugador: j.jugador } })}
+                                                            className={`flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-xl transition-all border ${
+                                                                isServing
+                                                                    ? 'bg-[#ccff00]/15 border-[#ccff00]/50 shadow-[0_0_12px_rgba(204,255,0,0.3)]'
+                                                                    : 'bg-black/30 border-white/10 hover:border-white/30 hover:bg-white/10'
+                                                            }`}
+                                                            title={isServing ? 'Sacando' : 'Toca para asignar saque'}
+                                                        >
+                                                            <span className={`text-base leading-none transition-all ${
+                                                                isServing ? 'opacity-100 grayscale-0' : 'opacity-30 grayscale'
+                                                            }`}>🎾</span>
+                                                            <span className={`font-bold italic uppercase tracking-tight text-[11px] truncate leading-tight ${
+                                                                isServing
+                                                                    ? 'text-[#ccff00]'
+                                                                    : 'text-white/70'
+                                                            }`}>
+                                                                {j.nombre}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            /* Fallback: sin jugadores individuales → mostrar equipo + botones de saque clásicos */
+                                            <>
+                                                <p className="font-black italic uppercase tracking-tight text-sm truncate"
+                                                    style={{ color: equipo?.color || '#fff' }}>
+                                                    {equipo?.nombre || `Equipo ${equipoNum}`}
+                                                </p>
+                                                <div className="flex gap-1.5 mt-1">
+                                                    {[1, 2].map(jNum => {
+                                                        const isServing = marcador.saque?.equipo === equipoNum && marcador.saque?.jugador === jNum;
+                                                        return (
+                                                            <button
+                                                                key={jNum}
+                                                                onClick={() => actualizarMarcadorLocal({ saque: { equipo: equipoNum, jugador: jNum } })}
+                                                                className={`w-8 h-8 rounded-full flex items-center justify-center text-base transition-all border ${
+                                                                    isServing
+                                                                        ? 'border-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.5)] opacity-100 grayscale-0 bg-[#ccff00]/10'
+                                                                        : 'border-white/10 opacity-40 grayscale hover:opacity-80 hover:grayscale-0 bg-black'
+                                                                }`}
+                                                                title={`J${jNum} saca`}
+                                                            >🎾</button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 );
                             })}

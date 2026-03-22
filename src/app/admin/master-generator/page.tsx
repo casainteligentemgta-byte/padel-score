@@ -112,16 +112,18 @@ const COLORS = [
     '#a78bfa', // Purple
 ];
 
-const COMPLEXES = [
-    { name: 'Food Kart', courts: 3 },
+// Sedes ordenadas alfabéticamente — etiqueta A1, A2, A3… según posición en la lista
+const COMPLEXES_RAW = [
     { name: 'El Bodeguero', courts: 3 },
-    { name: 'Margarita Padel', courts: 6 },
-    { name: 'Tibisay', courts: 3 },
-    { name: 'Sun Sol Costa Azul', courts: 4 },
     { name: 'Elite', courts: 4 },
-    { name: 'Sun Sol Pedro Gonzalez', courts: 2 },
+    { name: 'Food Kart', courts: 3 },
+    { name: 'Margarita Padel', courts: 6 },
     { name: 'Playa el Agua', courts: 3 },
+    { name: 'Sun Sol Costa Azul', courts: 4 },
+    { name: 'Sun Sol Pedro Gonzalez', courts: 2 },
+    { name: 'Tibisay', courts: 3 },
 ];
+const COMPLEXES = COMPLEXES_RAW.map((c, i) => ({ ...c, label: `A${i + 1}` }));
 
 // ── Estado inicial limpio del Generador Maestro ─────────────────────────
 const INITIAL_EVENT_DATA: MasterScheduleConfig = {
@@ -1373,7 +1375,7 @@ export default function MasterGeneratorPage() {
                                                 >
                                                     <option value="" disabled>— Selecciona una sede —</option>
                                                     {COMPLEXES.map(c => (
-                                                        <option key={c.name} value={c.name}>{c.name} ({c.courts} Pistas)</option>
+                                                        <option key={c.name} value={c.name}>{c.label} — {c.name} ({c.courts} pistas)</option>
                                                     ))}
                                                 </select>
                                             </div>

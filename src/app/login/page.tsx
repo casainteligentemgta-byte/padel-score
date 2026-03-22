@@ -563,24 +563,7 @@ export default function LoginPage() {
                                 </div>
                             )}
 
-                            {isLogin && passkeySupported && (
-                                <div className="flex justify-center mt-5">
-                                    <button
-                                        type="button"
-                                        onClick={handlePasskeyLogin}
-                                        disabled={passkeyLoading}
-                                        className="group relative w-20 h-20 rounded-full border-2 border-[#ccff00]/70 bg-black/60 text-[#ccff00] shadow-[0_0_24px_rgba(204,255,0,0.25)] hover:shadow-[0_0_30px_rgba(204,255,0,0.45)] hover:border-[#ccff00] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center"
-                                        aria-label="Entrar con FaceID o TouchID"
-                                        title="Entrar con FaceID / TouchID"
-                                    >
-                                        {passkeyLoading ? (
-                                            <RefreshCw className="w-8 h-8 animate-spin" />
-                                        ) : (
-                                            <Fingerprint className="w-9 h-9 group-hover:scale-105 transition-transform" />
-                                        )}
-                                    </button>
-                                </div>
-                            )}
+                            {/* FaceID / TouchID: oculto por solicitud */}
                         </form>
 
                     </div>
