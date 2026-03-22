@@ -97,23 +97,25 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
     const matchKey = match.id || (match.court ? `court_${match.court}` : (match.courtIndex != null ? `court_${match.courtIndex + 1}` : `court_${rank + 1}`));
     const canchaId = `cancha_${match.court ?? (match.courtIndex != null ? match.courtIndex + 1 : rank + 1)}`;
 
-    // Extraer los 4 jugadores individuales para pasarlos al marker
-    const p1Name = match.team1?.p1?.name ?? match.team1?.p1 ?? '';
-    const p2Name = match.team1?.p2?.name ?? match.team1?.p2 ?? '';
-    const p3Name = match.team2?.p1?.name ?? match.team2?.p1 ?? '';
-    const p4Name = match.team2?.p2?.name ?? match.team2?.p2 ?? '';
-    // Fallback: si no hay jugadores individuales, usar el nombre del equipo completo
-    const t1Display = (p1Name || p2Name) ? [p1Name, p2Name].filter(Boolean).join(' / ') : (match.team1?.name ?? match.team1Name ?? '');
-    const t2Display = (p3Name || p4Name) ? [p3Name, p4Name].filter(Boolean).join(' / ') : (match.team2?.name ?? match.team2Name ?? '');
+    // Usar los nombres ya resueltos por resolveTeamNames (soporta p1Name, p1.name, team.name, etc.)
+    // t1p1/t1p2 = jugadores del equipo 1, t2p1/t2p2 = jugadores del equipo 2
+    const p1Name = t1p1 !== '?' ? t1p1 : '';
+    const p2Name = t1p2 || '';
+    const p3Name = t2p1 !== '?' ? t2p1 : '';
+    const p4Name = t2p2 || '';
 
     const controlParams = new URLSearchParams();
     if (p1Name) controlParams.set('p1', p1Name);
     if (p2Name) controlParams.set('p2', p2Name);
     if (p3Name) controlParams.set('p3', p3Name);
     if (p4Name) controlParams.set('p4', p4Name);
-    // Fallback cuando no hay jugadores individuales
-    if (!p1Name && !p2Name) controlParams.set('team1', t1Display);
-    if (!p3Name && !p4Name) controlParams.set('team2', t2Display);
+    // Fallback cuando no hay jugadores individuales resueltos
+    if (!p1Name && !p3Name) {
+        const t1Display = match.team1?.name ?? match.team1Name ?? '';
+        const t2Display = match.team2?.name ?? match.team2Name ?? '';
+        if (t1Display) controlParams.set('team1', t1Display);
+        if (t2Display) controlParams.set('team2', t2Display);
+    }
 
     const controlHref = `/marker/${encodeURIComponent(canchaId)}?${controlParams.toString()}`;
     const pizarraHref = `/tournaments/${match._tournamentId}/display/${encodeURIComponent(match.id || matchKey)}`;
