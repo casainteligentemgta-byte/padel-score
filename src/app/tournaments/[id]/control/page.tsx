@@ -19,6 +19,7 @@ import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
+import { validateTournamentIntegrity } from '@/lib/tournamentService';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 interface EnrichedMatch {
@@ -246,11 +247,18 @@ function ControlMatchCard({
     const isPending = match.status === MatchStatus.PENDING;
     const isFinished = match.status === MatchStatus.FINISHED;
 
+    const PLACEHOLDER_RE = /pareja|jugador|placeholder/i;
+    const hasPlaceholder = [
+        match.team1?.name, match.team2?.name
+    ].some(n => !n || n === '?' || PLACEHOLDER_RE.test(n));
+
     const statusColor = isLive
         ? 'border-red-500/40 bg-red-500/[0.03] shadow-[0_0_40px_rgba(239,68,68,0.05)]'
         : isFinished
             ? 'border-white/5 bg-white/[0.01] opacity-70'
-            : 'border-white/[0.06] bg-white/[0.02]';
+            : hasPlaceholder
+                ? 'border-red-500 bg-red-500/[0.04] shadow-[0_0_20px_rgba(239,68,68,0.15)] animate-pulse'
+                : 'border-white/[0.06] bg-white/[0.02]';
 
     const toTennis = (p: any) => {
         const v = parseInt(String(p ?? 0));
@@ -448,31 +456,40 @@ export default function ControlPanel() {
             const enriched = ms.map(m => {
                 const matchId = m.id;
                 const data = m.data || m; // Support both format (data wrapper or flat)
-                const resolveTeam = (mTeam: any, teamIdx: number, side: string) => {
-                    // Support for embedded teams (new Master Generator)
+                const resolveTeam = (mTeam: any, teamIdx: number) => {
+                    const PLACEHOLDER_RE = /pareja|jugador|placeholder/i;
+                    // 1) Embedded in the match (real names, priority)
                     if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
                         if (mTeam.isTBD || mTeam.teamLabel) {
-                            return { name: mTeam.teamLabel || mTeam.p1?.name || (mTeam.p1Name ? mTeam.p1Name : '?'), photo1: null, photo2: null };
+                            return { name: mTeam.teamLabel || mTeam.p1?.name || '?', photo1: null, photo2: null };
                         }
                         const p1n = (mTeam.p1Name || mTeam.p1?.name || '').trim();
                         const p2n = (mTeam.p2Name || mTeam.p2?.name || '').trim();
-                        return {
-                            name: [p1n, p2n].filter(Boolean).join(' · ') || '?',
-                            photo1: mTeam.p1?.photo || null,
-                            photo2: mTeam.p2?.photo || null,
-                        };
+                        const hasReal = (p1n && !PLACEHOLDER_RE.test(p1n)) || (p2n && !PLACEHOLDER_RE.test(p2n));
+                        if (hasReal) {
+                            return {
+                                name: [p1n, p2n].filter(Boolean).join(' · ') || '?',
+                                photo1: mTeam.p1?.photo || null,
+                                photo2: mTeam.p2?.photo || null,
+                            };
+                        }
                     }
-                    // Legacy support (using indices from external teams array)
+                    // 2) team1Name / team2Name string
+                    // 3) Legacy: teams array by index
                     const teams = t?.teams || [];
                     const foundTeam = teamIdx > 0 ? teams[teamIdx - 1] : null;
-                    if (!foundTeam) return { name: teamIdx > 0 ? `Pareja ${teamIdx}` : '?', photo1: null, photo2: null };
-                    const p1n = foundTeam.p1?.name || 'Jugador 1';
-                    const p2n = foundTeam.p2?.name || 'Jugador 2';
-                    return {
-                        name: `${p1n} · ${p2n}`,
-                        photo1: foundTeam.p1?.photo || null,
-                        photo2: foundTeam.p2?.photo || null,
-                    };
+                    if (foundTeam) {
+                        const p1n = (foundTeam.p1?.name || '').trim();
+                        const p2n = (foundTeam.p2?.name || '').trim();
+                        if ((p1n && !PLACEHOLDER_RE.test(p1n)) || (p2n && !PLACEHOLDER_RE.test(p2n))) {
+                            return {
+                                name: [p1n, p2n].filter(Boolean).join(' · '),
+                                photo1: foundTeam.p1?.photo || null,
+                                photo2: foundTeam.p2?.photo || null,
+                            };
+                        }
+                    }
+                    return { name: '?', photo1: null, photo2: null };
                 };
 
                 return {
@@ -480,8 +497,8 @@ export default function ControlPanel() {
                     id: matchId,
                     tournament_id: m.tournament_id || id,
                     court: data.court || (data.courtIndex !== undefined ? data.courtIndex + 1 : undefined),
-                    team1: resolveTeam(data.team1, data.team1Index, 'team1'),
-                    team2: resolveTeam(data.team2, data.team2Index, 'team2'),
+                    team1: resolveTeam(data.team1, data.team1Index),
+                    team2: resolveTeam(data.team2, data.team2Index),
                     stage: data.stage || 'OPEN',
                 } as EnrichedMatch;
             });
@@ -537,6 +554,19 @@ export default function ControlPanel() {
     const startMatch = async (matchId: string) => {
         const match = matches.find(m => m.id === matchId);
         if (!match) return;
+
+        // ── Guard anti-placeholder ────────────────────────────────────────
+        if (tournament) {
+            const { canLive, issues } = validateTournamentIntegrity(tournament);
+            if (!canLive) {
+                const preview = issues.slice(0, 3).join('\n  • ');
+                const more = issues.length > 3 ? `\n  ...y ${issues.length - 3} más.` : '';
+                alert(`⚠️ No se puede iniciar: hay equipos con nombres genéricos.\n\n  • ${preview}${more}\n\nCorrígelos en el generador antes de continuar.`);
+                return;
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────
+
         const c = courtNum(match);
         const otherLiveOnCourt = matches.some(m => m.id !== matchId && m.status === MatchStatus.LIVE && courtNum(m) === c);
         if (otherLiveOnCourt) {
