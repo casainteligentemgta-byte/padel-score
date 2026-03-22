@@ -8,7 +8,8 @@ import {
     MonitorPlay, Tv, Megaphone, Radio, Camera, Zap,
     RefreshCw, Circle, Square, ChevronDown, ChevronUp,
     Wifi, WifiOff, Lock, Unlock, ArrowRight, Target, RotateCcw,
-    Cpu, Network, HardDrive, Clock as ClockIcon
+    Cpu, Network, HardDrive, Clock as ClockIcon,
+    Pencil, X, Save
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { MatchStatus, TournamentType } from '@/types/tournament';
@@ -247,6 +248,54 @@ function ControlMatchCard({
     const isPending = match.status === MatchStatus.PENDING;
     const isFinished = match.status === MatchStatus.FINISHED;
 
+    // ── Edit names state ─────────────────────────────────────────────────
+    const extractName = (team: any, player: 'p1' | 'p2') => {
+        const raw = team?.[player]?.name || team?.[`${player}Name`] || '';
+        const PH = /pareja|jugador|placeholder/i;
+        return (!raw || PH.test(raw) || raw === '?') ? '' : raw;
+    };
+    const [showEdit, setShowEdit] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [editNames, setEditNames] = useState({
+        t1p1: '', t1p2: '', t2p1: '', t2p2: ''
+    });
+
+    const openEdit = () => {
+        setEditNames({
+            t1p1: extractName(match.team1, 'p1'),
+            t1p2: extractName(match.team1, 'p2'),
+            t2p1: extractName(match.team2, 'p1'),
+            t2p2: extractName(match.team2, 'p2'),
+        });
+        setShowEdit(true);
+    };
+
+    const saveNames = async () => {
+        if (saving) return;
+        setSaving(true);
+        try {
+            const buildTeam = (orig: any, p1n: string, p2n: string) => ({
+                ...orig,
+                p1: { ...(orig?.p1 || {}), name: p1n.trim() || orig?.p1?.name || '?' },
+                p2: { ...(orig?.p2 || {}), name: p2n.trim() || orig?.p2?.name || '?' },
+                p1Name: p1n.trim() || orig?.p1Name || '?',
+                p2Name: p2n.trim() || orig?.p2Name || '?',
+            });
+            const { team1: _t1, team2: _t2, id: _id, tournament_id: _tid, ...rest } = match as any;
+            await dataService.updateMatch(tournamentId, match.id, {
+                ...rest,
+                team1: buildTeam(match.team1, editNames.t1p1, editNames.t1p2),
+                team2: buildTeam(match.team2, editNames.t2p1, editNames.t2p2),
+            });
+            setShowEdit(false);
+        } catch (e) {
+            console.error('[EditNames] Error saving:', e);
+        } finally {
+            setSaving(false);
+        }
+    };
+    // ─────────────────────────────────────────────────────────────────────
+
     const PLACEHOLDER_RE = /pareja|jugador|placeholder/i;
     const hasPlaceholder = [
         match.team1?.name, match.team2?.name
@@ -305,25 +354,101 @@ function ControlMatchCard({
 
             {/* Score Center */}
             <div className="flex p-4 gap-4 items-center">
-                <div className="flex-1 space-y-3">
-                    {/* Team 1 */}
-                    <div className={`flex items-center gap-3 ${match.server?.team === 1 ? 'opacity-100' : 'opacity-60'}`}>
-                        <div className="w-1.5 h-1.5 rounded-full bg-padel-primary shadow-[0_0_8px_#ccff00]" style={{ visibility: match.server?.team === 1 ? 'visible' : 'hidden' }} />
-                        <span className="text-xs font-black italic uppercase tracking-tighter truncate leading-none">
-                            {match.team1.name}
-                        </span>
-                    </div>
-                    {/* Team 2 */}
-                    <div className={`flex items-center gap-3 ${match.server?.team === 2 ? 'opacity-100' : 'opacity-60'}`}>
-                        <div className="w-1.5 h-1.5 rounded-full bg-padel-primary shadow-[0_0_8px_#ccff00]" style={{ visibility: match.server?.team === 2 ? 'visible' : 'hidden' }} />
-                        <span className="text-xs font-black italic uppercase tracking-tighter truncate leading-none">
-                            {match.team2.name}
-                        </span>
-                    </div>
+                <div className="flex-1 space-y-2 min-w-0">
+
+                    {/* ── Inline Edit Modal ────────────────────────────────── */}
+                    {showEdit && (
+                        <div className="bg-[#0d0d0d] border border-padel-primary/30 rounded-2xl p-3 space-y-2 shadow-[0_0_30px_rgba(204,255,0,0.08)]">
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="text-[8px] font-black uppercase tracking-widest text-padel-primary/80">Editar jugadores</span>
+                                <button onClick={() => setShowEdit(false)} className="text-gray-600 hover:text-white transition-colors">
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+
+                            {/* Team 1 */}
+                            <div className="space-y-1.5">
+                                <span className="text-[7px] font-bold text-padel-primary/50 uppercase tracking-widest">Pareja 1</span>
+                                <input
+                                    value={editNames.t1p1}
+                                    onChange={e => setEditNames(prev => ({ ...prev, t1p1: e.target.value }))}
+                                    placeholder="J1 nombre..."
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-padel-primary/50 transition-all"
+                                />
+                                <input
+                                    value={editNames.t1p2}
+                                    onChange={e => setEditNames(prev => ({ ...prev, t1p2: e.target.value }))}
+                                    placeholder="J2 nombre..."
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-padel-primary/50 transition-all"
+                                />
+                            </div>
+
+                            {/* Divider */}
+                            <div className="h-px bg-white/[0.04] my-1" />
+
+                            {/* Team 2 */}
+                            <div className="space-y-1.5">
+                                <span className="text-[7px] font-bold text-white/30 uppercase tracking-widest">Pareja 2</span>
+                                <input
+                                    value={editNames.t2p1}
+                                    onChange={e => setEditNames(prev => ({ ...prev, t2p1: e.target.value }))}
+                                    placeholder="J3 nombre..."
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-padel-primary/50 transition-all"
+                                />
+                                <input
+                                    value={editNames.t2p2}
+                                    onChange={e => setEditNames(prev => ({ ...prev, t2p2: e.target.value }))}
+                                    placeholder="J4 nombre..."
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-padel-primary/50 transition-all"
+                                />
+                            </div>
+
+                            {/* Save */}
+                            <button
+                                onClick={saveNames}
+                                disabled={saving}
+                                className="w-full mt-1 flex items-center justify-center gap-1.5 py-2 bg-padel-primary/10 hover:bg-padel-primary/20 border border-padel-primary/30 rounded-xl text-[9px] font-black uppercase tracking-widest text-padel-primary transition-all disabled:opacity-50"
+                            >
+                                <Save className="w-3 h-3" />
+                                {saving ? 'Guardando...' : 'Guardar nombres'}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* ── Team Names (normal view) ─────────────────────────── */}
+                    {!showEdit && (
+                        <>
+                            <div className={`flex items-center gap-2 ${match.server?.team === 1 ? 'opacity-100' : 'opacity-60'}`}>
+                                <div className="w-1.5 h-1.5 rounded-full bg-padel-primary shadow-[0_0_8px_#ccff00] flex-shrink-0" style={{ visibility: match.server?.team === 1 ? 'visible' : 'hidden' }} />
+                                <span className="text-xs font-black italic uppercase tracking-tighter truncate leading-none flex-1 min-w-0">
+                                    {match.team1.name}
+                                </span>
+                            </div>
+                            <div className={`flex items-center gap-2 ${match.server?.team === 2 ? 'opacity-100' : 'opacity-60'}`}>
+                                <div className="w-1.5 h-1.5 rounded-full bg-padel-primary shadow-[0_0_8px_#ccff00] flex-shrink-0" style={{ visibility: match.server?.team === 2 ? 'visible' : 'hidden' }} />
+                                <span className="text-xs font-black italic uppercase tracking-tighter truncate leading-none flex-1 min-w-0">
+                                    {match.team2.name}
+                                </span>
+                            </div>
+                        </>
+                    )}
                 </div>
 
-                {/* Vertical Separator */}
-                <div className="w-px h-8 bg-white/5" />
+                {/* Edit Pencil Button */}
+                {canOperate && !showEdit && (
+                    <button
+                        onClick={openEdit}
+                        title="Editar nombres de jugadores"
+                        className={`flex-shrink-0 flex flex-col items-center justify-center w-8 h-8 rounded-xl transition-all active:scale-90
+                            ${hasPlaceholder
+                                ? 'bg-red-500/20 border border-red-500/50 text-red-400 shadow-[0_0_10px_rgba(239,68,68,0.3)] animate-pulse'
+                                : 'bg-white/[0.03] border border-white/10 text-gray-600 hover:bg-padel-primary/10 hover:text-padel-primary hover:border-padel-primary/30'
+                            }`}
+                    >
+                        <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                )}
+
 
                 {/* Score Grid */}
                 {(isLive || isFinished) && (
