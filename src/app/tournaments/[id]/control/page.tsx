@@ -232,7 +232,8 @@ function MiniDock({
 
 // ── Match Card Component ──────────────────────────────────────────────────
 function ControlMatchCard({
-    match, tournamentId, canOperate, onStartMatch, onFinishMatch, onToggleStream, onToggleAds, onRevertMatch, isUpdating
+    match, tournamentId, canOperate, onStartMatch, onFinishMatch,
+    onToggleStream, onToggleAds, onRevertMatch, isUpdating, allPlayers
 }: {
     match: EnrichedMatch;
     tournamentId: string;
@@ -243,6 +244,8 @@ function ControlMatchCard({
     onToggleAds: (id: string, val: boolean) => void;
     onRevertMatch: (id: string) => void;
     isUpdating: boolean;
+    /** Lista de jugadores del torneo para sugerencias en el editor */
+    allPlayers?: { name: string; lastName?: string }[];
 }) {
     const isLive = match.status === MatchStatus.LIVE;
     const isPending = match.status === MatchStatus.PENDING;
@@ -356,60 +359,85 @@ function ControlMatchCard({
             <div className="flex p-4 gap-4 items-center">
                 <div className="flex-1 space-y-2 min-w-0">
 
-                    {/* ── Inline Edit Modal ────────────────────────────────── */}
+    {/* ── Inline Edit Modal ────────────────────────────────── */}
                     {showEdit && (
-                        <div className="bg-[#0d0d0d] border border-padel-primary/30 rounded-2xl p-3 space-y-2 shadow-[0_0_30px_rgba(204,255,0,0.08)]">
-                            <div className="flex items-center justify-between mb-1">
-                                <span className="text-[8px] font-black uppercase tracking-widest text-padel-primary/80">Editar jugadores</span>
-                                <button onClick={() => setShowEdit(false)} className="text-gray-600 hover:text-white transition-colors">
+                        <div className="bg-[#0d0d0d] border border-padel-primary/30 rounded-2xl p-4 space-y-3 shadow-[0_0_30px_rgba(204,255,0,0.08)]">
+                            {/* Header */}
+                            <div className="flex items-center justify-between">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-padel-primary/80">✏️ Editar jugadores</span>
+                                <button
+                                    onClick={() => setShowEdit(false)}
+                                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 text-gray-500 hover:text-white transition-colors"
+                                >
                                     <X className="w-3.5 h-3.5" />
                                 </button>
                             </div>
 
+                            {/* datalist de jugadores disponibles */}
+                            <datalist id={`players-${match.id}`}>
+                                {(allPlayers || []).map((p, i) => {
+                                    const full = [p.name, p.lastName].filter(Boolean).join(' ');
+                                    return <option key={i} value={full} />;
+                                })}
+                            </datalist>
+
                             {/* Team 1 */}
-                            <div className="space-y-1.5">
-                                <span className="text-[7px] font-bold text-padel-primary/50 uppercase tracking-widest">Pareja 1</span>
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-padel-primary shadow-[0_0_6px_#ccff00]" />
+                                    <span className="text-[8px] font-black text-padel-primary/70 uppercase tracking-widest">Pareja 1</span>
+                                </div>
                                 <input
+                                    list={`players-${match.id}`}
                                     value={editNames.t1p1}
                                     onChange={e => setEditNames(prev => ({ ...prev, t1p1: e.target.value }))}
-                                    placeholder="J1 nombre..."
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-padel-primary/50 transition-all"
+                                    placeholder="Jugador 1 — nombre y apellido"
+                                    autoComplete="off"
+                                    className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-3 py-3 text-sm font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-padel-primary/60 focus:bg-white/[0.08] transition-all"
                                 />
                                 <input
+                                    list={`players-${match.id}`}
                                     value={editNames.t1p2}
                                     onChange={e => setEditNames(prev => ({ ...prev, t1p2: e.target.value }))}
-                                    placeholder="J2 nombre..."
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-padel-primary/50 transition-all"
+                                    placeholder="Jugador 2 — nombre y apellido"
+                                    autoComplete="off"
+                                    className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-3 py-3 text-sm font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-padel-primary/60 focus:bg-white/[0.08] transition-all"
                                 />
                             </div>
 
-                            {/* Divider */}
-                            <div className="h-px bg-white/[0.04] my-1" />
+                            <div className="h-px bg-white/[0.05]" />
 
                             {/* Team 2 */}
-                            <div className="space-y-1.5">
-                                <span className="text-[7px] font-bold text-white/30 uppercase tracking-widest">Pareja 2</span>
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-white/30" />
+                                    <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">Pareja 2</span>
+                                </div>
                                 <input
+                                    list={`players-${match.id}`}
                                     value={editNames.t2p1}
                                     onChange={e => setEditNames(prev => ({ ...prev, t2p1: e.target.value }))}
-                                    placeholder="J3 nombre..."
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-padel-primary/50 transition-all"
+                                    placeholder="Jugador 3 — nombre y apellido"
+                                    autoComplete="off"
+                                    className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-3 py-3 text-sm font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-white/30 focus:bg-white/[0.08] transition-all"
                                 />
                                 <input
+                                    list={`players-${match.id}`}
                                     value={editNames.t2p2}
                                     onChange={e => setEditNames(prev => ({ ...prev, t2p2: e.target.value }))}
-                                    placeholder="J4 nombre..."
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-padel-primary/50 transition-all"
+                                    placeholder="Jugador 4 — nombre y apellido"
+                                    autoComplete="off"
+                                    className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-3 py-3 text-sm font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-white/30 focus:bg-white/[0.08] transition-all"
                                 />
                             </div>
 
-                            {/* Save */}
+                            {/* Save button — large for touch */}
                             <button
                                 onClick={saveNames}
                                 disabled={saving}
-                                className="w-full mt-1 flex items-center justify-center gap-1.5 py-2 bg-padel-primary/10 hover:bg-padel-primary/20 border border-padel-primary/30 rounded-xl text-[9px] font-black uppercase tracking-widest text-padel-primary transition-all disabled:opacity-50"
+                                className="w-full flex items-center justify-center gap-2 py-3.5 bg-padel-primary/15 hover:bg-padel-primary/25 active:scale-[0.98] border border-padel-primary/40 rounded-xl text-sm font-black uppercase tracking-widest text-padel-primary transition-all disabled:opacity-40"
                             >
-                                <Save className="w-3 h-3" />
+                                <Save className="w-4 h-4" />
                                 {saving ? 'Guardando...' : 'Guardar nombres'}
                             </button>
                         </div>
@@ -561,6 +589,24 @@ export default function ControlPanel() {
     const [activePhaseTab, setActivePhaseTab] = useState<'activa' | 'proximos' | 'finalizados'>('activa');
 
     const canOperate = isAdmin || (!!user && !!tournament && tournament.ownerId === user.uid) || profile?.role === 'marker';
+
+    // Lista de todos los jugadores del torneo para sugerencias en el editor de nombres
+    const allPlayers: { name: string; lastName?: string }[] = (() => {
+        const PH = /pareja|jugador|placeholder/i;
+        const teams: any[] = Array.isArray(tournament?.teams) ? tournament.teams : [];
+        const seen = new Set<string>();
+        const list: { name: string; lastName?: string }[] = [];
+        teams.forEach((t: any) => {
+            [t?.p1, t?.p2].forEach((p: any) => {
+                if (!p) return;
+                const name = (p.name || '').trim();
+                if (!name || PH.test(name) || seen.has(name)) return;
+                seen.add(name);
+                list.push({ name, lastName: p.lastName });
+            });
+        });
+        return list;
+    })();
 
     useEffect(() => {
         const t = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -902,6 +948,7 @@ export default function ControlPanel() {
                                     onToggleAds={toggleAds}
                                     onRevertMatch={revertToPending}
                                     isUpdating={updatingId === m.id}
+                                    allPlayers={allPlayers}
                                 />
                             ))}
                         </div>
@@ -920,6 +967,7 @@ export default function ControlPanel() {
                                     onToggleAds={toggleAds}
                                     onRevertMatch={revertToPending}
                                     isUpdating={updatingId === m.id}
+                                    allPlayers={allPlayers}
                                 />
                             ))}
                         </div>
@@ -938,6 +986,7 @@ export default function ControlPanel() {
                                     onToggleAds={toggleAds}
                                     onRevertMatch={revertToPending}
                                     isUpdating={updatingId === m.id}
+                                    allPlayers={allPlayers}
                                 />
                             ))}
                         </div>
