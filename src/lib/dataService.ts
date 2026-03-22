@@ -578,7 +578,7 @@ export const dataService = {
             .select('id')
             .single();
         throwIfError(error);
-        return { id: row.id };
+        return { id: (row as any)?.id };
     },
 
     async getMyParticipants(ownerId: string) {
@@ -725,7 +725,7 @@ export const dataService = {
             .select('id')
             .single();
         throwIfError(error);
-        return { id: row.id };
+        return { id: (row as any)?.id };
     },
 
     async getMyGroups(ownerId: string) {
@@ -1150,7 +1150,7 @@ export const dataService = {
             .select('id')
             .single();
         throwIfError(error);
-        return { id: row.id };
+        return { id: (row as any)?.id };
     },
 
     async getAds() {
@@ -1254,7 +1254,7 @@ export const dataService = {
             .select('id')
             .single();
         throwIfError(error);
-        return { id: row.id };
+        return { id: (row as any)?.id };
     },
 
     /**
