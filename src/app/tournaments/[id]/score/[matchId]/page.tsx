@@ -32,6 +32,12 @@ import { useAuth } from '@/lib/AuthContext';
 import RefereeRemoteControl from '@/components/RefereeRemoteControl';
 import AutoShrinkName from '@/components/AutoShrinkName';
 import { Bluetooth, LayoutDashboard, Search, ListFilter } from 'lucide-react';
+import {
+    getScoringRules,
+    isSetCompleteByGames,
+    shouldEnterSetTiebreak,
+    winsTiebreakPoints,
+} from '@/lib/matchScoringRules';
 
 export default function RefereeScoreboard() {
     const id = useRouteSegment('id');
@@ -55,7 +61,8 @@ export default function RefereeScoreboard() {
     const [isMedicalTimeout, setIsMedicalTimeout] = useState(false);
     const [medicalTimeRemaining, setMedicalTimeRemaining] = useState(180); // 3 minutes
     const [showSideChange, setShowSideChange] = useState(false);
-    const [tiebreakTo, setTiebreakTo] = useState(7);
+    /** Objetivo puntos solo para super tie-break (modal / torneo). El tie-break de set siempre es a 7 con margen 2. */
+    const [superTiebreakTarget, setSuperTiebreakTarget] = useState(10);
     const [finishClicks, setFinishClicks] = useState(0);
     const [now, setNow] = useState(new Date());
     const [animacionesMarcador, setAnimacionesMarcador] = useState<Record<string, { nombre: string; url: string }>>({});
@@ -89,6 +96,11 @@ export default function RefereeScoreboard() {
         const entries = Object.entries(animacionesMarcador) as [string, { nombre: string; url: string }][];
         return entries.sort((a, b) => a[0].localeCompare(b[0])).slice(0, 6);
     }, [animacionesMarcador]);
+
+    const scoringRules = useMemo(
+        () => getScoringRules(match?.matchFormat || tournament?.matchFormat, tournament?.tieBreakType),
+        [match?.matchFormat, tournament?.matchFormat, tournament?.tieBreakType]
+    );
 
     const handlePadAnimacion = async (animId: string) => {
         const canchaId = `cancha_${matchCourt}`;
@@ -249,26 +261,57 @@ export default function RefereeScoreboard() {
         if (!matchCourt || match?.status !== MatchStatus.LIVE) return;
 
         const canchaId = `cancha_${matchCourt}`;
-        const isStb = match.superTiebreak || match.matchFormat === 'SUPER_TIEBREAK';
+        const isStb = match.superTiebreak === true
+            || match.matchFormat === 'SUPER_TIEBREAK'
+            || match.matchFormat === 'SET_3_STB';
         const isTb = match.isTiebreak;
+
+        const teamLineForPizarra = (t: { full?: string; p1?: string; p2?: string } | null | undefined) => {
+            if (!t) return 'Equipo';
+            const full = typeof t.full === 'string' ? t.full.trim() : '';
+            if (full) return full;
+            const p1 = typeof t.p1 === 'string' ? t.p1.trim() : '';
+            const p2 = typeof t.p2 === 'string' ? t.p2.trim() : '';
+            if (p1 && p2) return `${p1} / ${p2}`;
+            return p1 || p2 || 'Equipo';
+        };
+        const nombreEquipo1 = teamLineForPizarra(match.team1);
+        const nombreEquipo2 = teamLineForPizarra(match.team2);
 
         dataService.getPizarraCanchaState(canchaId).then((cur) => {
             const data = cur?.data || {};
             const marcador = data.marcador || {};
+            const eq1 = marcador.equipo_1 || {};
+            const eq2 = marcador.equipo_2 || {};
             return dataService.setPizarraCanchaState(canchaId, {
                 ...data,
+                pizarra_refresh_nonce:
+                    typeof data.pizarra_refresh_nonce === 'number' && Number.isFinite(data.pizarra_refresh_nonce)
+                        ? data.pizarra_refresh_nonce
+                        : 0,
+                torneo_id: id,
+                partido_id: match.id,
                 marcador: {
                     ...marcador,
                     puntos: { local: match.points?.t1 || '0', visitante: match.points?.t2 || '0' },
                     games: { local: match.games?.t1 || 0, visitante: match.games?.t2 || 0 },
                     sets: { local: match.sets?.t1 || 0, visitante: match.sets?.t2 || 0 },
+                    historico_sets: (match.setScores || []).map((s: any) => ({ local: s.t1 ?? s.local ?? 0, visitante: s.t2 ?? s.visitante ?? 0 })),
                     saque: { equipo: match.server?.team || 1, jugador: match.server?.player || 1 },
                     modo_puntos: isStb ? 'super_tiebreak' : (isTb ? 'tiebreak' : 'normal'),
+                    super_tiebreak: !!match.superTiebreak,
+                    golden_point: isGoldenPoint,
+                    match_format: match.matchFormat || tournament?.matchFormat,
+                    tie_break_type: match.tieBreakType || tournament?.tieBreakType,
+                    equipo_1: { nombre: nombreEquipo1, color: eq1.color || '#CCFF00' },
+                    equipo_2: { nombre: nombreEquipo2, color: eq2.color || '#FF5500' },
                     ultimo_update: Date.now(),
                 },
             });
         }).catch((err) => console.warn('[Score] Sync pizarra cancha:', err));
     }, [
+        id,
+        match?.id,
         match?.status,
         match?.points,
         match?.games,
@@ -277,7 +320,13 @@ export default function RefereeScoreboard() {
         match?.isTiebreak,
         match?.superTiebreak,
         match?.matchFormat,
+        match?.setScores,
+        match?.team1,
+        match?.team2,
         matchCourt,
+        tournament?.matchFormat,
+        tournament?.tieBreakType,
+        isGoldenPoint,
     ]);
 
     const formatDuration = (seconds: number) => {
@@ -306,8 +355,9 @@ export default function RefereeScoreboard() {
             if (t.scoringSystem) {
                 setIsGoldenPoint(t.scoringSystem === 'GOLDEN_POINT');
             }
-            if (t.tieBreakType) {
-                setTiebreakTo(t.tieBreakType === 'STB' ? 10 : 7);
+            if (t.tieBreakType || t.matchFormat) {
+                const r = getScoringRules(t.matchFormat, t.tieBreakType);
+                setSuperTiebreakTarget(r.superTiebreakPointsToWin);
             }
 
             // Resolver partido
@@ -394,6 +444,8 @@ export default function RefereeScoreboard() {
                     ...foundMatch,
                     team1: t1,
                     team2: t2,
+                    matchFormat: foundMatch.matchFormat || t?.matchFormat,
+                    tieBreakType: foundMatch.tieBreakType || t?.tieBreakType,
                 });
             }
             setLoading(false);
@@ -437,7 +489,10 @@ export default function RefereeScoreboard() {
             games: previousState.games,
             sets: previousState.sets,
             server: previousState.server,
-            isTiebreak: previousState.isTiebreak ?? false
+            isTiebreak: previousState.isTiebreak ?? false,
+            superTiebreak: previousState.superTiebreak ?? false,
+            setScores: previousState.setScores,
+            superTiebreakScore: previousState.superTiebreakScore,
         };
 
         // Actualización optimista
@@ -471,14 +526,14 @@ export default function RefereeScoreboard() {
 
         let optimisticMatch = { ...match };
 
-        // ── Lógica de Tiebreak ───────────────────────────────────────────
-        if (match.isTiebreak) {
-            const currentP = parseInt(newPoints[side] || '0');
-            const otherP = parseInt(newPoints[otherSide] || '0');
+        // ── Tie-break de set (7+2) o super tie-break (10+2 / 7+2) ─────────
+        const inNumericTiebreak = match.isTiebreak || match.superTiebreak;
+        if (inNumericTiebreak) {
+            const currentP = parseInt(newPoints[side] || '0', 10);
+            const otherP = parseInt(newPoints[otherSide] || '0', 10);
             const nextP = currentP + 1;
             newPoints[side] = nextP.toString();
 
-            // Rotación de saque en Tiebreak
             const totalPoints = nextP + otherP;
             let nextServer = { ...match.server };
             if (totalPoints === 1 || (totalPoints > 1 && (totalPoints - 1) % 2 === 0)) {
@@ -487,9 +542,10 @@ export default function RefereeScoreboard() {
                 nextServer = { team: nextTeam as 1 | 2, player: nextPlayer as 1 | 2 };
             }
 
-            // Verificar ganador de tiebreak
-            const target = match.tiebreakTo || tiebreakTo;
-            if (nextP >= target && (nextP - otherP) >= 2) {
+            const target = match.superTiebreak
+                ? superTiebreakTarget
+                : scoringRules.setTiebreakPointsToWin;
+            if (winsTiebreakPoints(nextP, otherP, target)) {
                 await winGame(side);
                 return;
             }
@@ -555,11 +611,13 @@ export default function RefereeScoreboard() {
         const g2Before = newGames.t2;
         const totalGamesBefore = g1Before + g2Before;
 
-        if (match.isTiebreak) {
+        if (match.isTiebreak || match.superTiebreak) {
             newGames[side]++;
             await winSet(side, newGames);
             return;
         }
+
+        const rules = getScoringRules(match.matchFormat || tournament?.matchFormat, tournament?.tieBreakType);
 
         newGames[side]++;
         const g1 = newGames.t1;
@@ -591,9 +649,8 @@ export default function RefereeScoreboard() {
         const player = (teamNumTurns % 2 === 0) ? 1 : 2;
         const nextServer = { team: team as 1 | 2, player: player as 1 | 2 };
 
-        // ── Lógica de Set ────────────────────────────────────────────────
-        const isEntryTiebreak = g1 === 6 && g2 === 6;
-        const isSetFinished = (g1 >= 6 && g1 - g2 >= 2) || (g2 >= 6 && g2 - g1 >= 2) || g1 === 7 || g2 === 7;
+        const isEntryTiebreak = shouldEnterSetTiebreak(g1, g2, rules.tiebreakGamesEntry);
+        const isSetFinished = isSetCompleteByGames(g1, g2, rules.gamesToWinSet);
 
         if (isSetFinished) {
             await winSet(side, newGames);
@@ -631,35 +688,73 @@ export default function RefereeScoreboard() {
     };
 
     const winSet = async (side: 't1' | 't2', finalGames: { t1: number, t2: number }) => {
+        const rules = getScoringRules(match.matchFormat || tournament?.matchFormat, tournament?.tieBreakType);
         let newSets = { t1: match.sets?.t1 || 0, t2: match.sets?.t2 || 0 };
         newSets[side]++;
 
-        const isSuperTiebreakSet = (match.superTiebreak || match.matchFormat === 'SUPER_TIEBREAK') && (match.setScores?.length === 2 || ((match.sets?.t1 ?? 0) + (match.sets?.t2 ?? 0)) === 1);
-        const newSetScores = isSuperTiebreakSet
+        const isCompletingSuperTB = match.superTiebreak === true;
+
+        const newSetScores = isCompletingSuperTB
             ? (match.setScores || [])
             : [...(match.setScores || []), { t1: finalGames.t1, t2: finalGames.t2 }];
 
-        const isMatchFinished = newSets[side] >= (match.matchFormat === 'ONE_SET_6' || match.matchFormat === 'ONE_SET_9' ? 1 : 2);
-        const stbScore = isMatchFinished && isSuperTiebreakSet && match.points
-            ? { t1: parseInt(String(match.points.t1 || 0), 10), t2: parseInt(String(match.points.t2 || 0), 10) }
-            : (match.superTiebreakScore ?? undefined);
+        const isMatchFinished =
+            newSets.t1 >= rules.setsToWinMatch || newSets.t2 >= rules.setsToWinMatch;
 
-        const updatedData = {
+        const enterStb =
+            !isMatchFinished &&
+            rules.usesSuperTiebreakDecider &&
+            newSets.t1 === 1 &&
+            newSets.t2 === 1 &&
+            !isCompletingSuperTB;
+
+        let nextSuperTb = !!(match.superTiebreak ?? false);
+        if (enterStb) nextSuperTb = true;
+        if (isMatchFinished) nextSuperTb = false;
+
+        const updatedData: any = {
             games: isMatchFinished ? finalGames : { t1: 0, t2: 0 },
             points: { t1: '0', t2: '0' },
             sets: newSets,
             setScores: newSetScores,
-            ...(stbScore != null ? { superTiebreakScore: stbScore } : {}),
             isTiebreak: false,
+            superTiebreak: nextSuperTb,
             status: isMatchFinished ? MatchStatus.FINISHED : match.status,
             finishedAt: isMatchFinished ? new Date().toISOString() : match.finishedAt || null
         };
+        if (isCompletingSuperTB) {
+            updatedData.superTiebreakScore = { t1: finalGames.t1, t2: finalGames.t2 };
+        } else if (enterStb) {
+            updatedData.superTiebreakScore = null;
+        }
 
         // Actualización optimista
         setMatch({ ...match, ...updatedData });
 
         try {
             await dataService.updateMatch(id, match.id, updatedData);
+
+            // ── Broadcast al RTDB para sincronización en tiempo real con la Pizarra ──
+            if (rtdb) {
+                try {
+                    const canchaId = `cancha_${matchCourt}`;
+                    const rtdbRef = ref(rtdb, `canchas/${canchaId}/marcador`);
+                    update(rtdbRef, {
+                        sets: newSets,
+                        games: updatedData.games,
+                        setScores: newSetScores,
+                        superTiebreak: nextSuperTb,
+                        ...(updatedData.superTiebreakScore != null
+                            ? { superTiebreakScore: updatedData.superTiebreakScore }
+                            : {}),
+                        status: updatedData.status,
+                        ts: Date.now()
+                    });
+                } catch (rtdbErr) {
+                    console.warn('[winSet] RTDB broadcast error (non-fatal):', rtdbErr);
+                }
+            }
+
             if (isMatchFinished && id) {
                 setTimeout(() => {
                     window.location.href = `/tournaments/${id}`;
@@ -1609,18 +1704,19 @@ export default function RefereeScoreboard() {
 
                                 {/* Special Rules */}
                                 <div className="space-y-4 pt-4 border-t border-white/5">
-                                    <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Tiebreak Target</span>
+                                    <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Super tie-break (STB)</span>
+                                    <p className="text-[9px] text-gray-600 leading-relaxed">Solo aplica al desempate final a 2 sets. El tie-break de set va siempre a 7 con diferencia de 2.</p>
                                     <div className="grid grid-cols-2 gap-4">
                                         {[7, 10].map(val => (
                                             <button
                                                 key={val}
-                                                onClick={() => setTiebreakTo(val)}
-                                                className={`py-4 rounded-2xl border font-black italic uppercase text-xs transition-all ${tiebreakTo === val
+                                                onClick={() => setSuperTiebreakTarget(val)}
+                                                className={`py-4 rounded-2xl border font-black italic uppercase text-xs transition-all ${superTiebreakTarget === val
                                                     ? 'bg-padel-primary text-black border-padel-primary shadow-[0_0_20px_rgba(204,255,0,0.2)]'
                                                     : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
                                                     }`}
                                             >
-                                                To {val} Points
+                                                STB a {val} pts
                                             </button>
                                         ))}
                                     </div>
@@ -1636,11 +1732,27 @@ export default function RefereeScoreboard() {
                                                 points: { t1: '0', t2: '0' },
                                                 games: { t1: 0, t2: 0 },
                                                 sets: { t1: 0, t2: 0 },
+                                                setScores: [],
+                                                isTiebreak: false,
+                                                superTiebreak: false,
+                                                superTiebreakScore: null,
                                                 status: MatchStatus.PENDING,
                                                 startedAt: null,
                                                 finishedAt: null,
                                             });
-                                            setMatch((prev: any) => prev ? { ...prev, points: { t1: '0', t2: '0' }, games: { t1: 0, t2: 0 }, sets: { t1: 0, t2: 0 }, status: MatchStatus.PENDING, startedAt: null, finishedAt: null } : prev);
+                                            setMatch((prev: any) => prev ? {
+                                                ...prev,
+                                                points: { t1: '0', t2: '0' },
+                                                games: { t1: 0, t2: 0 },
+                                                sets: { t1: 0, t2: 0 },
+                                                setScores: [],
+                                                isTiebreak: false,
+                                                superTiebreak: false,
+                                                superTiebreakScore: null,
+                                                status: MatchStatus.PENDING,
+                                                startedAt: null,
+                                                finishedAt: null,
+                                            } : prev);
                                             setShowAdjustModal(false);
                                         } catch (e) {
                                             console.error('Reset match:', e);

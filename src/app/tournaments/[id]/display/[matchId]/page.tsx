@@ -12,6 +12,7 @@ import { rtdb } from '@/lib/rtdb';
 import { ref, onValue, off } from 'firebase/database';
 import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, Layers, ImageIcon, Play, Eye, Users } from 'lucide-react';
 import { BouncingBall } from '@/components/BouncingBall';
+import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 
 // Lottie player para animaciones JSON (biblioteca de animaciones)
 function LottieAnimationOverlay({ url }: { url: string }) {
@@ -178,6 +179,8 @@ export default function FullScreenDisplay() {
     const routeParams = useParams<{ id: string; matchId: string }>();
     const id = String(routeParams?.id ?? '');
     const matchId = String(routeParams?.matchId ?? '');
+    /** Tres dedos + arrastre vertical: salir al torneo (móvil / iPad, sin botón visible). */
+    useThreeFingerDragExit(id ? `/tournaments/${id}` : null);
     const [tournament, setTournament] = useState<any>(null);
     const [match, setMatch] = useState<any>(null);
     const [matchNumberInTournament, setMatchNumberInTournament] = useState<number | null>(null);
@@ -227,6 +230,8 @@ export default function FullScreenDisplay() {
 
     // ── Marcador en vivo del RTDB (escrito por el marker en tiempo real) ─────
     const [liveMarcador, setLiveMarcador] = useState<any>(null);
+    const pizarraRefreshNonceBaselineRef = useRef<number | null>(null);
+    const pizarraRefreshCanchaKeyRef = useRef<string>('');
     const [sponsorIdx, setSponsorIdx] = useState(0);
     const [sponsorCarousel, setSponsorCarousel] = useState<any[]>([]);
     const [sponsorCarouselIdx, setSponsorCarouselIdx] = useState(0);
@@ -303,15 +308,38 @@ export default function FullScreenDisplay() {
         if (!courtNum) return;
 
         const canchaId = `cancha_${courtNum}`;
+        if (pizarraRefreshCanchaKeyRef.current !== canchaId) {
+            pizarraRefreshCanchaKeyRef.current = canchaId;
+            pizarraRefreshNonceBaselineRef.current = null;
+        }
+
+        /** El marker incrementa `pizarra_refresh_nonce`; al subir el número recargamos la ventana. */
+        const applyPizarraRefreshNonce = (data: Record<string, unknown> | null | undefined) => {
+            let n = data?.pizarra_refresh_nonce;
+            if (typeof n !== 'number' || !Number.isFinite(n)) n = 0;
+            if (pizarraRefreshNonceBaselineRef.current === null) {
+                pizarraRefreshNonceBaselineRef.current = n;
+                return;
+            }
+            if (n > pizarraRefreshNonceBaselineRef.current) {
+                pizarraRefreshNonceBaselineRef.current = n;
+                window.location.reload();
+            }
+        };
+
         const unsub = dataService.subscribePizarraCanchaState(canchaId, (state) => {
-            const marcador = state?.data?.marcador ?? null;
+            const data = state?.data;
+            applyPizarraRefreshNonce(data);
+            const marcador = data?.marcador ?? null;
             setLiveMarcador(marcador);
         });
 
         // Polling de respaldo en caso de que Supabase Realtime no esté habilitado en el Dashboard
         const pollingInterval = setInterval(() => {
             dataService.getPizarraCanchaState(canchaId).then((state) => {
-                const marcador = state?.data?.marcador ?? null;
+                const data = state?.data;
+                applyPizarraRefreshNonce(data);
+                const marcador = data?.marcador ?? null;
                 setLiveMarcador((prev: any) => {
                     if (marcador?.ultimo_update !== prev?.ultimo_update || JSON.stringify(marcador) !== JSON.stringify(prev)) {
                         return marcador;
@@ -890,6 +918,17 @@ export default function FullScreenDisplay() {
     // ── Valores del marcador: preferir RTDB si hay marcador en vivo ──────────
     const lm = liveMarcador;
 
+    /** Nombres que envía el marcador del partido (mismo criterio que la grilla / score) */
+    const splitLiveTeamNombre = (nombre: string | undefined, fp1: string, fp2: string) => {
+        if (!nombre || typeof nombre !== 'string' || !nombre.trim()) return { p1: fp1, p2: fp2 };
+        const parts = nombre.split(/\s*\/\s*/).map((s) => s.trim()).filter(Boolean);
+        if (parts.length >= 2) return { p1: parts[0], p2: parts[1] };
+        if (parts.length === 1) return { p1: parts[0], p2: fp2 };
+        return { p1: fp1, p2: fp2 };
+    };
+    const t1Live = splitLiveTeamNombre(lm?.equipo_1?.nombre, match.t1p1, match.t1p2);
+    const t2Live = splitLiveTeamNombre(lm?.equipo_2?.nombre, match.t2p1, match.t2p2);
+
     // Games en el set actual
     const gamesT1 = lm ? (lm.games?.local ?? 0) : (match.games?.t1 ?? 0);
     const gamesT2 = lm ? (lm.games?.visitante ?? 0) : (match.games?.t2 ?? 0);
@@ -904,7 +943,7 @@ export default function FullScreenDisplay() {
     const modoPuntos: 'normal' | 'tiebreak' | 'super_tiebreak' = lm?.modo_puntos ||
         (match?.matchFormat === 'SUPER_TIEBREAK' || match?.superTiebreak || (currentSet === 3 && match?.matchFormat === 'SET_3_STB')
             ? 'super_tiebreak'
-            : (match?.matchFormat === 'TIEBREAK' || match?.tiebreak || (gamesT1 === 6 && gamesT2 === 6)
+            : (match?.matchFormat === 'TIEBREAK' || match?.tiebreak || match?.isTiebreak === true || (gamesT1 === 6 && gamesT2 === 6)
                 ? 'tiebreak'
                 : 'normal'));
 
@@ -1183,7 +1222,8 @@ export default function FullScreenDisplay() {
                             {/* Column headers dynámicos: SET 3 solo si formato es mejor-de-3 */}
                             {(() => {
                                 const fmt = (match?.matchFormat || tournament?.matchFormat || '') as string;
-                                const has3rdSet = fmt === 'BEST_OF_3' || fmt === '3SETS' || fmt === 'THREE_SETS' || fmt === 'SUPER_TIEBREAK' || fmt === 'SET_3_STB' || fmt === 'TIEBREAK' || match?.superTiebreak === true || match?.tiebreak === true || currentSet >= 3;
+                                const twoSetsPlusStb = fmt === 'TWO_SHORT_SETS' || fmt === 'TWO_NORMAL_SETS';
+                                const has3rdSet = fmt === 'BEST_OF_3' || fmt === '3SETS' || fmt === 'THREE_SETS' || fmt === 'SUPER_TIEBREAK' || fmt === 'SET_3_STB' || fmt === 'TIEBREAK' || twoSetsPlusStb || match?.superTiebreak === true || match?.tiebreak === true || currentSet >= 3;
                                 const setCols = has3rdSet ? [1, 2, 3] : [1, 2];
                                 const grid = has3rdSet ? 'grid-cols-[1fr_8%_8%_8%_12%]' : 'grid-cols-[1fr_8%_8%_12%]';
                                 return (
@@ -1195,7 +1235,8 @@ export default function FullScreenDisplay() {
                                                 const is3rdSTB = s === 3 && (
                                                     match?.matchFormat === 'SUPER_TIEBREAK' ||
                                                     match?.superTiebreak === true ||
-                                                    match?.matchFormat === 'SET_3_STB'
+                                                    match?.matchFormat === 'SET_3_STB' ||
+                                                    twoSetsPlusStb
                                                 );
                                                 const is3rdTB = s === 3 && !is3rdSTB && (
                                                     match?.matchFormat === 'TIEBREAK' ||
@@ -1256,7 +1297,7 @@ export default function FullScreenDisplay() {
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
-                                                            {processDisplayName(match.t1p1) || match.t1p1}
+                                                            {processDisplayName(t1Live.p1) || t1Live.p1}
                                                         </span>
                                                         <span className="text-white/30 mx-3">/</span>
                                                         <span className="flex items-center">
@@ -1268,7 +1309,7 @@ export default function FullScreenDisplay() {
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
-                                                            {processDisplayName(match.t1p2) || match.t1p2}
+                                                            {processDisplayName(t1Live.p2) || t1Live.p2}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -1309,7 +1350,7 @@ export default function FullScreenDisplay() {
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
-                                                            {processDisplayName(match.t2p1) || match.t2p1}
+                                                            {processDisplayName(t2Live.p1) || t2Live.p1}
                                                         </span>
                                                         <span className="text-white/30 mx-3">/</span>
                                                         <span className="flex items-center">
@@ -1321,7 +1362,7 @@ export default function FullScreenDisplay() {
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
-                                                            {processDisplayName(match.t2p2) || match.t2p2}
+                                                            {processDisplayName(t2Live.p2) || t2Live.p2}
                                                         </span>
                                                     </div>
                                                 </div>

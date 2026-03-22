@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { dataService, ROLES } from '@/lib/dataService';
+import { isAdminAccess } from '@/lib/adminAccess';
 import type { AppUser } from '@/lib/types/auth';
 
 interface AuthContextType {
@@ -271,13 +272,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setProfile(null);
     };
 
-    const isAdmin = !!(
-        profile?.role === ROLES.ADMIN ||
-        user?.email?.toLowerCase().includes('casainteligente') ||
-        user?.email?.toLowerCase().includes('casanteligente') ||
-        user?.email?.toLowerCase().includes('casainteligentemgta') ||
-        user?.email?.toLowerCase() === 'casainteligentemgta@gmail.com'
-    );
+    const isAdmin = !!isAdminAccess(profile?.role, user?.email ?? undefined);
     const isPlayer = !!(profile?.role === ROLES.PLAYER);
     const isMarker = !!(profile?.role === ROLES.MARKER);
     const markerCanchas: string[] = isMarker && Array.isArray(profile?.markerCanchas) ? profile.markerCanchas : [];

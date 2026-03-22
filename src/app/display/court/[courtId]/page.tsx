@@ -7,10 +7,12 @@ import { useAdBanner } from '@/lib/useAdBanner';
 import { MonitorOff, Megaphone, Wifi, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouteSegment } from '@/lib/useRouteSegment';
+import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 
 export default function CourtDisplayPage() {
     const courtId = useRouteSegment('courtId');
     const canchaId = `cancha_${courtId}`;
+    useThreeFingerDragExit('/');
 
     const [canchaData, setCanchaData] = useState<any>(null);
     const [loading, setLoading] = useState(true);

@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { ProgramacionPublicidad } from '@/lib/supabase/publicidad';
+import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 
 const INTERVALO_PROGRAMACION_MS = 60 * 1000; // 1 minuto
 
@@ -32,6 +33,7 @@ function tiempoEntre(actual: string, inicio: string, fin: string): boolean {
 export default function DisplayPantallaPage() {
   const params = useParams();
   const id = (params?.id as string) || '';
+  useThreeFingerDragExit('/');
   const [isActivated, setIsActivated] = useState(false);
   const [contenidoActualId, setContenidoActualId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -26,7 +26,7 @@ import Sidebar from '@/components/Sidebar';
 import { useSearchParams, useRouter } from 'next/navigation';
 
 function PlayersListContent() {
-    const { user, loading: authLoading, isAdmin } = useAuth();
+    const { user, loading: authLoading, isAdmin, profileLoading } = useAuth();
     const [players, setPlayers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -42,37 +42,51 @@ function PlayersListContent() {
     const editId = searchParams.get('edit');
 
     useEffect(() => {
-        const loadPlayers = async () => {
-            if (!user) return;
+        if (!authLoading && !user) {
+            setLoading(false);
+            return;
+        }
+        if (authLoading || !user) return;
+        // Si aún no sabemos el rol, esperar: evita pedir "mis jugadores" y luego toda la API (admin por rol en BD).
+        if (!isAdmin && profileLoading) {
+            setLoading(true);
+            return;
+        }
+
+        let cancelled = false;
+        setLoading(true);
+        (async () => {
             try {
                 if (isAdmin) {
                     const res = await fetch('/api/participants');
+                    if (cancelled) return;
                     if (res.ok) {
                         const data = await res.json();
                         setPlayers(Array.isArray(data) ? data : []);
-                        setLoading(false);
                         return;
                     }
                     if (res.status === 501) {
                         const data = await dataService.getAllParticipants();
-                        setPlayers(data);
-                    } else {
+                        if (!cancelled) setPlayers(data);
+                    } else if (!cancelled) {
                         setPlayers([]);
                     }
                 } else {
                     const data = await dataService.getMyParticipants(user.uid);
-                    setPlayers(data);
+                    if (!cancelled) setPlayers(data);
                 }
             } catch (err) {
                 console.error(err);
-                setPlayers([]);
+                if (!cancelled) setPlayers([]);
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
+        })();
+
+        return () => {
+            cancelled = true;
         };
-        if (!authLoading && user) loadPlayers();
-        else if (!authLoading && !user) setLoading(false);
-    }, [user, authLoading, isAdmin]);
+    }, [user, authLoading, isAdmin, profileLoading]);
 
     useEffect(() => {
         if (editId && players.length > 0) {
@@ -183,7 +197,7 @@ function PlayersListContent() {
         (p.dni || '').includes(searchTerm)
     );
 
-    if (authLoading || loading) {
+    if (authLoading || loading || (user && !isAdmin && profileLoading)) {
         return (
             <div className="min-h-screen bg-black flex items-center justify-center">
                 <RefreshCw className="w-8 h-8 text-padel-primary animate-spin" />
@@ -238,7 +252,7 @@ function PlayersListContent() {
                                             <div className="flex items-center gap-4">
                                                 <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center overflow-hidden border-2 border-white/5 group-hover:border-padel-primary/30 transition-all">
                                                     {player.photo ? (
-                                                        <img src={player.photo} className="w-full h-full object-cover" />
+                                                        <img src={player.photo} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
                                                     ) : (
                                                         <Users className="w-7 h-7 text-gray-600" />
                                                     )}

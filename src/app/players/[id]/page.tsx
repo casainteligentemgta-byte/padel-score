@@ -61,16 +61,20 @@ export default function PlayerProfilePage() {
                     const statsData = await dataService.getPlayerStats(id);
                     if (statsData) setPlayerStats(statsData);
 
-                    // Fetch profile to get uniqueCode
-                    if (data.ownerId) {
+                    const fromParticipant =
+                        typeof data.uniqueCode === 'string' && data.uniqueCode.trim()
+                            ? data.uniqueCode.trim().toUpperCase()
+                            : null;
+                    if (fromParticipant) {
+                        setUniqueCode(fromParticipant);
+                    } else if (data.ownerId) {
                         let prof = await dataService.getUserProfile(data.ownerId);
                         if (prof) {
                             if (!prof.uniqueCode) {
-                                // Generate if missing
                                 await dataService.setUserProfile(data.ownerId, { ...prof, uniqueCode: undefined });
                                 prof = await dataService.getUserProfile(data.ownerId);
                             }
-                            if (prof) setUniqueCode(prof.uniqueCode);
+                            if (prof?.uniqueCode) setUniqueCode(prof.uniqueCode);
                         }
                     }
                 } else {

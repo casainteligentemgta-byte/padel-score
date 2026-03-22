@@ -191,16 +191,6 @@ function RegistrationFormContent() {
 
         setLoading(true);
         try {
-            // Uniqueness validation
-            if (formData.email) {
-                const emailExists = await dataService.checkParticipantExistence('email', formData.email.toLowerCase(), editId || undefined);
-                if (emailExists) {
-                    alert('Este email ya está registrado con otro jugador.');
-                    setLoading(false);
-                    return;
-                }
-            }
-
             if (formData.dni) {
                 const dniExists = await dataService.checkParticipantExistence('dni', formData.dni, editId || undefined);
                 if (dniExists) {

@@ -1,5 +1,6 @@
 import { getSupabaseClient } from './supabase/client';
 import { sanitizeString } from './apiValidation';
+import { getAuthHeaders } from './apiAuth';
 
 const supabase = () => {
     const c = getSupabaseClient();
@@ -572,6 +573,54 @@ export const dataService = {
 
     async addParticipant(data: any, ownerId: string) {
         const sanitized = sanitizeObject(data);
+        if (typeof sanitized.email === 'string') {
+            sanitized.email = sanitized.email.trim().toLowerCase();
+        }
+
+        let uniqueCode: string | undefined;
+        try {
+            const authHeaders = await getAuthHeaders();
+            if (authHeaders.Authorization) {
+                const res = await fetch('/api/participants/allocate-player-code', {
+                    method: 'POST',
+                    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ownerUid: ownerId,
+                        email: sanitized.email || null,
+                    }),
+                });
+                if (res.ok) {
+                    const j = (await res.json()) as { uniqueCode?: string };
+                    if (j.uniqueCode) uniqueCode = j.uniqueCode;
+                } else if (res.status === 409) {
+                    const j = (await res.json().catch(() => ({}))) as { error?: string };
+                    throw new Error(j.error || 'Este email ya está registrado con otro usuario de la plataforma.');
+                }
+            }
+        } catch (e) {
+            if (e instanceof Error && e.message.includes('registrado')) throw e;
+        }
+
+        if (!uniqueCode) {
+            const prof = await this.getUserProfile(ownerId);
+            const mine = await this.getMyParticipants(ownerId);
+            const used = new Set<string>();
+            if (prof?.uniqueCode) used.add(String(prof.uniqueCode).toUpperCase());
+            (mine || []).forEach((p: { uniqueCode?: string }) => {
+                if (p.uniqueCode) used.add(String(p.uniqueCode).toUpperCase());
+            });
+            for (let i = 0; i < 48; i++) {
+                const c = generateUniqueCode().toUpperCase();
+                if (!used.has(c)) {
+                    uniqueCode = c;
+                    break;
+                }
+            }
+            if (!uniqueCode) uniqueCode = generateUniqueCode().toUpperCase();
+        }
+
+        sanitized.uniqueCode = uniqueCode;
+
         const { data: row, error } = await supabase()
             .from('participants')
             .insert({ owner_id: ownerId, data: sanitized, created_at: now(), updated_at: now() })
@@ -616,8 +665,40 @@ export const dataService = {
 
     async updateParticipant(id: string, data: any) {
         const { id: _id, ...rest } = data;
-        const { data: row } = await supabase().from('participants').select('data').eq('id', id).single();
-        const merged = { ...(row?.data || {}), ...rest };
+        const { data: row } = await supabase().from('participants').select('data, owner_id').eq('id', id).single();
+        const merged = { ...(row?.data || {}), ...sanitizeObject(rest) };
+        if (typeof merged.email === 'string') {
+            merged.email = merged.email.trim().toLowerCase();
+        }
+
+        try {
+            const authHeaders = await getAuthHeaders();
+            if (authHeaders.Authorization && row?.owner_id) {
+                const res = await fetch('/api/participants/allocate-player-code', {
+                    method: 'POST',
+                    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ownerUid: row.owner_id,
+                        email: merged.email || null,
+                    }),
+                });
+                if (res.ok) {
+                    const j = (await res.json()) as { uniqueCode?: string };
+                    if (j.uniqueCode) merged.uniqueCode = j.uniqueCode;
+                } else if (res.status === 409) {
+                    const j = (await res.json().catch(() => ({}))) as { error?: string };
+                    throw new Error(j.error || 'Este email ya está registrado con otro usuario de la plataforma.');
+                }
+            }
+        } catch (e) {
+            if (e instanceof Error && e.message.includes('registrado')) throw e;
+        }
+
+        const prevCode = (row?.data as { uniqueCode?: string } | undefined)?.uniqueCode;
+        if (!merged.uniqueCode && prevCode) {
+            merged.uniqueCode = String(prevCode).toUpperCase();
+        }
+
         const { error } = await supabase()
             .from('participants')
             .update({ data: merged, updated_at: now() })
@@ -714,6 +795,27 @@ export const dataService = {
     },
 
     async deleteParticipant(id: string) {
+        const authHeaders = await getAuthHeaders();
+        if (authHeaders.Authorization) {
+            const res = await fetch(
+                `/api/participants?id=${encodeURIComponent(id)}`,
+                { method: 'DELETE', headers: authHeaders }
+            );
+            if (res.ok) return;
+            if (res.status === 401 || res.status === 403) {
+                // No es admin: intentar borrado como propietario (RLS) más abajo.
+            } else if (res.status === 501) {
+                const body = await res.json().catch(() => ({}));
+                const msg =
+                    (body as { error?: string }).error ||
+                    'En el servidor falta SUPABASE_SERVICE_ROLE_KEY; el admin no puede borrar fichas de otros usuarios.';
+                throw new Error(msg);
+            } else {
+                const body = await res.json().catch(() => ({}));
+                const msg = (body as { error?: string }).error || `Error al eliminar (${res.status})`;
+                throw new Error(msg);
+            }
+        }
         const { error } = await supabase().from('participants').delete().eq('id', id);
         throwIfError(error);
     },
@@ -835,13 +937,29 @@ export const dataService = {
 
     async getUserByUniqueCode(code: string) {
         const cleanedCode = code.trim().toUpperCase().replace(/\s/g, '');
+        if (!/^[A-Z0-9]{6}$/.test(cleanedCode)) return null;
+
+        try {
+            const authHeaders = await getAuthHeaders();
+            if (authHeaders.Authorization) {
+                const res = await fetch(
+                    `/api/resolve-player-code?code=${encodeURIComponent(cleanedCode)}`,
+                    { headers: authHeaders }
+                );
+                if (res.ok) return await res.json();
+                if (res.status === 404 || res.status === 400) return null;
+            }
+        } catch {
+            /* fallback abajo */
+        }
+
         const { data, error } = await supabase()
             .from('profiles')
             .select('id, name, email')
             .eq('unique_code', cleanedCode)
             .single();
         if (error) {
-            if (error.code === 'PGRST116') return null; // No encontrado
+            if (error.code === 'PGRST116') return null;
             throw error;
         }
         return data;

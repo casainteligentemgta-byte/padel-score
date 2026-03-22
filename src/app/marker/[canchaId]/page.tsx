@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
@@ -10,6 +10,13 @@ import {
     Play, Square, RefreshCw, Shield, Trophy, Zap, Star, AlertCircle
 } from 'lucide-react';
 import { getCanchaLabel } from '@/lib/markerCanchas';
+import { isGenericEquipoNombre, resolveMatchTeamLines } from '@/lib/resolveMatchTeamLines';
+import {
+    getScoringRules,
+    isSetCompleteByGames,
+    shouldEnterSetTiebreak,
+    winsTiebreakPoints,
+} from '@/lib/matchScoringRules';
 import Link from 'next/link';
 
 const PUNTOS_NORMAL = ['0', '15', '30', '40', 'AD'];
@@ -30,6 +37,7 @@ export default function MarkerControlPage() {
     const [equipo2, setEquipo2] = useState({ nombre: 'Equipo 2', color: '#FF5500' });
     const [showSetup, setShowSetup] = useState(false);
     const [cronSeconds, setCronSeconds] = useState(0);
+    const [refrescandoPizarra, setRefrescandoPizarra] = useState(false);
 
     const searchParams = useSearchParams();
     // Soporte para jugadores individuales (p1/p2 = equipo 1, p3/p4 = equipo 2)
@@ -40,6 +48,10 @@ export default function MarkerControlPage() {
     // Fallback legacy: team1 / team2 como nombre de equipo completo
     const team1Raw = searchParams.get('team1') || '';
     const team2Raw = searchParams.get('team2') || '';
+    /** IDs torneo / partido (grilla u enlaces manuales) → nombres y vínculo con cuadro. */
+    const tParam = searchParams.get('t')?.trim() || '';
+    const mParam = searchParams.get('m')?.trim() || '';
+    const urlHasTeamText = !!(p1Raw || p2Raw || p3Raw || p4Raw || team1Raw || team2Raw);
 
     // Formatea nombres como: "Nombre1 Nombre2 Apellido1 Apellido2..." -> "Nombre1 N. Apellido1 Apellido2..."
     // Si solo hay 2 partes, deja el nombre tal cual.
@@ -92,13 +104,53 @@ export default function MarkerControlPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [p1Raw, p2Raw, p3Raw, p4Raw, team1Raw, team2Raw]);
 
-    // Jugadores individuales formateados (para el card de saque)
-    const jugadores = [
-        { equipo: 1, jugador: 1, nombre: p1Raw ? formatPlayerForMarker(p1Raw) : '', side: 'local' as const },
-        { equipo: 1, jugador: 2, nombre: p2Raw ? formatPlayerForMarker(p2Raw) : '', side: 'local' as const },
-        { equipo: 2, jugador: 1, nombre: p3Raw ? formatPlayerForMarker(p3Raw) : '', side: 'visitante' as const },
-        { equipo: 2, jugador: 2, nombre: p4Raw ? formatPlayerForMarker(p4Raw) : '', side: 'visitante' as const },
-    ].filter(j => j.nombre);
+    // Sin nombres en query: rellenar equipos desde el partido del torneo (solo ?t=&m=).
+    useEffect(() => {
+        if (!tParam || !mParam || urlHasTeamText) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const tourney = await dataService.getTournament(tParam);
+                const matches = await dataService.getMatches(tParam);
+                if (cancelled) return;
+                const found = matches.find((x: any) => x.id === mParam);
+                if (!found) return;
+                const { team1, team2 } = resolveMatchTeamLines(found, tourney);
+                setEquipo1(prev => (prev.nombre === team1 ? prev : { ...prev, nombre: team1 }));
+                setEquipo2(prev => (prev.nombre === team2 ? prev : { ...prev, nombre: team2 }));
+            } catch (e) {
+                console.warn('[Marker] Prefill equipos (t/m):', e);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [tParam, mParam, urlHasTeamText]);
+
+    // Jugadores para saque: prioridad URL (p1–p4); si no, partir "A / B" de Supabase (árbitro / hidratación).
+    const jugadores = useMemo(() => {
+        const fromUrl = [
+            { equipo: 1, jugador: 1, nombre: p1Raw ? formatPlayerForMarker(p1Raw) : '', side: 'local' as const },
+            { equipo: 1, jugador: 2, nombre: p2Raw ? formatPlayerForMarker(p2Raw) : '', side: 'local' as const },
+            { equipo: 2, jugador: 1, nombre: p3Raw ? formatPlayerForMarker(p3Raw) : '', side: 'visitante' as const },
+            { equipo: 2, jugador: 2, nombre: p4Raw ? formatPlayerForMarker(p4Raw) : '', side: 'visitante' as const },
+        ].filter(j => j.nombre);
+        if (fromUrl.length > 0) return fromUrl;
+        if (!marcador) return [];
+        const splitTeam = (line: string | undefined) => {
+            const t = (line || '').trim();
+            if (!t) return [] as string[];
+            return t.split(/\s*\/\s*/).map(p => p.trim()).filter(Boolean).map(formatPlayerForMarker);
+        };
+        const p1 = splitTeam(marcador.equipo_1?.nombre);
+        const p2 = splitTeam(marcador.equipo_2?.nombre);
+        const out: { equipo: number; jugador: number; nombre: string; side: 'local' | 'visitante' }[] = [];
+        if (p1[0]) out.push({ equipo: 1, jugador: 1, nombre: p1[0], side: 'local' });
+        if (p1[1]) out.push({ equipo: 1, jugador: 2, nombre: p1[1], side: 'local' });
+        if (p2[0]) out.push({ equipo: 2, jugador: 1, nombre: p2[0], side: 'visitante' });
+        if (p2[1]) out.push({ equipo: 2, jugador: 2, nombre: p2[1], side: 'visitante' });
+        return out;
+    }, [p1Raw, p2Raw, p3Raw, p4Raw, marcador?.equipo_1?.nombre, marcador?.equipo_2?.nombre]);
 
     // ── Guard: solo admin o marcador autorizado para esta cancha ───────────
     useEffect(() => {
@@ -132,17 +184,114 @@ export default function MarkerControlPage() {
         return unsub;
     }, [canchaId]);
 
+    // Nombres en formulario / estado local = los mismos que en Supabase mientras EN VIVO.
+    useEffect(() => {
+        if (!isEnVivo || !marcador) return;
+        const e1 = marcador.equipo_1;
+        const e2 = marcador.equipo_2;
+        if (e1?.nombre && typeof e1.nombre === 'string') {
+            const nombre = e1.nombre.trim();
+            const color = typeof e1.color === 'string' ? e1.color : '#CCFF00';
+            if (nombre) {
+                setEquipo1(prev => (prev.nombre === nombre && prev.color === color ? prev : { nombre, color }));
+            }
+        }
+        if (e2?.nombre && typeof e2.nombre === 'string') {
+            const nombre = e2.nombre.trim();
+            const color = typeof e2.color === 'string' ? e2.color : '#FF5500';
+            if (nombre) {
+                setEquipo2(prev => (prev.nombre === nombre && prev.color === color ? prev : { nombre, color }));
+            }
+        }
+    }, [isEnVivo, marcador?.equipo_1?.nombre, marcador?.equipo_1?.color, marcador?.equipo_2?.nombre, marcador?.equipo_2?.color]);
+
+    // Partido de torneo en vivo pero nombres genéricos en pizarra → rellenar desde cuadro (p. ej. marker sin querystring).
+    useEffect(() => {
+        if (!isEnVivo || !canchaId) return;
+        const tid = canchaData?.torneo_id;
+        const pid = canchaData?.partido_id;
+        if (!tid || !pid || String(pid).startsWith('live_')) return;
+        const m = canchaData?.marcador;
+        if (!m) return;
+        const n1 = m.equipo_1?.nombre;
+        const n2 = m.equipo_2?.nombre;
+        if (!isGenericEquipoNombre(n1, 'Equipo 1') && !isGenericEquipoNombre(n2, 'Equipo 2')) return;
+
+        let cancelled = false;
+        (async () => {
+            try {
+                const [tourney, matches] = await Promise.all([
+                    dataService.getTournament(String(tid)),
+                    dataService.getMatches(String(tid)),
+                ]);
+                if (cancelled) return;
+                const found = matches.find((x: any) => x.id === pid);
+                if (!found) return;
+                const { team1, team2 } = resolveMatchTeamLines(found, tourney);
+                const cur = await dataService.getPizarraCanchaState(canchaId);
+                const data = cur?.data || {};
+                const mar = data.marcador || {};
+                const cur1 = (mar.equipo_1?.nombre || '').trim();
+                const cur2 = (mar.equipo_2?.nombre || '').trim();
+                const next1 = isGenericEquipoNombre(cur1, 'Equipo 1') ? team1 : cur1;
+                const next2 = isGenericEquipoNombre(cur2, 'Equipo 2') ? team2 : cur2;
+                if (next1 === cur1 && next2 === cur2) return;
+                await dataService.setPizarraCanchaState(canchaId, {
+                    ...data,
+                    marcador: {
+                        ...mar,
+                        equipo_1: { ...(mar.equipo_1 || {}), nombre: next1, color: mar.equipo_1?.color || '#CCFF00' },
+                        equipo_2: { ...(mar.equipo_2 || {}), nombre: next2, color: mar.equipo_2?.color || '#FF5500' },
+                        ultimo_update: Date.now(),
+                    },
+                });
+            } catch (e) {
+                console.warn('[Marker] Hidratar nombres desde torneo:', e);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        isEnVivo,
+        canchaId,
+        canchaData?.torneo_id,
+        canchaData?.partido_id,
+        canchaData?.marcador?.equipo_1?.nombre,
+        canchaData?.marcador?.equipo_2?.nombre,
+    ]);
+
     // ── Activar partido (Supabase pizarra_cancha_state) ─────────────────────
     const handleActivar = async () => {
         if (!user) return;
         setActivando(true);
         try {
+            const torneoIdActivar = tParam || '';
+            const partidoIdActivar =
+                mParam && !String(mParam).startsWith('court_') ? mParam : `live_${Date.now()}`;
+
+            let match_format: string | undefined;
+            let tie_break_type: 'TB' | 'STB' | undefined;
+            let golden_point = false;
+            if (torneoIdActivar && partidoIdActivar && !String(partidoIdActivar).startsWith('live_')) {
+                try {
+                    const tourney = await dataService.getTournament(torneoIdActivar);
+                    const matches = await dataService.getMatches(torneoIdActivar);
+                    const found = matches.find((x: any) => x.id === partidoIdActivar);
+                    match_format = found?.matchFormat || tourney?.matchFormat;
+                    tie_break_type = tourney?.tieBreakType || found?.tieBreakType;
+                    golden_point = tourney?.scoringSystem === 'GOLDEN_POINT';
+                } catch (e) {
+                    console.warn('[Marker] Formato torneo/partido:', e);
+                }
+            }
+
             await dataService.setPizarraCanchaState(canchaId, {
                 estado: 'en_vivo',
                 marker_uid: user.uid,
                 marker_nombre: profile?.name || user.email || 'Marker',
-                torneo_id: '',
-                partido_id: `live_${Date.now()}`,
+                torneo_id: torneoIdActivar,
+                partido_id: partidoIdActivar,
                 marcador: {
                     sets: { local: 0, visitante: 0 },
                     games: { local: 0, visitante: 0 },
@@ -150,6 +299,9 @@ export default function MarkerControlPage() {
                     historico_sets: [],
                     modo_puntos: 'normal',
                     golden_point: false,
+                    super_tiebreak: false,
+                    match_format,
+                    tie_break_type,
                     equipo_1: equipo1,
                     equipo_2: equipo2,
                     cronometro: { running: false, startedAt: null, elapsedSec: 0 },
@@ -157,6 +309,7 @@ export default function MarkerControlPage() {
                     ultimo_update: Date.now(),
                 },
                 publicidad: { override_local: false, imagen_url_local: null },
+                pizarra_refresh_nonce: 0,
             });
             setShowSetup(false);
         } catch (err) {
@@ -164,6 +317,28 @@ export default function MarkerControlPage() {
             alert('Error al activar la cancha. Intenta de nuevo.');
         } finally {
             setActivando(false);
+        }
+    };
+
+    /** Pide a las pizarras enlazadas a esta cancha que recarguen (incrementa nonce en Supabase). */
+    const handleRefrescarPizarra = async () => {
+        if (refrescandoPizarra) return;
+        setRefrescandoPizarra(true);
+        try {
+            const cur = await dataService.getPizarraCanchaState(canchaId);
+            const data = cur?.data || {};
+            const prev = typeof data.pizarra_refresh_nonce === 'number' && Number.isFinite(data.pizarra_refresh_nonce)
+                ? data.pizarra_refresh_nonce
+                : 0;
+            await dataService.setPizarraCanchaState(canchaId, {
+                ...data,
+                pizarra_refresh_nonce: prev + 1,
+            });
+        } catch (err) {
+            console.error('[Marker] Refrescar pizarra:', err);
+            alert('No se pudo enviar el refresco a la pizarra. Revisa la conexión.');
+        } finally {
+            setTimeout(() => setRefrescandoPizarra(false), 600);
         }
     };
 
@@ -212,51 +387,152 @@ export default function MarkerControlPage() {
         }
     };
 
+    // Rellenar match_format / tie_break_type si hay torneo+partido pero el estado aún no trae formato (p. ej. sesión previa).
+    useEffect(() => {
+        if (!isEnVivo || !canchaId) return;
+        const tid = canchaData?.torneo_id;
+        const pid = canchaData?.partido_id;
+        if (!tid || !pid || String(pid).startsWith('live_')) return;
+        if (marcador?.match_format) return;
+
+        let cancelled = false;
+        (async () => {
+            try {
+                const tourney = await dataService.getTournament(String(tid));
+                const matches = await dataService.getMatches(String(tid));
+                if (cancelled) return;
+                const found = matches.find((x: any) => x.id === pid);
+                const mf = found?.matchFormat || tourney?.matchFormat;
+                const tb = tourney?.tieBreakType || found?.tieBreakType;
+                const gp =
+                    tourney?.scoringSystem === 'GOLDEN_POINT'
+                        ? true
+                        : tourney?.scoringSystem === 'TRADITIONAL'
+                            ? false
+                            : undefined;
+                if (!mf && !tb && gp === undefined) return;
+                const cur = await dataService.getPizarraCanchaState(canchaId);
+                const data = cur?.data || {};
+                const mar = data.marcador || {};
+                await dataService.setPizarraCanchaState(canchaId, {
+                    ...data,
+                    marcador: {
+                        ...mar,
+                        ...(mf ? { match_format: mf } : {}),
+                        ...(tb ? { tie_break_type: tb } : {}),
+                        ...(gp !== undefined ? { golden_point: gp } : {}),
+                        ultimo_update: Date.now(),
+                    },
+                });
+                setCanchaData((prev: any) => {
+                    const d = prev || {};
+                    const m = d.marcador || {};
+                    return {
+                        ...d,
+                        marcador: {
+                            ...m,
+                            ...(mf ? { match_format: mf } : {}),
+                            ...(tb ? { tie_break_type: tb } : {}),
+                            ...(gp !== undefined ? { golden_point: gp } : {}),
+                            ultimo_update: Date.now(),
+                        },
+                    };
+                });
+            } catch (e) {
+                console.warn('[Marker] Enriquecer formato:', e);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [isEnVivo, canchaId, canchaData?.torneo_id, canchaData?.partido_id, marcador?.match_format]);
+
+    const freezeCronometro = (cron: any) => {
+        if (!cron?.running || cron.startedAt == null) return cron;
+        return {
+            running: false,
+            startedAt: null,
+            elapsedSec: (Number(cron.elapsedSec) || 0) + Math.floor((dataService.getSyncedNow() - Number(cron.startedAt)) / 1000),
+        };
+    };
+
+    /** Cierra un set por juegos (no TB): actualiza sets, historial, STB si 1-1, o fin de partido. */
+    const applySetWonByGames = async (
+        m: any,
+        equipo: 'local' | 'visitante',
+        newGames: { local: number; visitante: number },
+    ) => {
+        const rules = getScoringRules(m?.match_format, m?.tie_break_type);
+        const sets = m.sets || { local: 0, visitante: 0 };
+        const base = { local: sets.local || 0, visitante: sets.visitante || 0 };
+        const newSets = { ...base, [equipo]: base[equipo] + 1 };
+        const newHistorico = [...(m.historico_sets || []), { local: newGames.local, visitante: newGames.visitante }];
+        const matchOver = newSets.local >= rules.setsToWinMatch || newSets.visitante >= rules.setsToWinMatch;
+        const enterStb =
+            !matchOver &&
+            rules.usesSuperTiebreakDecider &&
+            newSets.local === 1 &&
+            newSets.visitante === 1 &&
+            m.super_tiebreak !== true;
+
+        if (matchOver) {
+            await actualizarMarcadorLocal({
+                sets: newSets,
+                games: { local: 0, visitante: 0 },
+                puntos: { local: '0', visitante: '0' },
+                modo_puntos: 'normal',
+                super_tiebreak: false,
+                historico_sets: newHistorico,
+                cronometro: freezeCronometro(m.cronometro),
+            });
+            alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
+            return;
+        }
+        if (enterStb) {
+            await actualizarMarcadorLocal({
+                sets: newSets,
+                games: { local: 0, visitante: 0 },
+                puntos: { local: '0', visitante: '0' },
+                modo_puntos: 'super_tiebreak',
+                super_tiebreak: true,
+                historico_sets: newHistorico,
+            });
+            return;
+        }
+        await actualizarMarcadorLocal({
+            sets: newSets,
+            games: { local: 0, visitante: 0 },
+            puntos: { local: '0', visitante: '0' },
+            modo_puntos: 'normal',
+            super_tiebreak: false,
+            historico_sets: newHistorico,
+        });
+    };
+
     const winGame = async (equipo: 'local' | 'visitante') => {
         if (!marcador) return;
+        if (marcador.modo_puntos && marcador.modo_puntos !== 'normal') return;
+
+        const rules = getScoringRules(marcador.match_format, marcador.tie_break_type);
         const otroEquipo = equipo === 'local' ? 'visitante' : 'local';
         const games = marcador.games || { local: 0, visitante: 0 };
-        const sets = marcador.sets || { local: 0, visitante: 0 };
-        
         const newGames = { ...games, [equipo]: games[equipo] + 1 };
-        
-        // Verifica si gana el Set
-        const gamesWinner = newGames[equipo];
-        const gamesLoser = newGames[otroEquipo];
-        
-        if ((gamesWinner >= 6 && gamesWinner - gamesLoser >= 2) || gamesWinner >= 7) {
-            const newSets = { ...sets, [equipo]: sets[equipo] + 1 };
-            const newHistorico = [...(marcador.historico_sets || []), { local: newGames.local, visitante: newGames.visitante }];
-            
-            // Verifica si gana el Partido (2 sets)
-            if (newSets[equipo] >= 2) {
-                const curCron = marcador.cronometro;
-                const finalCron = (curCron && curCron.running && curCron.startedAt) 
-                    ? { running: false, startedAt: null, elapsedSec: (curCron.elapsedSec || 0) + Math.floor((dataService.getSyncedNow() - curCron.startedAt) / 1000) }
-                    : curCron;
+        const g1 = newGames.local;
+        const g2 = newGames.visitante;
 
-                await actualizarMarcadorLocal({
-                    sets: newSets,
-                    games: { local: 0, visitante: 0 },
-                    puntos: { local: '0', visitante: '0' },
-                    modo_puntos: 'normal',
-                    historico_sets: newHistorico,
-                    cronometro: finalCron
-                });
-                alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
-            } else {
-                await actualizarMarcadorLocal({
-                    sets: newSets,
-                    games: { local: 0, visitante: 0 },
-                    puntos: { local: '0', visitante: '0' },
-                    modo_puntos: 'normal',
-                    historico_sets: newHistorico
-                });
-            }
+        if (isSetCompleteByGames(g1, g2, rules.gamesToWinSet)) {
+            await applySetWonByGames(marcador, equipo, newGames);
+        } else if (shouldEnterSetTiebreak(g1, g2, rules.tiebreakGamesEntry)) {
+            await actualizarMarcadorLocal({
+                games: newGames,
+                puntos: { local: '0', visitante: '0' },
+                modo_puntos: 'tiebreak',
+                super_tiebreak: false,
+            });
         } else {
             await actualizarMarcadorLocal({
                 games: newGames,
-                puntos: { local: '0', visitante: '0' }
+                puntos: { local: '0', visitante: '0' },
             });
         }
     };
@@ -322,57 +598,95 @@ export default function MarkerControlPage() {
                 }
             }
         } else {
-            // Tiebreak / Super Tiebreak
-            const actual = parseInt(puntosActual[equipo] || '0');
-            const actualOtro = parseInt(puntosActual[otroEquipo] || '0');
-            
+            const rules = getScoringRules(marcador.match_format, marcador.tie_break_type);
+            const isStb = marcador.super_tiebreak === true || modo === 'super_tiebreak';
+            const target = isStb ? rules.superTiebreakPointsToWin : rules.setTiebreakPointsToWin;
+            const actual = parseInt(String(puntosActual[equipo] || '0'), 10) || 0;
+            const actualOtro = parseInt(String(puntosActual[otroEquipo] || '0'), 10) || 0;
+
             if (delta === 1) {
                 const nuevo = actual + 1;
-                const winTarget = modo === 'super_tiebreak' ? 10 : 7;
-                
-                if (nuevo >= winTarget && (nuevo - actualOtro) >= 2) {
-                    // Win Set via TB/STB
-                    const newSets = { ...marcador.sets, [equipo]: (marcador.sets?.[equipo] || 0) + 1 };
-                    const finalGames = { 
-                        local: (marcador.games?.local || 0) + (equipo === 'local' ? 1 : 0),
-                        visitante: (marcador.games?.visitante || 0) + (equipo === 'visitante' ? 1 : 0)
-                    };
-                    const newHistorico = [...(marcador.historico_sets || []), { local: finalGames.local, visitante: finalGames.visitante }];
-
-                    if (newSets[equipo] >= 2) {
-                        const curCron = marcador.cronometro;
-                        const finalCron = (curCron && curCron.running && curCron.startedAt) 
-                            ? { running: false, startedAt: null, elapsedSec: (curCron.elapsedSec || 0) + Math.floor((dataService.getSyncedNow() - curCron.startedAt) / 1000) }
-                            : curCron;
-
+                if (winsTiebreakPoints(nuevo, actualOtro, target)) {
+                    if (isStb) {
+                        const s0 = marcador.sets || { local: 0, visitante: 0 };
+                        const newSets = {
+                            local: s0.local || 0,
+                            visitante: s0.visitante || 0,
+                            [equipo]: (s0[equipo] || 0) + 1,
+                        };
+                        const finalLocal = equipo === 'local' ? nuevo : actualOtro;
+                        const finalVisit = equipo === 'visitante' ? nuevo : actualOtro;
                         await actualizarMarcadorLocal({
                             sets: newSets,
                             games: { local: 0, visitante: 0 },
                             puntos: { local: '0', visitante: '0' },
                             modo_puntos: 'normal',
-                            historico_sets: newHistorico,
-                            cronometro: finalCron
+                            super_tiebreak: false,
+                            historico_sets: [...(marcador.historico_sets || []), { local: finalLocal, visitante: finalVisit }],
+                            cronometro: freezeCronometro(marcador.cronometro),
                         });
                         alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
                     } else {
-                        await actualizarMarcadorLocal({
-                            sets: newSets,
-                            games: { local: 0, visitante: 0 },
-                            puntos: { local: '0', visitante: '0' },
-                            modo_puntos: 'normal',
-                            historico_sets: newHistorico
-                        });
+                        const g = marcador.games || { local: 0, visitante: 0 };
+                        const hist =
+                            equipo === 'local'
+                                ? { local: g.local + 1, visitante: g.visitante }
+                                : { local: g.local, visitante: g.visitante + 1 };
+                        const s0 = marcador.sets || { local: 0, visitante: 0 };
+                        const newSets = {
+                            local: s0.local || 0,
+                            visitante: s0.visitante || 0,
+                            [equipo]: (s0[equipo] || 0) + 1,
+                        };
+                        const newHistorico = [...(marcador.historico_sets || []), hist];
+                        const matchOver = newSets.local >= rules.setsToWinMatch || newSets.visitante >= rules.setsToWinMatch;
+                        const enterStb =
+                            !matchOver &&
+                            rules.usesSuperTiebreakDecider &&
+                            newSets.local === 1 &&
+                            newSets.visitante === 1 &&
+                            marcador.super_tiebreak !== true;
+
+                        if (matchOver) {
+                            await actualizarMarcadorLocal({
+                                sets: newSets,
+                                games: { local: 0, visitante: 0 },
+                                puntos: { local: '0', visitante: '0' },
+                                modo_puntos: 'normal',
+                                super_tiebreak: false,
+                                historico_sets: newHistorico,
+                                cronometro: freezeCronometro(marcador.cronometro),
+                            });
+                            alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
+                        } else if (enterStb) {
+                            await actualizarMarcadorLocal({
+                                sets: newSets,
+                                games: { local: 0, visitante: 0 },
+                                puntos: { local: '0', visitante: '0' },
+                                modo_puntos: 'super_tiebreak',
+                                super_tiebreak: true,
+                                historico_sets: newHistorico,
+                            });
+                        } else {
+                            await actualizarMarcadorLocal({
+                                sets: newSets,
+                                games: { local: 0, visitante: 0 },
+                                puntos: { local: '0', visitante: '0' },
+                                modo_puntos: 'normal',
+                                super_tiebreak: false,
+                                historico_sets: newHistorico,
+                            });
+                        }
                     }
                 } else {
                     await actualizarMarcadorLocal({
-                        puntos: { ...puntosActual, [equipo]: String(nuevo) }
+                        puntos: { ...puntosActual, [equipo]: String(nuevo) },
                     });
                 }
             } else {
-                // delta -1
                 const nuevo = Math.max(0, actual - 1);
                 await actualizarMarcadorLocal({
-                    puntos: { ...puntosActual, [equipo]: String(nuevo) }
+                    puntos: { ...puntosActual, [equipo]: String(nuevo) },
                 });
             }
         }
@@ -380,51 +694,36 @@ export default function MarkerControlPage() {
 
     const cambiarGame = async (equipo: 'local' | 'visitante', delta: 1 | -1) => {
         if (!marcador) return;
+        if (marcador.modo_puntos && marcador.modo_puntos !== 'normal') return;
+
+        const rules = getScoringRules(marcador.match_format, marcador.tie_break_type);
         const actual = marcador.games?.[equipo] || 0;
         const nuevo = Math.max(0, actual + delta);
-        
-        if (delta === 1) {
-            const otroEquipo = equipo === 'local' ? 'visitante' : 'local';
-            const gamesLoser = marcador.games?.[otroEquipo] || 0;
-            
-            if ((nuevo >= 6 && nuevo - gamesLoser >= 2) || nuevo >= 7) {
-                const newSets = { ...marcador.sets, [equipo]: (marcador.sets?.[equipo] || 0) + 1 };
-                const newGames = { ...marcador.games, [equipo]: nuevo };
-                const newHistorico = [...(marcador.historico_sets || []), { local: newGames.local || 0, visitante: newGames.visitante || 0 }];
 
-                if (newSets[equipo] >= 2) {
-                    const curCron = marcador.cronometro;
-                    const finalCron = (curCron && curCron.running && curCron.startedAt) 
-                        ? { running: false, startedAt: null, elapsedSec: (curCron.elapsedSec || 0) + Math.floor((dataService.getSyncedNow() - curCron.startedAt) / 1000) }
-                        : curCron;
-
-                    await actualizarMarcadorLocal({
-                        sets: newSets,
-                        games: { local: 0, visitante: 0 },
-                        puntos: { local: '0', visitante: '0' },
-                        modo_puntos: 'normal',
-                        historico_sets: newHistorico,
-                        cronometro: finalCron
-                    });
-                    alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
-                } else {
-                    await actualizarMarcadorLocal({
-                        sets: newSets,
-                        games: { local: 0, visitante: 0 },
-                        puntos: { local: '0', visitante: '0' },
-                        modo_puntos: 'normal',
-                        historico_sets: newHistorico
-                    });
-                }
-            } else {
-                await actualizarMarcadorLocal({
-                    games: { ...marcador.games, [equipo]: nuevo },
-                    puntos: { local: '0', visitante: '0' },
-                });
-            }
-        } else {
+        if (delta !== 1) {
             await actualizarMarcadorLocal({
                 games: { ...marcador.games, [equipo]: nuevo },
+                puntos: { local: '0', visitante: '0' },
+            });
+            return;
+        }
+
+        const newGames = { ...(marcador.games || { local: 0, visitante: 0 }), [equipo]: nuevo };
+        const g1 = newGames.local;
+        const g2 = newGames.visitante;
+
+        if (isSetCompleteByGames(g1, g2, rules.gamesToWinSet)) {
+            await applySetWonByGames(marcador, equipo, newGames);
+        } else if (shouldEnterSetTiebreak(g1, g2, rules.tiebreakGamesEntry)) {
+            await actualizarMarcadorLocal({
+                games: newGames,
+                puntos: { local: '0', visitante: '0' },
+                modo_puntos: 'tiebreak',
+                super_tiebreak: false,
+            });
+        } else {
+            await actualizarMarcadorLocal({
+                games: newGames,
                 puntos: { local: '0', visitante: '0' },
             });
         }
@@ -432,20 +731,27 @@ export default function MarkerControlPage() {
 
     const cambiarSet = async (equipo: 'local' | 'visitante', delta: 1 | -1) => {
         if (!marcador) return;
+        const rules = getScoringRules(marcador.match_format, marcador.tie_break_type);
+        const need = rules.setsToWinMatch;
         const nuevo = Math.max(0, (marcador.sets?.[equipo] || 0) + delta);
         let finalCron = marcador.cronometro;
-        if (nuevo >= 2 && finalCron && finalCron.running && finalCron.startedAt) {
-            finalCron = { running: false, startedAt: null, elapsedSec: (finalCron.elapsedSec || 0) + Math.floor((dataService.getSyncedNow() - finalCron.startedAt) / 1000) };
+        if (nuevo >= need && finalCron && finalCron.running && finalCron.startedAt) {
+            finalCron = {
+                running: false,
+                startedAt: null,
+                elapsedSec: (finalCron.elapsedSec || 0) + Math.floor((dataService.getSyncedNow() - finalCron.startedAt) / 1000),
+            };
         }
         await actualizarMarcadorLocal({
             sets: { ...marcador.sets, [equipo]: nuevo },
             games: { local: 0, visitante: 0 },
             puntos: { local: '0', visitante: '0' },
             modo_puntos: 'normal',
-            cronometro: finalCron
+            super_tiebreak: false,
+            cronometro: finalCron,
         });
-        if (nuevo >= 2) {
-             alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
+        if (nuevo >= need) {
+            alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
         }
     };
 
@@ -545,8 +851,23 @@ export default function MarkerControlPage() {
         await actualizarMarcadorLocal({
             modo_puntos: modo,
             puntos: { local: '0', visitante: '0' },
+            super_tiebreak: modo === 'super_tiebreak',
         });
     };
+
+    const formatoMarcadorLabel = useMemo(() => {
+        const r = getScoringRules(marcador?.match_format, marcador?.tie_break_type);
+        const mf = String(marcador?.match_format || 'ONE_SET_6');
+        const lines: Record<string, string> = {
+            ONE_SET_6: '1 set a 6 · TB set a 7',
+            ONE_SET_9: '1 set a 9 · TB en 8-8 a 7',
+            TWO_SHORT_SETS: `2 sets a 4 · STB a ${r.superTiebreakPointsToWin}`,
+            TWO_NORMAL_SETS: `2 sets a 6 · STB a ${r.superTiebreakPointsToWin}`,
+        };
+        return lines[mf] || `Formato ${mf} · TB ${r.setTiebreakPointsToWin}`;
+    }, [marcador?.match_format, marcador?.tie_break_type]);
+
+    const scoringUi = getScoringRules(marcador?.match_format, marcador?.tie_break_type);
 
     // ── Acceso denegado a esta cancha ───────────────────────────────────────
     if (accessDenied) {
@@ -606,11 +927,30 @@ export default function MarkerControlPage() {
                             <p className="subtitle-page text-gray-600">
                                 Control de Puntos
                             </p>
+                            {isEnVivo && marcador && (
+                                <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500 mt-0.5 max-w-[200px] leading-tight">
+                                    {formatoMarcadorLabel}
+                                </p>
+                            )}
                         </div>
                     </div>
-                    <div className={`flex items-center gap-2 px-4 py-2 rounded-full border text-[10px] font-black uppercase tracking-widest ${isEnVivo ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-gray-800/50 border-white/10 text-gray-600'}`}>
-                        {isEnVivo ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                        {isEnVivo ? 'EN VIVO' : 'EN ESPERA'}
+                    <div className="flex items-center gap-2">
+                        {isEnVivo && (
+                            <button
+                                type="button"
+                                onClick={handleRefrescarPizarra}
+                                disabled={refrescandoPizarra}
+                                title="Recarga la ventana de la pizarra enlazada a esta cancha (útil si la TV se quedó pillada)"
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/15 bg-white/5 text-[9px] font-black uppercase tracking-widest text-gray-300 hover:bg-white/10 hover:border-padel-primary/40 hover:text-padel-primary transition-colors disabled:opacity-40"
+                            >
+                                <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${refrescandoPizarra ? 'animate-spin' : ''}`} />
+                                Refrescar pizarra
+                            </button>
+                        )}
+                        <div className={`flex items-center gap-2 px-4 py-2 rounded-full border text-[10px] font-black uppercase tracking-widest ${isEnVivo ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-gray-800/50 border-white/10 text-gray-600'}`}>
+                            {isEnVivo ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+                            {isEnVivo ? 'EN VIVO' : 'EN ESPERA'}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -623,6 +963,11 @@ export default function MarkerControlPage() {
                                 <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
                                     <Shield className="w-4 h-4" /> Configurar Partido
                                 </h2>
+                                {tParam && mParam && (
+                                    <p className="text-[9px] text-gray-600 leading-relaxed">
+                                        Vinculado al partido del torneo: nombres desde el cuadro; al iniciar, la pizarra y el árbitro comparten el mismo enlace.
+                                    </p>
+                                )}
                                 <div className="space-y-3">
                                     <div>
                                         <label className="text-[9px] font-black uppercase text-gray-600 tracking-widest block mb-1">Equipo 1</label>
@@ -790,7 +1135,9 @@ export default function MarkerControlPage() {
                                     }`}
                             >
                                 <Star className="w-3.5 h-3.5" />
-                                {marcador.modo_puntos === 'super_tiebreak' ? 'STB ACTIVO' : 'Super Tie Break'}
+                                {marcador.modo_puntos === 'super_tiebreak'
+                                    ? `STB ACTIVO (${scoringUi.superTiebreakPointsToWin})`
+                                    : `Super TB (${scoringUi.superTiebreakPointsToWin})`}
                             </button>
                         </div>
 

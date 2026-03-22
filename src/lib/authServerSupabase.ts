@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { isAdminAccess } from '@/lib/adminAccess';
 
 type Request = globalThis.Request;
 
@@ -52,7 +53,10 @@ export async function getAuthUserWithRole(req: Request): Promise<AuthUserWithRol
     if (!user) return null;
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
-    if (!url || !key) return { ...user, role: 'player' };
+    if (!url || !key) {
+        const role = isAdminAccess(undefined, user.email) ? 'admin' : 'player';
+        return { ...user, role };
+    }
     try {
         const clientWithToken = createClient(url, key, {
             global: { headers: { Authorization: `Bearer ${token}` } },
@@ -62,10 +66,12 @@ export async function getAuthUserWithRole(req: Request): Promise<AuthUserWithRol
             .select('role')
             .eq('id', user.uid)
             .single();
-        const role = (profile?.role as string) ?? 'player';
+        const dbRole = (profile?.role as string) ?? 'player';
+        const role = isAdminAccess(dbRole, user.email) ? 'admin' : dbRole;
         return { ...user, role };
     } catch {
-        return { ...user, role: 'player' };
+        const role = isAdminAccess(undefined, user.email) ? 'admin' : 'player';
+        return { ...user, role };
     }
 }
 

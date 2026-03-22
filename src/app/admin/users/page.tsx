@@ -339,9 +339,9 @@ export default function AdminUsersPage() {
                         {filteredUsers.map((u, idx) => (
                             <motion.div
                                 key={u.id || u.uid}
-                                initial={{ opacity: 0, y: 10 }}
+                                initial={{ opacity: 0, y: 6 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: idx * 0.05 }}
+                                transition={{ duration: 0.18, delay: Math.min(idx, 12) * 0.015 }}
                                 className="group relative bg-white/[0.02] hover:bg-white/[0.04] backdrop-blur-3xl border border-white/5 hover:border-padel-primary/20 rounded-2xl transition-all duration-300"
                             >
                                 <div className="px-10 py-3 grid grid-cols-1 lg:grid-cols-12 items-center gap-2">
@@ -354,7 +354,7 @@ export default function AdminUsersPage() {
                                             title="Ver ficha"
                                         >
                                             {u.photo ? (
-                                                <img src={u.photo} alt={u.name} className="w-full h-full object-cover" />
+                                                <img src={u.photo} alt={u.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center text-gray-700">
                                                     <User size={26} />

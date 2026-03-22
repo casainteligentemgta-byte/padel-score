@@ -116,6 +116,9 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
         if (t1Display) controlParams.set('team1', t1Display);
         if (t2Display) controlParams.set('team2', t2Display);
     }
+    // Torneo + partido: hidratación en marker/pizarra aunque falten nombres en query (punto 1).
+    if (match._tournamentId) controlParams.set('t', String(match._tournamentId));
+    if (match.id) controlParams.set('m', String(match.id));
 
     const controlHref = `/marker/${encodeURIComponent(canchaId)}?${controlParams.toString()}`;
     const pizarraHref = `/tournaments/${match._tournamentId}/display/${encodeURIComponent(match.id || matchKey)}`;
