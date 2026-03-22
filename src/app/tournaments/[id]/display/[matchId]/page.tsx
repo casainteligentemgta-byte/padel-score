@@ -1183,20 +1183,57 @@ export default function FullScreenDisplay() {
                             {/* Column headers dynámicos: SET 3 solo si formato es mejor-de-3 */}
                             {(() => {
                                 const fmt = (match?.matchFormat || tournament?.matchFormat || '') as string;
-                                const has3rdSet = fmt === 'BEST_OF_3' || fmt === '3SETS' || fmt === 'THREE_SETS';
+                                const has3rdSet = fmt === 'BEST_OF_3' || fmt === '3SETS' || fmt === 'THREE_SETS' || fmt === 'SUPER_TIEBREAK' || fmt === 'SET_3_STB' || fmt === 'TIEBREAK' || match?.superTiebreak === true || match?.tiebreak === true || currentSet >= 3;
                                 const setCols = has3rdSet ? [1, 2, 3] : [1, 2];
                                 const grid = has3rdSet ? 'grid-cols-[1fr_8%_8%_8%_12%]' : 'grid-cols-[1fr_8%_8%_12%]';
                                 return (
                                     <>
-                                        <div className={`grid ${grid} items-center border-b border-white/[0.1] bg-black/40 h-[10%] px-6`}>
+                                        <div className={`grid ${grid} items-center border-b border-white/[0.1] bg-black/40 px-6`} style={{ height: '14%' }}>
                                             <div />
-                                            {setCols.map(s => (
-                                                <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
-                                                    <span className="font-black uppercase tracking-widest text-white/40 leading-none text-center w-full" style={{ fontSize: 'clamp(12px,1.2vw,20px)' }}>
-                                                        SET {s}
-                                                    </span>
-                                                </div>
-                                            ))}
+                                            {setCols.map(s => {
+                                                // Para el tercer set: detectar si es STB o TB
+                                                const is3rdSTB = s === 3 && (
+                                                    match?.matchFormat === 'SUPER_TIEBREAK' ||
+                                                    match?.superTiebreak === true ||
+                                                    match?.matchFormat === 'SET_3_STB'
+                                                );
+                                                const is3rdTB = s === 3 && !is3rdSTB && (
+                                                    match?.matchFormat === 'TIEBREAK' ||
+                                                    match?.tiebreak === true
+                                                );
+                                                const setLabel = is3rdSTB ? 'STB' : is3rdTB ? 'TB' : `SET ${s}`;
+
+                                                // Resultado del set — para STB usar superTiebreakScore
+                                                let sc: any = match.setScores?.[s - 1] ?? match.games_sets?.[s - 1] ?? null;
+                                                if (is3rdSTB && !sc && match.superTiebreakScore) {
+                                                    sc = match.superTiebreakScore;
+                                                }
+                                                const setDone = sc != null && s < currentSet;
+                                                const scT1 = sc?.t1 ?? sc?.local ?? null;
+                                                const scT2 = sc?.t2 ?? sc?.visitante ?? null;
+
+                                                return (
+                                                    <div key={s} className="flex flex-col items-center justify-center border-l border-white/[0.1] h-full gap-0.5">
+                                                        <span
+                                                            className="font-black uppercase tracking-widest leading-none text-center w-full"
+                                                            style={{
+                                                                fontSize: 'clamp(9px,0.9vw,17px)',
+                                                                color: (is3rdSTB || is3rdTB) ? 'rgba(204,255,0,0.55)' : 'rgba(255,255,255,0.4)'
+                                                            }}
+                                                        >
+                                                            {setLabel}
+                                                        </span>
+                                                        {setDone && scT1 != null && scT2 != null && (
+                                                            <span
+                                                                className="font-black italic tabular-nums leading-none text-center w-full"
+                                                                style={{ fontSize: 'clamp(10px,1.1vw,18px)', color: primaryColor, opacity: 0.9 }}
+                                                            >
+                                                                {scT1}·{scT2}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                             <div className="flex items-center justify-center border-l border-white/[0.15] h-full" style={{ backgroundColor: `${primaryColor}20` }}>
                                                 <span className="font-black uppercase tracking-widest leading-none text-center w-full" style={{ fontSize: 'clamp(12px,1.2vw,20px)', color: primaryColor }}>
                                                     PTS
@@ -1239,7 +1276,8 @@ export default function FullScreenDisplay() {
                                             {setCols.map((s: number) => {
                                                 let val: string | number = '';
                                                 if (s < currentSet) {
-                                                    val = lm?.historico_sets?.[s - 1]?.local ?? match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? 0;
+                                                    const stbFallback = (s === 3 && !match.setScores?.[2]) ? match.superTiebreakScore?.t1 : undefined;
+                                                    val = lm?.historico_sets?.[s - 1]?.local ?? match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? stbFallback ?? 0;
                                                 } else if (s === currentSet) {
                                                     val = gamesT1;
                                                 }
@@ -1291,7 +1329,8 @@ export default function FullScreenDisplay() {
                                             {setCols.map((s: number) => {
                                                 let val: string | number = '';
                                                 if (s < currentSet) {
-                                                    val = lm?.historico_sets?.[s - 1]?.visitante ?? match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? 0;
+                                                    const stbFallback = (s === 3 && !match.setScores?.[2]) ? match.superTiebreakScore?.t2 : undefined;
+                                                    val = lm?.historico_sets?.[s - 1]?.visitante ?? match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? stbFallback ?? 0;
                                                 } else if (s === currentSet) {
                                                     val = gamesT2;
                                                 }

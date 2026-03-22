@@ -941,6 +941,7 @@ export default function RefereeScoreboard() {
                     <div className="flex items-center gap-2">
                         {[
                             { icon: RefreshCw, onClick: () => setShowMatchSelector(true), color: 'hover:text-padel-primary', label: 'Cambiar Pista' },
+                            { icon: Monitor, onClick: () => { const pizarraUrl = '/tournaments/' + id + '/display/' + (match?.id || matchId); window.open(pizarraUrl, '_blank'); }, color: 'hover:text-padel-primary', label: 'Abrir / Refrescar Pizarra' },
                             { icon: Settings, onClick: () => setShowAdjustModal(true), color: 'hover:text-white', label: 'Ajustes' },
                             {
                                 icon: Plus,
