@@ -336,42 +336,59 @@ export default function RefereeScoreboard() {
                 };
 
                 // Team resolution logic
-                const resolveNames = (embeddedTeam: any, teamIdx: number, matchTeamName?: string) => {
-                    // 1. Equipo embebido en el partido (prioritario — más actualizado que el array del torneo)
-                    if (embeddedTeam && (embeddedTeam.p1 || embeddedTeam.p1Name || embeddedTeam.isTBD || embeddedTeam.teamLabel)) {
-                        const p1n = (embeddedTeam.p1Name || embeddedTeam.p1?.name || '').trim();
-                        const p2n = (embeddedTeam.p2Name || embeddedTeam.p2?.name || '').trim();
-                        // Solo usar si hay datos reales (no placeholder "Pareja X")
-                        const hasReal = (p1n && !p1n.startsWith('Pareja') && p1n !== '?' && p1n !== 'TBD')
-                            || (p2n && !p2n.startsWith('Pareja') && p2n !== '?');
-                        if (hasReal || embeddedTeam.isTBD) {
-                            const p1Final = embeddedTeam.isTBD ? (embeddedTeam.teamLabel || 'TBD') : (p1n || `J${(teamIdx * 2) - 1}`);
-                            const p2Final = embeddedTeam.isTBD ? '' : (p2n || `J${teamIdx * 2}`);
-                            return { p1: p1Final, p2: p2Final, full: embeddedTeam.isTBD ? p1Final : [p1Final, p2Final].filter(Boolean).join(' / '), p1Photo: embeddedTeam.p1?.photo || null, p2Photo: embeddedTeam.p2?.photo || null };
+                const PH = /^(pareja|jugador|player|placeholder|tbd|\?|j\d+|p\d+)$/i;
+                const isReal = (s: string) => s && s.trim().length > 0 && !PH.test(s.trim());
+
+                const resolveNames = (embeddedTeam: any, teamIdx: number, matchTeamName?: string, matchTeamId?: string) => {
+                    // 1. Equipo embebido directamente en el partido (más actualizado)
+                    if (embeddedTeam) {
+                        if (embeddedTeam.isTBD) {
+                            const label = embeddedTeam.teamLabel || 'TBD';
+                            return { p1: label, p2: '', full: label, p1Photo: null, p2Photo: null };
+                        }
+                        const p1n = (embeddedTeam.p1?.name || embeddedTeam.p1Name || '').trim();
+                        const p2n = (embeddedTeam.p2?.name || embeddedTeam.p2Name || '').trim();
+                        if (isReal(p1n) || isReal(p2n)) {
+                            const p1f = isReal(p1n) ? p1n : '?';
+                            const p2f = isReal(p2n) ? p2n : '';
+                            return {
+                                p1: p1f, p2: p2f,
+                                full: [p1f, p2f].filter(Boolean).join(' / '),
+                                p1Photo: embeddedTeam.p1?.photo || null,
+                                p2Photo: embeddedTeam.p2?.photo || null
+                            };
                         }
                     }
-                    // 2. Nombre de equipo guardado en el partido (string "A / B")
-                    if (matchTeamName && !matchTeamName.startsWith('Pareja') && !matchTeamName.startsWith('TBD')) {
-                        const parts = matchTeamName.split('/').map((s: string) => s.trim()).filter(Boolean);
+                    // 2. Nombre de equipo en el partido (string "A / B")
+                    if (matchTeamName && isReal(matchTeamName)) {
+                        const parts = matchTeamName.split('/').map((s: string) => s.trim()).filter(isReal);
                         if (parts.length >= 2) return { p1: parts[0], p2: parts[1], full: matchTeamName, p1Photo: null, p2Photo: null };
                         if (parts.length === 1) return { p1: parts[0], p2: '', full: parts[0], p1Photo: null, p2Photo: null };
                     }
-                    // 3. tournament.teams por índice (solo si no son placeholders)
-                    const teams = t?.teams || [];
-                    const legacyTeam = teamIdx > 0 ? teams[teamIdx - 1] : null;
-                    if (legacyTeam) {
-                        const p1n = (legacyTeam.p1?.name || '').trim();
-                        const p2n = (legacyTeam.p2?.name || '').trim();
-                        if ((p1n && !p1n.startsWith('Pareja') && p1n !== '?') || (p2n && !p2n.startsWith('Pareja') && p2n !== '?')) {
-                            return { p1: p1n || `J${(teamIdx * 2) - 1}`, p2: p2n || `J${teamIdx * 2}`, full: `${p1n} / ${p2n}`, p1Photo: legacyTeam.p1?.photo || null, p2Photo: legacyTeam.p2?.photo || null };
+                    // 3. tournament.teams — buscar por id y por índice
+                    const teams: any[] = t?.teams || [];
+                    const byId = matchTeamId ? teams.find((tm: any) => tm.id === matchTeamId || tm.teamId === matchTeamId) : null;
+                    const byIdx = teamIdx > 0 ? teams[teamIdx - 1] : (teams[teamIdx] ?? null);
+                    const tData = byId || byIdx || null;
+                    if (tData) {
+                        const p1n = (tData.p1?.name || tData.p1Name || '').trim();
+                        const p2n = (tData.p2?.name || tData.p2Name || '').trim();
+                        if (isReal(p1n) || isReal(p2n)) {
+                            return {
+                                p1: isReal(p1n) ? p1n : '?',
+                                p2: isReal(p2n) ? p2n : '',
+                                full: [p1n, p2n].filter(isReal).join(' / '),
+                                p1Photo: tData.p1?.photo || null,
+                                p2Photo: tData.p2?.photo || null
+                            };
                         }
                     }
-                    // 4. Fallback mínimo
+                    // 4. Fallback
                     return { p1: '?', p2: '?', full: matchTeamName || '?', p1Photo: null, p2Photo: null };
                 };
 
-                const t1 = resolveNames(foundMatch.team1, foundMatch.team1Index ?? 0, foundMatch.team1Name);
-                const t2 = resolveNames(foundMatch.team2, foundMatch.team2Index ?? 0, foundMatch.team2Name);
+                const t1 = resolveNames(foundMatch.team1, foundMatch.team1Index ?? 0, foundMatch.team1Name, foundMatch.team1Id || foundMatch.team1?.id);
+                const t2 = resolveNames(foundMatch.team2, foundMatch.team2Index ?? 0, foundMatch.team2Name, foundMatch.team2Id || foundMatch.team2?.id);
 
                 setMatch({
                     ...foundMatch,
