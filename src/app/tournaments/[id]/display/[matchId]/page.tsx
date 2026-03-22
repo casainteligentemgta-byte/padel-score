@@ -315,8 +315,9 @@ export default function FullScreenDisplay() {
 
         /** El marker incrementa `pizarra_refresh_nonce`; al subir el número recargamos la ventana. */
         const applyPizarraRefreshNonce = (data: Record<string, unknown> | null | undefined) => {
-            let n = data?.pizarra_refresh_nonce;
-            if (typeof n !== 'number' || !Number.isFinite(n)) n = 0;
+            const raw = data?.pizarra_refresh_nonce;
+            const n =
+                typeof raw === 'number' && Number.isFinite(raw) ? raw : 0;
             if (pizarraRefreshNonceBaselineRef.current === null) {
                 pizarraRefreshNonceBaselineRef.current = n;
                 return;
