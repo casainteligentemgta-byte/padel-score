@@ -704,13 +704,50 @@ export default function FullScreenDisplay() {
                     const teams = currentTournament?.teams || [];
                     const teamByIndex = teamIdx > 0 ? teams[teamIdx - 1] : null;
 
-                    // 1) Prioridad: nombres en tournament.teams (nombre + apellido si existen)
+                    // 1) Prioridad: equipo embebido en el partido (p1/p2 con name, o p1Name/p2Name)
+                    //    El match siempre trae los datos más frescos (actualizados por el generador/inscripción)
+                    if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
+                        const p1Base = mTeam.isTBD ? (mTeam.teamLabel || 'TBD') : (mTeam.p1Name || fullName(mTeam.p1));
+                        const p2Base = mTeam.isTBD ? '' : (mTeam.p2Name || fullName(mTeam.p2));
+                        // Solo usar los datos embebidos si tienen info real (no placeholder vacío)
+                        const hasRealData = (p1Base && p1Base !== '?' && !p1Base.startsWith('Pareja') && p1Base !== 'TBD')
+                            || (p2Base && p2Base !== '?' && !p2Base.startsWith('Pareja'));
+                        if (hasRealData) {
+                            const p1Final = p1Base || getSimulatedName(gender, seed * 2);
+                            const p2Final = mTeam.isTBD ? '' : (p2Base || getSimulatedName(gender, seed * 2 + 1));
+                            return {
+                                p1Name: p1Final,
+                                p2Name: p2Final,
+                                p1Photo: mTeam.p1?.photo || null,
+                                p2Photo: mTeam.p2?.photo || null,
+                                name: mTeam.isTBD ? p1Final : [p1Final, p2Final].filter(Boolean).join(' / ')
+                            };
+                        }
+                    }
+
+                    // 2) team1Name / team2Name guardados en el partido (string "A / B")
+                    const storedName = mTeam?.teamLabel || mTeam?.name
+                        || (matchRecord && teamIdx === 1 ? (matchRecord as any).team1Name : matchRecord && teamIdx === 2 ? (matchRecord as any).team2Name : null);
+                    if (storedName && typeof storedName === 'string' && storedName.trim()
+                        && !storedName.startsWith('Pareja') && !storedName.startsWith('TBD')) {
+                        const parts = storedName.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(Boolean);
+                        if (parts.length >= 2) {
+                            return { p1Name: parts[0], p2Name: parts[1], p1Photo: null, p2Photo: null, name: storedName.trim() };
+                        }
+                        if (parts.length === 1) {
+                            return { p1Name: parts[0], p2Name: '', p1Photo: null, p2Photo: null, name: parts[0] };
+                        }
+                    }
+
+                    // 3) tournament.teams por índice — solo si no son placeholders
                     const p1FromTeam = fullName(teamByIndex?.p1);
                     const p2FromTeam = fullName(teamByIndex?.p2);
-                    const fromTournament = teamByIndex && (p1FromTeam.trim() || p2FromTeam.trim());
-                    if (fromTournament) {
-                        const p1Final = p1FromTeam && p1FromTeam !== '?' && p1FromTeam !== 'TBD' ? p1FromTeam : getSimulatedName(gender, seed * 2);
-                        const p2Final = p2FromTeam && p2FromTeam !== '?' && p2FromTeam !== 'TBD' ? p2FromTeam : getSimulatedName(gender, seed * 2 + 1);
+                    const hasRealTournamentName = teamByIndex
+                        && (p1FromTeam.trim() && !p1FromTeam.startsWith('Pareja') && p1FromTeam !== '?'
+                            || p2FromTeam.trim() && !p2FromTeam.startsWith('Pareja') && p2FromTeam !== '?');
+                    if (hasRealTournamentName) {
+                        const p1Final = p1FromTeam && p1FromTeam !== '?' ? p1FromTeam : getSimulatedName(gender, seed * 2);
+                        const p2Final = p2FromTeam && p2FromTeam !== '?' ? p2FromTeam : getSimulatedName(gender, seed * 2 + 1);
                         return {
                             p1Name: p1Final,
                             p2Name: p2Final,
@@ -720,40 +757,7 @@ export default function FullScreenDisplay() {
                         };
                     }
 
-                    // 2) Equipo embebido en el partido (p1/p2 con name+lastName o p1Name/p2Name)
-                    if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
-                        const p1Base = mTeam.isTBD ? (mTeam.teamLabel || 'TBD') : (mTeam.p1Name || fullName(mTeam.p1));
-                        const p2Base = mTeam.isTBD ? '' : (mTeam.p2Name || fullName(mTeam.p2));
-                        const p1Final = (!p1Base || p1Base === '?' || p1Base === 'TBD') ? getSimulatedName(gender, seed * 2) : p1Base;
-                        const p2Final = (!p2Base || p2Base === '?' || (p2Base === 'TBD' && !mTeam.isTBD)) ? (mTeam.isTBD ? '' : getSimulatedName(gender, seed * 2 + 1)) : p2Base;
-                        return {
-                            p1Name: p1Final,
-                            p2Name: p2Final,
-                            p1Photo: mTeam.p1?.photo || null,
-                            p2Photo: mTeam.p2?.photo || null,
-                            name: mTeam.isTBD ? p1Final : [p1Final, p2Final].filter(Boolean).join(' / ')
-                        };
-                    }
-
-                    // 3) team1Name / team2Name guardados en el partido (según teamIdx)
-                    const storedName = mTeam?.teamLabel || mTeam?.name || (matchRecord && teamIdx === 1 ? (matchRecord as any).team1Name : matchRecord && teamIdx === 2 ? (matchRecord as any).team2Name : null);
-                    if (storedName && typeof storedName === 'string' && storedName.trim() && !storedName.startsWith('Pareja')) {
-                        const parts = storedName.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(Boolean);
-                        if (parts.length >= 2) {
-                            return { p1Name: parts[0], p2Name: parts[1], p1Photo: null, p2Photo: null, name: storedName.trim() };
-                        }
-                        if (parts.length === 1) {
-                            return { p1Name: parts[0], p2Name: getSimulatedName(gender, seed * 2 + 1), p1Photo: null, p2Photo: null, name: `${parts[0]} / ${getSimulatedName(gender, seed * 2 + 1)}` };
-                        }
-                    }
-
-                    // 4) Fallback: equipo por índice (nombre + apellido)
-                    if (teamByIndex) {
-                        const p1 = fullName(teamByIndex.p1).trim() || getSimulatedName(gender, seed * 2);
-                        const p2 = fullName(teamByIndex.p2).trim() || getSimulatedName(gender, seed * 2 + 1);
-                        return { p1Name: p1, p2Name: p2, p1Photo: teamByIndex.p1?.photo || null, p2Photo: teamByIndex.p2?.photo || null, name: `${p1} / ${p2}` };
-                    }
-
+                    // 4) Fallback final — nombres simulados (solo si reealmente no hay datos)
                     const p1Sim = getSimulatedName(gender, seed * 2);
                     const p2Sim = getSimulatedName(gender, seed * 2 + 1);
                     return { p1Name: p1Sim, p2Name: p2Sim, p1Photo: null, p2Photo: null, name: `${p1Sim} / ${p2Sim}` };

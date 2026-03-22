@@ -188,7 +188,7 @@ export const dataService = {
             .select('id')
             .single();
         throwIfError(error);
-        return { id: row.id };
+        return { id: (row as any)?.id };
     },
 
     async updateTournament(id: string, data: any) {
