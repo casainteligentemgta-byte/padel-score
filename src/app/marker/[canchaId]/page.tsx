@@ -280,14 +280,27 @@ export default function MarkerControlPage() {
             let match_format: string | undefined;
             let tie_break_type: 'TB' | 'STB' | undefined;
             let golden_point = false;
-            if (torneoIdActivar && partidoIdActivar && !String(partidoIdActivar).startsWith('live_')) {
+            // Siempre tomamos match_format / tie_break_type del torneo si está disponible.
+            // Esto evita que, si el partido viene como `live_...` (por perdida de querystring al salir/volver),
+            // el scoring caiga al default `ONE_SET_6` y termine el partido al primer set.
+            if (torneoIdActivar) {
                 try {
                     const tourney = await dataService.getTournament(torneoIdActivar);
+                    match_format = tourney?.matchFormat;
+                    tie_break_type = tourney?.tieBreakType;
+                    golden_point = tourney?.scoringSystem === 'GOLDEN_POINT';
+                } catch (e) {
+                    console.warn('[Marker] Formato torneo:', e);
+                }
+            }
+
+            // Si tenemos un partido real (no `live_...`), lo usamos para sobreescribir si hace falta.
+            if (torneoIdActivar && partidoIdActivar && !String(partidoIdActivar).startsWith('live_')) {
+                try {
                     const matches = await dataService.getMatches(torneoIdActivar);
                     const found = matches.find((x: any) => x.id === partidoIdActivar);
-                    match_format = found?.matchFormat || tourney?.matchFormat;
-                    tie_break_type = tourney?.tieBreakType || found?.tieBreakType;
-                    golden_point = tourney?.scoringSystem === 'GOLDEN_POINT';
+                    match_format = found?.matchFormat || match_format;
+                    tie_break_type = found?.tieBreakType || tie_break_type;
                 } catch (e) {
                     console.warn('[Marker] Formato torneo/partido:', e);
                 }
