@@ -1053,12 +1053,19 @@ export default function FullScreenDisplay() {
         setsT1,
         setsT2,
     });
-    const scoreboardGridClass = scoreboardGridClassForSetCount(visibleSetCols.length);
+    // En vivo puede existir un pequeño desfase: games llega a 6 antes de que sets se incremente.
+    // En formatos a 2 sets, mostramos SET 2 apenas se ve cierre del primer set por games.
+    const shouldForceSecondSetCol =
+        twoSetsPlusStbFmt &&
+        setsT1 + setsT2 === 0 &&
+        (gamesT1 >= 6 || gamesT2 >= 6);
+    const visibleSetColsFinal = shouldForceSecondSetCol ? [1, 2] : visibleSetCols;
+    const scoreboardGridClass = scoreboardGridClassForSetCount(visibleSetColsFinal.length);
 
     // Set boxes helper (alineado con columnas visibles de la pizarra principal)
     const SetBoxes = ({ team }: { team: 1 | 2 }) => (
         <div className="flex items-center gap-[1vw]">
-            {visibleSetCols.map(setNum => {
+            {visibleSetColsFinal.map(setNum => {
                 const isPast = setNum < currentSet;
                 const isCurrent = setNum === currentSet;
                 const pastVal = match.games_sets?.[setNum - 1]?.[`t${team}`] ?? match.setScores?.[setNum - 1]?.[`t${team}`];
@@ -1307,7 +1314,7 @@ export default function FullScreenDisplay() {
                             {(() => {
                                 const fmt = fmtForSets;
                                 const twoSetsPlusStb = twoSetsPlusStbFmt;
-                                const setCols = visibleSetCols;
+                                const setCols = visibleSetColsFinal;
                                 const grid = scoreboardGridClass;
                                 return (
                                     <>
