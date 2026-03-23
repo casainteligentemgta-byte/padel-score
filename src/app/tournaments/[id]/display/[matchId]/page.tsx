@@ -967,10 +967,34 @@ export default function FullScreenDisplay() {
 
     /** Nombres que envía el marcador del partido (mismo criterio que la grilla / score) */
     const splitLiveTeamNombre = (nombre: string | undefined, fp1: string, fp2: string) => {
+        const isPlaceholder = (v: string | undefined | null) => {
+            const s = (v || '').trim();
+            if (!s) return true;
+            const lower = s.toLowerCase();
+            return (
+                s === '?' ||
+                s.toUpperCase() === 'TBD' ||
+                lower === 'undefined' ||
+                lower === 'player' ||
+                lower === 'placeholder' ||
+                /^pareja\s*\d*$/i.test(s) ||
+                /^equipo\s*\d*$/i.test(s) ||
+                /^jugador\s*\d*$/i.test(s) ||
+                /^player\s*\d*$/i.test(s)
+            );
+        };
+
         if (!nombre || typeof nombre !== 'string' || !nombre.trim()) return { p1: fp1, p2: fp2 };
         const parts = nombre.split(/\s*\/\s*/).map((s) => s.trim()).filter(Boolean);
-        if (parts.length >= 2) return { p1: parts[0], p2: parts[1] };
-        if (parts.length === 1) return { p1: parts[0], p2: fp2 };
+        if (parts.length >= 2) {
+            const p1 = isPlaceholder(parts[0]) ? fp1 : parts[0];
+            const p2 = isPlaceholder(parts[1]) ? fp2 : parts[1];
+            return { p1, p2 };
+        }
+        if (parts.length === 1) {
+            const p1 = isPlaceholder(parts[0]) ? fp1 : parts[0];
+            return { p1, p2: fp2 };
+        }
         return { p1: fp1, p2: fp2 };
     };
     const t1Live = splitLiveTeamNombre(lm?.equipo_1?.nombre, match.t1p1, match.t1p2);
