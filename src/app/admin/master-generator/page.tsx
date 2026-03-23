@@ -204,7 +204,7 @@ export default function MasterGeneratorPage() {
     const [pendingTournamentType, setPendingTournamentType] = useState<'AMERICANO' | 'DUPLA_FIJA' | 'ROUND_ROBIN' | 'ELIMINACION_DIRECTA' | 'COMBINADO' | 'CUADRO_CONSOLACION'>('AMERICANO');
     const [pendingPointsGoal, setPendingPointsGoal] = useState<number>(16);
     // Formato de partido para Round Robin
-    const [pendingRRFormat, setPendingRRFormat] = useState<'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS'>('ONE_SET_6');
+    const [pendingRRFormat, setPendingRRFormat] = useState<'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS'>('TWO_NORMAL_SETS');
     const [pendingAdvanceCount, setPendingAdvanceCount] = useState<1 | 2>(2);
     const [pendingQuickQualification, setPendingQuickQualification] = useState(false);
     const [pendingConsolacionMatchFormat, setPendingConsolacionMatchFormat] = useState<'ONE_SET_9' | 'TWO_SHORT_SETS'>('TWO_SHORT_SETS');
@@ -239,7 +239,7 @@ export default function MasterGeneratorPage() {
         setPendingMatchFormat('2SETS_STB');
         setPendingTournamentType('AMERICANO');
         setPendingPointsGoal(16);
-        setPendingRRFormat('ONE_SET_6');
+        setPendingRRFormat('TWO_NORMAL_SETS');
         setPendingPrice(0);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -386,7 +386,7 @@ export default function MasterGeneratorPage() {
         setPendingGroupSize(4);
         setPendingTournamentType('AMERICANO');
         setPendingPointsGoal(16);
-        setPendingRRFormat('ONE_SET_6');
+        setPendingRRFormat('TWO_NORMAL_SETS');
         setPendingAdvanceCount(2);
         setPendingQuickQualification(false);
         setPendingConsolacionMatchFormat('TWO_SHORT_SETS');

@@ -93,13 +93,22 @@ export function getScoringRules(
                 superTiebreakPointsToWin: stbPts,
             };
         case 'ONE_SET_6':
-        default:
             return {
                 gamesToWinSet: 6,
                 tiebreakGamesEntry: 6,
                 setTiebreakPointsToWin: DEFAULT_SET_TB,
                 setsToWinMatch: 1,
                 usesSuperTiebreakDecider: false,
+                superTiebreakPointsToWin: stbPts,
+            };
+        // Formato por defecto: 2 sets normales a 6 juegos con STB en caso de 1-1
+        default:
+            return {
+                gamesToWinSet: 6,
+                tiebreakGamesEntry: 6,
+                setTiebreakPointsToWin: DEFAULT_SET_TB,
+                setsToWinMatch: 2,
+                usesSuperTiebreakDecider: true,
                 superTiebreakPointsToWin: stbPts,
             };
     }
