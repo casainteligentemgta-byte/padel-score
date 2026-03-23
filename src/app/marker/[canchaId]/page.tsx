@@ -38,6 +38,13 @@ export default function MarkerControlPage() {
     const [showSetup, setShowSetup] = useState(false);
     const [cronSeconds, setCronSeconds] = useState(0);
     const [refrescandoPizarra, setRefrescandoPizarra] = useState(false);
+    const [showJugadoresEdit, setShowJugadoresEdit] = useState(false);
+    const [jugadoresDraft, setJugadoresDraft] = useState({
+        j1: '',
+        j2: '',
+        j3: '',
+        j4: '',
+    });
 
     const searchParams = useSearchParams();
     // Soporte para jugadores individuales (p1/p2 = equipo 1, p3/p4 = equipo 2)
@@ -385,6 +392,102 @@ export default function MarkerControlPage() {
         } catch (err) {
             console.error('[Marker] Error actualizando marcador en Supabase:', err);
         }
+    };
+
+    const splitTeamTokens = (line?: string | null) => {
+        const t = (line || '').trim();
+        if (!t) return [];
+        return t.split(/\s*\/\s*/).map((p) => p.trim()).filter(Boolean);
+    };
+
+    const buildTeamName = (p1: string, p2: string, fallback: string) => {
+        const a = (p1 || '').trim();
+        const b = (p2 || '').trim();
+        if (a && b) return `${a} / ${b}`;
+        if (a || b) return a || b;
+        return fallback;
+    };
+
+    const openJugadoresEditor = () => {
+        if (!marcador) return;
+        const e1 = marcador?.equipo_1?.nombre;
+        const e2 = marcador?.equipo_2?.nombre;
+        const p1 = splitTeamTokens(e1)[0] || '';
+        const p2 = splitTeamTokens(e1)[1] || '';
+        const p3 = splitTeamTokens(e2)[0] || '';
+        const p4 = splitTeamTokens(e2)[1] || '';
+
+        setJugadoresDraft({ j1: p1, j2: p2, j3: p3, j4: p4 });
+        setShowJugadoresEdit(true);
+    };
+
+    const saveJugadoresEditor = async () => {
+        if (!marcador || !canchaId || !canchaData) return;
+
+        const t1p1 = jugadoresDraft.j1.trim() || 'Jugador 1';
+        const t1p2 = jugadoresDraft.j2.trim() || 'Jugador 2';
+        const t2p1 = jugadoresDraft.j3.trim() || 'Jugador 3';
+        const t2p2 = jugadoresDraft.j4.trim() || 'Jugador 4';
+
+        const team1Name = buildTeamName(t1p1, t1p2, 'Equipo 1');
+        const team2Name = buildTeamName(t2p1, t2p2, 'Equipo 2');
+
+        const equipo1Patch = {
+            ...(marcador.equipo_1 || {}),
+            nombre: team1Name,
+            color: marcador?.equipo_1?.color || '#CCFF00',
+        };
+        const equipo2Patch = {
+            ...(marcador.equipo_2 || {}),
+            nombre: team2Name,
+            color: marcador?.equipo_2?.color || '#FF5500',
+        };
+
+        // 1) Actualiza pizarra en tiempo real (lo que ve el público)
+        await actualizarMarcadorLocal({
+            equipo_1: equipo1Patch,
+            equipo_2: equipo2Patch,
+        });
+
+        // 2) Best-effort: persiste también el match si existe (si no, al menos se ve en pizarra)
+        const tid = canchaData?.torneo_id;
+        const pid = canchaData?.partido_id;
+        if (tid && pid && !String(pid).startsWith('live_')) {
+            try {
+                const matches = await dataService.getMatches(String(tid));
+                const found = matches.find((x: any) => x.id === pid);
+                if (found) {
+                    const nextTeam1 = {
+                        ...(found.team1 || {}),
+                        p1: t1p1,
+                        p2: t1p2,
+                        p1Name: t1p1,
+                        p2Name: t1p2,
+                        full: team1Name,
+                        name: team1Name,
+                    };
+                    const nextTeam2 = {
+                        ...(found.team2 || {}),
+                        p1: t2p1,
+                        p2: t2p2,
+                        p1Name: t2p1,
+                        p2Name: t2p2,
+                        full: team2Name,
+                        name: team2Name,
+                    };
+                    await dataService.updateMatch(String(tid), String(pid), {
+                        team1: nextTeam1,
+                        team2: nextTeam2,
+                        team1Name: team1Name,
+                        team2Name: team2Name,
+                    });
+                }
+            } catch (e) {
+                console.warn('[Marker] Guardar jugadores en match:', e);
+            }
+        }
+
+        setShowJugadoresEdit(false);
     };
 
     // Rellenar match_format / tie_break_type si hay torneo+partido pero el estado aún no trae formato (p. ej. sesión previa).
@@ -1015,6 +1118,17 @@ export default function MarkerControlPage() {
                 {/* ── ESTADO: EN VIVO → Controles de marcador ── */}
                 {isEnVivo && marcador && (
                     <div className="space-y-5">
+                        {canMarkInCancha(canchaId) && (
+                            <div className="flex items-center justify-end">
+                                <button
+                                    type="button"
+                                    onClick={openJugadoresEditor}
+                                    className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/80 text-[11px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+                                >
+                                    Editar jugadores (J1-J4)
+                                </button>
+                            </div>
+                        )}
                         {/* Tarjetas de equipo con jugadores clicables para saque */}
                         <div className="grid grid-cols-2 gap-3">
                             {(['local', 'visitante'] as const).map((lado, i) => {
@@ -1094,6 +1208,98 @@ export default function MarkerControlPage() {
                                 );
                             })}
                         </div>
+
+                        {showJugadoresEdit && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 z-[500] bg-black/80 backdrop-blur-xl flex items-center justify-center p-6"
+                                onClick={() => setShowJugadoresEdit(false)}
+                            >
+                                <motion.div
+                                    initial={{ scale: 0.9, y: 20 }}
+                                    animate={{ scale: 1, y: 0 }}
+                                    transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+                                    className="bg-[#111] border border-white/10 rounded-[2rem] w-full max-w-2xl overflow-hidden"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                                        <div>
+                                            <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white">Editar jugadores</h3>
+                                            <p className="text-[10px] font-black italic text-gray-500 uppercase tracking-widest mt-1">
+                                                Se reflejará en marker y pizarra
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowJugadoresEdit(false)}
+                                            className="p-3 bg-white/5 rounded-full hover:bg-white/10 transition-all text-gray-400 font-black"
+                                        >
+                                            Cerrar
+                                        </button>
+                                    </div>
+
+                                    <div className="p-6 space-y-6">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Jugador 1</label>
+                                                <input
+                                                    value={jugadoresDraft.j1}
+                                                    onChange={(e) => setJugadoresDraft((p) => ({ ...p, j1: e.target.value }))}
+                                                    placeholder="Jugador 1"
+                                                    className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-sm font-bold text-white outline-none focus:border-padel-primary/60"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Jugador 2</label>
+                                                <input
+                                                    value={jugadoresDraft.j2}
+                                                    onChange={(e) => setJugadoresDraft((p) => ({ ...p, j2: e.target.value }))}
+                                                    placeholder="Jugador 2"
+                                                    className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-sm font-bold text-white outline-none focus:border-padel-primary/60"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Jugador 3</label>
+                                                <input
+                                                    value={jugadoresDraft.j3}
+                                                    onChange={(e) => setJugadoresDraft((p) => ({ ...p, j3: e.target.value }))}
+                                                    placeholder="Jugador 3"
+                                                    className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-sm font-bold text-white outline-none focus:border-padel-primary/60"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Jugador 4</label>
+                                                <input
+                                                    value={jugadoresDraft.j4}
+                                                    onChange={(e) => setJugadoresDraft((p) => ({ ...p, j4: e.target.value }))}
+                                                    placeholder="Jugador 4"
+                                                    className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-sm font-bold text-white outline-none focus:border-padel-primary/60"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-6 bg-white/[0.02] border-t border-white/5 flex gap-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowJugadoresEdit(false)}
+                                            className="flex-1 py-4 bg-white/10 text-white rounded-2xl font-black italic uppercase tracking-widest text-[10px] hover:bg-white/20 transition-all"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={saveJugadoresEditor}
+                                            className="flex-1 py-4 bg-padel-primary text-black rounded-2xl font-black italic uppercase tracking-widest text-[10px] hover:scale-[1.02] transition-all"
+                                        >
+                                            Guardar
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            </motion.div>
+                        )}
 
                         {/* Marcador compacto: puntos a los lados, games/sets al centro */}
                         <CompactScoreRow
