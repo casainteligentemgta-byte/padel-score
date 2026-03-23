@@ -1159,7 +1159,7 @@ export default function MasterGeneratorPage() {
                                                             { val: 'ONE_SET_6', label: 'Set Normal (6 juegos)' },
                                                             { val: 'ONE_SET_9', label: 'Set Largo (9 juegos)' },
                                                             { val: 'TWO_SHORT_SETS', label: '2 Sets Cortos (4) + STB' },
-                                                            { val: 'TWO_NORMAL_SETS', label: '2 Sets Largos (6) + STB' },
+                                                            { val: 'TWO_NORMAL_SETS', label: '2 Sets Normales (6) + STB' },
                                                         ].map(opt => {
                                                             const isSelected = pendingTournamentType === 'CUADRO_CONSOLACION'
                                                                 ? pendingConsolacionMatchFormat === opt.val
