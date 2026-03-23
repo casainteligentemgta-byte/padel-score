@@ -3,11 +3,38 @@
 import { useEffect, useState } from 'react';
 import { ref, onValue, off } from 'firebase/database';
 import { rtdb } from '@/lib/rtdb';
+import { dataService } from '@/lib/dataService';
 import { useAdBanner } from '@/lib/useAdBanner';
 import { MonitorOff, Megaphone, Wifi, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
+import { visibleSetNumbersForScoreboard } from '@/lib/displaySetColumns';
+
+function courtSetCell(
+    setIdx: number,
+    team: 'local' | 'visitante',
+    marcador: any,
+    currentSet: number,
+): string | number {
+    const hist = marcador?.historico_sets || [];
+    const games = marcador?.games || { local: 0, visitante: 0 };
+    const modo = marcador?.modo_puntos || 'normal';
+    if (setIdx < currentSet) {
+        const h = hist[setIdx - 1];
+        return h?.[team] ?? 0;
+    }
+    if (setIdx === currentSet) {
+        if (modo === 'super_tiebreak' && currentSet >= 3) {
+            return Number(marcador?.puntos?.[team] ?? 0);
+        }
+        if (modo === 'tiebreak') {
+            return Number(marcador?.puntos?.[team] ?? 0);
+        }
+        return games[team] ?? 0;
+    }
+    return '—';
+}
 
 export default function CourtDisplayPage() {
     const courtId = useRouteSegment('courtId');
@@ -15,10 +42,11 @@ export default function CourtDisplayPage() {
     useThreeFingerDragExit('/');
 
     const [canchaData, setCanchaData] = useState<any>(null);
+    const [pizarraData, setPizarraData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const { currentImageUrl, isVisible: adVisible, mode: adMode } = useAdBanner();
 
-    // ── Escuchar estado de la cancha en RTDB ───────────────────────────────
+    // ── Escuchar estado de la cancha en RTDB (respaldo) ───────────────────
     useEffect(() => {
         if (!rtdb) return;
         const canchaRef = ref(rtdb, `canchas/${canchaId}`);
@@ -33,8 +61,19 @@ export default function CourtDisplayPage() {
         return () => off(canchaRef, 'value', handler);
     }, [canchaId]);
 
-    const isEnVivo = canchaData?.estado === 'en_vivo';
-    const marcador = canchaData?.marcador;
+    // ── Supabase pizarra (misma fuente que marker / árbitro) ───────────────
+    useEffect(() => {
+        if (!canchaId) return;
+        setLoading(false);
+        const unsub = dataService.subscribePizarraCanchaState(canchaId, (state) => {
+            setPizarraData(state?.data ?? null);
+        });
+        return unsub;
+    }, [canchaId]);
+
+    const effectiveCancha = pizarraData ?? canchaData;
+    const isEnVivo = effectiveCancha?.estado === 'en_vivo';
+    const marcador = effectiveCancha?.marcador;
 
     // ── Loading ────────────────────────────────────────────────────────────
     if (loading) return (
@@ -124,7 +163,7 @@ export default function CourtDisplayPage() {
             </div>
 
             {/* Marcador principal */}
-            <div className="flex-1 flex flex-col items-center justify-center gap-8 px-8">
+            <div className="flex-1 flex flex-col items-center justify-center gap-6 px-8">
                 {/* Equipos y puntos */}
                 <div className="w-full max-w-4xl">
                     <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-6">
@@ -156,6 +195,58 @@ export default function CourtDisplayPage() {
                         />
                     </div>
                 </div>
+
+                {/* Sets por columnas: solo el 1.º en juego; al cerrarlo aparece el 2.º (y STB/TB si aplica) */}
+                {marcador && (() => {
+                    const setsL = Number(marcador.sets?.local ?? 0) || 0;
+                    const setsV = Number(marcador.sets?.visitante ?? 0) || 0;
+                    const currentSet = setsL + setsV + 1;
+                    const fmt = String(marcador.match_format || '');
+                    const twoPlusStb = fmt === 'TWO_SHORT_SETS' || fmt === 'TWO_NORMAL_SETS';
+                    const visible = visibleSetNumbersForScoreboard({
+                        matchFormat: fmt,
+                        superTiebreak: marcador.super_tiebreak === true || marcador.modo_puntos === 'super_tiebreak',
+                        tiebreak: marcador.modo_puntos === 'tiebreak',
+                        setsT1: setsL,
+                        setsT2: setsV,
+                    });
+                    const ptsL = marcador.puntos?.local ?? '0';
+                    const ptsV = marcador.puntos?.visitante ?? '0';
+                    return (
+                        <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-black/50 px-4 py-3">
+                            <div
+                                className="grid gap-2 text-center"
+                                style={{
+                                    gridTemplateColumns: `repeat(${visible.length}, minmax(0, 1fr)) minmax(4rem, 6rem)`,
+                                }}
+                            >
+                                {visible.map((s) => {
+                                    const is3rdSTB =
+                                        s === 3 &&
+                                        (marcador.super_tiebreak === true ||
+                                            twoPlusStb ||
+                                            fmt === 'SUPER_TIEBREAK' ||
+                                            fmt === 'SET_3_STB');
+                                    const label = is3rdSTB ? 'STB' : s === 3 && fmt === 'TIEBREAK' ? 'TB' : `SET ${s}`;
+                                    const v1 = courtSetCell(s, 'local', marcador, currentSet);
+                                    const v2 = courtSetCell(s, 'visitante', marcador, currentSet);
+                                    return (
+                                        <div key={s} className="flex flex-col gap-1 border-l border-white/10 first:border-l-0 pl-2">
+                                            <span className="text-[8px] font-black uppercase tracking-widest text-gray-500">{label}</span>
+                                            <span className="text-xl font-black tabular-nums" style={{ color: marcador?.equipo_1?.color || '#CCFF00' }}>{v1}</span>
+                                            <span className="text-xl font-black tabular-nums" style={{ color: marcador?.equipo_2?.color || '#FF5500' }}>{v2}</span>
+                                        </div>
+                                    );
+                                })}
+                                <div className="flex flex-col gap-1 border-l border-padel-primary/40 pl-2 justify-center">
+                                    <span className="text-[8px] font-black uppercase tracking-widest text-padel-primary">PTS</span>
+                                    <span className="text-2xl font-black tabular-nums text-padel-primary">{ptsL}</span>
+                                    <span className="text-2xl font-black tabular-nums text-orange-400">{ptsV}</span>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
 
             {/* Banner de publicidad */}

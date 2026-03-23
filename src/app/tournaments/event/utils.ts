@@ -44,6 +44,16 @@ export const resolveTeamNames = (team: any, teamName?: string): [string, string]
         return [team.teamLabel || formatDisplayName(team.p1?.name) || teamName || '?', ''];
     }
 
+    if (typeof team.full === 'string' && team.full.trim()) {
+        const parts = team.full.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(Boolean);
+        if (parts.length >= 2) {
+            return [formatDisplayName(parts[0]) || '?', formatDisplayName(parts[1])];
+        }
+        if (parts.length === 1) {
+            return [formatDisplayName(parts[0]) || '?', ''];
+        }
+    }
+
     const p1 = (team.p1Name || team.p1?.name || '').trim();
     const p2 = (team.p2Name || team.p2?.name || '').trim();
 

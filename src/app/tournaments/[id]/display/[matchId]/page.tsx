@@ -13,6 +13,7 @@ import { ref, onValue, off } from 'firebase/database';
 import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, Layers, ImageIcon, Play, Eye, Users } from 'lucide-react';
 import { BouncingBall } from '@/components/BouncingBall';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
+import { visibleSetNumbersForScoreboard, scoreboardGridClassForSetCount } from '@/lib/displaySetColumns';
 
 // Lottie player para animaciones JSON (biblioteca de animaciones)
 function LottieAnimationOverlay({ url }: { url: string }) {
@@ -200,16 +201,18 @@ export default function FullScreenDisplay() {
         if (!name || typeof name !== 'string') return null;
         const trimmed = name.trim();
         const lower = trimmed.toLowerCase();
+        const isGenericEquipo = /^equipo\s*[12]?\s*$/i.test(trimmed) || /^equipo\s*\d+\s*$/i.test(trimmed);
         if (
             trimmed === '' ||
             trimmed === '?' ||
             trimmed === 'TBD' ||
             trimmed === 'UNDEFINED' ||
             trimmed === 'undefined' ||
-            lower.includes('pareja') ||
-            lower.includes('equipo') ||
-            lower.includes('player') ||
-            (lower.includes('jugador') && !/\d/.test(lower))
+            /^pareja\s*\d*$/i.test(trimmed) ||
+            isGenericEquipo ||
+            lower === 'player' ||
+            lower === 'placeholder' ||
+            (lower.startsWith('jugador') && /^jugador\s*\d+\s*$/i.test(trimmed))
         ) return null;
 
         const parts = trimmed.split(/\s+/).filter(Boolean);
@@ -733,6 +736,37 @@ export default function FullScreenDisplay() {
                     const teams = currentTournament?.teams || [];
                     const teamByIndex = teamIdx > 0 ? teams[teamIdx - 1] : null;
 
+                    // 0) Línea única `full` (muy habitual en datos del master / Supabase)
+                    if (
+                        mTeam &&
+                        !mTeam.isTBD &&
+                        typeof mTeam.full === 'string' &&
+                        mTeam.full.trim() &&
+                        !mTeam.full.trim().startsWith('Pareja') &&
+                        mTeam.full.trim() !== 'TBD'
+                    ) {
+                        const fullLine = mTeam.full.trim();
+                        const parts = fullLine.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(Boolean);
+                        if (parts.length >= 2) {
+                            return {
+                                p1Name: parts[0],
+                                p2Name: parts[1],
+                                p1Photo: mTeam.p1?.photo || null,
+                                p2Photo: mTeam.p2?.photo || null,
+                                name: fullLine,
+                            };
+                        }
+                        if (parts.length === 1) {
+                            return {
+                                p1Name: parts[0],
+                                p2Name: '',
+                                p1Photo: mTeam.p1?.photo || null,
+                                p2Photo: mTeam.p2?.photo || null,
+                                name: parts[0],
+                            };
+                        }
+                    }
+
                     // 1) Prioridad: equipo embebido en el partido (p1/p2 con name, o p1Name/p2Name)
                     //    El match siempre trae los datos más frescos (actualizados por el generador/inscripción)
                     if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
@@ -972,10 +1006,21 @@ export default function FullScreenDisplay() {
     const ptsT1 = isSTB ? String(stbT1) : isTiebreak ? String(tbT1) : toTennis(ptsT1Raw);
     const ptsT2 = isSTB ? String(stbT2) : isTiebreak ? String(tbT2) : toTennis(ptsT2Raw);
 
-    // Set boxes helper (solo Set 1 y Set 2; STB se ve en el game actual)
+    const fmtForSets = (match?.matchFormat || tournament?.matchFormat || '') as string;
+    const twoSetsPlusStbFmt = fmtForSets === 'TWO_SHORT_SETS' || fmtForSets === 'TWO_NORMAL_SETS';
+    const visibleSetCols = visibleSetNumbersForScoreboard({
+        matchFormat: fmtForSets,
+        superTiebreak: match?.superTiebreak === true,
+        tiebreak: match?.tiebreak === true,
+        setsT1,
+        setsT2,
+    });
+    const scoreboardGridClass = scoreboardGridClassForSetCount(visibleSetCols.length);
+
+    // Set boxes helper (alineado con columnas visibles de la pizarra principal)
     const SetBoxes = ({ team }: { team: 1 | 2 }) => (
         <div className="flex items-center gap-[1vw]">
-            {[1, 2].map(setNum => {
+            {visibleSetCols.map(setNum => {
                 const isPast = setNum < currentSet;
                 const isCurrent = setNum === currentSet;
                 const pastVal = match.games_sets?.[setNum - 1]?.[`t${team}`] ?? match.setScores?.[setNum - 1]?.[`t${team}`];
@@ -1220,13 +1265,12 @@ export default function FullScreenDisplay() {
                                 </h2>
                             </div>
 
-                            {/* Column headers dynámicos: SET 3 solo si formato es mejor-de-3 */}
+                            {/* Columnas de set: solo la del set en curso hasta que el anterior cierre */}
                             {(() => {
-                                const fmt = (match?.matchFormat || tournament?.matchFormat || '') as string;
-                                const twoSetsPlusStb = fmt === 'TWO_SHORT_SETS' || fmt === 'TWO_NORMAL_SETS';
-                                const has3rdSet = fmt === 'BEST_OF_3' || fmt === '3SETS' || fmt === 'THREE_SETS' || fmt === 'SUPER_TIEBREAK' || fmt === 'SET_3_STB' || fmt === 'TIEBREAK' || twoSetsPlusStb || match?.superTiebreak === true || match?.tiebreak === true || currentSet >= 3;
-                                const setCols = has3rdSet ? [1, 2, 3] : [1, 2];
-                                const grid = has3rdSet ? 'grid-cols-[1fr_8%_8%_8%_12%]' : 'grid-cols-[1fr_8%_8%_12%]';
+                                const fmt = fmtForSets;
+                                const twoSetsPlusStb = twoSetsPlusStbFmt;
+                                const setCols = visibleSetCols;
+                                const grid = scoreboardGridClass;
                                 return (
                                     <>
                                         <div className={`grid ${grid} items-center border-b border-white/[0.1] bg-black/40 px-6`} style={{ height: '14%' }}>

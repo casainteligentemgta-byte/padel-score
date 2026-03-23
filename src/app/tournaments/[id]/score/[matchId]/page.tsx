@@ -396,6 +396,29 @@ export default function RefereeScoreboard() {
                             const label = embeddedTeam.teamLabel || 'TBD';
                             return { p1: label, p2: '', full: label, p1Photo: null, p2Photo: null };
                         }
+                        const fullStr =
+                            typeof embeddedTeam.full === 'string' ? embeddedTeam.full.trim() : '';
+                        if (fullStr && !/^pareja\s*\d*$/i.test(fullStr) && fullStr !== 'TBD') {
+                            const fparts = fullStr.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(isReal);
+                            if (fparts.length >= 2) {
+                                return {
+                                    p1: fparts[0],
+                                    p2: fparts[1],
+                                    full: fullStr,
+                                    p1Photo: embeddedTeam.p1?.photo || null,
+                                    p2Photo: embeddedTeam.p2?.photo || null,
+                                };
+                            }
+                            if (fparts.length === 1) {
+                                return {
+                                    p1: fparts[0],
+                                    p2: '',
+                                    full: fparts[0],
+                                    p1Photo: embeddedTeam.p1?.photo || null,
+                                    p2Photo: embeddedTeam.p2?.photo || null,
+                                };
+                            }
+                        }
                         const p1n = (embeddedTeam.p1?.name || embeddedTeam.p1Name || '').trim();
                         const p2n = (embeddedTeam.p2?.name || embeddedTeam.p2Name || '').trim();
                         if (isReal(p1n) || isReal(p2n)) {

@@ -20,6 +20,14 @@ function resolveNames(
         if (embeddedTeam.isTBD) {
             return (embeddedTeam.teamLabel || 'TBD').trim() || 'TBD';
         }
+        /** Master / cuadro suelen persistir la línea en `full` sin objetos p1/p2. */
+        const fullLine =
+            typeof embeddedTeam.full === 'string' ? embeddedTeam.full.trim() : '';
+        if (fullLine && !/^pareja\s*\d*$/i.test(fullLine) && fullLine !== 'TBD') {
+            const parts = fullLine.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(isReal);
+            if (parts.length >= 2) return fullLine;
+            if (parts.length === 1) return parts[0];
+        }
         const p1n = (embeddedTeam.p1?.name || embeddedTeam.p1Name || '').trim();
         const p2n = (embeddedTeam.p2?.name || embeddedTeam.p2Name || '').trim();
         if (isReal(p1n) || isReal(p2n)) {
