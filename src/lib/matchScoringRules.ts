@@ -1,10 +1,15 @@
 /**
  * Reglas de marcador según el formato del torneo (creación en /new-tournament).
  *
+ * Nombres en UI (referencia):
+ * - ONE_SET_6: un set a 6 juegos.
+ * - ONE_SET_9: un set “largo” a 9 juegos (TB de set en 8-8).
+ * - TWO_SHORT_SETS: dos sets cortos a 4 juegos; si el partido va 1-1 en sets → tramo decisivo (STB o TB según tieBreakType).
+ * - TWO_NORMAL_SETS: dos sets largos a 6 juegos; si 1-1 en sets → mismo decisivo.
+ *
  * - Juego: puntos 0/15/30/40/AD (o punto de oro si aplica).
- * - Set: se gana al llegar a N juegos con diferencia de 2, o tras tie-break de set.
- * - Tie-break de set (6-6, 4-4, 8-8…): puntos 1,2,3… gana quien llegue a 7 con margen de 2 (estándar FIP / ATP).
- * - Super tie-break (desempate del partido a 2 sets): 10 puntos con margen de 2 si tieBreakType === 'STB', si no 7.
+ * - Tie-break **dentro** de un set (6-6, 4-4, 8-8…): siempre a 7 con margen 2 (no usa tieBreakType del torneo).
+ * - Tras **1-1 en sets** (solo formatos con usesSuperTiebreakDecider): tieBreakType STB → 10 puntos con margen 2; TB → 7.
  */
 
 export type MatchFormatId =

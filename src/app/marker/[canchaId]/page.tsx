@@ -858,13 +858,20 @@ export default function MarkerControlPage() {
     const formatoMarcadorLabel = useMemo(() => {
         const r = getScoringRules(marcador?.match_format, marcador?.tie_break_type);
         const mf = String(marcador?.match_format || 'ONE_SET_6');
+        const tbt = marcador?.tie_break_type;
+        const decisiveIf11 =
+            r.usesSuperTiebreakDecider
+                ? tbt === 'STB'
+                    ? `si 1-1: super TB a ${r.superTiebreakPointsToWin}`
+                    : `si 1-1: TB a ${r.superTiebreakPointsToWin}`
+                : '';
         const lines: Record<string, string> = {
-            ONE_SET_6: '1 set a 6 · TB set a 7',
-            ONE_SET_9: '1 set a 9 · TB en 8-8 a 7',
-            TWO_SHORT_SETS: `2 sets a 4 · STB a ${r.superTiebreakPointsToWin}`,
-            TWO_NORMAL_SETS: `2 sets a 6 · STB a ${r.superTiebreakPointsToWin}`,
+            ONE_SET_6: '1 set a 6 juegos · empate 6-6: TB a 7',
+            ONE_SET_9: '1 set a 9 juegos · empate 8-8: TB a 7',
+            TWO_SHORT_SETS: `2 sets cortos a 4 · ${decisiveIf11}`,
+            TWO_NORMAL_SETS: `2 sets largos a 6 · ${decisiveIf11}`,
         };
-        return lines[mf] || `Formato ${mf} · TB ${r.setTiebreakPointsToWin}`;
+        return lines[mf] || `Formato ${mf} · TB set a ${r.setTiebreakPointsToWin}`;
     }, [marcador?.match_format, marcador?.tie_break_type]);
 
     const scoringUi = getScoringRules(marcador?.match_format, marcador?.tie_break_type);

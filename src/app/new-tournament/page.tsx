@@ -40,7 +40,8 @@ const INITIAL_DATA = {
     groupSize: 3,
     matchFormat: 'ONE_SET_6' as 'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS',
     scoringSystem: 'GOLDEN_POINT' as 'GOLDEN_POINT' | 'TRADITIONAL',
-    tieBreakType: 'TB' as 'TB' | 'STB',
+    /** STB por defecto: en formatos a 2 sets el decisivo habitual es super tie-break a 10. */
+    tieBreakType: 'STB' as 'TB' | 'STB',
     startDate: new Date().toISOString().split('T')[0],
     startTime: '16:00',
     endTime: '23:30',
@@ -1495,14 +1496,25 @@ export default function NewTournamentPage() {
                                             <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Formato de Partido</label>
                                             <div className="grid grid-cols-1 gap-2">
                                                 {[
-                                                    { id: 'ONE_SET_6', label: '1 Set (a 6 juegos)' },
-                                                    { id: 'ONE_SET_9', label: '1 Set (a 9 juegos)' },
-                                                    { id: 'TWO_SHORT_SETS', label: '2 Sets Cortos (a 4) + MTB' },
-                                                    { id: 'TWO_NORMAL_SETS', label: '2 Sets Normales (a 6) + MTB' },
+                                                    { id: 'ONE_SET_6', label: '1 set (a 6 juegos)' },
+                                                    { id: 'ONE_SET_9', label: '1 set largo (a 9 juegos)' },
+                                                    { id: 'TWO_SHORT_SETS', label: '2 sets cortos (a 4 juegos) + decisivo si 1-1' },
+                                                    { id: 'TWO_NORMAL_SETS', label: '2 sets largos (a 6 juegos) + decisivo si 1-1' },
                                                 ].map(format => (
                                                     <button
                                                         key={format.id}
-                                                        onClick={() => setTournamentData({ ...tournamentData, matchFormat: format.id as any })}
+                                                        onClick={() =>
+                                                            setTournamentData((prev) => {
+                                                                const id = format.id as typeof prev.matchFormat;
+                                                                const useStbDefault =
+                                                                    id === 'TWO_SHORT_SETS' || id === 'TWO_NORMAL_SETS';
+                                                                return {
+                                                                    ...prev,
+                                                                    matchFormat: id,
+                                                                    ...(useStbDefault ? { tieBreakType: 'STB' as const } : {}),
+                                                                };
+                                                            })
+                                                        }
                                                         className={`py-3 px-4 rounded-xl font-bold italic text-[10px] text-left transition-all border uppercase tracking-wider ${tournamentData.matchFormat === format.id
                                                             ? 'bg-padel-primary border-padel-primary text-black'
                                                             : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
@@ -1513,13 +1525,16 @@ export default function NewTournamentPage() {
                                             </div>
                                         </div>
 
-                                        {/* Tie-break Type */}
+                                        {/* Tie-break Type: solo el decisivo con partido 1-1 en sets (formatos a 2 sets) */}
                                         <div className="space-y-4">
-                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Desempate (Tie-break)</label>
+                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest pl-1">Decisivo si van 1-1 en sets</label>
+                                            <p className="text-[8px] font-bold text-gray-600 uppercase tracking-wide leading-relaxed pl-1">
+                                                No afecta el empate 6-6 (o 4-4 en sets cortos) dentro de un set: ese tie-break va siempre a 7 con diferencia de 2.
+                                            </p>
                                             <div className="grid grid-cols-1 gap-2">
                                                 {[
-                                                    { id: 'TB', label: 'Tie-break (7)', desc: 'Desempate a 7 puntos' },
-                                                    { id: 'STB', label: 'Super Tie-break (10)', desc: 'Desempate a 10 puntos' },
+                                                    { id: 'TB', label: 'Tie-break a 7', desc: 'Tras 1-1 en sets, decisivo a 7 puntos (misma lógica que un TB de set)' },
+                                                    { id: 'STB', label: 'Super tie-break a 10', desc: 'Tras 1-1 en sets, decisivo a 10 puntos (lo habitual en club)' },
                                                 ].map(tb => (
                                                     <button
                                                         key={tb.id}
