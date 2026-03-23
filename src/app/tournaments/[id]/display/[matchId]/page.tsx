@@ -14,6 +14,7 @@ import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, Layer
 import { BouncingBall } from '@/components/BouncingBall';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 import { visibleSetNumbersForScoreboard, scoreboardGridClassForSetCount } from '@/lib/displaySetColumns';
+import { resolveMatchTeamLines } from '@/lib/resolveMatchTeamLines';
 
 // Lottie player para animaciones JSON (biblioteca de animaciones)
 function LottieAnimationOverlay({ url }: { url: string }) {
@@ -828,20 +829,35 @@ export default function FullScreenDisplay() {
 
                 const t1 = resolveTeam(found.team1, found.team1Index ?? 1, found);
                 const t2 = resolveTeam(found.team2, found.team2Index ?? 2, found);
+                const lines = resolveMatchTeamLines(found, currentTournament);
+                const splitLine = (line: string) => {
+                    const parts = (line || '').split(/\s*\/\s*/).map((s) => s.trim()).filter(Boolean);
+                    return { p1: parts[0] || '', p2: parts[1] || '' };
+                };
+                const l1 = splitLine(lines.team1);
+                const l2 = splitLine(lines.team2);
+                const isRealName = (s?: string) => {
+                    const v = (s || '').trim().toLowerCase();
+                    if (!v) return false;
+                    if (v === '?' || v === 'tbd' || v === 'undefined') return false;
+                    if (/^pareja\s*\d*$/.test(v)) return false;
+                    if (/^equipo\s*\d*$/.test(v)) return false;
+                    return true;
+                };
 
                 const matchData = {
                     ...found,
                     court: found.court || (found.courtIndex !== undefined ? found.courtIndex + 1 : undefined),
-                    t1p1: t1.p1Name,
-                    t1p2: t1.p2Name,
-                    t2p1: t2.p1Name,
-                    t2p2: t2.p2Name,
+                    t1p1: isRealName(t1.p1Name) ? t1.p1Name : (l1.p1 || 'Equipo 1'),
+                    t1p2: isRealName(t1.p2Name) ? t1.p2Name : l1.p2,
+                    t2p1: isRealName(t2.p1Name) ? t2.p1Name : (l2.p1 || 'Equipo 2'),
+                    t2p2: isRealName(t2.p2Name) ? t2.p2Name : l2.p2,
                     t1p1Photo: t1.p1Photo,
                     t1p2Photo: t1.p2Photo,
                     t2p1Photo: t2.p1Photo,
                     t2p2Photo: t2.p2Photo,
-                    t1Name: t1.name,
-                    t2Name: t2.name,
+                    t1Name: isRealName(t1.name) ? t1.name : lines.team1,
+                    t2Name: isRealName(t2.name) ? t2.name : lines.team2,
                 };
                 setMatch(matchData);
 
