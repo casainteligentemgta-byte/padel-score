@@ -41,8 +41,30 @@ export function getScoringRules(
     tieBreakType: 'TB' | 'STB' | undefined
 ): ScoringRules {
     const stbPts = tieBreakType === 'STB' ? 10 : 7;
+    const fmt = String(matchFormat || '').toUpperCase();
 
-    switch (matchFormat) {
+    switch (fmt) {
+        // Legacy aliases used by older generator records.
+        case '2SETS_STB':
+            return {
+                gamesToWinSet: 6,
+                tiebreakGamesEntry: 6,
+                setTiebreakPointsToWin: DEFAULT_SET_TB,
+                setsToWinMatch: 2,
+                usesSuperTiebreakDecider: true,
+                superTiebreakPointsToWin: stbPts,
+            };
+        case '3SETS':
+        case 'BEST_OF_3':
+        case 'THREE_SETS':
+            return {
+                gamesToWinSet: 6,
+                tiebreakGamesEntry: 6,
+                setTiebreakPointsToWin: DEFAULT_SET_TB,
+                setsToWinMatch: 2,
+                usesSuperTiebreakDecider: false,
+                superTiebreakPointsToWin: stbPts,
+            };
         case 'ONE_SET_9':
             return {
                 gamesToWinSet: 9,
