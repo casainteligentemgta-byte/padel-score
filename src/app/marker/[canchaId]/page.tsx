@@ -286,7 +286,10 @@ export default function MarkerControlPage() {
             if (torneoIdActivar) {
                 try {
                     const tourney = await dataService.getTournament(torneoIdActivar);
-                    match_format = tourney?.matchFormat;
+                    // El generador guarda el "a cuantos games" en `rrMatchFormat`.
+                    // Si `matchFormat` no existe, caemos a `rrMatchFormat` para que el scoring
+                    // no degrade al default (`ONE_SET_6`).
+                    match_format = tourney?.matchFormat ?? (tourney as any)?.rrMatchFormat;
                     tie_break_type = tourney?.tieBreakType;
                     golden_point = tourney?.scoringSystem === 'GOLDEN_POINT';
                 } catch (e) {
@@ -299,7 +302,7 @@ export default function MarkerControlPage() {
                 try {
                     const matches = await dataService.getMatches(torneoIdActivar);
                     const found = matches.find((x: any) => x.id === partidoIdActivar);
-                    match_format = found?.matchFormat || match_format;
+                    match_format = found?.matchFormat ?? found?.rrMatchFormat ?? match_format;
                     tie_break_type = found?.tieBreakType || tie_break_type;
                 } catch (e) {
                     console.warn('[Marker] Formato torneo/partido:', e);
@@ -518,7 +521,7 @@ export default function MarkerControlPage() {
                 const matches = await dataService.getMatches(String(tid));
                 if (cancelled) return;
                 const found = matches.find((x: any) => x.id === pid);
-                const mf = found?.matchFormat || tourney?.matchFormat;
+                const mf = found?.matchFormat ?? found?.rrMatchFormat ?? tourney?.matchFormat ?? (tourney as any)?.rrMatchFormat;
                 const tb = tourney?.tieBreakType || found?.tieBreakType;
                 const gp =
                     tourney?.scoringSystem === 'GOLDEN_POINT'
