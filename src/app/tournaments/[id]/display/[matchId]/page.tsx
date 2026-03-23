@@ -1001,12 +1001,12 @@ export default function FullScreenDisplay() {
     const t2Live = splitLiveTeamNombre(lm?.equipo_2?.nombre, match.t2p1, match.t2p2);
 
     // Games en el set actual
-    const gamesT1 = lm ? (lm.games?.local ?? 0) : (match.games?.t1 ?? 0);
-    const gamesT2 = lm ? (lm.games?.visitante ?? 0) : (match.games?.t2 ?? 0);
+    const gamesT1 = lm ? (Number(lm.games?.local ?? 0) || 0) : (Number(match.games?.t1 ?? 0) || 0);
+    const gamesT2 = lm ? (Number(lm.games?.visitante ?? 0) || 0) : (Number(match.games?.t2 ?? 0) || 0);
 
     // Sets ganados
-    const setsT1 = lm ? (lm.sets?.local ?? 0) : (match.sets?.t1 ?? 0);
-    const setsT2 = lm ? (lm.sets?.visitante ?? 0) : (match.sets?.t2 ?? 0);
+    const setsT1 = lm ? (Number(lm.sets?.local ?? 0) || 0) : (Number(match.sets?.t1 ?? 0) || 0);
+    const setsT2 = lm ? (Number(lm.sets?.visitante ?? 0) || 0) : (Number(match.sets?.t2 ?? 0) || 0);
 
     // Set actual
     const currentSet = setsT1 + setsT2 + 1;
@@ -1042,12 +1042,14 @@ export default function FullScreenDisplay() {
     const ptsT1 = isSTB ? String(stbT1) : isTiebreak ? String(tbT1) : toTennis(ptsT1Raw);
     const ptsT2 = isSTB ? String(stbT2) : isTiebreak ? String(tbT2) : toTennis(ptsT2Raw);
 
-    const fmtForSets = (match?.matchFormat || tournament?.matchFormat || '') as string;
+    // Para decidir cuántas columnas de sets mostrar, priorizamos el formato "vivo"
+    // que escribe el marker en RTDB: `marcador.match_format`.
+    const fmtForSets = (lm?.match_format || match?.matchFormat || tournament?.matchFormat || '') as string;
     const twoSetsPlusStbFmt = fmtForSets === 'TWO_SHORT_SETS' || fmtForSets === 'TWO_NORMAL_SETS';
     const visibleSetCols = visibleSetNumbersForScoreboard({
         matchFormat: fmtForSets,
-        superTiebreak: match?.superTiebreak === true,
-        tiebreak: match?.tiebreak === true,
+        superTiebreak: lm?.super_tiebreak === true || match?.superTiebreak === true,
+        tiebreak: lm?.modo_puntos === 'tiebreak' || match?.tiebreak === true,
         setsT1,
         setsT2,
     });
