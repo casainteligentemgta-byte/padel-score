@@ -575,13 +575,28 @@ export default function MarkerControlPage() {
         };
     };
 
+    // Blindaje de reglas: en formato esperado "2 sets + STB", nunca cerrar partido al primer set
+    // aunque llegue un match_format inconsistente desde datos antiguos.
+    const getRulesSafe = (m: any) => {
+        const base = getScoringRules(m?.match_format, m?.tie_break_type);
+        const isStb = String(m?.tie_break_type || '').toUpperCase() === 'STB';
+        if (isStb && base.setsToWinMatch === 1) {
+            return {
+                ...base,
+                setsToWinMatch: 2,
+                usesSuperTiebreakDecider: true,
+            };
+        }
+        return base;
+    };
+
     /** Cierra un set por juegos (no TB): actualiza sets, historial, STB si 1-1, o fin de partido. */
     const applySetWonByGames = async (
         m: any,
         equipo: 'local' | 'visitante',
         newGames: { local: number; visitante: number },
     ) => {
-        const rules = getScoringRules(m?.match_format, m?.tie_break_type);
+        const rules = getRulesSafe(m);
         const sets = m.sets || { local: 0, visitante: 0 };
         const base = { local: sets.local || 0, visitante: sets.visitante || 0 };
         const newSets = { ...base, [equipo]: base[equipo] + 1 };
@@ -634,7 +649,7 @@ export default function MarkerControlPage() {
         if (!marcador) return;
         if (marcador.modo_puntos && marcador.modo_puntos !== 'normal') return;
 
-        const rules = getScoringRules(marcador.match_format, marcador.tie_break_type);
+        const rules = getRulesSafe(marcador);
         const otroEquipo = equipo === 'local' ? 'visitante' : 'local';
         const games = marcador.games || { local: 0, visitante: 0 };
         const newGames = { ...games, [equipo]: games[equipo] + 1 };
@@ -719,7 +734,7 @@ export default function MarkerControlPage() {
                 }
             }
         } else {
-            const rules = getScoringRules(marcador.match_format, marcador.tie_break_type);
+            const rules = getRulesSafe(marcador);
             const isStb = marcador.super_tiebreak === true || modo === 'super_tiebreak';
             const target = isStb ? rules.superTiebreakPointsToWin : rules.setTiebreakPointsToWin;
             const actual = parseInt(String(puntosActual[equipo] || '0'), 10) || 0;
@@ -821,7 +836,7 @@ export default function MarkerControlPage() {
         if (!marcador) return;
         if (marcador.modo_puntos && marcador.modo_puntos !== 'normal') return;
 
-        const rules = getScoringRules(marcador.match_format, marcador.tie_break_type);
+        const rules = getRulesSafe(marcador);
         const actual = marcador.games?.[equipo] || 0;
         const nuevo = Math.max(0, actual + delta);
 
@@ -856,7 +871,7 @@ export default function MarkerControlPage() {
 
     const cambiarSet = async (equipo: 'local' | 'visitante', delta: 1 | -1) => {
         if (!marcador) return;
-        const rules = getScoringRules(marcador.match_format, marcador.tie_break_type);
+        const rules = getRulesSafe(marcador);
         const need = rules.setsToWinMatch;
         const nuevo = Math.max(0, (marcador.sets?.[equipo] || 0) + delta);
         let finalCron = marcador.cronometro;
@@ -987,7 +1002,7 @@ export default function MarkerControlPage() {
     };
 
     const formatoMarcadorLabel = useMemo(() => {
-        const r = getScoringRules(marcador?.match_format, marcador?.tie_break_type);
+        const r = getRulesSafe(marcador);
         const mf = String(marcador?.match_format || 'ONE_SET_6');
         const tbt = marcador?.tie_break_type;
         const decisiveIf11 =
@@ -1005,7 +1020,7 @@ export default function MarkerControlPage() {
         return lines[mf] || `Formato ${mf} · TB set a ${r.setTiebreakPointsToWin}`;
     }, [marcador?.match_format, marcador?.tie_break_type]);
 
-    const scoringUi = getScoringRules(marcador?.match_format, marcador?.tie_break_type);
+    const scoringUi = getRulesSafe(marcador);
 
     // ── Acceso denegado a esta cancha ───────────────────────────────────────
     if (accessDenied) {
