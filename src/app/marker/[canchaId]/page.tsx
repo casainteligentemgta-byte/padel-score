@@ -604,7 +604,9 @@ export default function MarkerControlPage() {
                 historico_sets: newHistorico,
                 cronometro: freezeCronometro(m.cronometro),
             });
-            alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
+            alert(
+                `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${newSets.local}-${newSets.visitante})`
+            );
             return;
         }
         if (enterStb) {
@@ -744,7 +746,9 @@ export default function MarkerControlPage() {
                             historico_sets: [...(marcador.historico_sets || []), { local: finalLocal, visitante: finalVisit }],
                             cronometro: freezeCronometro(marcador.cronometro),
                         });
-                        alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
+                        alert(
+                            `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${newSets.local}-${newSets.visitante})`
+                        );
                     } else {
                         const g = marcador.games || { local: 0, visitante: 0 };
                         const hist =
@@ -776,7 +780,9 @@ export default function MarkerControlPage() {
                                 historico_sets: newHistorico,
                                 cronometro: freezeCronometro(marcador.cronometro),
                             });
-                            alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
+                            alert(
+                                `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${newSets.local}-${newSets.visitante})`
+                            );
                         } else if (enterStb) {
                             await actualizarMarcadorLocal({
                                 sets: newSets,
@@ -870,7 +876,13 @@ export default function MarkerControlPage() {
             cronometro: finalCron,
         });
         if (nuevo >= need) {
-            alert(`¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'}`);
+            const setsFinal = {
+                ...(marcador.sets || { local: 0, visitante: 0 }),
+                [equipo]: nuevo,
+            } as { local: number; visitante: number };
+            alert(
+                `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${setsFinal.local}-${setsFinal.visitante})`
+            );
         }
     };
 
@@ -1526,7 +1538,7 @@ function CompactScoreRow({
 
                 {/* Games al centro */}
                 <MiniScoreControl
-                    label="GAMES"
+                    label="JUEGOS"
                     localVal={gamesLocal}
                     visitanteVal={gamesVisitante}
                     onUpLocal={onGameUpLocal}
@@ -1537,7 +1549,7 @@ function CompactScoreRow({
 
                 {/* Sets al centro, al lado de games */}
                 <MiniScoreControl
-                    label="SETS"
+                    label="SETS GANADOS"
                     localVal={setsLocal}
                     visitanteVal={setsVisitante}
                     onUpLocal={onSetUpLocal}
