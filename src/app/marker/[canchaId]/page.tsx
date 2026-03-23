@@ -308,6 +308,7 @@ export default function MarkerControlPage() {
                     console.warn('[Marker] Formato torneo/partido:', e);
                 }
             }
+            const sets_to_win_match = deriveSetsToWinMatch(match_format, tie_break_type);
 
             await dataService.setPizarraCanchaState(canchaId, {
                 estado: 'en_vivo',
@@ -325,6 +326,7 @@ export default function MarkerControlPage() {
                     super_tiebreak: false,
                     match_format,
                     tie_break_type,
+                    sets_to_win_match,
                     equipo_1: equipo1,
                     equipo_2: equipo2,
                     cronometro: { running: false, startedAt: null, elapsedSec: 0 },
@@ -523,6 +525,7 @@ export default function MarkerControlPage() {
                 const found = matches.find((x: any) => x.id === pid);
                 const mf = found?.rrMatchFormat ?? found?.matchFormat ?? (tourney as any)?.rrMatchFormat ?? tourney?.matchFormat;
                 const tb = tourney?.tieBreakType || found?.tieBreakType;
+                const setsToWin = deriveSetsToWinMatch(mf, tb);
                 const gp =
                     tourney?.scoringSystem === 'GOLDEN_POINT'
                         ? true
@@ -539,6 +542,7 @@ export default function MarkerControlPage() {
                         ...mar,
                         ...(mf ? { match_format: mf } : {}),
                         ...(tb ? { tie_break_type: tb } : {}),
+                        sets_to_win_match: setsToWin,
                         ...(gp !== undefined ? { golden_point: gp } : {}),
                         ultimo_update: Date.now(),
                     },
@@ -552,6 +556,7 @@ export default function MarkerControlPage() {
                             ...m,
                             ...(mf ? { match_format: mf } : {}),
                             ...(tb ? { tie_break_type: tb } : {}),
+                            sets_to_win_match: setsToWin,
                             ...(gp !== undefined ? { golden_point: gp } : {}),
                             ultimo_update: Date.now(),
                         },
@@ -575,10 +580,42 @@ export default function MarkerControlPage() {
         };
     };
 
+    const deriveSetsToWinMatch = (matchFormat: any, tieBreakType: any): number => {
+        const r = getScoringRules(matchFormat, tieBreakType);
+        const fmt = String(matchFormat || '').toUpperCase();
+        const tb = String(tieBreakType || '').toUpperCase();
+        if (
+            r.setsToWinMatch === 1 &&
+            (
+                tb === 'STB' ||
+                fmt === '2SETS_STB' ||
+                fmt === '3SETS' ||
+                fmt === 'BEST_OF_3' ||
+                fmt === 'THREE_SETS' ||
+                fmt === 'TWO_SHORT_SETS' ||
+                fmt === 'TWO_NORMAL_SETS'
+            )
+        ) {
+            return 2;
+        }
+        return r.setsToWinMatch;
+    };
+
     // Blindaje de reglas: en formato esperado "2 sets + STB", nunca cerrar partido al primer set
     // aunque llegue un match_format inconsistente desde datos antiguos.
     const getRulesSafe = (m: any) => {
         const base = getScoringRules(m?.match_format, m?.tie_break_type);
+        const explicitSetsToWin = Number(m?.sets_to_win_match || 0);
+        if (explicitSetsToWin >= 1) {
+            return {
+                ...base,
+                setsToWinMatch: explicitSetsToWin,
+                usesSuperTiebreakDecider:
+                    explicitSetsToWin >= 2 && String(m?.tie_break_type || '').toUpperCase() === 'STB'
+                        ? true
+                        : base.usesSuperTiebreakDecider,
+            };
+        }
         const isStb = String(m?.tie_break_type || '').toUpperCase() === 'STB';
         if (isStb && base.setsToWinMatch === 1) {
             return {
