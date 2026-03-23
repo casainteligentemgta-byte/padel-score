@@ -49,6 +49,13 @@ export default function RefereeScoreboard() {
     const [loading, setLoading] = useState(true);
     const [showMatchSelector, setShowMatchSelector] = useState(false);
     const [showAdjustModal, setShowAdjustModal] = useState(false);
+    const [showNameModal, setShowNameModal] = useState(false);
+    const [nameDraft, setNameDraft] = useState({
+        t1p1: '',
+        t1p2: '',
+        t2p1: '',
+        t2p2: '',
+    });
     const [swappingCourtWith, setSwappingCourtWith] = useState<string | null>(null);
 
     const matchCourt = match?.court ?? (match?.courtIndex != null ? match.courtIndex + 1 : 1);
@@ -334,6 +341,72 @@ export default function RefereeScoreboard() {
         const m = Math.floor((seconds % 3600) / 60);
         const s = seconds % 60;
         return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const buildTeamFull = (p1: string, p2: string, fallback: string) => {
+        const a = p1.trim();
+        const b = p2.trim();
+        if (a && b) return `${a} / ${b}`;
+        if (a || b) return a || b;
+        return fallback;
+    };
+
+    const openNameEditor = () => {
+        if (!match) return;
+        setNameDraft({
+            t1p1: (match.team1?.p1 || '').toString(),
+            t1p2: (match.team1?.p2 || '').toString(),
+            t2p1: (match.team2?.p1 || '').toString(),
+            t2p2: (match.team2?.p2 || '').toString(),
+        });
+        setShowNameModal(true);
+    };
+
+    const saveEditedNames = async () => {
+        if (!match) return;
+        const t1p1 = nameDraft.t1p1.trim();
+        const t1p2 = nameDraft.t1p2.trim();
+        const t2p1 = nameDraft.t2p1.trim();
+        const t2p2 = nameDraft.t2p2.trim();
+
+        const nextTeam1 = {
+            ...(match.team1 || {}),
+            p1: t1p1 || 'Jugador 1',
+            p2: t1p2 || 'Jugador 2',
+            p1Name: t1p1 || 'Jugador 1',
+            p2Name: t1p2 || 'Jugador 2',
+            full: buildTeamFull(t1p1, t1p2, 'Equipo 1'),
+            name: buildTeamFull(t1p1, t1p2, 'Equipo 1'),
+        };
+        const nextTeam2 = {
+            ...(match.team2 || {}),
+            p1: t2p1 || 'Jugador 3',
+            p2: t2p2 || 'Jugador 4',
+            p1Name: t2p1 || 'Jugador 3',
+            p2Name: t2p2 || 'Jugador 4',
+            full: buildTeamFull(t2p1, t2p2, 'Equipo 2'),
+            name: buildTeamFull(t2p1, t2p2, 'Equipo 2'),
+        };
+
+        try {
+            await dataService.updateMatch(id, match.id, {
+                team1: nextTeam1,
+                team2: nextTeam2,
+                team1Name: nextTeam1.full,
+                team2Name: nextTeam2.full,
+            });
+            setMatch((prev: any) => prev ? {
+                ...prev,
+                team1: nextTeam1,
+                team2: nextTeam2,
+                team1Name: nextTeam1.full,
+                team2Name: nextTeam2.full,
+            } : prev);
+            setShowNameModal(false);
+        } catch (err) {
+            console.error('[saveEditedNames] Error:', err);
+            alert('No se pudieron guardar los nombres. Intenta de nuevo.');
+        }
     };
 
     useEffect(() => {
@@ -1104,6 +1177,7 @@ export default function RefereeScoreboard() {
                         {[
                             { icon: RefreshCw, onClick: () => setShowMatchSelector(true), color: 'hover:text-padel-primary', label: 'Cambiar Pista' },
                             { icon: Monitor, onClick: () => { const pizarraUrl = '/tournaments/' + id + '/display/' + (match?.id || matchId); window.open(pizarraUrl, '_blank'); }, color: 'hover:text-padel-primary', label: 'Abrir / Refrescar Pizarra' },
+                            { icon: Users, onClick: openNameEditor, color: 'hover:text-padel-primary', label: 'Editar nombres' },
                             { icon: Settings, onClick: () => setShowAdjustModal(true), color: 'hover:text-white', label: 'Ajustes' },
                             {
                                 icon: Plus,
@@ -1834,6 +1908,88 @@ export default function RefereeScoreboard() {
                                     className="flex-1 py-4 bg-white text-black rounded-2xl font-black italic uppercase tracking-widest text-[10px] hover:scale-[1.02] transition-all"
                                 >
                                     Close
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+                {showNameModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[410] bg-black/90 backdrop-blur-xl flex items-center justify-center p-6"
+                        onClick={() => setShowNameModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 30 }}
+                            animate={{ scale: 1, y: 0 }}
+                            className="bg-[#111] border border-white/10 rounded-[3rem] w-full max-w-2xl overflow-hidden flex flex-col"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white">Editar Nombres</h3>
+                                    <p className="text-[10px] font-black italic text-gray-500 uppercase tracking-widest mt-1">Completa jugadores si la carga automática falla</p>
+                                </div>
+                                <button onClick={() => setShowNameModal(false)} className="p-4 bg-white/5 rounded-full hover:bg-white/10 transition-all text-gray-400">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
+
+                            <div className="p-6 space-y-6">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Jugador 1</label>
+                                        <input
+                                            value={nameDraft.t1p1}
+                                            onChange={(e) => setNameDraft((p) => ({ ...p, t1p1: e.target.value }))}
+                                            placeholder="Jugador 1"
+                                            className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-sm font-bold text-white outline-none focus:border-padel-primary/60"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Jugador 2</label>
+                                        <input
+                                            value={nameDraft.t1p2}
+                                            onChange={(e) => setNameDraft((p) => ({ ...p, t1p2: e.target.value }))}
+                                            placeholder="Jugador 2"
+                                            className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-sm font-bold text-white outline-none focus:border-padel-primary/60"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Jugador 3</label>
+                                        <input
+                                            value={nameDraft.t2p1}
+                                            onChange={(e) => setNameDraft((p) => ({ ...p, t2p1: e.target.value }))}
+                                            placeholder="Jugador 3"
+                                            className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-sm font-bold text-white outline-none focus:border-padel-primary/60"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Jugador 4</label>
+                                        <input
+                                            value={nameDraft.t2p2}
+                                            onChange={(e) => setNameDraft((p) => ({ ...p, t2p2: e.target.value }))}
+                                            placeholder="Jugador 4"
+                                            className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-sm font-bold text-white outline-none focus:border-padel-primary/60"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="p-6 bg-white/[0.02] border-t border-white/5 flex gap-4">
+                                <button
+                                    onClick={() => setShowNameModal(false)}
+                                    className="flex-1 py-4 bg-white/10 text-white rounded-2xl font-black italic uppercase tracking-widest text-[10px] hover:bg-white/20 transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={saveEditedNames}
+                                    className="flex-1 py-4 bg-padel-primary text-black rounded-2xl font-black italic uppercase tracking-widest text-[10px] hover:scale-[1.02] transition-all"
+                                >
+                                    Guardar nombres
                                 </button>
                             </div>
                         </motion.div>
