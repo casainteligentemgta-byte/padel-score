@@ -15,22 +15,31 @@ export type VisibleSetsInput = {
 export function visibleSetNumbersForScoreboard(input: VisibleSetsInput): number[] {
     const fmt = (input.matchFormat || '') as string;
     const currentSet = input.setsT1 + input.setsT2 + 1;
-    const twoSetsPlusStb = fmt === 'TWO_SHORT_SETS' || fmt === 'TWO_NORMAL_SETS';
-    const mayHaveThirdScoreboardCol =
-        fmt === 'BEST_OF_3' ||
-        fmt === '3SETS' ||
-        fmt === 'THREE_SETS' ||
-        fmt === 'SUPER_TIEBREAK' ||
-        fmt === 'SET_3_STB' ||
-        fmt === 'TIEBREAK' ||
-        twoSetsPlusStb ||
-        input.superTiebreak === true ||
-        input.tiebreak === true;
 
+    // Formatos de 1 set: solo columna SET 1
     if (fmt === 'ONE_SET_6' || fmt === 'ONE_SET_9') return [1];
+
+    // Formatos de 2 sets + STB/TB como desempate:
+    // mostrar columna 3 SOLO cuando el desempate está realmente en juego
+    const twoSetsPlusDecider =
+        fmt === 'TWO_SHORT_SETS' ||
+        fmt === 'TWO_NORMAL_SETS' ||
+        fmt === '2SETS_STB';
+    if (twoSetsPlusDecider) {
+        // El STB/TB está activo cuando ya se jugaron 2 sets (1-1) y empieza el 3er segmento
+        const deciderActive =
+            currentSet >= 3 ||
+            input.superTiebreak === true ||
+            input.tiebreak === true;
+        if (currentSet <= 1) return [1];
+        if (currentSet === 2 && !deciderActive) return [1, 2];
+        return deciderActive ? [1, 2, 3] : [1, 2];
+    }
+
+    // Formatos de 3 sets normales (BEST_OF_3, etc.): mostrar col 3 desde que arranca el set 3
     if (currentSet <= 1) return [1];
     if (currentSet === 2) return [1, 2];
-    return mayHaveThirdScoreboardCol ? [1, 2, 3] : [1, 2];
+    return [1, 2, 3];
 }
 
 export function scoreboardGridClassForSetCount(setCount: number): string {
