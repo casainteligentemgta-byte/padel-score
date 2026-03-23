@@ -3,7 +3,8 @@
  * para rellenar marker y pizarra cuando solo hay match + tournament en BD.
  */
 
-const PH = /^(pareja|jugador|player|placeholder|tbd|\?|j\d+|p\d+)$/i;
+// Detecta placeholders tipo "Jugador 1", "Pareja 2", etc. para no mostrarlos como si fueran nombres reales.
+const PH = /^(pareja\s*\d*|jugador\s*\d*|player\s*\d*|equipo\s*\d*|placeholder|tbd|\?|j\d+|p\d+)$/i;
 
 function isReal(s: string) {
     return !!(s && s.trim().length > 0 && !PH.test(s.trim()));
