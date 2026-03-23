@@ -630,19 +630,8 @@ export default function MarkerControlPage() {
     const mustContinueAfterFirstSet = (m: any, newSets: { local: number; visitante: number }) => {
         const totalFinishedSets = (newSets.local || 0) + (newSets.visitante || 0);
         if (totalFinishedSets !== 1) return false;
-        const fmt = String(m?.match_format || '').toUpperCase();
-        const tb = String(m?.tie_break_type || '').toUpperCase();
-        const explicit = Number(m?.sets_to_win_match || 0);
-        return (
-            explicit >= 2 ||
-            tb === 'STB' ||
-            fmt === '2SETS_STB' ||
-            fmt === '3SETS' ||
-            fmt === 'BEST_OF_3' ||
-            fmt === 'THREE_SETS' ||
-            fmt === 'TWO_SHORT_SETS' ||
-            fmt === 'TWO_NORMAL_SETS'
-        );
+        // Regla operativa solicitada: nunca terminar partido al cerrar el primer set.
+        return true;
     };
 
     /** Cierra un set por juegos (no TB): actualiza sets, historial, STB si 1-1, o fin de partido. */
