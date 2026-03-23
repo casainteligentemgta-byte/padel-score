@@ -20,7 +20,8 @@ import {
     Play,
     Zap,
     Activity,
-    ZapOff
+    ZapOff,
+    Users
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
