@@ -2265,7 +2265,7 @@ export default function TournamentDashboard() {
                                                     else setP2Selected(null);
                                                 }}
                                                 placeholder="Nombre del jugador (buscar por nombre o email)"
-                                                className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-padel-primary/60"
+                                                className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-sm outline-none focus:border-padel-primary/60 text-white placeholder:text-white/40 caret-white"
                                             />
                                             {!locked && cfg.matches.length > 0 && (
                                                 <div className="max-h-40 overflow-y-auto rounded-xl border border-white/10 bg-black/40">
@@ -2290,21 +2290,21 @@ export default function TournamentDashboard() {
                                                 onChange={(e) => cfg.setLastName(e.target.value)}
                                                 readOnly={locked}
                                                 placeholder="Apellido"
-                                                className={`w-full rounded-xl border px-3 py-2 text-sm outline-none ${locked ? 'border-white/10 bg-white/5 text-gray-400' : 'border-white/15 bg-black/30 focus:border-padel-primary/60'}`}
+                                                className={`w-full rounded-xl border px-3 py-2 text-sm outline-none ${locked ? 'border-white/10 bg-white/5 text-gray-400' : 'border-white/15 bg-black/30 focus:border-padel-primary/60 text-white placeholder:text-white/40 caret-white'}`}
                                             />
                                             <input
                                                 value={cfg.email}
                                                 onChange={(e) => cfg.setEmail(e.target.value)}
                                                 readOnly={locked}
                                                 placeholder="Email"
-                                                className={`w-full rounded-xl border px-3 py-2 text-sm outline-none ${locked ? 'border-white/10 bg-white/5 text-gray-400' : 'border-white/15 bg-black/30 focus:border-padel-primary/60'}`}
+                                                className={`w-full rounded-xl border px-3 py-2 text-sm outline-none ${locked ? 'border-white/10 bg-white/5 text-gray-400' : 'border-white/15 bg-black/30 focus:border-padel-primary/60 text-white placeholder:text-white/40 caret-white'}`}
                                             />
                                             <input
                                                 value={cfg.phone}
                                                 onChange={(e) => cfg.setPhone(e.target.value)}
                                                 readOnly={locked}
                                                 placeholder="Teléfono"
-                                                className={`w-full rounded-xl border px-3 py-2 text-sm outline-none ${locked ? 'border-white/10 bg-white/5 text-gray-400' : 'border-white/15 bg-black/30 focus:border-padel-primary/60'}`}
+                                                className={`w-full rounded-xl border px-3 py-2 text-sm outline-none ${locked ? 'border-white/10 bg-white/5 text-gray-400' : 'border-white/15 bg-black/30 focus:border-padel-primary/60 text-white placeholder:text-white/40 caret-white'}`}
                                             />
                                         </div>
                                     );

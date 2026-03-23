@@ -169,12 +169,8 @@ function MatchDurationCounter({
                 {duration}
             </span>
         );
-    return (
-        <>
-            <span className="font-bold uppercase text-white/50 tracking-[0.35em] leading-none" style={{ fontSize: 'clamp(6px,0.7vw,11px)' }}>Tiempo de juego</span>
-            <span className="font-black italic tracking-tighter leading-none mt-0.5 tabular-nums" style={{ fontSize: 'clamp(24px,3.2vw,56px)', color: primaryColor }}>{duration}</span>
-        </>
-    );
+    // En pizarras (modo fullscreen), el "Tiempo de juego" no se muestra.
+    return null;
 }
 
 export default function FullScreenDisplay() {

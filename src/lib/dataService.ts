@@ -1755,8 +1755,10 @@ export const dataService = {
             .from('inscriptions')
             .select('id, data')
             .eq('tournament_id', tournamentId)
-            .eq('is_placeholder', true)
             .eq('participant_name', placeholderLabel)
+            // En algunos proyectos el flag `is_placeholder` no existe en la tabla.
+            // Los placeholders se distinguen por tener `participant_id` = null.
+            .is('participant_id', null)
             .order('created_at', { ascending: true })
             .limit(1);
         if (categoryKey) query = query.eq('category_key', categoryKey);
@@ -1783,7 +1785,6 @@ export const dataService = {
                 participant_email: sanitizeString(player1.email ?? null),
                 participant_id: player1.id,
                 payment_status: 'paid',
-                is_placeholder: false,
                 data: mergedData,
                 updated_at: now(),
             })
