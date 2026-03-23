@@ -627,6 +627,24 @@ export default function MarkerControlPage() {
         return base;
     };
 
+    const mustContinueAfterFirstSet = (m: any, newSets: { local: number; visitante: number }) => {
+        const totalFinishedSets = (newSets.local || 0) + (newSets.visitante || 0);
+        if (totalFinishedSets !== 1) return false;
+        const fmt = String(m?.match_format || '').toUpperCase();
+        const tb = String(m?.tie_break_type || '').toUpperCase();
+        const explicit = Number(m?.sets_to_win_match || 0);
+        return (
+            explicit >= 2 ||
+            tb === 'STB' ||
+            fmt === '2SETS_STB' ||
+            fmt === '3SETS' ||
+            fmt === 'BEST_OF_3' ||
+            fmt === 'THREE_SETS' ||
+            fmt === 'TWO_SHORT_SETS' ||
+            fmt === 'TWO_NORMAL_SETS'
+        );
+    };
+
     /** Cierra un set por juegos (no TB): actualiza sets, historial, STB si 1-1, o fin de partido. */
     const applySetWonByGames = async (
         m: any,
@@ -638,7 +656,10 @@ export default function MarkerControlPage() {
         const base = { local: sets.local || 0, visitante: sets.visitante || 0 };
         const newSets = { ...base, [equipo]: base[equipo] + 1 };
         const newHistorico = [...(m.historico_sets || []), { local: newGames.local, visitante: newGames.visitante }];
-        const matchOver = newSets.local >= rules.setsToWinMatch || newSets.visitante >= rules.setsToWinMatch;
+        let matchOver = newSets.local >= rules.setsToWinMatch || newSets.visitante >= rules.setsToWinMatch;
+        if (matchOver && mustContinueAfterFirstSet(m, newSets)) {
+            matchOver = false;
+        }
         const enterStb =
             !matchOver &&
             rules.usesSuperTiebreakDecider &&
@@ -814,7 +835,10 @@ export default function MarkerControlPage() {
                             [equipo]: (s0[equipo] || 0) + 1,
                         };
                         const newHistorico = [...(marcador.historico_sets || []), hist];
-                        const matchOver = newSets.local >= rules.setsToWinMatch || newSets.visitante >= rules.setsToWinMatch;
+                        let matchOver = newSets.local >= rules.setsToWinMatch || newSets.visitante >= rules.setsToWinMatch;
+                        if (matchOver && mustContinueAfterFirstSet(marcador, newSets)) {
+                            matchOver = false;
+                        }
                         const enterStb =
                             !matchOver &&
                             rules.usesSuperTiebreakDecider &&
