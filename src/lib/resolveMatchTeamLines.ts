@@ -28,6 +28,12 @@ function resolveNames(
             if (parts.length >= 2) return fullLine;
             if (parts.length === 1) return parts[0];
         }
+        const altLine = typeof embeddedTeam.name === 'string' ? embeddedTeam.name.trim() : '';
+        if (altLine && !/^pareja\s*\d*$/i.test(altLine) && altLine !== 'TBD') {
+            const parts = altLine.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(isReal);
+            if (parts.length >= 2) return altLine;
+            if (parts.length === 1) return parts[0];
+        }
         const p1n = (embeddedTeam.p1?.name || embeddedTeam.p1Name || '').trim();
         const p2n = (embeddedTeam.p2?.name || embeddedTeam.p2Name || '').trim();
         if (isReal(p1n) || isReal(p2n)) {
@@ -45,6 +51,12 @@ function resolveNames(
     const byIdx = teamIdx > 0 ? teams[teamIdx - 1] : (teams[teamIdx] ?? null);
     const tData = byId || byIdx || null;
     if (tData) {
+        const fullLine = (tData.full || tData.teamName || tData.name || '').toString().trim();
+        if (fullLine && !/^pareja\s*\d*$/i.test(fullLine) && fullLine !== 'TBD') {
+            const parts = fullLine.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(isReal);
+            if (parts.length >= 2) return fullLine;
+            if (parts.length === 1) return parts[0];
+        }
         const p1n = (tData.p1?.name || tData.p1Name || '').trim();
         const p2n = (tData.p2?.name || tData.p2Name || '').trim();
         if (isReal(p1n) || isReal(p2n)) {
