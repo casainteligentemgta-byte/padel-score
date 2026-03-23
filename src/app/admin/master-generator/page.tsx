@@ -623,6 +623,13 @@ export default function MasterGeneratorPage() {
                 teamsFromCat.forEach((t: any, idx: number) => { if (t?.id) teamIdToIndex.set(String(t.id), idx + 1); });
 
                 try {
+                    // Formato efectivo que consumen marker/display para reglas reales de scoring.
+                    const effectiveMatchFormat =
+                        cat.type === TournamentType.CUADRO_CONSOLACION
+                            ? ((cat as any).consolacionMatchFormat ?? 'TWO_SHORT_SETS')
+                            : ((cat as any).rrMatchFormat ?? 'ONE_SET_6');
+                    const effectiveTieBreakType = cat.setFormat === 'SUPER_TIE_BREAK' ? 'STB' : 'TB';
+
                     // Cada partido: id, stage para grupos, team1Index/team2Index para la vista de grupos
                     const matchesWithIds = categoryMatches.map((m: any, i: number) => {
                         const t1Id = m.team1?.id || m.team1?.p1?.id;
@@ -637,6 +644,8 @@ export default function MasterGeneratorPage() {
                             scheduledTime: typeof m.scheduledTime === 'string' ? m.scheduledTime : (m.scheduledTime instanceof Date ? m.scheduledTime.toISOString() : new Date().toISOString()),
                             status: m.status ?? MatchStatus.PENDING,
                             stage: isGroupStage ? 'GROUP_STAGE' : (m.roundName?.includes('Consolación') ? 'CONSOLATION' : 'MAIN_DRAW'),
+                            matchFormat: effectiveMatchFormat,
+                            tieBreakType: effectiveTieBreakType,
                             ...(team1Index != null && { team1Index }),
                             ...(team2Index != null && { team2Index }),
                         };
@@ -661,8 +670,9 @@ export default function MasterGeneratorPage() {
                         groupSize: cat.groupSize,
                         advanceCount: (cat as any).advanceCount ?? 2,
                         pointsGoal: (cat as any).pointsGoal ?? 24,
+                        matchFormat: effectiveMatchFormat,
                         scoringSystem: cat.goldenPoint ? 'GOLDEN_POINT' : 'TRADITIONAL',
-                        tieBreakType: cat.setFormat === 'SUPER_TIE_BREAK' ? 'STB' : 'TB',
+                        tieBreakType: effectiveTieBreakType,
                         inscriptionPrice: cat.inscriptionPrice ?? 0,
                         maxTeams: cat.numTeams, // Añadimos el cupo máximo
                         registrationStatus: 'open',
