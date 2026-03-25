@@ -8,6 +8,7 @@ import { dataService } from '@/lib/dataService';
 import Sidebar from '@/components/Sidebar';
 import { BackButton } from '@/components/BackButton';
 import PaymentInfo from '@/components/PaymentInfo';
+import AutoShrinkName from '@/components/AutoShrinkName';
 import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
 import {
     ArrowLeft,
@@ -837,9 +838,13 @@ export default function InscribirmePage() {
                                             <h2 className="text-xs font-black uppercase tracking-widest text-[#ccff00] mb-2">
                                                 Datos del Compañero
                                             </h2>
-                                            <p className="text-[10px] text-gray-500 mb-4 uppercase">
-                                                Ingresa el código de 6 dígitos de tu pareja para completar el equipo.
-                                            </p>
+                                            <div className="mb-4 min-w-0">
+                                                <AutoShrinkName
+                                                    name="Ingresa el código de 6 dígitos de tu pareja para completar el equipo."
+                                                    style={{ fontSize: '10px' }}
+                                                    className="text-gray-500 uppercase"
+                                                />
+                                            </div>
 
                                             <div className="flex gap-2">
                                                 <div className="relative flex-1">

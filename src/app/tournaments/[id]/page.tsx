@@ -81,6 +81,8 @@ export default function TournamentDashboard() {
     const [manualTeamId, setManualTeamId] = useState<string | null>(null);
     const [savingManualInscription, setSavingManualInscription] = useState(false);
     const [manualError, setManualError] = useState<string | null>(null);
+    const [markerLiveMatchIds, setMarkerLiveMatchIds] = useState<Set<string>>(new Set());
+    const [markerLiveByMatchId, setMarkerLiveByMatchId] = useState<Record<string, any>>({});
     const [p1Query, setP1Query] = useState('');
     const [p2Query, setP2Query] = useState('');
     const [p1Matches, setP1Matches] = useState<ParticipantOption[]>([]);
@@ -126,6 +128,54 @@ export default function TournamentDashboard() {
         if (!id) return;
         dataService.getInscriptionsByTournament(id).then(setInscriptions).catch(() => setInscriptions([]));
     }, [id]);
+
+    // En vivo real = lo que el marker tiene iniciado en pizarra_cancha_state
+    useEffect(() => {
+        if (!id) return;
+        let cancelled = false;
+        const loadMarkerLiveIds = async () => {
+            try {
+                const courtNums = new Set<number>();
+                matches.forEach((m: any) => {
+                    const c = Number(m?.court ?? (m?.courtIndex != null ? Number(m.courtIndex) + 1 : 0));
+                    if (Number.isFinite(c) && c > 0) courtNums.add(c);
+                });
+                const totalCourts = Number((tournament as any)?.totalCourts ?? 0);
+                if (totalCourts > 0) {
+                    for (let c = 1; c <= totalCourts; c++) courtNums.add(c);
+                }
+
+                const liveIds = new Set<string>();
+                const liveDataByMatch: Record<string, any> = {};
+                const checks = Array.from(courtNums).map(async (courtNum) => {
+                    const state = await dataService.getPizarraCanchaState(`cancha_${courtNum}`);
+                    const data = state?.data || {};
+                    if (data?.estado !== 'en_vivo') return;
+                    if (String(data?.torneo_id || '') !== String(id)) return;
+                    const pid = String(data?.partido_id || '').trim();
+                    if (!pid || pid.startsWith('live_')) return;
+                    liveIds.add(pid);
+                    liveDataByMatch[pid] = data?.marcador || null;
+                });
+                await Promise.all(checks);
+                if (!cancelled) {
+                    setMarkerLiveMatchIds(liveIds);
+                    setMarkerLiveByMatchId(liveDataByMatch);
+                }
+            } catch {
+                if (!cancelled) {
+                    setMarkerLiveMatchIds(new Set());
+                    setMarkerLiveByMatchId({});
+                }
+            }
+        };
+        loadMarkerLiveIds();
+        const t = setInterval(loadMarkerLiveIds, 3000);
+        return () => {
+            cancelled = true;
+            clearInterval(t);
+        };
+    }, [id, matches, (tournament as any)?.totalCourts]);
 
     // Búsqueda realtime de participantes para inscripción manual (siempre antes de cualquier return de render).
     useEffect(() => {
@@ -890,7 +940,7 @@ export default function TournamentDashboard() {
     // En Vivo: un solo partido por pista (no puede haber dos en vivo en la misma pista)
     const _liveByCourt = new Map<number, any>();
     for (const mx of matches) {
-        if (mx.status !== MatchStatus.LIVE) continue;
+        if (!markerLiveMatchIds.has(String(mx.id))) continue;
         const c = _courtNum(mx);
         if (c >= 1 && c <= _numCanchas && !_liveByCourt.has(c)) _liveByCourt.set(c, mx);
     }
@@ -2017,9 +2067,10 @@ export default function TournamentDashboard() {
                                                                             );
                                                                         }
 
-                                                                        const isActive = match.status === MatchStatus.LIVE;
-                                                                        const isSTB = match.matchFormat === 'SUPER_TIEBREAK' || match.superTiebreak;
-                                                                        const isTB = !isSTB && (match.matchFormat === 'TIEBREAK' || match.tiebreak);
+                                                                        const liveMarker = markerLiveByMatchId[String(match.id)];
+                                                                        const isActive = markerLiveMatchIds.has(String(match.id)) || match.status === MatchStatus.LIVE;
+                                                                        const isSTB = liveMarker?.super_tiebreak === true || match.matchFormat === 'SUPER_TIEBREAK' || match.superTiebreak;
+                                                                        const isTB = !isSTB && (liveMarker?.modo_puntos === 'tiebreak' || match.matchFormat === 'TIEBREAK' || match.tiebreak);
                                                                         const showExtra = isSTB || isTB;
                                                                         const extraLabel = isSTB ? 'STB' : 'TB';
 
@@ -2027,11 +2078,11 @@ export default function TournamentDashboard() {
                                                                             const labels = ['0', '15', '30', '40', 'AD'];
                                                                             return labels[Math.min(p ?? 0, 4)] ?? String(p);
                                                                         };
-                                                                        const gp1 = match.points?.t1 ?? 0;
-                                                                        const gp2 = match.points?.t2 ?? 0;
+                                                                        const gp1 = liveMarker ? Number(liveMarker?.puntos?.local ?? 0) : (match.points?.t1 ?? 0);
+                                                                        const gp2 = liveMarker ? Number(liveMarker?.puntos?.visitante ?? 0) : (match.points?.t2 ?? 0);
 
-                                                                        const isT1Serving = match.status === MatchStatus.LIVE && match.server?.team === 1;
-                                                                        const isT2Serving = match.status === MatchStatus.LIVE && match.server?.team === 2;
+                                                                        const isT1Serving = isActive && (liveMarker?.saque?.equipo === 1 || match.server?.team === 1);
+                                                                        const isT2Serving = isActive && (liveMarker?.saque?.equipo === 2 || match.server?.team === 2);
 
                                                                         const fmt = (name: string) => {
                                                                             if (!name) return '';
@@ -2043,7 +2094,13 @@ export default function TournamentDashboard() {
                                                                         const ROW_H = 'h-8';
                                                                         const COL_W_SCORE = 'w-8';
                                                                         const COL_W_POINTS = 'w-9';
-                                                                        const showPgsCols = activeTab !== 'Por Comenzar';
+                                                                        const team1Label = [fmt(t1p1), t1p2 ? fmt(t1p2) : ''].filter(Boolean).join(' · ') || 'Equipo 1';
+                                                                        const team2Label = [fmt(t2p1), t2p2 ? fmt(t2p2) : ''].filter(Boolean).join(' · ') || 'Equipo 2';
+                                                                        const showPgsCols =
+                                                                            activeTab !== 'Por Comenzar' &&
+                                                                            (activeTab !== 'Todos' && activeTab !== 'Fase de Grupo'
+                                                                                ? true
+                                                                                : match.status === MatchStatus.FINISHED);
 
                                                                         const ServingBall = () => (
                                                                             <motion.div
@@ -2075,121 +2132,135 @@ export default function TournamentDashboard() {
                                                                                     </div>
                                                                                 )}
 
-                                                                                {/* Team 1 */}
-                                                                                <div className={`flex ${ROW_H} items-stretch border-b border-white/[0.12]`}>
-                                                                                    {/* Nombres */}
-                                                                                    {(() => {
-                                                                                        const t1total = (fmt(t1p1) + (t1p2 ? fmt(t1p2) : '')).length;
-                                                                                        const fs1 = t1total <= 8 ? '14px' : t1total <= 13 ? '12px' : t1total <= 18 ? '10px' : t1total <= 24 ? '9px' : '8px';
-                                                                                        return (
-                                                                                            <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
-                                                                                                <div className="w-3 flex-shrink-0 flex items-center justify-center">
-                                                                                                    {isT1Serving && <ServingBall />}
-                                                                                                </div>
-                                                                                                <div className="flex items-center gap-1 min-w-0 overflow-hidden">
-                                                                                                    <div className="min-w-0 flex-1">
-                                                                                                        <AutoShrinkName name={fmt(t1p1)} style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white' : 'text-white/65'}`} />
-                                                                                                    </div>
-                                                                                                    {t1p2 && (
-                                                                                                        <>
-                                                                                                            <span className="text-white/20 text-xs flex-shrink-0">·</span>
+                                                                                {!showPgsCols ? (
+                                                                                    <div className="h-16 border-b border-white/[0.12] flex items-center px-3 gap-2">
+                                                                                        <div className="min-w-0 flex-1">
+                                                                                            <AutoShrinkName name={team1Label} style={{ fontSize: '12px' }} className="font-black italic uppercase tracking-tight leading-none text-white/85" />
+                                                                                        </div>
+                                                                                        <span className="text-[10px] font-black uppercase tracking-widest text-white/45 flex-shrink-0">VS</span>
+                                                                                        <div className="min-w-0 flex-1 text-right">
+                                                                                            <AutoShrinkName name={team2Label} style={{ fontSize: '12px' }} className="font-black italic uppercase tracking-tight leading-none text-white/85" />
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <>
+                                                                                        {/* Team 1 */}
+                                                                                        <div className={`flex ${ROW_H} items-stretch border-b border-white/[0.12]`}>
+                                                                                            {/* Nombres */}
+                                                                                            {(() => {
+                                                                                                const t1total = (fmt(t1p1) + (t1p2 ? fmt(t1p2) : '')).length;
+                                                                                                const fs1 = t1total <= 8 ? '14px' : t1total <= 13 ? '12px' : t1total <= 18 ? '10px' : t1total <= 24 ? '9px' : '8px';
+                                                                                                return (
+                                                                                                    <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
+                                                                                                        <div className="w-3 flex-shrink-0 flex items-center justify-center">
+                                                                                                            {isT1Serving && <ServingBall />}
+                                                                                                        </div>
+                                                                                                        <div className="flex items-center gap-1 min-w-0 overflow-hidden">
                                                                                                             <div className="min-w-0 flex-1">
-                                                                                                                <AutoShrinkName name={fmt(t1p2)} style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white/70' : 'text-white/40'}`} />
+                                                                                                                <AutoShrinkName name={fmt(t1p1)} style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white' : 'text-white/65'}`} />
                                                                                                             </div>
-                                                                                                        </>
+                                                                                                            {t1p2 && (
+                                                                                                                <>
+                                                                                                                    <span className="text-white/20 text-xs flex-shrink-0">·</span>
+                                                                                                                    <div className="min-w-0 flex-1">
+                                                                                                                        <AutoShrinkName name={fmt(t1p2)} style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white/70' : 'text-white/40'}`} />
+                                                                                                                    </div>
+                                                                                                                </>
+                                                                                                            )}
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                );
+                                                                                            })()}
+                                                                                            {showPgsCols && (
+                                                                                                <>
+                                                                                                    {/* G — puntos */}
+                                                                                                    <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
+                                                                                                        <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                            {isActive ? toTennisScore(gp1) : '–'}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    {/* JG — games */}
+                                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
+                                                                                                        <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                            {isActive ? (liveMarker ? (liveMarker?.games?.local ?? 0) : (match.games?.t1 ?? 0)) : '–'}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    {/* ST — sets */}
+                                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
+                                                                                                        <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                            {isActive ? (liveMarker ? (liveMarker?.sets?.local ?? 0) : (match.sets?.t1 ?? 0)) : '–'}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    {showExtra && (
+                                                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
+                                                                                                            <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                                {isActive ? (isSTB ? (liveMarker ? Number(liveMarker?.puntos?.local ?? 0) : (match.superTiebreakScore?.t1 ?? 0)) : (liveMarker ? Number(liveMarker?.puntos?.local ?? 0) : (match.tiebreakScore?.t1 ?? 0))) : '–'}
+                                                                                                            </span>
+                                                                                                        </div>
                                                                                                     )}
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        );
-                                                                                    })()}
-                                                                                    {showPgsCols && (
-                                                                                        <>
-                                                                                            {/* G — puntos */}
-                                                                                            <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
-                                                                                                <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                    {isActive ? toTennisScore(gp1) : '–'}
-                                                                                                </span>
-                                                                                            </div>
-                                                                                            {/* JG — games */}
-                                                                                            <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                    {isActive ? (match.games?.t1 ?? 0) : '–'}
-                                                                                                </span>
-                                                                                            </div>
-                                                                                            {/* ST — sets */}
-                                                                                            <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                    {isActive ? (match.sets?.t1 ?? 0) : '–'}
-                                                                                                </span>
-                                                                                            </div>
-                                                                                            {showExtra && (
-                                                                                                <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                                    <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                        {isActive ? (isSTB ? (match.superTiebreakScore?.t1 ?? 0) : (match.tiebreakScore?.t1 ?? 0)) : '–'}
-                                                                                                    </span>
-                                                                                                </div>
+                                                                                                </>
                                                                                             )}
-                                                                                        </>
-                                                                                    )}
-                                                                                </div>
+                                                                                        </div>
 
-                                                                                {/* Team 2 */}
-                                                                                <div className={`flex ${ROW_H} items-stretch`}>
-                                                                                    {/* Nombres */}
-                                                                                    {(() => {
-                                                                                        const t2total = (fmt(t2p1) + (t2p2 ? fmt(t2p2) : '')).length;
-                                                                                        const fs2 = t2total <= 8 ? '14px' : t2total <= 13 ? '12px' : t2total <= 18 ? '10px' : t2total <= 24 ? '9px' : '8px';
-                                                                                        return (
-                                                                                            <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
-                                                                                                <div className="w-3 flex-shrink-0 flex items-center justify-center">
-                                                                                                    {isT2Serving && <ServingBall />}
-                                                                                                </div>
-                                                                                                <div className="flex items-center gap-1 min-w-0 overflow-hidden">
-                                                                                                    <div className="min-w-0 flex-1">
-                                                                                                        <AutoShrinkName name={fmt(t2p1)} style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white' : 'text-white/65'}`} />
-                                                                                                    </div>
-                                                                                                    {t2p2 && (
-                                                                                                        <>
-                                                                                                            <span className="text-white/20 text-xs flex-shrink-0">·</span>
+                                                                                        {/* Team 2 */}
+                                                                                        <div className={`flex ${ROW_H} items-stretch`}>
+                                                                                            {/* Nombres */}
+                                                                                            {(() => {
+                                                                                                const t2total = (fmt(t2p1) + (t2p2 ? fmt(t2p2) : '')).length;
+                                                                                                const fs2 = t2total <= 8 ? '14px' : t2total <= 13 ? '12px' : t2total <= 18 ? '10px' : t2total <= 24 ? '9px' : '8px';
+                                                                                                return (
+                                                                                                    <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
+                                                                                                        <div className="w-3 flex-shrink-0 flex items-center justify-center">
+                                                                                                            {isT2Serving && <ServingBall />}
+                                                                                                        </div>
+                                                                                                        <div className="flex items-center gap-1 min-w-0 overflow-hidden">
                                                                                                             <div className="min-w-0 flex-1">
-                                                                                                                <AutoShrinkName name={fmt(t2p2)} style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white/70' : 'text-white/40'}`} />
+                                                                                                                <AutoShrinkName name={fmt(t2p1)} style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white' : 'text-white/65'}`} />
                                                                                                             </div>
-                                                                                                        </>
+                                                                                                            {t2p2 && (
+                                                                                                                <>
+                                                                                                                    <span className="text-white/20 text-xs flex-shrink-0">·</span>
+                                                                                                                    <div className="min-w-0 flex-1">
+                                                                                                                        <AutoShrinkName name={fmt(t2p2)} style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white/70' : 'text-white/40'}`} />
+                                                                                                                    </div>
+                                                                                                                </>
+                                                                                                            )}
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                );
+                                                                                            })()}
+                                                                                            {showPgsCols && (
+                                                                                                <>
+                                                                                                    {/* G */}
+                                                                                                    <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
+                                                                                                        <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                            {isActive ? toTennisScore(gp2) : '–'}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    {/* JG */}
+                                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
+                                                                                                        <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                            {isActive ? (liveMarker ? (liveMarker?.games?.visitante ?? 0) : (match.games?.t2 ?? 0)) : '–'}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    {/* ST */}
+                                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
+                                                                                                        <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                            {isActive ? (liveMarker ? (liveMarker?.sets?.visitante ?? 0) : (match.sets?.t2 ?? 0)) : '–'}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    {showExtra && (
+                                                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
+                                                                                                            <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                                {isActive ? (isSTB ? (liveMarker ? Number(liveMarker?.puntos?.visitante ?? 0) : (match.superTiebreakScore?.t2 ?? 0)) : (liveMarker ? Number(liveMarker?.puntos?.visitante ?? 0) : (match.tiebreakScore?.t2 ?? 0))) : '–'}
+                                                                                                            </span>
+                                                                                                        </div>
                                                                                                     )}
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        );
-                                                                                    })()}
-                                                                                    {showPgsCols && (
-                                                                                        <>
-                                                                                            {/* G */}
-                                                                                            <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
-                                                                                                <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                    {isActive ? toTennisScore(gp2) : '–'}
-                                                                                                </span>
-                                                                                            </div>
-                                                                                            {/* JG */}
-                                                                                            <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                    {isActive ? (match.games?.t2 ?? 0) : '–'}
-                                                                                                </span>
-                                                                                            </div>
-                                                                                            {/* ST */}
-                                                                                            <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                    {isActive ? (match.sets?.t2 ?? 0) : '–'}
-                                                                                                </span>
-                                                                                            </div>
-                                                                                            {showExtra && (
-                                                                                                <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                                    <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                        {isActive ? (isSTB ? (match.superTiebreakScore?.t2 ?? 0) : (match.tiebreakScore?.t2 ?? 0)) : '–'}
-                                                                                                    </span>
-                                                                                                </div>
+                                                                                                </>
                                                                                             )}
-                                                                                        </>
-                                                                                    )}
-                                                                                </div>
+                                                                                        </div>
+                                                                                    </>
+                                                                                )}
                                                                             </div>
                                                                         );
                                                                     })()}

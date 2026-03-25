@@ -371,6 +371,23 @@ export default function MarkerControlPage() {
     const handleDesactivar = async () => {
         if (!confirm('¿Terminar el partido y poner la cancha en espera?')) return;
         try {
+            const curSets = marcador?.sets || { local: 0, visitante: 0 };
+            const curGames = marcador?.games || { local: 0, visitante: 0 };
+            const curHist = marcador?.historico_sets || [];
+            const curModo = String(marcador?.modo_puntos || '');
+            const isStb = marcador?.super_tiebreak === true || curModo === 'super_tiebreak';
+            const stbScore = isStb
+                ? {
+                    t1: Number(marcador?.puntos?.local ?? 0) || 0,
+                    t2: Number(marcador?.puntos?.visitante ?? 0) || 0,
+                }
+                : null;
+            await persistFinishedMatchFromMarker({
+                sets: curSets,
+                historicoSets: curHist,
+                finalGames: curGames,
+                ...(stbScore ? { superTiebreakScore: stbScore } : {}),
+            });
             await dataService.setPizarraCanchaState(canchaId, {
                 estado: 'espera',
                 marker_uid: null,
