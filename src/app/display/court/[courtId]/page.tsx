@@ -10,6 +10,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 import { visibleSetNumbersForScoreboard } from '@/lib/displaySetColumns';
+import { useCourtDisplayHeartbeat } from '@/lib/courtDisplayHeartbeat';
+import { logDisplayVideoError } from '@/lib/logDisplayVideoError';
 
 function courtSetCell(
     setIdx: number,
@@ -44,7 +46,9 @@ export default function CourtDisplayPage() {
     const [canchaData, setCanchaData] = useState<any>(null);
     const [pizarraData, setPizarraData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const { currentImageUrl, isVisible: adVisible, mode: adMode } = useAdBanner(canchaId);
+    /** Carrusel: `cancha_publicidad` + `media_content`/`publicidad`, orden y duracion_segundos — ver useAdBanner + canchaPublicidadQuery */
+    const { currentMediaUrl, currentMediaKind, isVisible: adVisible, mode: adMode } = useAdBanner(canchaId);
+    useCourtDisplayHeartbeat(canchaId);
 
     // ── Escuchar estado de la cancha en RTDB (respaldo) ───────────────────
     useEffect(() => {
@@ -117,13 +121,21 @@ export default function CourtDisplayPage() {
                 </div>
 
                 {/* Publicidad en espera */}
-                {adVisible && currentImageUrl && (
+                {adVisible && currentMediaUrl && (
                     <div className="absolute bottom-0 left-0 right-0 h-32 overflow-hidden">
-                        <img
-                            src={currentImageUrl}
-                            alt="Publicidad"
-                            className="w-full h-full object-cover opacity-40"
-                        />
+                        {currentMediaKind === 'video' ? (
+                            <video
+                                src={currentMediaUrl}
+                                className="w-full h-full object-cover opacity-40"
+                                autoPlay
+                                muted
+                                playsInline
+                                loop
+                                onError={() => logDisplayVideoError(canchaId, currentMediaUrl)}
+                            />
+                        ) : (
+                            <img src={currentMediaUrl} alt="Publicidad" className="w-full h-full object-cover opacity-40" />
+                        )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
                     </div>
                 )}
@@ -251,18 +263,26 @@ export default function CourtDisplayPage() {
 
             {/* Banner de publicidad */}
             <AnimatePresence>
-                {adVisible && currentImageUrl && (
+                {adVisible && currentMediaUrl && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 20 }}
                         className="relative h-28 border-t border-white/10 overflow-hidden flex-shrink-0"
                     >
-                        <img
-                            src={currentImageUrl}
-                            alt="Publicidad"
-                            className="w-full h-full object-cover"
-                        />
+                        {currentMediaKind === 'video' ? (
+                            <video
+                                src={currentMediaUrl}
+                                className="w-full h-full object-cover"
+                                autoPlay
+                                muted
+                                playsInline
+                                loop
+                                onError={() => logDisplayVideoError(canchaId, currentMediaUrl)}
+                            />
+                        ) : (
+                            <img src={currentMediaUrl} alt="Publicidad" className="w-full h-full object-cover" />
+                        )}
                         <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-black/40" />
                         <div className="absolute top-2 right-4 text-[8px] font-black uppercase tracking-widest text-white/30">
                             {adMode === 'programada' ? '⏱ Promo' : 'Publicidad'}

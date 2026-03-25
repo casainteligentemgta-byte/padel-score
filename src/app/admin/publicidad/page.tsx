@@ -7,23 +7,51 @@ import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import Sidebar from '@/components/Sidebar';
+import CourtCard from '@/components/publicidad/CourtCard';
+import type { CourtPlaylistRow } from '@/components/publicidad/CourtCard';
 import { AlertCircle, Download, Eye, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import type { MediaContent, TiraInformativa } from '@/lib/supabase/publicidad';
 
-type CourtAssignmentRow = {
-  id: string;
-  venue_name: string;
-  cancha_id: string;
-  media_id: string;
-  orden: number;
-  duracion_segundos: number;
-  media_content?: MediaContent | null;
+type VenueWithCourts = {
+  name: string;
+  courts: { key: string; label: string; displayNum: number }[];
 };
 
-type VenueOption = {
-  name: string;
-  courts: number;
-};
+function buildVenuesAndCourtsFromTournaments(tournaments: any[]): VenueWithCourts[] {
+  const map = new Map<string, { maxN: number; bestNames: string[] }>();
+
+  for (const t of tournaments || []) {
+    const name = String(t?.complexName || '').trim();
+    if (!name) continue;
+    const courtNames = Array.isArray(t.courtNames) ? t.courtNames.map((x: any) => String(x).trim()) : [];
+    const totalFromNum = Number(t.totalCourts) || 0;
+    const n = Math.max(courtNames.length, totalFromNum, 1);
+    const prev = map.get(name);
+    const useNames = courtNames.length >= (prev?.bestNames.length ?? 0) ? courtNames : prev?.bestNames ?? courtNames;
+    map.set(name, {
+      maxN: Math.max(prev?.maxN ?? 0, n),
+      bestNames: useNames,
+    });
+  }
+
+  return Array.from(map.entries())
+    .map(([name, v]) => {
+      const courts: { key: string; label: string; displayNum: number }[] = [];
+      for (let i = 0; i < v.maxN; i++) {
+        const displayNum = i + 1;
+        const raw = v.bestNames[i]?.trim();
+        let label: string;
+        if (raw) {
+          label = /^pista\s*\d/i.test(raw) ? raw : `Pista ${displayNum} — ${raw}`;
+        } else {
+          label = `Pista ${displayNum}`;
+        }
+        courts.push({ key: `cancha_${displayNum}`, label, displayNum });
+      }
+      return { name, courts };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
 const mb = (bytes?: number | null) => {
   if (!bytes || Number(bytes) <= 0) return '—';
@@ -47,15 +75,18 @@ export default function AdminPublicidadPage() {
   const [tiraList, setTiraList] = useState<TiraInformativa[]>([]);
   const [nuevoTicker, setNuevoTicker] = useState('');
 
-  const [venues, setVenues] = useState<VenueOption[]>([]);
+  const [venues, setVenues] = useState<VenueWithCourts[]>([]);
   const [selectedVenue, setSelectedVenue] = useState<string>('');
-  const [assignments, setAssignments] = useState<CourtAssignmentRow[]>([]);
+  const [assignments, setAssignments] = useState<CourtPlaylistRow[]>([]);
 
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignCourtId, setAssignCourtId] = useState<string>('');
   const [assignMediaId, setAssignMediaId] = useState<string>('');
   const [assignOrden, setAssignOrden] = useState<number>(1);
   const [assignDuracion, setAssignDuracion] = useState<number>(10);
+  const [librarySearch, setLibrarySearch] = useState('');
+  /** last_seen ISO por cancha_id (heartbeat desde pizarra) */
+  const [canchasHealth, setCanchasHealth] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     if (!authLoading && !isAdmin) router.push('/');
@@ -73,38 +104,52 @@ export default function AdminPublicidadPage() {
     setTiraList((data as TiraInformativa[]) || []);
   }, [supabase]);
 
-  const fetchVenues = useCallback(async () => {
+  const loadVenuesAndCourts = useCallback(async () => {
     const all = await dataService.listAllTournaments();
-    const map = new Map<string, number>();
-    (all || []).forEach((t: any) => {
-      const v = String(t?.complexName || '').trim();
-      if (!v) return;
-      const c1 = Number(t?.totalCourts || 0) || 0;
-      const c2 = Array.isArray(t?.courtNames) ? t.courtNames.length : 0;
-      const courts = Math.max(c1, c2, 1);
-      map.set(v, Math.max(map.get(v) || 0, courts));
-    });
-    const result = Array.from(map.entries())
-      .map(([name, courts]) => ({ name, courts }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-    setVenues(result);
-    if (!selectedVenue && result.length > 0) setSelectedVenue(result[0].name);
+    const list = buildVenuesAndCourtsFromTournaments(all || []);
+    setVenues(list);
+    if (!selectedVenue && list.length > 0) setSelectedVenue(list[0].name);
   }, [selectedVenue]);
 
-  const fetchAssignments = useCallback(async (venue: string) => {
-    if (!venue) {
+  const selectedVenueCourts = useMemo(() => {
+    return venues.find((v) => v.name === selectedVenue)?.courts ?? [];
+  }, [venues, selectedVenue]);
+
+  const courtKeySet = useMemo(() => new Set(selectedVenueCourts.map((c) => c.key)), [selectedVenueCourts]);
+
+  const fetchAssignments = useCallback(async () => {
+    if (!selectedVenue || selectedVenueCourts.length === 0) {
       setAssignments([]);
       return;
     }
-    const { data, error } = await supabase
+    const keys = selectedVenueCourts.map((c) => c.key);
+
+    const q = supabase
       .from('cancha_publicidad')
-      .select('id, venue_name, cancha_id, media_id, orden, duracion_segundos, media_content(*)')
-      .eq('venue_name', venue)
-      .order('cancha_id', { ascending: true })
+      .select('id, cancha_id, media_id, orden, duracion_segundos, venue_name, media_content(*)')
+      .in('cancha_id', keys)
+      .eq('venue_name', selectedVenue)
       .order('orden', { ascending: true });
+
+    const r1 = await q;
+    let data = r1.data as CourtPlaylistRow[] | null;
+    let error = r1.error;
+
+    if (error) {
+      const r2 = await supabase
+        .from('cancha_publicidad')
+        .select('id, cancha_id, media_id, orden, duracion_segundos, media_content(*)')
+        .in('cancha_id', keys)
+        .order('orden', { ascending: true });
+      data = r2.data as CourtPlaylistRow[] | null;
+      error = r2.error;
+    }
+
     if (error) throw error;
-    setAssignments((data as CourtAssignmentRow[]) || []);
-  }, [supabase]);
+    const rows = data || [];
+    const filtered = rows.filter((r) => courtKeySet.has(r.cancha_id));
+    setAssignments(filtered);
+  }, [selectedVenue, selectedVenueCourts, supabase, courtKeySet]);
 
   useEffect(() => {
     let mounted = true;
@@ -112,7 +157,7 @@ export default function AdminPublicidadPage() {
       try {
         setLoading(true);
         setError(null);
-        await Promise.all([fetchMedia(), fetchTicker(), fetchVenues()]);
+        await Promise.all([fetchMedia(), fetchTicker(), loadVenuesAndCourts()]);
       } catch (e: any) {
         if (mounted) setError(e?.message || 'No se pudo cargar publicidad.');
       } finally {
@@ -120,21 +165,47 @@ export default function AdminPublicidadPage() {
       }
     })();
     return () => { mounted = false; };
-  }, [fetchMedia, fetchTicker, fetchVenues]);
+  }, [fetchMedia, fetchTicker, loadVenuesAndCourts]);
 
   useEffect(() => {
-    fetchAssignments(selectedVenue).catch((e: any) => setError(e?.message || 'No se pudo cargar asignaciones.'));
-  }, [selectedVenue, fetchAssignments]);
+    fetchAssignments().catch((e: any) => setError(e?.message || 'No se pudo cargar asignaciones.'));
+  }, [fetchAssignments]);
+
+  useEffect(() => {
+    const keys = selectedVenueCourts.map((c) => c.key);
+    if (keys.length === 0) {
+      setCanchasHealth({});
+      return;
+    }
+    const load = async () => {
+      const { data, error } = await supabase.from('canchas').select('cancha_id, last_seen').in('cancha_id', keys);
+      if (error) return;
+      const m: Record<string, string | null> = {};
+      keys.forEach((k) => {
+        m[k] = null;
+      });
+      (data || []).forEach((r: { cancha_id: string; last_seen: string | null }) => {
+        m[r.cancha_id] = r.last_seen;
+      });
+      setCanchasHealth(m);
+    };
+    void load();
+    const id = window.setInterval(load, 15_000);
+    return () => window.clearInterval(id);
+  }, [selectedVenueCourts, supabase]);
 
   const videos = useMemo(() => mediaList.filter((m) => String(m.tipo).includes('video')), [mediaList]);
   const carrusel = useMemo(() => mediaList.filter((m) => m.tipo === 'imagen'), [mediaList]);
   const assignableMedia = useMemo(() => [...videos, ...carrusel], [videos, carrusel]);
 
-  const selectedVenueCourts = useMemo(() => {
-    const v = venues.find((x) => x.name === selectedVenue);
-    const count = v?.courts || 0;
-    return Array.from({ length: count }, (_, i) => `cancha_${i + 1}`);
-  }, [venues, selectedVenue]);
+  const filteredLibrary = useMemo(() => {
+    const s = librarySearch.trim().toLowerCase();
+    if (!s) return assignableMedia;
+    return assignableMedia.filter((m) => {
+      const n = (m.nombre_sponsor || m.nombre || '').toLowerCase();
+      return n.includes(s);
+    });
+  }, [assignableMedia, librarySearch]);
 
   const uploadFiles = async (files: File[]) => {
     if (!files.length) return;
@@ -177,11 +248,11 @@ export default function AdminPublicidadPage() {
   });
 
   const deleteMedia = async (id: string) => {
-    if (!confirm('Eliminar este medio?')) return;
+    if (!confirm('¿Eliminar este medio?')) return;
     const { error } = await supabase.from('media_content').delete().eq('id', id);
     if (error) return setError(error.message);
     await fetchMedia();
-    await fetchAssignments(selectedVenue);
+    await fetchAssignments();
   };
 
   const download = async (url: string, name: string) => {
@@ -226,27 +297,34 @@ export default function AdminPublicidadPage() {
     setAssignMediaId(assignableMedia[0]?.id || '');
     setAssignOrden(1);
     setAssignDuracion(10);
+    setLibrarySearch('');
     setAssignModalOpen(true);
   };
 
   const saveAssignment = async () => {
     if (!selectedVenue || !assignCourtId || !assignMediaId) return;
-    const { error } = await supabase.from('cancha_publicidad').insert({
-      venue_name: selectedVenue,
+    const row: Record<string, unknown> = {
       cancha_id: assignCourtId,
       media_id: assignMediaId,
       orden: Number(assignOrden) || 1,
       duracion_segundos: Number(assignDuracion) || 10,
-    });
+    };
+    row.venue_name = selectedVenue;
+
+    let { error } = await supabase.from('cancha_publicidad').insert(row);
+    if (error && error.message?.toLowerCase().includes('venue')) {
+      delete row.venue_name;
+      ({ error } = await supabase.from('cancha_publicidad').insert(row));
+    }
     if (error) return setError(error.message);
     setAssignModalOpen(false);
-    await fetchAssignments(selectedVenue);
+    await fetchAssignments();
   };
 
   const removeAssignment = async (id: string) => {
     const { error } = await supabase.from('cancha_publicidad').delete().eq('id', id);
     if (error) return setError(error.message);
-    await fetchAssignments(selectedVenue);
+    await fetchAssignments();
   };
 
   const renderMediaTable = (title: string, items: MediaContent[]) => (
@@ -268,9 +346,9 @@ export default function AdminPublicidadPage() {
                 <td className="px-3 py-2 text-xs text-white/70">{mb((m as any).file_size_bytes)}</td>
                 <td className="px-3 py-2">
                   <div className="flex items-center justify-end gap-2">
-                    <button onClick={() => setPreviewUrl(m.url)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10" title="Preview"><Eye size={14} /></button>
-                    <button onClick={() => download(m.url, m.nombre || m.nombre_sponsor || 'media')} className="p-2 rounded-lg bg-white/5 hover:bg-white/10" title="Download"><Download size={14} /></button>
-                    <button onClick={() => deleteMedia(m.id)} className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20" title="Delete"><Trash2 size={14} /></button>
+                    <button type="button" onClick={() => setPreviewUrl(m.url)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10" title="Preview"><Eye size={14} /></button>
+                    <button type="button" onClick={() => download(m.url, m.nombre || m.nombre_sponsor || 'media')} className="p-2 rounded-lg bg-white/5 hover:bg-white/10" title="Download"><Download size={14} /></button>
+                    <button type="button" onClick={() => deleteMedia(m.id)} className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20" title="Delete"><Trash2 size={14} /></button>
                   </div>
                 </td>
               </tr>
@@ -296,7 +374,7 @@ export default function AdminPublicidadPage() {
         <div className="max-w-7xl mx-auto space-y-8">
           <header>
             <h1 className="text-3xl font-black uppercase italic">Admin Publicidad</h1>
-            <p className="text-xs text-white/60 uppercase tracking-wider">Control maestro por sede y cancha</p>
+            <p className="text-xs text-white/60 uppercase tracking-wider">Playlist independiente por sede y cancha</p>
           </header>
 
           {error && (
@@ -309,11 +387,11 @@ export default function AdminPublicidadPage() {
             <div className="flex flex-wrap items-center gap-3">
               <div {...drop.getRootProps()} className="cursor-pointer">
                 <input {...drop.getInputProps()} />
-                <button className="px-4 py-2 rounded-xl bg-padel-primary text-black font-black text-xs uppercase tracking-wider flex items-center gap-2">
+                <button type="button" className="px-4 py-2 rounded-xl bg-padel-primary text-black font-black text-xs uppercase tracking-wider flex items-center gap-2">
                   {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} Cargar Media
                 </button>
               </div>
-              <p className="text-xs text-white/50">Sube video o imagen. Se guarda el tamaño para mostrar en MB.</p>
+              <p className="text-xs text-white/50">Videos e imágenes para la biblioteca y las playlists.</p>
             </div>
           </section>
 
@@ -329,7 +407,7 @@ export default function AdminPublicidadPage() {
                 placeholder="Nuevo mensaje para la tira"
                 className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm"
               />
-              <button onClick={addTicker} className="px-4 py-2 rounded-xl bg-padel-primary text-black font-black text-xs uppercase">Agregar</button>
+              <button type="button" onClick={addTicker} className="px-4 py-2 rounded-xl bg-padel-primary text-black font-black text-xs uppercase">Agregar</button>
             </div>
             <div className="overflow-auto rounded-2xl border border-white/10">
               <table className="w-full text-left">
@@ -346,7 +424,7 @@ export default function AdminPublicidadPage() {
                       <td className="px-3 py-2 text-sm font-bold text-white/90">{t.mensaje}</td>
                       <td className="px-3 py-2 text-xs text-white/70">—</td>
                       <td className="px-3 py-2 text-right">
-                        <button onClick={() => deleteTicker(t.id)} className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={14} /></button>
+                        <button type="button" onClick={() => deleteTicker(t.id)} className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><Trash2 size={14} /></button>
                       </td>
                     </tr>
                   ))}
@@ -359,7 +437,10 @@ export default function AdminPublicidadPage() {
           </section>
 
           <section className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 space-y-4">
-            <h2 className="text-lg md:text-xl font-black uppercase tracking-wider">Asignación por Sede</h2>
+            <h2 className="text-lg md:text-xl font-black uppercase tracking-wider">Playlists por sede</h2>
+            <p className="text-xs text-white/50">
+              Sedes y nombres de pista se obtienen de los torneos. Al elegir una sede solo ves las canchas de ese club.
+            </p>
             <div className="max-w-md">
               <label className="text-[10px] uppercase text-white/60">Sede</label>
               <select
@@ -367,72 +448,28 @@ export default function AdminPublicidadPage() {
                 onChange={(e) => setSelectedVenue(e.target.value)}
                 className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm"
               >
-                {venues.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)}
+                {venues.length === 0 ? (
+                  <option value="">— Sin sedes en torneos —</option>
+                ) : (
+                  venues.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)
+                )}
               </select>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {selectedVenueCourts.map((courtId, idx) => {
-                const rows = assignments.filter((a) => a.cancha_id === courtId);
+              {selectedVenueCourts.map((court) => {
+                const rows = assignments.filter((a) => a.cancha_id === court.key);
                 return (
-                  <div key={courtId} className="rounded-2xl border border-white/10 bg-black/30 p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-black uppercase">Pista {idx + 1}</h3>
-                      <span className="text-[10px] text-white/50">{courtId}</span>
-                    </div>
-
-                    <div className="relative h-48 overflow-hidden rounded-xl border border-white/10 bg-black">
-                      <iframe
-                        src={`/display/court/${idx + 1}`}
-                        className="absolute top-0 left-0 border-0 pointer-events-none"
-                        style={{
-                          transform: 'scale(0.25)',
-                          transformOrigin: 'top left',
-                          width: '400%',
-                          height: '400%',
-                        }}
-                        title={`preview-${courtId}`}
-                      />
-                    </div>
-
-                    <div className="mt-3">
-                      <p className="text-[10px] uppercase text-white/60 mb-2">Playlist</p>
-                      <div className="overflow-auto rounded-xl border border-white/10">
-                        <table className="w-full text-left">
-                          <thead className="bg-black/40">
-                            <tr>
-                              <th className="px-2 py-1 text-[10px] text-white/60">Media</th>
-                              <th className="px-2 py-1 text-[10px] text-white/60">Ord</th>
-                              <th className="px-2 py-1 text-[10px] text-white/60">Seg</th>
-                              <th className="px-2 py-1 text-[10px] text-white/60"></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rows.map((r) => (
-                              <tr key={r.id} className="border-t border-white/10">
-                                <td className="px-2 py-1 text-[11px] text-white/90 truncate max-w-[140px]">{r.media_content?.nombre_sponsor || r.media_content?.nombre || 'Media'}</td>
-                                <td className="px-2 py-1 text-[11px] text-white/70">{r.orden}</td>
-                                <td className="px-2 py-1 text-[11px] text-white/70">{r.duracion_segundos}s</td>
-                                <td className="px-2 py-1 text-right">
-                                  <button onClick={() => removeAssignment(r.id)} className="p-1 rounded bg-red-500/10 text-red-400"><X size={12} /></button>
-                                </td>
-                              </tr>
-                            ))}
-                            {rows.length === 0 && (
-                              <tr><td className="px-2 py-3 text-[11px] text-white/40 text-center" colSpan={4}>Sin medios asignados</td></tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => openAssignModal(courtId)}
-                      className="mt-3 w-full rounded-xl bg-padel-primary text-black py-2 text-xs font-black uppercase flex items-center justify-center gap-2"
-                    >
-                      <Plus size={14} /> Asignar Nuevo
-                    </button>
-                  </div>
+                  <CourtCard
+                    key={`${selectedVenue}-${court.key}`}
+                    courtKey={court.key}
+                    displayCourtNum={court.displayNum}
+                    title={court.label}
+                    rows={rows}
+                    lastSeenIso={canchasHealth[court.key] ?? null}
+                    onAddToPlaylist={() => openAssignModal(court.key)}
+                    onRemoveRow={removeAssignment}
+                  />
                 );
               })}
             </div>
@@ -442,30 +479,56 @@ export default function AdminPublicidadPage() {
 
       {assignModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-[#111] border border-white/10 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-black uppercase">Asignar a {assignCourtId}</h3>
-              <button onClick={() => setAssignModalOpen(false)} className="p-2 rounded-lg bg-white/5"><X size={14} /></button>
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#111] border border-white/10 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-black uppercase">Añadir a playlist — {assignCourtId}</h3>
+              <button type="button" onClick={() => setAssignModalOpen(false)} className="p-2 rounded-lg bg-white/5 shrink-0"><X size={14} /></button>
             </div>
+
             <div>
-              <label className="text-[10px] uppercase text-white/60">Media</label>
-              <select value={assignMediaId} onChange={(e) => setAssignMediaId(e.target.value)} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm">
-                {assignableMedia.map((m) => (
-                  <option key={m.id} value={m.id}>{m.nombre_sponsor || m.nombre || m.id}</option>
-                ))}
-              </select>
+              <label className="text-[10px] uppercase text-white/60">Biblioteca de medios</label>
+              <div className="relative mt-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                <input
+                  value={librarySearch}
+                  onChange={(e) => setLibrarySearch(e.target.value)}
+                  placeholder="Buscar por nombre..."
+                  className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-3 py-2 text-sm"
+                />
+              </div>
             </div>
+
+            <div className="max-h-48 overflow-y-auto rounded-xl border border-white/10 divide-y divide-white/10">
+              {filteredLibrary.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setAssignMediaId(m.id)}
+                  className={`w-full text-left px-3 py-2 text-xs font-bold transition-colors ${assignMediaId === m.id ? 'bg-padel-primary/20 text-padel-primary' : 'hover:bg-white/5 text-white/90'}`}
+                >
+                  {m.nombre_sponsor || m.nombre || m.id}
+                  <span className="block text-[10px] font-normal text-white/40">{String(m.tipo)}</span>
+                </button>
+              ))}
+              {filteredLibrary.length === 0 && (
+                <p className="px-3 py-6 text-center text-white/40 text-xs">No hay medios que coincidan</p>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-[10px] uppercase text-white/60">Orden</label>
                 <input type="number" min={1} value={assignOrden} onChange={(e) => setAssignOrden(Number(e.target.value))} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="text-[10px] uppercase text-white/60">Duración (s)</label>
+                <label className="text-[10px] uppercase text-white/60">Tiempo en pantalla (s)</label>
                 <input type="number" min={1} value={assignDuracion} onChange={(e) => setAssignDuracion(Number(e.target.value))} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm" />
               </div>
             </div>
-            <button onClick={saveAssignment} className="w-full rounded-xl bg-padel-primary text-black py-2 text-xs font-black uppercase">Guardar Asignación</button>
+
+            <button type="button" onClick={saveAssignment} className="w-full rounded-xl bg-padel-primary text-black py-2.5 text-xs font-black uppercase flex items-center justify-center gap-2">
+              <Plus size={14} /> Guardar en playlist
+            </button>
           </div>
         </div>
       )}
@@ -473,7 +536,7 @@ export default function AdminPublicidadPage() {
       {previewUrl && (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
           <div className="w-full max-w-4xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/10 relative">
-            <button onClick={() => setPreviewUrl(null)} className="absolute top-3 right-3 z-10 p-2 rounded-full bg-black/50"><X size={16} /></button>
+            <button type="button" onClick={() => setPreviewUrl(null)} className="absolute top-3 right-3 z-10 p-2 rounded-full bg-black/50"><X size={16} /></button>
             {/\.(mp4|webm|mov|m4v)$/i.test(previewUrl) ? (
               <video src={previewUrl} controls autoPlay className="w-full h-full" />
             ) : (
@@ -485,4 +548,3 @@ export default function AdminPublicidadPage() {
     </div>
   );
 }
-

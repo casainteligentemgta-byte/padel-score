@@ -21,10 +21,7 @@ export default function TVCourtDisplayPage() {
     const [activeMatch, setActiveMatch] = useState<any>(null);
     const [tournament, setTournament] = useState<any>(null);
     const [tickerMessages, setTickerMessages] = useState<any[]>([]);
-    const [pantalla, setPantalla] = useState<any>(null);
-    const [displayConfig, setDisplayConfig] = useState<any>(null);
-
-    const [allMedia, setAllMedia] = useState<any[]>([]);
+    const [courtPlaylist, setCourtPlaylist] = useState<any[]>([]);
 
     useEffect(() => {
         // 1. Firebase Live Match Subscription
@@ -92,26 +89,26 @@ export default function TVCourtDisplayPage() {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'tira_informativa' }, () => fetchTicker())
             .subscribe();
 
-        // 3. Supabase Pantalla & Estado Subscription
+        // 3. Supabase Playlist por cancha (cancha_publicidad)
         const initDisplay = async () => {
-            const pantallas = await dataService.getPantallas();
-            const p = pantallas.find((s: any) => s.nombre === `Cancha ${courtId}`);
-            if (p) {
-                setPantalla(p);
-                const estado = await dataService.getPantallaEstado(p.id);
-                setDisplayConfig(estado);
+            if (!supabase) return;
+            const canchaKey = `cancha_${courtId}`;
+            const { data, error } = await supabase
+                .from('cancha_publicidad')
+                .select('orden, duracion_segundos, media_content(*)')
+                .eq('cancha_id', canchaKey)
+                .order('orden', { ascending: true });
+            if (error) {
+                console.warn('[TV Display] cancha_publicidad:', error.message);
+                setCourtPlaylist([]);
+                return;
             }
-
-            // Fetch all active media as fallback
-            if (supabase) {
-                const { data: media } = await supabase.from('media_content').select('*').eq('activa', true);
-                setAllMedia(media || []);
-            }
+            setCourtPlaylist((data as any[]) || []);
         };
         initDisplay();
 
         const displayChannel = supabase?.channel('display-changes-v2')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'display_estado' }, () => initDisplay())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'cancha_publicidad', filter: `cancha_id=eq.cancha_${courtId}` }, () => initDisplay())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'media_content' }, () => initDisplay())
             .subscribe();
 
@@ -131,17 +128,18 @@ export default function TVCourtDisplayPage() {
         );
     }
 
-    // Prepare playlists with fallback
-    const assignedVideos = displayConfig?.filter((c: any) => c.slot === 'video').map((c: any) => c.media_content?.url).filter(Boolean) || [];
-    const assignedCarousel = displayConfig?.filter((c: any) => c.slot === 'carousel').map((c: any) => c.media_content?.url).filter(Boolean) || [];
+    // Playlist final desde cancha_publicidad ordenada por orden.
+    const finalVideos = courtPlaylist
+        .map((r: any) => r?.media_content)
+        .filter((m: any) => m?.tipo && String(m.tipo).includes('video'))
+        .map((m: any) => m.url)
+        .filter(Boolean);
 
-    const finalVideos = assignedVideos.length > 0
-        ? assignedVideos
-        : allMedia.filter(m => m.tipo.includes('video')).map(m => m.url);
-
-    const finalCarousel = assignedCarousel.length > 0
-        ? assignedCarousel
-        : allMedia.filter(m => m.tipo === 'imagen').map(m => m.url);
+    const finalCarousel = courtPlaylist
+        .map((r: any) => r?.media_content)
+        .filter((m: any) => m?.tipo === 'imagen')
+        .map((m: any) => m.url)
+        .filter(Boolean);
 
     return (
         <div className="min-h-screen bg-black overflow-hidden flex items-center justify-center p-8">

@@ -234,12 +234,18 @@ export const dataService = {
     },
 
     async getMatches(tournamentId: string) {
-        const { data, error } = await supabase()
-            .from('tournament_matches')
-            .select('*')
-            .eq('tournament_id', tournamentId);
-        throwIfError(error);
-        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+        try {
+            const { data, error } = await supabase()
+                .from('tournament_matches')
+                .select('*')
+                .eq('tournament_id', tournamentId);
+            throwIfError(error);
+            return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+        } catch (e) {
+            // Evita romper la UI cuando hay fallas transitorias de red/Supabase.
+            console.warn('[dataService] getMatches fallback (fetch error):', e);
+            return [];
+        }
     },
 
     async updateMatch(tournamentId: string, matchId: string, data: any) {

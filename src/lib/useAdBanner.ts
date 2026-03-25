@@ -2,12 +2,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { selectCanchaPublicidadPlaylist } from '@/lib/canchaPublicidadQuery';
 
 export type AdMode = 'fija' | 'programada' | 'carrusel';
 
 export interface AdState {
   mode: AdMode;
+  /** URL actual (imagen o video); compatible con pantallas que solo usan currentImageUrl */
   currentImageUrl: string | null;
+  currentMediaUrl: string | null;
+  currentMediaKind: 'image' | 'video' | null;
   isVisible: boolean;
 }
 
@@ -15,9 +19,26 @@ type PlaylistItem = {
   url: string;
   duracion_segundos: number;
   orden: number;
+  kind: 'image' | 'video';
 };
 
-export function useAdBanner(canchaId?: string): AdState {
+function rowMedia(row: any): { url: string; kind: 'image' | 'video' } | null {
+  const m = row?.media_content ?? row?.publicidad;
+  if (!m?.url) return null;
+  const tipo = String(m.tipo || '');
+  const isVid =
+    tipo.includes('video') ||
+    tipo === 'video_url' ||
+    tipo === 'video_file' ||
+    /\.(mp4|webm|mov|m4v)(\?|$)/i.test(String(m.url));
+  return { url: String(m.url), kind: isVid ? 'video' : 'image' };
+}
+
+/**
+ * Playlist por cancha: tabla `cancha_publicidad` con embed `media_content` o `publicidad`,
+ * `.eq('cancha_id', canchaId).order('orden', { ascending: true })`.
+ */
+export function useAdBanner(canchaId?: string | null): AdState {
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [playlist, setPlaylist] = useState<PlaylistItem[]>([]);
   const [index, setIndex] = useState(0);
@@ -32,26 +53,26 @@ export function useAdBanner(canchaId?: string): AdState {
     let mounted = true;
 
     const load = async () => {
-      const { data, error } = await supabase
-        .from('cancha_publicidad')
-        .select('orden, duracion_segundos, media_content(url)')
-        .eq('cancha_id', canchaId)
-        .order('orden', { ascending: true });
-
+      const { data, error } = await selectCanchaPublicidadPlaylist(supabase, canchaId);
       if (!mounted) return;
-      if (error) {
+      if (error || !data) {
         setPlaylist([]);
         setIndex(0);
         return;
       }
 
-      const items: PlaylistItem[] = ((data as any[]) || [])
-        .map((r) => ({
-          url: String(r?.media_content?.url || ''),
-          duracion_segundos: Number(r?.duracion_segundos || 10),
-          orden: Number(r?.orden || 0),
-        }))
-        .filter((x) => !!x.url);
+      const items: PlaylistItem[] = (data as any[])
+        .map((r) => {
+          const m = rowMedia(r);
+          if (!m) return null;
+          return {
+            url: m.url,
+            kind: m.kind,
+            duracion_segundos: Math.max(1, Number(r.duracion_segundos ?? 10)),
+            orden: Number(r.orden ?? 0),
+          };
+        })
+        .filter(Boolean) as PlaylistItem[];
 
       setPlaylist(items);
       setIndex(0);
@@ -80,10 +101,14 @@ export function useAdBanner(canchaId?: string): AdState {
   }, [playlist, index]);
 
   const current = playlist[index];
+  const url = current?.url || null;
+  const kind = current?.kind || null;
+
   return {
     mode: playlist.length > 1 ? 'carrusel' : 'fija',
-    currentImageUrl: current?.url || null,
-    isVisible: Boolean(current?.url),
+    currentImageUrl: url,
+    currentMediaUrl: url,
+    currentMediaKind: kind,
+    isVisible: Boolean(url),
   };
 }
-
