@@ -634,6 +634,38 @@ export default function MarkerControlPage() {
         return true;
     };
 
+    const persistFinishedMatchFromMarker = async (params: {
+        sets: { local: number; visitante: number };
+        historicoSets: Array<{ local: number; visitante: number }>;
+        finalGames?: { local: number; visitante: number } | null;
+        superTiebreakScore?: { t1: number; t2: number } | null;
+    }) => {
+        const tid = canchaData?.torneo_id;
+        const pid = canchaData?.partido_id;
+        if (!tid || !pid || String(pid).startsWith('live_')) return;
+        try {
+            const totalSets = (params.sets.local || 0) + (params.sets.visitante || 0);
+            const normalSetCount = params.superTiebreakScore ? Math.max(totalSets - 1, 0) : totalSets;
+            const setScores = (params.historicoSets || [])
+                .slice(0, normalSetCount)
+                .map((s) => ({ t1: Number(s?.local ?? 0) || 0, t2: Number(s?.visitante ?? 0) || 0 }));
+            await dataService.updateMatch(String(tid), String(pid), {
+                status: 'FINISHED',
+                finishedAt: new Date().toISOString(),
+                sets: { t1: params.sets.local || 0, t2: params.sets.visitante || 0 },
+                games: {
+                    t1: params.finalGames?.local ?? 0,
+                    t2: params.finalGames?.visitante ?? 0,
+                },
+                points: { t1: '0', t2: '0' },
+                setScores,
+                ...(params.superTiebreakScore ? { superTiebreakScore: params.superTiebreakScore } : {}),
+            });
+        } catch (e) {
+            console.warn('[Marker] Persistir FINISHED en match:', e);
+        }
+    };
+
     /** Cierra un set por juegos (no TB): actualiza sets, historial, STB si 1-1, o fin de partido. */
     const applySetWonByGames = async (
         m: any,
@@ -665,6 +697,11 @@ export default function MarkerControlPage() {
                 super_tiebreak: false,
                 historico_sets: newHistorico,
                 cronometro: freezeCronometro(m.cronometro),
+            });
+            await persistFinishedMatchFromMarker({
+                sets: newSets,
+                historicoSets: newHistorico,
+                finalGames: newGames,
             });
             alert(
                 `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${newSets.local}-${newSets.visitante})`
@@ -808,6 +845,11 @@ export default function MarkerControlPage() {
                             historico_sets: [...(marcador.historico_sets || []), { local: finalLocal, visitante: finalVisit }],
                             cronometro: freezeCronometro(marcador.cronometro),
                         });
+                        await persistFinishedMatchFromMarker({
+                            sets: newSets,
+                            historicoSets: [...(marcador.historico_sets || []), { local: finalLocal, visitante: finalVisit }],
+                            superTiebreakScore: { t1: finalLocal, t2: finalVisit },
+                        });
                         alert(
                             `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${newSets.local}-${newSets.visitante})`
                         );
@@ -844,6 +886,11 @@ export default function MarkerControlPage() {
                                 super_tiebreak: false,
                                 historico_sets: newHistorico,
                                 cronometro: freezeCronometro(marcador.cronometro),
+                            });
+                            await persistFinishedMatchFromMarker({
+                                sets: newSets,
+                                historicoSets: newHistorico,
+                                finalGames: hist,
                             });
                             alert(
                                 `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${newSets.local}-${newSets.visitante})`
@@ -945,6 +992,10 @@ export default function MarkerControlPage() {
                 ...(marcador.sets || { local: 0, visitante: 0 }),
                 [equipo]: nuevo,
             } as { local: number; visitante: number };
+            await persistFinishedMatchFromMarker({
+                sets: setsFinal,
+                historicoSets: marcador.historico_sets || [],
+            });
             alert(
                 `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${setsFinal.local}-${setsFinal.visitante})`
             );

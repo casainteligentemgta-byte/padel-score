@@ -43,7 +43,6 @@ import { useRouteSegment } from '@/lib/useRouteSegment';
 import GroupPhaseView from '@/components/GroupPhaseView';
 import TournamentPhaseManager from '@/components/TournamentPhaseManager';
 import { TournamentGridView, type Group, type Team } from '@/components/TournamentGridView';
-import Sidebar from '@/components/Sidebar';
 import { BackButton } from '@/components/BackButton';
 import AutoShrinkName from '@/components/AutoShrinkName';
 import jsPDF from 'jspdf';
@@ -1632,7 +1631,6 @@ export default function TournamentDashboard() {
 
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit">
-            <Sidebar />
 
             {/* Pizarra: cabecera con título y acciones */}
             <header className="sticky top-0 z-[60] bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5">
@@ -1897,11 +1895,17 @@ export default function TournamentDashboard() {
 
                                                             {/* ── Franja superior: Nº partido · Hora · Pista · Categoría · Género ─────────────────── */}
                                                             <div className={`px-4 pt-3 pb-2.5 border-b border-white/[0.10] flex flex-col gap-2 ${isLive ? 'bg-[#39ff14]/15' : isPorComenzar ? 'bg-[#ff9500]/15' : isEnCola ? 'bg-red-500/10' : 'bg-white/[0.07]'}`}>
-                                                                <div className="flex items-center justify-between gap-4 flex-wrap">
-                                                                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                                                <div className="flex items-center justify-between gap-3 flex-wrap">
+                                                                    <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
                                                                         {matchNumber >= 1 && (
                                                                             <>
-                                                                                <span className="text-[11px] font-black uppercase tracking-widest text-gray-400 flex-shrink-0">Partido {matchNumber}</span>
+                                                                                <div className="min-w-0 max-w-[140px]">
+                                                                                    <AutoShrinkName
+                                                                                        name={`Partido ${matchNumber}`}
+                                                                                        style={{ fontSize: '11px' }}
+                                                                                        className="font-black uppercase tracking-widest text-gray-400"
+                                                                                    />
+                                                                                </div>
                                                                                 <span className="text-white/30 flex-shrink-0">·</span>
                                                                             </>
                                                                         )}
@@ -1925,23 +1929,35 @@ export default function TournamentDashboard() {
                                                                             );
                                                                         })()}
                                                                         <span className="text-white/30 flex-shrink-0">·</span>
-                                                                        <span className={`text-[11px] font-black uppercase tracking-widest italic flex-shrink-0 ${match.status === MatchStatus.LIVE ? 'text-padel-primary' : 'text-gray-500'}`}>
-                                                                            {match.courtName ?? (match.court != null ? `Pista ${match.court}` : (match.courtIndex != null ? `Pista ${match.courtIndex + 1}` : 'Pista –'))}
-                                                                        </span>
+                                                                        <div className="min-w-0 max-w-[110px]">
+                                                                            <AutoShrinkName
+                                                                                name={match.courtName ?? (match.court != null ? `Pista ${match.court}` : (match.courtIndex != null ? `Pista ${match.courtIndex + 1}` : 'Pista –'))}
+                                                                                style={{ fontSize: '11px' }}
+                                                                                className={`font-black uppercase tracking-widest italic ${match.status === MatchStatus.LIVE ? 'text-padel-primary' : 'text-gray-500'}`}
+                                                                            />
+                                                                        </div>
                                                                         {tournament?.category && (
                                                                             <>
                                                                                 <span className="text-white/30 flex-shrink-0">·</span>
-                                                                                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 bg-white/[0.10] border border-white/[0.15] px-1.5 py-0.5 rounded flex-shrink-0">
-                                                                                    {formatCat(tournament.category)}
-                                                                                </span>
+                                                                                <div className="min-w-0 max-w-[120px] bg-white/[0.10] border border-white/[0.15] px-1.5 py-0.5 rounded">
+                                                                                    <AutoShrinkName
+                                                                                        name={formatCat(tournament.category)}
+                                                                                        style={{ fontSize: '10px' }}
+                                                                                        className="font-black uppercase tracking-widest text-gray-400"
+                                                                                    />
+                                                                                </div>
                                                                             </>
                                                                         )}
                                                                         {tournament?.gender && (
                                                                             <>
                                                                                 <span className="text-white/30 flex-shrink-0">·</span>
-                                                                                <span className={`text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border flex-shrink-0 ${tournament.gender === 'MALE' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' : tournament.gender === 'FEMALE' ? 'text-pink-400 bg-pink-500/10 border-pink-500/20' : 'text-purple-400 bg-purple-500/10 border-purple-500/20'}`}>
-                                                                                    {tournament.gender === 'MALE' ? '♂ Masc' : tournament.gender === 'FEMALE' ? '♀ Fem' : '⚥ Mix'}
-                                                                                </span>
+                                                                                <div className={`min-w-0 max-w-[95px] px-1.5 py-0.5 rounded border ${tournament.gender === 'MALE' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' : tournament.gender === 'FEMALE' ? 'text-pink-400 bg-pink-500/10 border-pink-500/20' : 'text-purple-400 bg-purple-500/10 border-purple-500/20'}`}>
+                                                                                    <AutoShrinkName
+                                                                                        name={tournament.gender === 'MALE' ? '♂ Masc' : tournament.gender === 'FEMALE' ? '♀ Fem' : '⚥ Mix'}
+                                                                                        style={{ fontSize: '10px' }}
+                                                                                        className="font-black uppercase tracking-widest"
+                                                                                    />
+                                                                                </div>
                                                                             </>
                                                                         )}
                                                                     </div>
@@ -2027,6 +2043,7 @@ export default function TournamentDashboard() {
                                                                         const ROW_H = 'h-8';
                                                                         const COL_W_SCORE = 'w-8';
                                                                         const COL_W_POINTS = 'w-9';
+                                                                        const showPgsCols = activeTab !== 'Por Comenzar';
 
                                                                         const ServingBall = () => (
                                                                             <motion.div
@@ -2038,23 +2055,25 @@ export default function TournamentDashboard() {
 
                                                                         return (
                                                                             <div className="flex flex-col shrink-0">
-                                                                                <div className="flex h-4 border-b border-white/[0.12] bg-white/[0.05] shrink-0">
-                                                                                    <div className="flex-1" />
-                                                                                    <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center`}>
-                                                                                        <span className="text-[8px] font-black uppercase tracking-widest text-white/25">P</span>
-                                                                                    </div>
-                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
-                                                                                        <span className="text-[8px] font-black uppercase tracking-widest text-white/60">G</span>
-                                                                                    </div>
-                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
-                                                                                        <span className="text-[8px] font-black uppercase tracking-widest text-white/60">S</span>
-                                                                                    </div>
-                                                                                    {showExtra && (
-                                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
-                                                                                            <span className="text-[8px] font-black uppercase tracking-widest text-white/60">{extraLabel}</span>
+                                                                                {showPgsCols && (
+                                                                                    <div className="flex h-4 border-b border-white/[0.12] bg-white/[0.05] shrink-0">
+                                                                                        <div className="flex-1" />
+                                                                                        <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center`}>
+                                                                                            <span className="text-[8px] font-black uppercase tracking-widest text-white/25">P</span>
                                                                                         </div>
-                                                                                    )}
-                                                                                </div>
+                                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
+                                                                                            <span className="text-[8px] font-black uppercase tracking-widest text-white/60">G</span>
+                                                                                        </div>
+                                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
+                                                                                            <span className="text-[8px] font-black uppercase tracking-widest text-white/60">S</span>
+                                                                                        </div>
+                                                                                        {showExtra && (
+                                                                                            <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
+                                                                                                <span className="text-[8px] font-black uppercase tracking-widest text-white/60">{extraLabel}</span>
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )}
 
                                                                                 {/* Team 1 */}
                                                                                 <div className={`flex ${ROW_H} items-stretch border-b border-white/[0.12]`}>
@@ -2083,30 +2102,34 @@ export default function TournamentDashboard() {
                                                                                             </div>
                                                                                         );
                                                                                     })()}
-                                                                                    {/* G — puntos */}
-                                                                                    <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
-                                                                                        <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                            {isActive ? toTennisScore(gp1) : '–'}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                    {/* JG — games */}
-                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                        <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                            {isActive ? (match.games?.t1 ?? 0) : '–'}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                    {/* ST — sets */}
-                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                        <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                            {isActive ? (match.sets?.t1 ?? 0) : '–'}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                    {showExtra && (
-                                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                            <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                {isActive ? (isSTB ? (match.superTiebreakScore?.t1 ?? 0) : (match.tiebreakScore?.t1 ?? 0)) : '–'}
-                                                                                            </span>
-                                                                                        </div>
+                                                                                    {showPgsCols && (
+                                                                                        <>
+                                                                                            {/* G — puntos */}
+                                                                                            <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
+                                                                                                <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive ? toTennisScore(gp1) : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            {/* JG — games */}
+                                                                                            <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
+                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive ? (match.games?.t1 ?? 0) : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            {/* ST — sets */}
+                                                                                            <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
+                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive ? (match.sets?.t1 ?? 0) : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            {showExtra && (
+                                                                                                <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
+                                                                                                    <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                        {isActive ? (isSTB ? (match.superTiebreakScore?.t1 ?? 0) : (match.tiebreakScore?.t1 ?? 0)) : '–'}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </>
                                                                                     )}
                                                                                 </div>
 
@@ -2137,30 +2160,34 @@ export default function TournamentDashboard() {
                                                                                             </div>
                                                                                         );
                                                                                     })()}
-                                                                                    {/* G */}
-                                                                                    <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
-                                                                                        <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                            {isActive ? toTennisScore(gp2) : '–'}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                    {/* JG */}
-                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                        <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                            {isActive ? (match.games?.t2 ?? 0) : '–'}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                    {/* ST */}
-                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                        <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                            {isActive ? (match.sets?.t2 ?? 0) : '–'}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                    {showExtra && (
-                                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                            <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                {isActive ? (isSTB ? (match.superTiebreakScore?.t2 ?? 0) : (match.tiebreakScore?.t2 ?? 0)) : '–'}
-                                                                                            </span>
-                                                                                        </div>
+                                                                                    {showPgsCols && (
+                                                                                        <>
+                                                                                            {/* G */}
+                                                                                            <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
+                                                                                                <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive ? toTennisScore(gp2) : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            {/* JG */}
+                                                                                            <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
+                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive ? (match.games?.t2 ?? 0) : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            {/* ST */}
+                                                                                            <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
+                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive ? (match.sets?.t2 ?? 0) : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            {showExtra && (
+                                                                                                <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
+                                                                                                    <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                        {isActive ? (isSTB ? (match.superTiebreakScore?.t2 ?? 0) : (match.tiebreakScore?.t2 ?? 0)) : '–'}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </>
                                                                                     )}
                                                                                 </div>
                                                                             </div>
