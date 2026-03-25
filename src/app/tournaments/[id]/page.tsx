@@ -958,13 +958,20 @@ export default function TournamentDashboard() {
 
 
     const filteredMatches = matches.filter(m => {
+        const isLiveByMarker = markerLiveMatchIds.has(String(m.id));
+        const isFinishedDefinitive =
+            m.status === MatchStatus.FINISHED ||
+            Boolean((m as any)?.finishedAt) ||
+            Boolean((m as any)?.actualEndTime);
+
         if (activeTab === 'Todos') return true;
         if (activeTab === 'En Vivo') return _allowedLiveIds.has(m.id);
         if (activeTab === 'Por Comenzar') {
-            return _nextUpKeys.has(_mkKey(m));
+            // Si ya fue iniciado por marker o ya terminó, no puede seguir en "Por Comenzar".
+            return !isLiveByMarker && !isFinishedDefinitive && _nextUpKeys.has(_mkKey(m));
         }
 
-        if (activeTab === 'Finalizados') return m.status === MatchStatus.FINISHED;
+        if (activeTab === 'Finalizados') return isFinishedDefinitive;
         if (activeTab === 'Grupos' || activeTab === 'Ranking') return false;
         // Fase del cuadro
         if (activeTab === 'Fase de Grupo') return m.stage === 'GROUP_STAGE';

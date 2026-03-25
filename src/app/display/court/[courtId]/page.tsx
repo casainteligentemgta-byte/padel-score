@@ -44,7 +44,7 @@ export default function CourtDisplayPage() {
     const [canchaData, setCanchaData] = useState<any>(null);
     const [pizarraData, setPizarraData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const { currentImageUrl, isVisible: adVisible, mode: adMode } = useAdBanner();
+    const { currentImageUrl, isVisible: adVisible, mode: adMode } = useAdBanner(canchaId);
 
     // ── Escuchar estado de la cancha en RTDB (respaldo) ───────────────────
     useEffect(() => {

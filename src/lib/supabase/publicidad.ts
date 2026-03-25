@@ -9,6 +9,7 @@ export interface MediaContent {
   tipo: MediaTipo;
   url: string;
   nombre_sponsor: string | null;
+  file_size_bytes?: number | null;
   duracion_segundos: number | null;
   nombre: string | null;
   activa: boolean | null;
@@ -60,6 +61,17 @@ export interface ProgramacionPublicidad {
   hora_fin: string;
   media_content_id: string;
   prioridad: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CanchaPublicidad {
+  id: string;
+  venue_name: string;
+  cancha_id: string;
+  media_id: string;
+  orden: number;
+  duracion_segundos: number;
   created_at: string;
   updated_at: string;
 }
