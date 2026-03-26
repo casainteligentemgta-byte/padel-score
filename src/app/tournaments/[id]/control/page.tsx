@@ -232,6 +232,7 @@ function MiniDock({
 
 // ── Match Card Component ──────────────────────────────────────────────────
 function ControlMatchCard({
+    match, tournamentId, canOperate, onStartMatch, onFinishMatch,
     onToggleStream, onToggleAds, onRevertMatch, onUpdateNames, isUpdating, allPlayers
 }: {
     match: EnrichedMatch;
