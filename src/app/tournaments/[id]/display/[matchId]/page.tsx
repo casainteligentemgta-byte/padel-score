@@ -727,6 +727,15 @@ export default function FullScreenDisplay() {
                     return n || (typeof p.name === 'string' ? p.name : '') || '';
                 };
 
+                const isRealName = (s?: string) => {
+                    const v = (s || '').trim().toLowerCase();
+                    if (!v) return false;
+                    if (v === '?' || v === 'tbd' || v === 'undefined') return false;
+                    if (/^pareja\s*\d*$/.test(v)) return false;
+                    if (/^equipo\s*\d*$/.test(v)) return false;
+                    return true;
+                };
+
                 const resolveTeam = (mTeam: any, teamIdx: number, matchRecord?: any) => {
                     const gender = tournament?.gender; // Use state tournament instead of closure currentTournament
                     const teams = tournament?.teams || [];
@@ -826,14 +835,6 @@ export default function FullScreenDisplay() {
                 };
                 const l1 = splitLine(lines.team1);
                 const l2 = splitLine(lines.team2);
-                const isRealName = (s?: string) => {
-                    const v = (s || '').trim().toLowerCase();
-                    if (!v) return false;
-                    if (v === '?' || v === 'tbd' || v === 'undefined') return false;
-                    if (/^pareja\s*\d*$/.test(v)) return false;
-                    if (/^equipo\s*\d*$/.test(v)) return false;
-                    return true;
-                };
 
                 const matchData = {
                     ...found,

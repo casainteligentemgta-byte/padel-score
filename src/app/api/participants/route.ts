@@ -34,13 +34,15 @@ export async function GET() {
   const rows = data || [];
   const ownerIds = [...new Set(rows.map((r: any) => r.owner_id).filter(Boolean))];
   let codeByOwner: Record<string, string> = {};
+  let avatarByOwner: Record<string, string> = {};
   if (ownerIds.length > 0) {
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, unique_code')
+      .select('id, unique_code, avatar_url')
       .in('id', ownerIds);
     (profiles || []).forEach((p: any) => {
       if (p.unique_code) codeByOwner[p.id] = p.unique_code;
+      if (p.avatar_url) avatarByOwner[p.id] = p.avatar_url;
     });
   }
   const list = rows.map((r: any) => {
@@ -54,6 +56,7 @@ export async function GET() {
       ownerId: r.owner_id,
       uid: r.owner_id,
       ...light,
+      photo: light.photo || avatarByOwner[r.owner_id] || null,
       uniqueCode: fromRow || codeByOwner[r.owner_id] || null,
       createdAt: r.created_at,
       updatedAt: r.updated_at,

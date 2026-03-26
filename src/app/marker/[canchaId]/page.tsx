@@ -397,8 +397,12 @@ export default function MarkerControlPage() {
                 marcador: null,
                 publicidad: { override_local: false, imagen_url_local: null },
             });
-            // Al terminar manualmente, redirigir a torneos "por comenzar"
-            router.push('/tournaments?status=programado');
+            const tid = canchaData?.torneo_id;
+            if (tid) {
+                router.push(`/tournaments/${tid}?tab=por-comenzar`);
+            } else {
+                router.push('/tournaments?status=programado');
+            }
         } catch (err) {
             console.error('[Marker] Error desactivando cancha:', err);
         }
@@ -1018,8 +1022,12 @@ export default function MarkerControlPage() {
             alert(
                 `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${setsFinal.local}-${setsFinal.visitante})`
             );
-            // Redirigir a torneos "por comenzar"
-            router.push('/tournaments?status=programado');
+            const tid = canchaData?.torneo_id;
+            if (tid) {
+                router.push(`/tournaments/${tid}?tab=por-comenzar`);
+            } else {
+                router.push('/tournaments?status=programado');
+            }
         }
     };
 
