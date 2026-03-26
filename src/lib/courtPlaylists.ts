@@ -9,7 +9,7 @@ export type CourtPlaylistRowDb = {
   media_id: string;
   orden: number;
   duracion_segundos: number;
-  playlist_slot: PlaylistSlot;
+  playlist_slot?: PlaylistSlot;
   media_content?: {
     id: string;
     tipo: string;
