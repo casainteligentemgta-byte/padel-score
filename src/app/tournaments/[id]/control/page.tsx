@@ -931,7 +931,6 @@ export default function ControlPanel() {
     // En 'Activa' mostramos: En Vivo, Pendientes con Pista asignada y Finalizados recientemente
     const activePhaseMatches = matches.filter(m => {
         if (m.status === MatchStatus.LIVE) return true;
-        if (m.status === MatchStatus.FINISHED) return true; // Mostramos terminados en la tab activa para visibilidad
         if (m.status === MatchStatus.PENDING) {
             return m.court !== undefined && m.court !== null && m.court !== '';
         }

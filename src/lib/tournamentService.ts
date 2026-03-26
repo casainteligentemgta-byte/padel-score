@@ -82,6 +82,7 @@ export async function initializeTournamentWithPlaceholders(
   const categoryKeys = Object.keys(maxTeamsByCategory);
   const isSingleCategory = categoryKeys.length === 1;
 
+  let globalMatchIndex = 1;
   for (const categoryKey of categoryKeys) {
     const maxTeams = Math.max(2, Math.floor(maxTeamsByCategory[categoryKey] || 0));
     if (maxTeams < 2) continue;
@@ -136,7 +137,7 @@ export async function initializeTournamentWithPlaceholders(
     const matchIdPrefix = `m-${categoryKey}`;
     const ts = Date.now().toString(36);
     const teamIdToIndex = new Map(teams.map((t, idx) => [t.id, idx + 1]));
-    let matchIndex = 0;
+    
     const startDate = (tournament as any).startDate ?? new Date().toISOString().split('T')[0];
     const startTime = (tournament as any).startTime ?? '08:00';
     const [startH = 8, startM = 0] = startTime.split(':').map(Number);
@@ -154,8 +155,10 @@ export async function initializeTournamentWithPlaceholders(
         scheduledTime.setHours(startH, startM + slotMinutes, 0, 0);
         slotMinutes += matchDuration + buffer;
 
+        const currentMatchNumber = globalMatchIndex++;
+
         matchPayloads.push({
-          id: `${matchIdPrefix}-${matchIndex++}-${ts}`,
+          id: `${matchIdPrefix}-${currentMatchNumber}-${ts}`,
           team1: t1,
           team2: t2,
           team1Name: t1.p1?.name ? (t1.p2?.name ? `${t1.p1.name} / ${t1.p2.name}` : t1.p1.name) : 'TBD',
@@ -167,6 +170,7 @@ export async function initializeTournamentWithPlaceholders(
           stage: 'GROUP_STAGE',
           scheduledTime: scheduledTime.toISOString(),
           categoryId: categoryKey,
+          matchNumber: currentMatchNumber,
         });
       }
     }

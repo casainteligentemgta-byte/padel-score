@@ -863,6 +863,7 @@ export default function RefereeScoreboard() {
         if (enterStb) nextSuperTb = true;
         if (isMatchFinished) nextSuperTb = false;
 
+        const finishedAt = isMatchFinished ? new Date().toISOString() : match.finishedAt || null;
         const updatedData: any = {
             games: isMatchFinished ? finalGames : { t1: 0, t2: 0 },
             points: { t1: '0', t2: '0' },
@@ -871,7 +872,8 @@ export default function RefereeScoreboard() {
             isTiebreak: false,
             superTiebreak: nextSuperTb,
             status: isMatchFinished ? MatchStatus.FINISHED : match.status,
-            finishedAt: isMatchFinished ? new Date().toISOString() : match.finishedAt || null
+            finishedAt: finishedAt,
+            actualEndTime: finishedAt // Para consistencia con el panel de control
         };
         if (isCompletingSuperTB) {
             updatedData.superTiebreakScore = { t1: finalGames.t1, t2: finalGames.t2 };
