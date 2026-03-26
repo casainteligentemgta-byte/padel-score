@@ -920,15 +920,26 @@ export default function ControlPanel() {
     };
 
     const liveMatches = matches.filter(m => m.status === MatchStatus.LIVE);
-    const finishedMatches = matches.filter(m => m.status === MatchStatus.FINISHED);
+    const finishedMatches = matches.filter(m => m.status === MatchStatus.FINISHED)
+        .sort((a, b) => {
+            const timeA = new Date(a.actualEndTime || a.updatedAt || 0).getTime();
+            const timeB = new Date(b.actualEndTime || b.updatedAt || 0).getTime();
+            return timeB - timeA; // Más recientes arriba
+        });
     const pendingMatches = matches.filter(m => m.status === MatchStatus.PENDING);
 
+    // En 'Activa' mostramos: En Vivo, Pendientes con Pista asignada y Finalizados recientemente
     const activePhaseMatches = matches.filter(m => {
         if (m.status === MatchStatus.LIVE) return true;
+        if (m.status === MatchStatus.FINISHED) return true; // Mostramos terminados en la tab activa para visibilidad
         if (m.status === MatchStatus.PENDING) {
             return m.court !== undefined && m.court !== null && m.court !== '';
         }
         return false;
+    }).sort((a, b) => {
+        // Orden: LIVE primero, luego PENDING, luego FINISHED
+        const score = { [MatchStatus.LIVE]: 1, [MatchStatus.PENDING]: 2, [MatchStatus.FINISHED]: 3 };
+        return (score[a.status] || 99) - (score[b.status] || 99);
     });
 
     const proximosMatches = matches.filter(m =>
@@ -1029,7 +1040,13 @@ export default function ControlPanel() {
                             className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all 
                                 ${activePhaseTab === tab ? 'bg-white/[0.08] text-white' : 'text-gray-600 hover:text-gray-400'}`}
                         >
-                            {tab}
+                            <span className="capitalize">{tab}</span>
+                            {tab === 'activa' && activePhaseMatches.length > 0 && (
+                                <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-white/10 text-[7px]">{activePhaseMatches.length}</span>
+                            )}
+                            {tab === 'finalizados' && finishedMatches.length > 0 && (
+                                <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-white/10 text-[7px]">{finishedMatches.length}</span>
+                            )}
                         </button>
                     ))}
                 </div>
