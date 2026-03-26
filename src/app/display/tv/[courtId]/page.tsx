@@ -110,7 +110,7 @@ export default function TVCourtDisplayPage() {
                 setCourtRows([]);
                 return;
             }
-            setCourtRows((res.data as CourtPlaylistRowDb[]) || []);
+            setCourtRows((res.data as unknown as CourtPlaylistRowDb[]) || []);
 
             if (complexFilter) {
                 const cfg = await fetchCanchaPlaylistConfig(supabase, `cancha_${courtId}`, complexFilter);
