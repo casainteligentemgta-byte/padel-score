@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { formatDate } from '@/lib/formatters';
 
@@ -34,15 +34,21 @@ export default function AdminTournamentsPage() {
     const [statusFilter, setStatusFilter] = useState('ALL');
     const router = useRouter();
 
+    const searchParams = useSearchParams();
+
     useEffect(() => {
         if (!authLoading && !isAdmin) {
             router.push('/');
             return;
         }
         if (isAdmin) {
+            const statusParam = searchParams.get('status');
+            if (statusParam) {
+                setStatusFilter(statusParam);
+            }
             loadTournaments();
         }
-    }, [isAdmin, authLoading]);
+    }, [isAdmin, authLoading, searchParams]);
 
     const loadTournaments = async () => {
         setLoading(true);

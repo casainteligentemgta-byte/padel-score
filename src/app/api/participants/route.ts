@@ -6,7 +6,7 @@ import { requireRole } from '@/lib/authServerSupabase';
 function lightenParticipantData(data: Record<string, unknown> | null | undefined) {
   const d = { ...(data || {}) };
   const photo = d.photo;
-  if (typeof photo === 'string' && photo.startsWith('data:') && photo.length > 4096) {
+  if (typeof photo === 'string' && photo.startsWith('data:') && photo.length > 500000) {
     delete d.photo;
   }
   return d;

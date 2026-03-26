@@ -19,6 +19,7 @@ export default function MyTournamentsPage() {
     const { user, isAdmin, loading: authLoading } = useAuth();
     const [tournaments, setTournaments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [statusFilter, setStatusFilter] = useState('ALL');
 
     const loadTournaments = async () => {
         if (user) {
@@ -35,9 +36,13 @@ export default function MyTournamentsPage() {
     };
 
     useEffect(() => {
-        if (!authLoading && user) loadTournaments();
+        if (!authLoading && user) {
+            loadTournaments();
+            const statusParam = searchParams.get('status');
+            if (statusParam) setStatusFilter(statusParam);
+        }
         else if (!authLoading && !user) setLoading(false);
-    }, [user, authLoading]);
+    }, [user, authLoading, searchParams]);
 
     const handleDelete = async (e: React.MouseEvent, id: string) => {
         e.preventDefault();
@@ -122,10 +127,31 @@ export default function MyTournamentsPage() {
             {partnerCode && partnerCode.length === 6 && (
                 <div className="mx-6 mb-4 p-3 rounded-xl bg-padel-primary/10 border border-padel-primary/30">
                     <p className="text-[11px] font-bold text-padel-primary">
-                        Inscríbete con <span className="text-white">{partnerName || 'tu compañero'}</span>. Selecciona un torneo y pulsa «Inscribirme».
                     </p>
                 </div>
             )}
+
+            {/* ── Tabs de Estado ── */}
+            <div className="px-6 mb-6 flex gap-2 overflow-x-auto no-scrollbar">
+                {[
+                    { id: 'ALL', label: 'Todos' },
+                    { id: 'Programado', label: 'Por comenzar' },
+                    { id: 'En Curso', label: 'En curso' },
+                    { id: 'Finalizado', label: 'Finalizados' }
+                ].map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setStatusFilter(tab.id)}
+                        className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all whitespace-nowrap border ${
+                            statusFilter === tab.id
+                                ? 'bg-padel-primary text-black border-padel-primary shadow-[0_10px_20px_rgba(204,255,0,0.2)]'
+                                : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'
+                        }`}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
 
             {/* ── Lista scrollable ── */}
             <div className="ipad-scroll-area pb-2">
@@ -143,7 +169,21 @@ export default function MyTournamentsPage() {
                             {(() => {
                                 // Group tournaments by date and location
                                 const groups: { [key: string]: any[] } = {};
-                                tournaments.forEach(t => {
+                                const filtered = tournaments.filter(t => {
+                                    if (statusFilter === 'ALL') return true;
+                                    return t.status === statusFilter;
+                                });
+
+                                if (filtered.length === 0) {
+                                    return (
+                                        <div className="col-span-full py-20 text-center">
+                                            <Trophy className="w-12 h-12 text-gray-800 mx-auto mb-4" />
+                                            <p className="text-gray-500 font-bold uppercase tracking-widest text-xs">No hay torneos en este estado</p>
+                                        </div>
+                                    );
+                                }
+
+                                filtered.forEach(t => {
                                     const key = `${t.startDate || 'no-date'}_${t.complexName || 'Margarita Padel'}`;
                                     if (!groups[key]) groups[key] = [];
                                     groups[key].push(t);

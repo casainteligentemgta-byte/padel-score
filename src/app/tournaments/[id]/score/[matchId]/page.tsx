@@ -136,7 +136,7 @@ export default function RefereeScoreboard() {
             status: MatchStatus.FINISHED,
             finishedAt: new Date().toISOString()
         });
-        router.push(`/tournaments/${id}?tab=live`);
+        router.push(`/tournaments/${id}?tab=por-comenzar`);
     };
 
     const updateManualScore = async (side: 't1' | 't2', field: 'games' | 'sets' | 'points', value: any) => {
