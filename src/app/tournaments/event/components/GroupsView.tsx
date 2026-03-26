@@ -54,9 +54,38 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
         const stats = calcGroupStanding(tid, tNum, allMatches);
         return { id: tid, name, tNum, p1Name, p2Name, player2Accepted, ...stats };
     }).sort((a, b) => {
+        // 1. Puntos (Pts)
         if (b.Pts !== a.Pts) return b.Pts - a.Pts;
+
+        // Si hay empate en Puntos, revisamos la regla de la Categoría
+        const rule = activeTournament?.tieBreakRule || 'GAMES_DIFF';
+
+        if (rule === 'HEAD_TO_HEAD') {
+            // Intentar desempate directo (Enfrentamiento)
+            // Se busca el partido jugado entre ambos equipos
+            const h2hMatch = allMatches.find(m => 
+                m.status === MatchStatus.FINISHED &&
+                ((m.team1Index === a.tNum && m.team2Index === b.tNum) ||
+                 (m.team1Index === b.tNum && m.team2Index === a.tNum))
+            );
+
+            if (h2hMatch) {
+                const aWins = (h2hMatch.team1Index === a.tNum && h2hMatch.score1 > h2hMatch.score2) ||
+                              (h2hMatch.team2Index === a.tNum && h2hMatch.score2 > h2hMatch.score1);
+                const bWins = (h2hMatch.team1Index === b.tNum && h2hMatch.score1 > h2hMatch.score2) ||
+                              (h2hMatch.team2Index === b.tNum && h2hMatch.score2 > h2hMatch.score1);
+                
+                if (aWins) return -1;
+                if (bWins) return 1;
+            }
+            // Si no hay partido entre ellos o fue empate, se pasa al siguiente criterio (JF-JC)
+        }
+
+        // 2. Diferencia de Juegos (JF - JC)
         const da = a.JF - a.JC, db = b.JF - b.JC;
         if (db !== da) return db - da;
+
+        // 3. Partidos Ganados (PG)
         return b.PG - a.PG;
     });
 
@@ -170,7 +199,7 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
 
             <div className="px-5 py-2.5 border-t border-white/[0.05] bg-white/[0.01]">
                 <p className="text-[7px] text-gray-700 font-bold uppercase tracking-widest">
-                    Desempate: 1° Pts · 2° ±Juegos (JF-JC) · 3° PG
+                    Desempate: 1° Pts · {activeTournament?.tieBreakRule === 'HEAD_TO_HEAD' ? '2° Enfrentamiento Directo · 3° ±Juegos' : '2° ±Juegos (JF-JC) · 3° PG'}
                 </p>
             </div>
         </motion.div>

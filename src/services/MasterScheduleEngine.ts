@@ -20,6 +20,7 @@ export interface CategoryConfig {
     pointsGoal?: number;            // Americano/Dupla fija: a cuántos puntos (ej. 16, 24)
     consolacionMatchFormat?: 'ONE_SET_9' | 'TWO_SHORT_SETS';
     inscriptionPrice?: number;      // Precio de la inscripción por pareja/jugador en esta categoría
+    tieBreakRule?: 'GAMES_DIFF' | 'HEAD_TO_HEAD';
 }
 
 export interface MasterScheduleConfig {

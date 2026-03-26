@@ -1,3 +1,9 @@
+export enum TieBreakRule {
+    GAMES_DIFF = 'GAMES_DIFF',      // 1. Pts, 2. JF-JC, 3. PG
+    HEAD_TO_HEAD = 'HEAD_TO_HEAD', // 1. Pts, 2. Enfrentamiento directo, 3. JF-JC
+}
+
+
 export enum TournamentType {
     AMERICANO_INDIVIDUAL = 'AMERICANO_INDIVIDUAL', // Rey de pista (cambio de pareja)
     AMERICANO_DUPLA = 'AMERICANO_DUPLA',           // Dupla fija
@@ -85,6 +91,7 @@ export interface Tournament {
         funAnimationsEnabled?: boolean;
         aiAnimationSearchEnabled?: boolean;
     };
+    tieBreakRule?: TieBreakRule;
     rules?: {
         content?: string;
         manuals?: { title: string; url: string }[];

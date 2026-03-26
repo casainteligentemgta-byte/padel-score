@@ -209,6 +209,7 @@ export default function MasterGeneratorPage() {
     const [pendingQuickQualification, setPendingQuickQualification] = useState(false);
     const [pendingConsolacionMatchFormat, setPendingConsolacionMatchFormat] = useState<'ONE_SET_9' | 'TWO_SHORT_SETS'>('TWO_SHORT_SETS');
     const [pendingPrice, setPendingPrice] = useState<number>(0);
+    const [pendingTieBreakRule, setPendingTieBreakRule] = useState<'GAMES_DIFF' | 'HEAD_TO_HEAD'>('GAMES_DIFF');
 
     // Sorteo aleatorio: barajar equipos antes de repartir en grupos (por defecto activado)
     const [sorteoAleatorio, setSorteoAleatorio] = useState(true);
@@ -241,6 +242,7 @@ export default function MasterGeneratorPage() {
         setPendingPointsGoal(16);
         setPendingRRFormat('TWO_NORMAL_SETS');
         setPendingPrice(0);
+        setPendingTieBreakRule('GAMES_DIFF');
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -391,6 +393,7 @@ export default function MasterGeneratorPage() {
         setPendingQuickQualification(false);
         setPendingConsolacionMatchFormat('TWO_SHORT_SETS');
         setPendingPrice(0);
+        setPendingTieBreakRule('GAMES_DIFF');
     };
 
     const confirmAddCategory = () => {
@@ -419,6 +422,7 @@ export default function MasterGeneratorPage() {
                         type: pendingTournamentType === 'CUADRO_CONSOLACION' ? TournamentType.CUADRO_CONSOLACION : TournamentType.ROUND_ROBIN,
                         consolacionMatchFormat: pendingTournamentType === 'CUADRO_CONSOLACION' ? pendingConsolacionMatchFormat : undefined,
                         inscriptionPrice: pendingPrice,
+                        tieBreakRule: pendingTieBreakRule,
                         teams: Array.from({ length: pendingNumTeams }, (_, j) => ({
                             id: `team-${c.id}-${j}`,
                             p1: { id: `p1-${c.id}-${j}`, name: `Jugador ${j * 2 + 1}` },
@@ -449,6 +453,7 @@ export default function MasterGeneratorPage() {
                     quickQualification: pendingTournamentType === 'ROUND_ROBIN' && pendingAdvanceCount === 2 ? pendingQuickQualification : undefined,
                     consolacionMatchFormat: pendingTournamentType === 'CUADRO_CONSOLACION' ? pendingConsolacionMatchFormat : undefined,
                     inscriptionPrice: pendingPrice,
+                    tieBreakRule: pendingTieBreakRule,
                     teams: Array.from({ length: pendingNumTeams }, (_, i) => ({
                         id: `team-${id}-${i}`,
                         p1: { id: `p1-${id}-${i}`, name: `Jugador ${i * 2 + 1}` },
@@ -1264,6 +1269,31 @@ export default function MasterGeneratorPage() {
                                                         />
                                                     </div>
                                                 </div>
+
+                                                {/* F. Sistema de Desempate en Clasificación */}
+                                                <div className="space-y-2 pt-2 border-t border-zinc-900/50">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                                                        <Sparkles className="w-3 h-3 text-padel-primary" /> Sistema de Desempate (Clasificación)
+                                                    </label>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPendingTieBreakRule('GAMES_DIFF')}
+                                                            className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${pendingTieBreakRule === 'GAMES_DIFF' ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:border-zinc-700'}`}
+                                                        >
+                                                            <span className="text-[10px] font-black uppercase text-center">Diferencia de Juegos</span>
+                                                            <span className="text-[8px] font-bold opacity-70 mt-0.5 text-center">1. Pts, 2. JF-JC, 3. PG</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPendingTieBreakRule('HEAD_TO_HEAD')}
+                                                            className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${pendingTieBreakRule === 'HEAD_TO_HEAD' ? 'bg-padel-primary border-padel-primary text-black' : 'bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:border-zinc-700'}`}
+                                                        >
+                                                            <span className="text-[10px] font-black uppercase text-center">Enfrentamiento Directo</span>
+                                                            <span className="text-[8px] font-bold opacity-70 mt-0.5 text-center">1. Pts, 2. Win vs, 3. JF-JC</span>
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
@@ -1751,6 +1781,7 @@ export default function MasterGeneratorPage() {
                                                                     setPendingQuickQualification(!!(cat as any).quickQualification);
                                                                     setPendingConsolacionMatchFormat((cat as any).consolacionMatchFormat ?? 'TWO_SHORT_SETS');
                                                                     setPendingPrice(cat.inscriptionPrice ?? 0);
+                                                                    setPendingTieBreakRule((cat as any).tieBreakRule ?? 'GAMES_DIFF');
                                                                 }}
                                                                 className="text-zinc-600 hover:text-padel-primary transition-colors p-1.5 hover:bg-padel-primary/10 rounded-lg"
                                                             >
