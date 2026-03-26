@@ -35,6 +35,11 @@ interface TVScoreboardDisplayProps {
     forcedAds?: boolean;
     adsPlaylist?: string[];
     carouselPlaylist?: string[];
+    /** Por slide: duración en segundos (misma longitud que carouselPlaylist o se repite el último) */
+    carouselDurationsSec?: number[];
+    carouselLoop?: boolean;
+    /** Pausa extra entre fotos (seg), sumada a la duración de cada slide */
+    carouselPauseBetweenSec?: number;
     tournamentId?: string;
     tournamentCategory?: string;
     tournamentPhase?: string;
@@ -78,6 +83,9 @@ export default function TVScoreboardDisplay({
     forcedAds = false,
     adsPlaylist = [],
     carouselPlaylist = [],
+    carouselDurationsSec,
+    carouselLoop = true,
+    carouselPauseBetweenSec = 0,
     tournamentId = "global",
     tournamentCategory = "Suma 8 / Masculino",
     tournamentPhase = "Fase de Grupos",
@@ -102,12 +110,34 @@ export default function TVScoreboardDisplay({
     }, []);
 
     useEffect(() => {
+        setCurrentCarouselIdx(0);
+    }, [carouselPlaylist.join('|')]);
+
+    useEffect(() => {
         if (carouselPlaylist.length <= 1) return;
-        const timer = setInterval(() => {
-            setCurrentCarouselIdx(prev => (prev + 1) % carouselPlaylist.length);
-        }, 8000);
-        return () => clearInterval(timer);
-    }, [carouselPlaylist]);
+        const idx = currentCarouselIdx;
+        const dur =
+            carouselDurationsSec && carouselDurationsSec.length > 0
+                ? carouselDurationsSec[Math.min(idx, carouselDurationsSec.length - 1)] ?? 8
+                : 8;
+        const ms = Math.max(1, dur) * 1000 + Math.max(0, carouselPauseBetweenSec) * 1000;
+        const timer = window.setTimeout(() => {
+            setCurrentCarouselIdx((prev) => {
+                const next = prev + 1;
+                if (next >= carouselPlaylist.length) {
+                    return carouselLoop ? 0 : prev;
+                }
+                return next;
+            });
+        }, ms);
+        return () => window.clearTimeout(timer);
+    }, [
+        carouselPlaylist,
+        currentCarouselIdx,
+        carouselDurationsSec,
+        carouselLoop,
+        carouselPauseBetweenSec,
+    ]);
 
     const formatDate = (date: Date) => {
         return date.toLocaleDateString('es-ES', {

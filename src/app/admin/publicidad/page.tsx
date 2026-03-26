@@ -9,6 +9,7 @@ import { dataService } from '@/lib/dataService';
 import Sidebar from '@/components/Sidebar';
 import CourtCard from '@/components/publicidad/CourtCard';
 import type { CourtPlaylistRow } from '@/components/publicidad/CourtCard';
+import { partitionPlaylistRows, upsertCanchaPlaylistConfig, type CourtPlaylistRowDb } from '@/lib/courtPlaylists';
 import { AlertCircle, Download, Eye, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import type { MediaContent, TiraInformativa } from '@/lib/supabase/publicidad';
 
@@ -61,6 +62,14 @@ const mb = (bytes?: number | null) => {
 const isVideoFile = (f: File) => f.type.startsWith('video/');
 const isImageFile = (f: File) => f.type.startsWith('image/');
 
+function rowPlaylistKind(a: CourtPlaylistRow): 'video' | 'imagen' {
+  const ps = a.playlist_slot || 'legacy';
+  if (ps === 'imagen') return 'imagen';
+  if (ps === 'video') return 'video';
+  const tipo = String(a.media_content?.tipo || '');
+  return tipo === 'imagen' ? 'imagen' : 'video';
+}
+
 export default function AdminPublicidadPage() {
   const { isAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -84,9 +93,14 @@ export default function AdminPublicidadPage() {
   const [assignMediaId, setAssignMediaId] = useState<string>('');
   const [assignOrden, setAssignOrden] = useState<number>(1);
   const [assignDuracion, setAssignDuracion] = useState<number>(10);
+  const [assignSlot, setAssignSlot] = useState<'video' | 'imagen'>('video');
   const [librarySearch, setLibrarySearch] = useState('');
   /** last_seen ISO por cancha_id (heartbeat desde pizarra) */
   const [canchasHealth, setCanchasHealth] = useState<Record<string, string | null>>({});
+  const [tiraLinksByCourt, setTiraLinksByCourt] = useState<Record<string, string[]>>({});
+  const [playlistConfigByCourt, setPlaylistConfigByCourt] = useState<
+    Record<string, { imagen_loop: boolean; imagen_pausa_entre_segundos: number }>
+  >({});
 
   useEffect(() => {
     if (!authLoading && !isAdmin) router.push('/');
@@ -126,7 +140,7 @@ export default function AdminPublicidadPage() {
 
     const q = supabase
       .from('cancha_publicidad')
-      .select('id, cancha_id, media_id, orden, duracion_segundos, venue_name, media_content(*)')
+      .select('id, cancha_id, media_id, orden, duracion_segundos, venue_name, playlist_slot, media_content(*)')
       .in('cancha_id', keys)
       .eq('venue_name', selectedVenue)
       .order('orden', { ascending: true });
@@ -138,7 +152,7 @@ export default function AdminPublicidadPage() {
     if (error) {
       const r2 = await supabase
         .from('cancha_publicidad')
-        .select('id, cancha_id, media_id, orden, duracion_segundos, media_content(*)')
+        .select('id, cancha_id, media_id, orden, duracion_segundos, playlist_slot, media_content(*)')
         .in('cancha_id', keys)
         .order('orden', { ascending: true });
       data = r2.data as CourtPlaylistRow[] | null;
@@ -149,6 +163,35 @@ export default function AdminPublicidadPage() {
     const rows = data || [];
     const filtered = rows.filter((r) => courtKeySet.has(r.cancha_id));
     setAssignments(filtered);
+
+    const tmap: Record<string, string[]> = {};
+    keys.forEach((k) => {
+      tmap[k] = [];
+    });
+    const tr = await supabase
+      .from('cancha_tira')
+      .select('cancha_id, tira_informativa_id, orden')
+      .eq('venue_name', selectedVenue)
+      .order('orden', { ascending: true });
+    if (!tr.error && tr.data) {
+      (tr.data as { cancha_id: string; tira_informativa_id: string }[]).forEach((row) => {
+        if (!tmap[row.cancha_id]) tmap[row.cancha_id] = [];
+        tmap[row.cancha_id].push(row.tira_informativa_id);
+      });
+    }
+    setTiraLinksByCourt(tmap);
+
+    const cmap: Record<string, { imagen_loop: boolean; imagen_pausa_entre_segundos: number }> = {};
+    const cr = await supabase.from('cancha_playlist_config').select('*').eq('venue_name', selectedVenue);
+    if (!cr.error && cr.data) {
+      (cr.data as any[]).forEach((r) => {
+        cmap[r.cancha_id] = {
+          imagen_loop: r.imagen_loop !== false,
+          imagen_pausa_entre_segundos: Math.max(0, Number(r.imagen_pausa_entre_segundos) || 0),
+        };
+      });
+    }
+    setPlaylistConfigByCourt(cmap);
   }, [selectedVenue, selectedVenueCourts, supabase, courtKeySet]);
 
   useEffect(() => {
@@ -197,15 +240,20 @@ export default function AdminPublicidadPage() {
   const videos = useMemo(() => mediaList.filter((m) => String(m.tipo).includes('video')), [mediaList]);
   const carrusel = useMemo(() => mediaList.filter((m) => m.tipo === 'imagen'), [mediaList]);
   const assignableMedia = useMemo(() => [...videos, ...carrusel], [videos, carrusel]);
+  const slotMedia = useMemo(
+    () => (assignSlot === 'video' ? videos : carrusel),
+    [assignSlot, videos, carrusel],
+  );
 
   const filteredLibrary = useMemo(() => {
     const s = librarySearch.trim().toLowerCase();
-    if (!s) return assignableMedia;
-    return assignableMedia.filter((m) => {
+    const pool = slotMedia;
+    if (!s) return pool;
+    return pool.filter((m) => {
       const n = (m.nombre_sponsor || m.nombre || '').toLowerCase();
       return n.includes(s);
     });
-  }, [assignableMedia, librarySearch]);
+  }, [slotMedia, librarySearch]);
 
   const uploadFiles = async (files: File[]) => {
     if (!files.length) return;
@@ -292,11 +340,21 @@ export default function AdminPublicidadPage() {
     await fetchTicker();
   };
 
-  const openAssignModal = (canchaId: string) => {
+  const openAssignModal = (canchaId: string, slot: 'video' | 'imagen') => {
+    setAssignSlot(slot);
+    const pool = slot === 'video' ? videos : carrusel;
+    const same = assignments.filter((a) => {
+      if (a.cancha_id !== canchaId) return false;
+      const ps = (a as CourtPlaylistRow).playlist_slot || 'legacy';
+      const tipo = String(a.media_content?.tipo || '');
+      if (slot === 'imagen') return ps === 'imagen' || (ps === 'legacy' && tipo === 'imagen');
+      return ps === 'video' || ps === 'legacy' || (ps !== 'imagen' && tipo !== 'imagen');
+    });
+    const maxO = same.reduce((m, r) => Math.max(m, r.orden || 0), 0);
     setAssignCourtId(canchaId);
-    setAssignMediaId(assignableMedia[0]?.id || '');
-    setAssignOrden(1);
-    setAssignDuracion(10);
+    setAssignMediaId(pool[0]?.id || '');
+    setAssignOrden(maxO + 1);
+    setAssignDuracion(slot === 'imagen' ? 10 : 30);
     setLibrarySearch('');
     setAssignModalOpen(true);
   };
@@ -308,6 +366,7 @@ export default function AdminPublicidadPage() {
       media_id: assignMediaId,
       orden: Number(assignOrden) || 1,
       duracion_segundos: Number(assignDuracion) || 10,
+      playlist_slot: assignSlot,
     };
     row.venue_name = selectedVenue;
 
@@ -315,6 +374,11 @@ export default function AdminPublicidadPage() {
     if (error && error.message?.toLowerCase().includes('venue')) {
       delete row.venue_name;
       ({ error } = await supabase.from('cancha_publicidad').insert(row));
+    }
+    if (error && (error.message?.includes('playlist_slot') || error.message?.includes('schema cache'))) {
+      const row2 = { ...row };
+      delete row2.playlist_slot;
+      ({ error } = await supabase.from('cancha_publicidad').insert(row2));
     }
     if (error) return setError(error.message);
     setAssignModalOpen(false);
@@ -324,6 +388,41 @@ export default function AdminPublicidadPage() {
   const removeAssignment = async (id: string) => {
     const { error } = await supabase.from('cancha_publicidad').delete().eq('id', id);
     if (error) return setError(error.message);
+    await fetchAssignments();
+  };
+
+  const saveImagenConfigForCourt = async (courtKey: string, loop: boolean, pausaSeg: number) => {
+    if (!selectedVenue) return;
+    setError(null);
+    const { error } = await upsertCanchaPlaylistConfig(supabase, selectedVenue, courtKey, {
+      imagen_loop: loop,
+      imagen_pausa_entre_segundos: pausaSeg,
+    });
+    if (error) return setError(error.message);
+    await fetchAssignments();
+  };
+
+  const toggleCanchaTira = async (courtKey: string, tiraId: string, selected: boolean) => {
+    if (!selectedVenue) return;
+    setError(null);
+    if (selected) {
+      const orden = (tiraLinksByCourt[courtKey]?.length || 0) + 1;
+      const { error } = await supabase.from('cancha_tira').insert({
+        venue_name: selectedVenue,
+        cancha_id: courtKey,
+        tira_informativa_id: tiraId,
+        orden,
+      });
+      if (error) return setError(error.message);
+    } else {
+      const { error } = await supabase
+        .from('cancha_tira')
+        .delete()
+        .eq('venue_name', selectedVenue)
+        .eq('cancha_id', courtKey)
+        .eq('tira_informativa_id', tiraId);
+      if (error) return setError(error.message);
+    }
     await fetchAssignments();
   };
 
@@ -405,7 +504,7 @@ export default function AdminPublicidadPage() {
                 value={nuevoTicker}
                 onChange={(e) => setNuevoTicker(e.target.value)}
                 placeholder="Nuevo mensaje para la tira"
-                className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm"
+                className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/45 outline-none focus:border-white/25"
               />
               <button type="button" onClick={addTicker} className="px-4 py-2 rounded-xl bg-padel-primary text-black font-black text-xs uppercase">Agregar</button>
             </div>
@@ -446,12 +545,16 @@ export default function AdminPublicidadPage() {
               <select
                 value={selectedVenue}
                 onChange={(e) => setSelectedVenue(e.target.value)}
-                className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm"
+                className="w-full mt-1 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-white/25"
               >
                 {venues.length === 0 ? (
-                  <option value="">— Sin sedes en torneos —</option>
+                  <option value="" className="bg-zinc-950 text-white">— Sin sedes en torneos —</option>
                 ) : (
-                  venues.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)
+                  venues.map((v) => (
+                    <option key={v.name} value={v.name} className="bg-zinc-950 text-white">
+                      {v.name}
+                    </option>
+                  ))
                 )}
               </select>
             </div>
@@ -459,16 +562,26 @@ export default function AdminPublicidadPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {selectedVenueCourts.map((court) => {
                 const rows = assignments.filter((a) => a.cancha_id === court.key);
+                const { video, imagen } = partitionPlaylistRows(rows as CourtPlaylistRowDb[]);
+                const cfg = playlistConfigByCourt[court.key];
                 return (
                   <CourtCard
                     key={`${selectedVenue}-${court.key}`}
+                    venueName={selectedVenue}
                     courtKey={court.key}
                     displayCourtNum={court.displayNum}
                     title={court.label}
-                    rows={rows}
+                    videoRows={video as CourtPlaylistRow[]}
+                    imageRows={imagen as CourtPlaylistRow[]}
+                    tiraList={tiraList.map((t) => ({ id: t.id, mensaje: t.mensaje }))}
+                    linkedTiraIds={tiraLinksByCourt[court.key] || []}
+                    imagenLoop={cfg?.imagen_loop ?? true}
+                    imagenPausaSeg={cfg?.imagen_pausa_entre_segundos ?? 0}
                     lastSeenIso={canchasHealth[court.key] ?? null}
-                    onAddToPlaylist={() => openAssignModal(court.key)}
+                    onAddClip={(slot) => openAssignModal(court.key, slot)}
                     onRemoveRow={removeAssignment}
+                    onToggleTira={(tiraId, sel) => toggleCanchaTira(court.key, tiraId, sel)}
+                    onSaveImagenConfig={(loop, pausa) => saveImagenConfigForCourt(court.key, loop, pausa)}
                   />
                 );
               })}
@@ -481,7 +594,9 @@ export default function AdminPublicidadPage() {
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#111] border border-white/10 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-black uppercase">Añadir a playlist — {assignCourtId}</h3>
+              <h3 className="text-sm font-black uppercase">
+                Añadir {assignSlot === 'video' ? 'video' : 'imagen'} — {assignCourtId}
+              </h3>
               <button type="button" onClick={() => setAssignModalOpen(false)} className="p-2 rounded-lg bg-white/5 shrink-0"><X size={14} /></button>
             </div>
 
@@ -493,7 +608,7 @@ export default function AdminPublicidadPage() {
                   value={librarySearch}
                   onChange={(e) => setLibrarySearch(e.target.value)}
                   placeholder="Buscar por nombre..."
-                  className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-3 py-2 text-sm"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-3 py-2 text-sm text-white placeholder:text-white/45 outline-none focus:border-white/25"
                 />
               </div>
             </div>
@@ -518,11 +633,13 @@ export default function AdminPublicidadPage() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-[10px] uppercase text-white/60">Orden</label>
-                <input type="number" min={1} value={assignOrden} onChange={(e) => setAssignOrden(Number(e.target.value))} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm" />
+                <input type="number" min={1} value={assignOrden} onChange={(e) => setAssignOrden(Number(e.target.value))} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-white/25 [color-scheme:dark]" />
               </div>
               <div>
-                <label className="text-[10px] uppercase text-white/60">Tiempo en pantalla (s)</label>
-                <input type="number" min={1} value={assignDuracion} onChange={(e) => setAssignDuracion(Number(e.target.value))} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm" />
+                <label className="text-[10px] uppercase text-white/60">
+                  {assignSlot === 'imagen' ? 'Segundos por imagen' : 'Segundos (respaldo si el vídeo no avanza)'}
+                </label>
+                <input type="number" min={1} value={assignDuracion} onChange={(e) => setAssignDuracion(Number(e.target.value))} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-white/25 [color-scheme:dark]" />
               </div>
             </div>
 

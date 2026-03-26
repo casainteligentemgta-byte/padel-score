@@ -7,7 +7,10 @@
 const PH = /^(pareja\s*\d*|jugador\s*\d*|player\s*\d*|equipo\s*\d*|placeholder|tbd|\?|j\d+|p\d+)$/i;
 
 function isReal(s: string) {
-    return !!(s && s.trim().length > 0 && !PH.test(s.trim()));
+    if (!s) return false;
+    const trimmed = s.trim();
+    if (!trimmed || trimmed === '?' || trimmed === '-') return false;
+    return !PH.test(trimmed);
 }
 
 function resolveNames(
@@ -24,16 +27,16 @@ function resolveNames(
         /** Master / cuadro suelen persistir la línea en `full` sin objetos p1/p2. */
         const fullLine =
             typeof embeddedTeam.full === 'string' ? embeddedTeam.full.trim() : '';
-        if (fullLine && !/^pareja\s*\d*$/i.test(fullLine) && fullLine !== 'TBD') {
-            const parts = fullLine.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(isReal);
+        if (isReal(fullLine)) {
+            const parts = fullLine.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(Boolean);
             if (parts.length >= 2) return fullLine;
-            if (parts.length === 1) return parts[0];
+            if (parts.length === 1 && isReal(parts[0])) return parts[0];
         }
         const altLine = typeof embeddedTeam.name === 'string' ? embeddedTeam.name.trim() : '';
-        if (altLine && !/^pareja\s*\d*$/i.test(altLine) && altLine !== 'TBD') {
-            const parts = altLine.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(isReal);
+        if (isReal(altLine)) {
+            const parts = altLine.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(Boolean);
             if (parts.length >= 2) return altLine;
-            if (parts.length === 1) return parts[0];
+            if (parts.length === 1 && isReal(parts[0])) return parts[0];
         }
         const p1n = (embeddedTeam.p1?.name || embeddedTeam.p1Name || '').trim();
         const p2n = (embeddedTeam.p2?.name || embeddedTeam.p2Name || '').trim();
@@ -53,10 +56,10 @@ function resolveNames(
     const tData = byId || byIdx || null;
     if (tData) {
         const fullLine = (tData.full || tData.teamName || tData.name || '').toString().trim();
-        if (fullLine && !/^pareja\s*\d*$/i.test(fullLine) && fullLine !== 'TBD') {
-            const parts = fullLine.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(isReal);
+        if (isReal(fullLine)) {
+            const parts = fullLine.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(Boolean);
             if (parts.length >= 2) return fullLine;
-            if (parts.length === 1) return parts[0];
+            if (parts.length === 1 && isReal(parts[0])) return parts[0];
         }
         const p1n = (tData.p1?.name || tData.p1Name || '').trim();
         const p2n = (tData.p2?.name || tData.p2Name || '').trim();
@@ -97,6 +100,7 @@ export function isGenericEquipoNombre(nombre: string | undefined | null, default
     const s = (nombre || '').trim();
     if (!s) return true;
     if (s === defaultLabel) return true;
-    if (/^equipo\s*[12]$/i.test(s)) return true;
+    if (/^(equipo|jugador|pareja|player|tbd)\s*\d*$/i.test(s)) return true;
+    if (s === '?' || s === '-') return true;
     return false;
 }

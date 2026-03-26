@@ -22,7 +22,7 @@ import { ShareModal, SponsorModal, RulesModal } from './components/Modals';
 
 // Utilities
 import {
-    formatCategory, formatHHMM, toMs, toMinute, TABS, KNOWN_COMPLEXES
+    formatCategory, formatHHMM, toMs, toMinute, TABS, KNOWN_COMPLEXES, isRealName
 } from './utils';
 
 function getFaseLabel(match: any): string {
@@ -233,25 +233,41 @@ function EventView() {
                 let team1Obj: any = null;
                 let team2Obj: any = null;
 
-                if (m.team1 && (m.team1.p1 || m.team1.p1Name || m.team1.isTBD || m.team1.teamLabel)) {
+                // Priorizar la información de los equipos del torneo si hay index
+                if (m.team1Index != null && t.teams && t.teams[m.team1Index - 1]) {
+                    team1Obj = { ...(m.team1 || {}), ...t.teams[m.team1Index - 1] };
+                } else if (m.team1 && (m.team1.p1 || m.team1.p1Name || m.team1.isTBD || m.team1.teamLabel)) {
                     team1Obj = m.team1;
-                } else if (m.team1Index != null && t.teams) {
-                    team1Obj = t.teams[m.team1Index - 1] ?? null;
                 }
 
-                if (m.team2 && (m.team2.p1 || m.team2.p1Name || m.team2.isTBD || m.team2.teamLabel)) {
+                if (m.team2Index != null && t.teams && t.teams[m.team2Index - 1]) {
+                    team2Obj = { ...(m.team2 || {}), ...t.teams[m.team2Index - 1] };
+                } else if (m.team2 && (m.team2.p1 || m.team2.p1Name || m.team2.isTBD || m.team2.teamLabel)) {
                     team2Obj = m.team2;
-                } else if (m.team2Index != null && t.teams) {
-                    team2Obj = t.teams[m.team2Index - 1] ?? null;
                 }
 
                 const buildTeam = (obj: any, idx: number | undefined, matchTeamName?: string) => {
-                    if (!obj && !matchTeamName) return { name: idx != null ? `Pareja ${idx}` : '?', p1Name: idx != null ? `Pareja ${idx}` : '?', p2Name: '' };
-                    if (obj?.isTBD || obj?.teamLabel) return { ...obj, name: obj.teamLabel || obj.p1?.name || '?' };
+                    const fallbackName = idx != null ? `Pareja ${idx}` : '?';
+                    if (!obj && !isRealName(matchTeamName)) {
+                        return { name: fallbackName, p1Name: fallbackName, p2Name: '' };
+                    }
+                    if (obj?.isTBD || obj?.teamLabel) {
+                        const label = obj.teamLabel || (isRealName(obj.p1?.name) ? obj.p1.name : null);
+                        return { ...obj, name: label || matchTeamName || fallbackName };
+                    }
                     const p1n = (obj?.p1Name || obj?.p1?.name || '').trim();
                     const p2n = (obj?.p2Name || obj?.p2?.name || '').trim();
-                    const nameStr = (p1n && p2n) ? `${p1n} / ${p2n}` : (p1n || matchTeamName || (idx != null ? `Pareja ${idx}` : '?'));
-                    return { ...obj, name: nameStr, p1Name: p1n || (idx != null ? `J${(idx - 1) * 2 + 1}` : '?'), p2Name: p2n };
+
+                    const hasP1 = isRealName(p1n);
+                    const hasP2 = isRealName(p2n);
+
+                    if (hasP1 || hasP2) {
+                        const nameStr = (hasP1 && hasP2) ? `${p1n} / ${p2n}` : (hasP1 ? p1n : p2n);
+                        return { ...obj, name: nameStr, p1Name: p1n, p2Name: p2n };
+                    }
+
+                    const mtn = isRealName(matchTeamName) ? matchTeamName : null;
+                    return { ...obj, name: mtn || fallbackName, p1Name: mtn || (idx != null ? `J${(idx - 1) * 2 + 1}` : '?'), p2Name: '' };
                 };
 
                 const genderValue = t.gender || (['MALE', 'FEMALE', 'MIXED'].includes(String(t.category)) ? t.category : undefined);

@@ -13,6 +13,12 @@ import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 
 const INTERVALO_PROGRAMACION_MS = 60 * 1000; // 1 minuto
 
+/** `/display/[id]` usa el UUID de `pantallas.id`. Números o `cancha_N` provocan error UUID en Supabase. */
+function isPantallaUuid(pantallaId: string): boolean {
+  const s = pantallaId.trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+}
+
 /** Devuelve la hora actual en formato HH:MM:SS para comparar con hora_inicio/hora_fin */
 function getHoraActual(): string {
   const now = new Date();
@@ -60,7 +66,7 @@ export default function DisplayPantallaPage() {
    */
   const getContenidoProgramado = useCallback(
     async (pantallaId: string): Promise<string | null> => {
-      if (!supabase || !pantallaId) return null;
+      if (!supabase || !pantallaId || !isPantallaUuid(pantallaId)) return null;
       setError(null);
 
       const horaActual = getHoraActual();
@@ -122,6 +128,19 @@ export default function DisplayPantallaPage() {
   // Carga inicial y verificación cada 1 minuto
   useEffect(() => {
     if (!id || !supabase) return;
+
+    if (!isPantallaUuid(id)) {
+      const courtNum = id.replace(/^cancha_?/i, '').trim();
+      const hint =
+        courtNum && /^\d+$/.test(courtNum)
+          ? ` Para la pizarra de la pista ${courtNum} abre /display/court/${courtNum}.`
+          : '';
+      setError(
+        `La ruta /display/[id] espera el UUID de una pantalla (tabla pantallas), no un id de cancha.${hint}`,
+      );
+      setContenidoActualId(null);
+      return;
+    }
 
     const aplicar = async () => {
       const mediaId = await getContenidoProgramado(id);

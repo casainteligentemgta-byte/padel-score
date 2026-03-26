@@ -728,19 +728,35 @@ export default function FullScreenDisplay() {
                 };
 
                 const resolveTeam = (mTeam: any, teamIdx: number, matchRecord?: any) => {
-                    const gender = currentTournament?.gender;
-                    const seed = teamIdx || 1;
-                    const teams = currentTournament?.teams || [];
+                    const gender = tournament?.gender; // Use state tournament instead of closure currentTournament
+                    const teams = tournament?.teams || [];
                     const teamByIndex = teamIdx > 0 ? teams[teamIdx - 1] : null;
+                    const seed = teamIdx || 1;
 
-                    // 0) Línea única `full` (muy habitual en datos del master / Supabase)
+                    // 1) Prioridad Máxima: tournament.teams (la fuente de verdad de las inscripciones)
+                    const p1FromTeam = fullName(teamByIndex?.p1);
+                    const p2FromTeam = fullName(teamByIndex?.p2);
+                    const hasRealTournamentName = teamByIndex
+                        && (isRealName(p1FromTeam) || isRealName(p2FromTeam));
+
+                    if (hasRealTournamentName) {
+                        const p1Final = isRealName(p1FromTeam) ? p1FromTeam : getSimulatedName(gender, seed * 2);
+                        const p2Final = isRealName(p2FromTeam) ? p2FromTeam : getSimulatedName(gender, seed * 2 + 1);
+                        return {
+                            p1Name: p1Final,
+                            p2Name: p2Final,
+                            p1Photo: teamByIndex.p1?.photo || null,
+                            p2Photo: teamByIndex.p2?.photo || null,
+                            name: [p1Final, p2Final].filter(Boolean).join(' / ')
+                        };
+                    }
+
+                    // 2) Segunda Prioridad: equipo embebido en el partido (linea full)
                     if (
                         mTeam &&
                         !mTeam.isTBD &&
                         typeof mTeam.full === 'string' &&
-                        mTeam.full.trim() &&
-                        !mTeam.full.trim().startsWith('Pareja') &&
-                        mTeam.full.trim() !== 'TBD'
+                        isRealName(mTeam.full)
                     ) {
                         const fullLine = mTeam.full.trim();
                         const parts = fullLine.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(Boolean);
@@ -764,17 +780,14 @@ export default function FullScreenDisplay() {
                         }
                     }
 
-                    // 1) Prioridad: equipo embebido en el partido (p1/p2 con name, o p1Name/p2Name)
-                    //    El match siempre trae los datos más frescos (actualizados por el generador/inscripción)
+                    // 3) datos p1/p2 embebidos en el partido
                     if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
                         const p1Base = mTeam.isTBD ? (mTeam.teamLabel || 'TBD') : (mTeam.p1Name || fullName(mTeam.p1));
                         const p2Base = mTeam.isTBD ? '' : (mTeam.p2Name || fullName(mTeam.p2));
-                        // Solo usar los datos embebidos si tienen info real (no placeholder vacío)
-                        const hasRealData = (p1Base && p1Base !== '?' && !p1Base.startsWith('Pareja') && p1Base !== 'TBD')
-                            || (p2Base && p2Base !== '?' && !p2Base.startsWith('Pareja'));
-                        if (hasRealData) {
-                            const p1Final = p1Base || getSimulatedName(gender, seed * 2);
-                            const p2Final = mTeam.isTBD ? '' : (p2Base || getSimulatedName(gender, seed * 2 + 1));
+                        
+                        if (isRealName(p1Base) || isRealName(p2Base)) {
+                            const p1Final = isRealName(p1Base) ? p1Base : getSimulatedName(gender, seed * 2);
+                            const p2Final = mTeam.isTBD ? '' : (isRealName(p2Base) ? p2Base : getSimulatedName(gender, seed * 2 + 1));
                             return {
                                 p1Name: p1Final,
                                 p2Name: p2Final,
@@ -785,39 +798,20 @@ export default function FullScreenDisplay() {
                         }
                     }
 
-                    // 2) team1Name / team2Name guardados en el partido (string "A / B")
+                    // 4) team1Name / team2Name guardados en el partido (string "A / B")
                     const storedName = mTeam?.teamLabel || mTeam?.name
                         || (matchRecord && teamIdx === 1 ? (matchRecord as any).team1Name : matchRecord && teamIdx === 2 ? (matchRecord as any).team2Name : null);
-                    if (storedName && typeof storedName === 'string' && storedName.trim()
-                        && !storedName.startsWith('Pareja') && !storedName.startsWith('TBD')) {
-                        const parts = storedName.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(Boolean);
+                    if (isRealName(storedName)) {
+                        const parts = (storedName as string).split(/\s*\/\s*/).map((s: string) => s.trim()).filter(Boolean);
                         if (parts.length >= 2) {
-                            return { p1Name: parts[0], p2Name: parts[1], p1Photo: null, p2Photo: null, name: storedName.trim() };
+                            return { p1Name: parts[0], p2Name: parts[1], p1Photo: null, p2Photo: null, name: (storedName as string).trim() };
                         }
                         if (parts.length === 1) {
                             return { p1Name: parts[0], p2Name: '', p1Photo: null, p2Photo: null, name: parts[0] };
                         }
                     }
 
-                    // 3) tournament.teams por índice — solo si no son placeholders
-                    const p1FromTeam = fullName(teamByIndex?.p1);
-                    const p2FromTeam = fullName(teamByIndex?.p2);
-                    const hasRealTournamentName = teamByIndex
-                        && (p1FromTeam.trim() && !p1FromTeam.startsWith('Pareja') && p1FromTeam !== '?'
-                            || p2FromTeam.trim() && !p2FromTeam.startsWith('Pareja') && p2FromTeam !== '?');
-                    if (hasRealTournamentName) {
-                        const p1Final = p1FromTeam && p1FromTeam !== '?' ? p1FromTeam : getSimulatedName(gender, seed * 2);
-                        const p2Final = p2FromTeam && p2FromTeam !== '?' ? p2FromTeam : getSimulatedName(gender, seed * 2 + 1);
-                        return {
-                            p1Name: p1Final,
-                            p2Name: p2Final,
-                            p1Photo: teamByIndex.p1?.photo || null,
-                            p2Photo: teamByIndex.p2?.photo || null,
-                            name: [p1Final, p2Final].filter(Boolean).join(' / ')
-                        };
-                    }
-
-                    // 4) Fallback final — nombres simulados (solo si reealmente no hay datos)
+                    // 5) Fallback final — nombres simulados
                     const p1Sim = getSimulatedName(gender, seed * 2);
                     const p2Sim = getSimulatedName(gender, seed * 2 + 1);
                     return { p1Name: p1Sim, p2Name: p2Sim, p1Photo: null, p2Photo: null, name: `${p1Sim} / ${p2Sim}` };

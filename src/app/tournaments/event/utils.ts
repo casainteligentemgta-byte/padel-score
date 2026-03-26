@@ -17,6 +17,18 @@ export const formatHHMM = (v: any) => {
 export const toMinute = (v: any): number => Math.floor(toMs(v) / 60000);
 
 /**
+ * Valida si un nombre es real (no es un placeholder tipo "Jugador X", "Pareja X", "?", etc.)
+ */
+export const isRealName = (name: any): boolean => {
+    if (!name || typeof name !== 'string') return false;
+    const n = name.trim();
+    if (!n || n === '?' || n === '-' || n.toUpperCase() === 'TBD' || n.toUpperCase() === 'TBA') return false;
+    // Regex para detectar "Jugador X", "Pareja X", "Equipo X", "P. X"
+    if (/^(JUGADOR|PAREJA|EQUIPO|P\.)\s*\d+$/i.test(n)) return false;
+    return true;
+};
+
+/**
  * Formatea un nombre para mostrar "Nombre Inicial." (e.g. Juan Perez -> Juan P.)
  */
 export const formatDisplayName = (name: string): string => {
@@ -39,32 +51,38 @@ export const formatDisplayName = (name: string): string => {
  * Resuelve los nombres de jugadores de un equipo.
  */
 export const resolveTeamNames = (team: any, teamName?: string): [string, string] => {
-    if (!team) return [teamName || '?', ''];
+    if (!team) return [isRealName(teamName) ? teamName! : '?', ''];
+    
+    // 1) Si es TBD o tiene label explicito
     if (team.isTBD || team.teamLabel) {
-        return [team.teamLabel || formatDisplayName(team.p1?.name) || teamName || '?', ''];
+        const label = team.teamLabel || team.p1Name || team.p1?.name;
+        return [isRealName(label) ? label : (isRealName(teamName) ? teamName! : '?'), ''];
     }
 
-    if (typeof team.full === 'string' && team.full.trim()) {
+    // 2) Si tiene linea 'full' (ej. "LUIS V / CARLOS V")
+    if (typeof team.full === 'string' && isRealName(team.full)) {
         const parts = team.full.split(/\s*\/\s*/).map((s: string) => s.trim()).filter(Boolean);
         if (parts.length >= 2) {
-            return [formatDisplayName(parts[0]) || '?', formatDisplayName(parts[1])];
+            return [formatDisplayName(parts[0]), formatDisplayName(parts[1])];
         }
         if (parts.length === 1) {
-            return [formatDisplayName(parts[0]) || '?', ''];
+            return [formatDisplayName(parts[0]), ''];
         }
     }
 
+    // 3) Nombres individuales
     const p1 = (team.p1Name || team.p1?.name || '').trim();
     const p2 = (team.p2Name || team.p2?.name || '').trim();
 
-    if (p1 || p2) {
+    if (isRealName(p1) || isRealName(p2)) {
         return [
-            formatDisplayName(p1) || '?',
-            formatDisplayName(p2)
+            isRealName(p1) ? formatDisplayName(p1) : '?',
+            isRealName(p2) ? formatDisplayName(p2) : ''
         ];
     }
 
-    if (team.name) {
+    // 4) team.name (ej. "Jugador 1 / Jugador 2")
+    if (isRealName(team.name)) {
         const parts = team.name.split('/');
         return [
             formatDisplayName((parts[0] || '?').trim()),
@@ -72,8 +90,9 @@ export const resolveTeamNames = (team: any, teamName?: string): [string, string]
         ];
     }
 
-    if (teamName) {
-        const parts = teamName.split('/');
+    // 5) teamName placeholder (fallback)
+    if (isRealName(teamName)) {
+        const parts = teamName!.split('/');
         return [
             formatDisplayName((parts[0] || '?').trim()),
             formatDisplayName((parts[1] || '').trim())
@@ -133,12 +152,12 @@ export const CAT_COLORS: Record<string, string> = {
 };
 
 export const TABS = [
-    { label: 'Todos', value: 'all' },
-    { label: 'Grupos', value: 'groups' },
-    { label: 'Por Comenzar', value: MatchStatus.PENDING },
-    { label: 'En Vivo', value: MatchStatus.LIVE },
-    { label: 'Finalizados', value: MatchStatus.FINISHED },
-    { label: 'Reglas', value: 'rules' },
+    { label: 'TODOS', value: 'all' },
+    { label: 'EN VIVO', value: MatchStatus.LIVE },
+    { label: 'POR COMENZAR', value: MatchStatus.PENDING },
+    { label: 'FINALIZADOS', value: MatchStatus.FINISHED },
+    { label: 'GRUPOS', value: 'groups' },
+    { label: 'REGLAS', value: 'rules' },
 ];
 
 export const KNOWN_COMPLEXES: Record<string, number> = {

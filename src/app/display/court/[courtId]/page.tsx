@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ref, onValue, off } from 'firebase/database';
 import { rtdb } from '@/lib/rtdb';
 import { dataService } from '@/lib/dataService';
-import { useAdBanner } from '@/lib/useAdBanner';
+import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
 import { MonitorOff, Megaphone, Wifi, Zap } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 import { visibleSetNumbersForScoreboard } from '@/lib/displaySetColumns';
@@ -38,16 +39,94 @@ function courtSetCell(
     return '—';
 }
 
+function TickerMarquee({ messages }: { messages: { id: string; mensaje: string }[] }) {
+    if (!messages.length) return null;
+    return (
+        <div className="w-full overflow-hidden border-b border-white/10 bg-black/60 backdrop-blur-md py-2">
+            <div className="flex items-center whitespace-nowrap animate-marquee">
+                {messages.map((msg) => (
+                    <span key={msg.id} className="mx-10 text-xs font-black uppercase tracking-widest text-padel-primary/90">
+                        {msg.mensaje}
+                    </span>
+                ))}
+                {messages.map((msg) => (
+                    <span key={`${msg.id}-d`} className="mx-10 text-xs font-black uppercase tracking-widest text-padel-primary/90">
+                        {msg.mensaje}
+                    </span>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function DualPlaylistStrip({
+    canchaId,
+    currentVideoUrl,
+    currentImageUrl,
+    videoKey,
+    imageKey,
+    onVideoEnded,
+    singleVideoLoop,
+}: {
+    canchaId: string;
+    currentVideoUrl: string | null;
+    currentImageUrl: string | null;
+    videoKey: string;
+    imageKey: string;
+    onVideoEnded: () => void;
+    singleVideoLoop: boolean;
+}) {
+    const hasVideo = Boolean(currentVideoUrl);
+    const hasImage = Boolean(currentImageUrl);
+    if (!hasVideo && !hasImage) return null;
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-white/10 min-h-[7rem]">
+            <div className="relative bg-black/80 overflow-hidden flex items-center justify-center">
+                {hasVideo ? (
+                    <video
+                        key={videoKey}
+                        src={currentVideoUrl!}
+                        className="w-full h-full object-cover opacity-90 max-h-32"
+                        autoPlay
+                        muted
+                        playsInline
+                        loop={singleVideoLoop}
+                        onEnded={onVideoEnded}
+                        onError={() => logDisplayVideoError(canchaId, currentVideoUrl!)}
+                    />
+                ) : (
+                    <span className="text-[10px] font-black uppercase text-white/25 tracking-widest">Sin vídeos</span>
+                )}
+                <span className="absolute bottom-1 left-2 text-[8px] font-black uppercase text-white/40">Vídeo</span>
+            </div>
+            <div className="relative bg-black/80 overflow-hidden flex items-center justify-center">
+                {hasImage ? (
+                    <img
+                        key={imageKey}
+                        src={currentImageUrl!}
+                        alt=""
+                        className="w-full h-full object-cover opacity-90 max-h-32"
+                    />
+                ) : (
+                    <span className="text-[10px] font-black uppercase text-white/25 tracking-widest">Sin imágenes</span>
+                )}
+                <span className="absolute bottom-1 left-2 text-[8px] font-black uppercase text-white/40">Imagen</span>
+            </div>
+        </div>
+    );
+}
+
 export default function CourtDisplayPage() {
     const courtId = useRouteSegment('courtId');
     const canchaId = `cancha_${courtId}`;
+    const searchParams = useSearchParams();
+    const venueFilter = searchParams.get('complex') || searchParams.get('venue') || null;
     useThreeFingerDragExit('/');
 
     const [canchaData, setCanchaData] = useState<any>(null);
     const [pizarraData, setPizarraData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    /** Carrusel: `cancha_publicidad` + `media_content`/`publicidad`, orden y duracion_segundos — ver useAdBanner + canchaPublicidadQuery */
-    const { currentMediaUrl, currentMediaKind, isVisible: adVisible, mode: adMode } = useAdBanner(canchaId);
+    const playlists = useCourtPlaylists(canchaId, venueFilter);
     useCourtDisplayHeartbeat(canchaId);
 
     // ── Escuchar estado de la cancha en RTDB (respaldo) ───────────────────
@@ -120,25 +199,22 @@ export default function CourtDisplayPage() {
                     </div>
                 </div>
 
-                {/* Publicidad en espera */}
-                {adVisible && currentMediaUrl && (
-                    <div className="absolute bottom-0 left-0 right-0 h-32 overflow-hidden">
-                        {currentMediaKind === 'video' ? (
-                            <video
-                                src={currentMediaUrl}
-                                className="w-full h-full object-cover opacity-40"
-                                autoPlay
-                                muted
-                                playsInline
-                                loop
-                                onError={() => logDisplayVideoError(canchaId, currentMediaUrl)}
-                            />
-                        ) : (
-                            <img src={currentMediaUrl} alt="Publicidad" className="w-full h-full object-cover opacity-40" />
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
-                    </div>
-                )}
+                <div className="absolute top-0 left-0 right-0 z-20">
+                    <TickerMarquee messages={playlists.tickerMessages} />
+                </div>
+
+                <div className="absolute bottom-0 left-0 right-0 z-10">
+                    <DualPlaylistStrip
+                        canchaId={canchaId}
+                        currentVideoUrl={playlists.currentVideoUrl}
+                        currentImageUrl={playlists.currentImageUrl}
+                        videoKey={playlists.videoKey}
+                        imageKey={playlists.imageKey}
+                        onVideoEnded={playlists.onVideoEnded}
+                        singleVideoLoop={playlists.videoUrls.length <= 1}
+                    />
+                    <div className="h-8 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+                </div>
 
                 <div className="absolute bottom-12 text-center opacity-20">
                     <p className="font-black italic uppercase tracking-[0.5em] text-xs">Smart Padel Pro System</p>
@@ -261,35 +337,19 @@ export default function CourtDisplayPage() {
                 })()}
             </div>
 
-            {/* Banner de publicidad */}
-            <AnimatePresence>
-                {adVisible && currentMediaUrl && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 20 }}
-                        className="relative h-28 border-t border-white/10 overflow-hidden flex-shrink-0"
-                    >
-                        {currentMediaKind === 'video' ? (
-                            <video
-                                src={currentMediaUrl}
-                                className="w-full h-full object-cover"
-                                autoPlay
-                                muted
-                                playsInline
-                                loop
-                                onError={() => logDisplayVideoError(canchaId, currentMediaUrl)}
-                            />
-                        ) : (
-                            <img src={currentMediaUrl} alt="Publicidad" className="w-full h-full object-cover" />
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-black/40" />
-                        <div className="absolute top-2 right-4 text-[8px] font-black uppercase tracking-widest text-white/30">
-                            {adMode === 'programada' ? '⏱ Promo' : 'Publicidad'}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            <TickerMarquee messages={playlists.tickerMessages} />
+
+            <div className="relative border-t border-white/10 flex-shrink-0 overflow-hidden">
+                <DualPlaylistStrip
+                    canchaId={canchaId}
+                    currentVideoUrl={playlists.currentVideoUrl}
+                    currentImageUrl={playlists.currentImageUrl}
+                    videoKey={playlists.videoKey}
+                    imageKey={playlists.imageKey}
+                    onVideoEnded={playlists.onVideoEnded}
+                    singleVideoLoop={playlists.videoUrls.length <= 1}
+                />
+            </div>
 
             <style jsx global>{`
                 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
