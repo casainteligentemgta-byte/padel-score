@@ -938,7 +938,11 @@ export default function ControlPanel() {
         return false;
     }).sort((a, b) => {
         // Orden: LIVE primero, luego PENDING, luego FINISHED
-        const score = { [MatchStatus.LIVE]: 1, [MatchStatus.PENDING]: 2, [MatchStatus.FINISHED]: 3 };
+        const score: Record<string, number> = { 
+            [MatchStatus.LIVE]: 1, 
+            [MatchStatus.PENDING]: 2, 
+            [MatchStatus.FINISHED]: 3 
+        };
         return (score[a.status] || 99) - (score[b.status] || 99);
     });
 
