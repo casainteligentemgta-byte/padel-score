@@ -49,7 +49,7 @@ export function useCourtPlaylists(canchaId: string, venueName: string | null | u
     if (error) {
       setRows([]);
     } else {
-      setRows((data as CourtPlaylistRowDb[]) || []);
+      setRows((data as unknown as CourtPlaylistRowDb[]) || []);
     }
 
     if (venueName?.trim()) {
