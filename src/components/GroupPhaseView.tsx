@@ -701,7 +701,7 @@ export default function GroupPhaseView({
                                                                 <span className="text-[6px] font-black uppercase tracking-widest">Control</span>
                                                             </Link>
                                                             <Link
-                                                                href={`/tournaments/${tournament.id}/display/${match.id}`}
+                                                                href={isLive ? `/tournaments/${tournament.id}/display/${match.id}` : `/tournaments/${tournament.id}/monitor`}
                                                                 target="_blank"
                                                                 className="flex flex-col items-center justify-center gap-1 py-2 text-gray-500 hover:text-white transition-all active:scale-95"
                                                             >

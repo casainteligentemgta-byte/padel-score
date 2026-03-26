@@ -161,7 +161,7 @@ function BracketMatchCard({
 
                     {/* PIZARRA */}
                     <Link
-                        href={`/tournaments/${tournamentId}/display/${match.id}`}
+                        href={match.status === MatchStatus.LIVE ? `/tournaments/${tournamentId}/display/${match.id}` : `/tournaments/${tournamentId}/monitor`}
                         target="_blank"
                         className="flex flex-col items-center justify-center gap-1 py-1.5 bg-white/[0.02] text-gray-500 hover:bg-white/[0.06] hover:text-white transition-all active:scale-95"
                     >

@@ -232,8 +232,7 @@ function MiniDock({
 
 // ── Match Card Component ──────────────────────────────────────────────────
 function ControlMatchCard({
-    match, tournamentId, canOperate, onStartMatch, onFinishMatch,
-    onToggleStream, onToggleAds, onRevertMatch, isUpdating, allPlayers
+    onToggleStream, onToggleAds, onRevertMatch, onUpdateNames, isUpdating, allPlayers
 }: {
     match: EnrichedMatch;
     tournamentId: string;
@@ -243,6 +242,7 @@ function ControlMatchCard({
     onToggleStream: (id: string, val: boolean) => void;
     onToggleAds: (id: string, val: boolean) => void;
     onRevertMatch: (id: string) => void;
+    onUpdateNames: (id: string, names: { t1p1: string; t1p2: string; t2p1: string; t2p2: string }) => Promise<void>;
     isUpdating: boolean;
     /** Lista de jugadores del torneo para sugerencias en el editor */
     allPlayers?: { name: string; lastName?: string }[];
@@ -277,19 +277,7 @@ function ControlMatchCard({
         if (saving) return;
         setSaving(true);
         try {
-            const buildTeam = (orig: any, p1n: string, p2n: string) => ({
-                ...orig,
-                p1: { ...(orig?.p1 || {}), name: p1n.trim() || orig?.p1?.name || '?' },
-                p2: { ...(orig?.p2 || {}), name: p2n.trim() || orig?.p2?.name || '?' },
-                p1Name: p1n.trim() || orig?.p1Name || '?',
-                p2Name: p2n.trim() || orig?.p2Name || '?',
-            });
-            const { team1: _t1, team2: _t2, id: _id, tournament_id: _tid, ...rest } = match as any;
-            await dataService.updateMatch(tournamentId, match.id, {
-                ...rest,
-                team1: buildTeam(match.team1, editNames.t1p1, editNames.t1p2),
-                team2: buildTeam(match.team2, editNames.t2p1, editNames.t2p2),
-            });
+            await onUpdateNames(match.id, editNames);
             setShowEdit(false);
         } catch (e) {
             console.error('[EditNames] Error saving:', e);
@@ -615,7 +603,6 @@ export default function ControlPanel() {
 
     useEffect(() => {
         if (!id || authLoading) return;
-        if (!id || authLoading) return;
         setLoading(true);
 
         let currentTournament: any = null;
@@ -745,8 +732,22 @@ export default function ControlPanel() {
             return;
         }
         setUpdatingId(matchId);
+        
+        // Optimistic update
+        const nowIso = new Date().toISOString();
+        const optimisticMatch = {
+            ...match,
+            status: MatchStatus.LIVE,
+            actualStartTime: nowIso,
+            startedAt: nowIso,
+            sets: { t1: 0, t2: 0 },
+            games: { t1: 0, t2: 0 },
+            points: { t1: 0, t2: 0 },
+            server: { team: 1 as 1, player: 1 as 1 }
+        };
+        setMatches(prev => prev.map(m => m.id === matchId ? optimisticMatch : m));
+
         try {
-            const nowIso = new Date().toISOString();
             const updatedData = {
                 ...stripMatchForDb(match),
                 status: MatchStatus.LIVE,
@@ -758,7 +759,12 @@ export default function ControlPanel() {
                 server: { team: 1 as 1, player: 1 as 1 }
             };
             await dataService.updateMatch(id, matchId, updatedData);
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error(e);
+            alert('Error al iniciar el partido. Reintentando sincronización...');
+            // Error: the realtime subscription will eventually fix the state, 
+            // but we could also force a reload if needed.
+        }
         finally { setUpdatingId(null); }
     };
 
@@ -766,6 +772,15 @@ export default function ControlPanel() {
         const match = matches.find(m => m.id === matchId);
         if (!match) return;
         setUpdatingId(matchId);
+        
+        // Optimistic update
+        const optimisticMatch = {
+            ...match,
+            status: MatchStatus.FINISHED,
+            actualEndTime: new Date().toISOString()
+        };
+        setMatches(prev => prev.map(m => m.id === matchId ? optimisticMatch : m));
+
         try {
             const updatedData = {
                 ...stripMatchForDb(match),
@@ -773,7 +788,10 @@ export default function ControlPanel() {
                 actualEndTime: new Date().toISOString()
             };
             await dataService.updateMatch(id, matchId, updatedData);
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error(e);
+            alert('Error al finalizar el partido. Verifica tu conexión.');
+        }
         finally { setUpdatingId(null); }
     };
 
@@ -781,9 +799,16 @@ export default function ControlPanel() {
         const match = matches.find(m => m.id === matchId);
         if (!match) return;
         setUpdatingId(matchId);
+        
+        // Optimistic update
+        setMatches(prev => prev.map(m => m.id === matchId ? { ...m, isStreaming: val } : m));
+
         try {
             await dataService.updateMatch(id, matchId, { ...stripMatchForDb(match), isStreaming: val });
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error(e);
+            alert('Error al cambiar el estado del stream.');
+        }
         finally { setUpdatingId(null); }
     };
 
@@ -791,10 +816,61 @@ export default function ControlPanel() {
         const match = matches.find(m => m.id === matchId);
         if (!match) return;
         setUpdatingId(matchId);
+        
+        // Optimistic update
+        setMatches(prev => prev.map(m => m.id === matchId ? { ...m, forcedAds: val } : m));
+
         try {
             await dataService.updateMatch(id, matchId, { ...stripMatchForDb(match), forcedAds: val });
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error(e);
+            alert('Error al cambiar el estado de la publicidad.');
+        }
         finally { setUpdatingId(null); }
+    };
+
+    const updateMatchNames = async (matchId: string, names: { t1p1: string; t1p2: string; t2p1: string; t2p2: string }) => {
+        const match = matches.find(m => m.id === matchId);
+        if (!match) return;
+        
+        const buildTeam = (orig: any, p1n: string, p2n: string) => ({
+            ...orig,
+            p1: { ...(orig?.p1 || {}), name: p1n.trim() || orig?.p1?.name || '?' },
+            p2: { ...(orig?.p2 || {}), name: p2n.trim() || orig?.p2?.name || '?' },
+            p1Name: p1n.trim() || orig?.p1Name || '?',
+            p2Name: p2n.trim() || orig?.p2Name || '?',
+        });
+
+        const team1 = buildTeam(match.team1, names.t1p1, names.t1p2);
+        const team2 = buildTeam(match.team2, names.t2p1, names.t2p2);
+
+        // Optimistic update - update friendly names for the UI list
+        const PLACEHOLDER_RE = /pareja|jugador|placeholder/i;
+        const getName = (t: any) => {
+            if (t.teamLabel) return t.teamLabel;
+            const p1n = (t.p1Name || '').trim();
+            const p2n = (t.p2Name || '').trim();
+            const hasReal = (p1n && !PLACEHOLDER_RE.test(p1n)) || (p2n && !PLACEHOLDER_RE.test(p2n));
+            return hasReal ? [p1n, p2n].filter(Boolean).join(' · ') : '?';
+        };
+
+        setMatches(prev => prev.map(m => m.id === matchId ? {
+            ...m,
+            team1: { ...m.team1, name: getName(team1) },
+            team2: { ...m.team2, name: getName(team2) }
+        } : m));
+
+        try {
+            const clean = stripMatchForDb(match);
+            await dataService.updateMatch(id, matchId, {
+                ...clean,
+                team1,
+                team2
+            });
+        } catch (e) {
+            console.error(e);
+            alert('Error al actualizar los nombres.');
+        }
     };
 
     const revertToPending = async (matchId: string) => {
@@ -802,19 +878,43 @@ export default function ControlPanel() {
         if (!match) return;
         if (!confirm('¿Revertir este partido a Pendiente? Se borrará el marcador actual.')) return;
         setUpdatingId(matchId);
+        
+        // Optimistic update
+        const optimisticMatch = {
+            ...match,
+            status: MatchStatus.PENDING,
+            actualStartTime: null,
+            startedAt: null,
+            actualEndTime: null,
+            isStreaming: false,
+            forcedAds: false,
+            sets: { t1: 0, t2: 0 },
+            games: { t1: 0, t2: 0 },
+            points: { t1: 0, t2: 0 },
+            server: { team: 1 as 1, player: 1 as 1 }
+        };
+        setMatches(prev => prev.map(m => m.id === matchId ? optimisticMatch : m));
+
         try {
             const clean = stripMatchForDb(match);
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { actualStartTime, startedAt, actualEndTime, isStreaming, ...rest } = clean;
             const updatedData = {
-                ...rest,
+                ...clean,
                 status: MatchStatus.PENDING,
+                actualStartTime: null,
+                startedAt: null,
+                actualEndTime: null,
+                isStreaming: false,
+                forcedAds: false,
                 sets: { t1: 0, t2: 0 },
                 games: { t1: 0, t2: 0 },
-                points: { t1: '0', t2: '0' },
+                points: { t1: 0, t2: 0 },
+                server: { team: 1 as 1, player: 1 as 1 }
             };
             await dataService.updateMatch(id, matchId, updatedData);
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error(e);
+            alert('Error al revertir el partido.');
+        }
         finally { setUpdatingId(null); }
     };
 
@@ -947,6 +1047,7 @@ export default function ControlPanel() {
                                     onToggleStream={toggleStream}
                                     onToggleAds={toggleAds}
                                     onRevertMatch={revertToPending}
+                                    onUpdateNames={updateMatchNames}
                                     isUpdating={updatingId === m.id}
                                     allPlayers={allPlayers}
                                 />
@@ -966,6 +1067,7 @@ export default function ControlPanel() {
                                     onToggleStream={toggleStream}
                                     onToggleAds={toggleAds}
                                     onRevertMatch={revertToPending}
+                                    onUpdateNames={updateMatchNames}
                                     isUpdating={updatingId === m.id}
                                     allPlayers={allPlayers}
                                 />
@@ -985,6 +1087,7 @@ export default function ControlPanel() {
                                     onToggleStream={toggleStream}
                                     onToggleAds={toggleAds}
                                     onRevertMatch={revertToPending}
+                                    onUpdateNames={updateMatchNames}
                                     isUpdating={updatingId === m.id}
                                     allPlayers={allPlayers}
                                 />

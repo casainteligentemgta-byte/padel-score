@@ -266,7 +266,13 @@ export default function RefereeScoreboard() {
 
     // ── Sincronizar marcador a pizarra_cancha_state (para displays por cancha) ──
     useEffect(() => {
-        if (!matchCourt || match?.status !== MatchStatus.LIVE) return;
+        if (!matchCourt) return;
+        
+        // Solo sincronizamos si está LIVE o si acaba de terminar (para enviar el estado final)
+        const isLive = match?.status === MatchStatus.LIVE;
+        const isFinished = match?.status === MatchStatus.FINISHED;
+        
+        if (!isLive && !isFinished) return;
 
         const canchaId = `cancha_${matchCourt}`;
         const isStb = match.superTiebreak === true
@@ -291,8 +297,10 @@ export default function RefereeScoreboard() {
             const marcador = data.marcador || {};
             const eq1 = marcador.equipo_1 || {};
             const eq2 = marcador.equipo_2 || {};
+            
             return dataService.setPizarraCanchaState(canchaId, {
                 ...data,
+                estado: isFinished ? 'finalizado' : 'en_vivo',
                 pizarra_refresh_nonce:
                     typeof data.pizarra_refresh_nonce === 'number' && Number.isFinite(data.pizarra_refresh_nonce)
                         ? data.pizarra_refresh_nonce
@@ -301,6 +309,7 @@ export default function RefereeScoreboard() {
                 partido_id: match.id,
                 marcador: {
                     ...marcador,
+                    status: match.status,
                     puntos: { local: match.points?.t1 || '0', visitante: match.points?.t2 || '0' },
                     games: { local: match.games?.t1 || 0, visitante: match.games?.t2 || 0 },
                     sets: { local: match.sets?.t1 || 0, visitante: match.sets?.t2 || 0 },
@@ -898,6 +907,20 @@ export default function RefereeScoreboard() {
             }
 
             if (isMatchFinished && id) {
+                // Al finalizar, forzar un refresco de la pizarra para que salga del modo LIVE
+                try {
+                    const canchaId = `cancha_${matchCourt}`;
+                    const cur = await dataService.getPizarraCanchaState(canchaId);
+                    const data = cur?.data || {};
+                    await dataService.setPizarraCanchaState(canchaId, {
+                        ...data,
+                        estado: 'finalizado',
+                        pizarra_refresh_nonce: (Number(data.pizarra_refresh_nonce) || 0) + 1
+                    });
+                } catch (pizarraErr) {
+                    console.warn('[winSet] Error updating pizarra status on finish (non-fatal):', pizarraErr);
+                }
+
                 setTimeout(() => {
                     window.location.href = `/tournaments/${id}`;
                 }, 3000);

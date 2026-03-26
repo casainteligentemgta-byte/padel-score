@@ -684,6 +684,23 @@ export default function MarkerControlPage() {
                 setScores,
                 ...(params.superTiebreakScore ? { superTiebreakScore: params.superTiebreakScore } : {}),
             });
+            
+            // LIMPIAR LA CANCHA PARA QUE NO SIGA SALIENDO EN VIVO
+            await dataService.setPizarraCanchaState(canchaId, {
+                estado: 'disponible',
+                torneo_id: null,
+                partido_id: null,
+                marcador: null,
+            });
+
+            // Redirigir siempre al terminar el partido
+            setTimeout(() => {
+                if (tid) {
+                    router.push(`/tournaments/${tid}?tab=por-comenzar`);
+                } else {
+                    router.push('/tournaments?status=programado');
+                }
+            }, 600);
         } catch (e) {
             console.warn('[Marker] Persistir FINISHED en match:', e);
         }
@@ -1022,12 +1039,6 @@ export default function MarkerControlPage() {
             alert(
                 `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${setsFinal.local}-${setsFinal.visitante})`
             );
-            const tid = canchaData?.torneo_id;
-            if (tid) {
-                router.push(`/tournaments/${tid}?tab=por-comenzar`);
-            } else {
-                router.push('/tournaments?status=programado');
-            }
         }
     };
 

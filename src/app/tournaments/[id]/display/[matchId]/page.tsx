@@ -737,8 +737,8 @@ export default function FullScreenDisplay() {
                 };
 
                 const resolveTeam = (mTeam: any, teamIdx: number, matchRecord?: any) => {
-                    const gender = tournament?.gender; // Use state tournament instead of closure currentTournament
-                    const teams = tournament?.teams || [];
+                    const gender = t?.gender; // FIX: Use local 't' object instead of stale state
+                    const teams = t?.teams || []; // FIX: Use local 't' object
                     const teamByIndex = teamIdx > 0 ? teams[teamIdx - 1] : null;
                     const seed = teamIdx || 1;
 
@@ -890,11 +890,29 @@ export default function FullScreenDisplay() {
             }
         };
 
+        // Initial Fetch
+        const initialFetch = async () => {
+            try {
+                const [t, ms] = await Promise.all([
+                    dataService.getTournament(id),
+                    dataService.getMatches(id)
+                ]);
+                if (t) currentTournament = t;
+                if (ms) currentMatches = ms;
+                if (currentTournament) updateAll(currentTournament, currentMatches);
+            } catch (error) {
+                console.error("Error in initial fetch:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        initialFetch();
+
         // 1. Supabase Subscriptions
         const unsubT = dataService.subscribeToTournament(id, (t) => {
             if (!t) return;
             currentTournament = t;
-            if (currentMatches.length > 0) updateAll(currentTournament, currentMatches);
+            updateAll(currentTournament, currentMatches);
         });
 
         const unsubM = dataService.subscribeToMatches(id, (ms) => {
@@ -903,7 +921,7 @@ export default function FullScreenDisplay() {
             if (currentTournament) updateAll(currentTournament, currentMatches);
         });
 
-        // Polling de respaldo: cuando el partido está LIVE, refrescar cada 3s por si Realtime no dispara
+        // Polling de respaldo: refrescar cada 3s por si Realtime no dispara
         const pollInterval = setInterval(async () => {
             const ms = await dataService.getMatches(id);
             if (ms?.length && currentTournament) {
@@ -912,13 +930,10 @@ export default function FullScreenDisplay() {
             }
         }, 3000);
 
-        const timeout = setTimeout(() => setLoading(false), 10000);
-
         return () => {
             unsubT();
             unsubM();
             clearInterval(pollInterval);
-            clearTimeout(timeout);
         };
     }, [id, matchId]);
 

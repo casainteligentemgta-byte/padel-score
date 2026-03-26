@@ -2285,7 +2285,7 @@ export default function TournamentDashboard() {
                                                                                 <span className="text-[7px] font-black uppercase tracking-widest leading-none">Control</span>
                                                                             </Link>
                                                                             <Link
-                                                                                href={id && match?.id ? `/tournaments/${id}/display/${match.id}` : id ? `/tournaments/${id}/monitor` : '#'}
+                                                                                href={id && match?.id && (markerLiveMatchIds.has(String(match.id)) || match.status === MatchStatus.LIVE) ? `/tournaments/${id}/display/${match.id}` : id ? `/tournaments/${id}/monitor` : '#'}
                                                                                 target={id ? '_blank' : undefined}
                                                                                 className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-white transition-all active:scale-90 border-r border-white/5"
                                                                             >
