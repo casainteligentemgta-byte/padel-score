@@ -12,6 +12,7 @@ import { useRouteSegment } from '@/lib/useRouteSegment';
 import {
     partitionPlaylistRows,
     fetchCanchaPlaylistConfig,
+    fetchCanchaPlaylistRows,
     fetchCanchaTiraMessages,
     type CourtPlaylistRowDb,
 } from '@/lib/courtPlaylists';
@@ -103,36 +104,16 @@ export default function TVCourtDisplayPage() {
 
         const initDisplay = async () => {
             if (!supabase) return;
-            const canchaKey = `cancha_${courtId}`;
-            let q = supabase
-                .from('cancha_publicidad')
-                .select('orden, duracion_segundos, playlist_slot, media_content(*)')
-                .eq('cancha_id', canchaKey)
-                .order('orden', { ascending: true });
-            if (complexFilter) q = q.eq('venue_name', complexFilter);
-            const r1 = await q;
-            let rows: CourtPlaylistRowDb[] = (r1.data as CourtPlaylistRowDb[]) || [];
-            let err = r1.error;
-            if (err && err.message?.includes('playlist_slot')) {
-                let q2 = supabase
-                    .from('cancha_publicidad')
-                    .select('orden, duracion_segundos, media_content(*)')
-                    .eq('cancha_id', canchaKey)
-                    .order('orden', { ascending: true });
-                if (complexFilter) q2 = q2.eq('venue_name', complexFilter);
-                const r2 = await q2;
-                rows = (r2.data as CourtPlaylistRowDb[]) || [];
-                err = r2.error;
-            }
-            if (err) {
-                console.warn('[TV Display] cancha_publicidad:', err.message);
+            const res = await fetchCanchaPlaylistRows(supabase, `cancha_${courtId}`, complexFilter);
+            if (res.error) {
+                console.warn('[TV Display] cancha_publicidad:', res.error.message);
                 setCourtRows([]);
                 return;
             }
-            setCourtRows(rows);
+            setCourtRows((res.data as CourtPlaylistRowDb[]) || []);
 
             if (complexFilter) {
-                const cfg = await fetchCanchaPlaylistConfig(supabase, canchaKey, complexFilter);
+                const cfg = await fetchCanchaPlaylistConfig(supabase, `cancha_${courtId}`, complexFilter);
                 setCarouselCfg(
                     cfg
                         ? {
