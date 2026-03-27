@@ -356,15 +356,14 @@ export default function TournamentDashboard() {
             .channel(`matches-status-${id}`)
             .on(
                 'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'tournament_matches', filter: `tournament_id=eq.${id}` },
+                { event: '*', schema: 'public', table: 'tournament_matches', filter: `tournament_id=eq.${id}` },
                 async (payload) => {
                     const before = String((payload.old as any)?.data?.status || '').toUpperCase();
                     const after = String((payload.new as any)?.data?.status || '').toUpperCase();
-                    if (!after || before === after) return;
 
                     // Update optimista local para que "salte" entre columnas sin esperar polling.
                     const matchId = String((payload.new as any)?.id || '');
-                    if (matchId) {
+                    if (matchId && after && before !== after) {
                         setMatches((prev) =>
                             prev.map((m) =>
                                 String(m?.id) === matchId
@@ -374,7 +373,7 @@ export default function TournamentDashboard() {
                         );
                     }
 
-                    // Re-sync completo para evitar drift de datos derivados.
+                    // Re-sync completo de listas ante INSERT/UPDATE/DELETE.
                     router.refresh();
                 }
             )

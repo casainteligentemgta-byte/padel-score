@@ -51,6 +51,8 @@ export default function MarkerControlPage() {
         j4: '',
     });
     const [showJugadoresEdit, setShowJugadoresEdit] = useState(false);
+    const finishedLockRef = useRef(false);
+    const lastFinishedCheckRef = useRef<{ at: number; finished: boolean }>({ at: 0, finished: false });
 
     const searchParams = useSearchParams();
     // Soporte para jugadores individuales (p1/p2 = equipo 1, p3/p4 = equipo 2)
@@ -274,6 +276,28 @@ export default function MarkerControlPage() {
         canchaData?.marcador?.equipo_2?.nombre,
     ]);
 
+    // ── Transición de estados del partido ───────────────────────────────────
+    const updateMatchStatus = async (
+        matchId: string,
+        newStatus: 'WARM_UP' | 'IN_PROGRESS' | 'FINISHED',
+        tournamentId?: string
+    ) => {
+        const tid = String(tournamentId || canchaDataRef.current?.torneo_id || '').trim();
+        const pid = String(matchId || '').trim();
+        if (!tid || !pid || pid.startsWith('live_')) return;
+
+        const nowIso = new Date().toISOString();
+        const patch: Record<string, unknown> = { status: newStatus };
+        if (newStatus === 'WARM_UP') patch.startedAt = nowIso;
+        if (newStatus === 'IN_PROGRESS') patch.actualStartTime = nowIso;
+        if (newStatus === 'FINISHED') {
+            patch.finishedAt = nowIso;
+            patch.actualEndTime = nowIso;
+            finishedLockRef.current = true;
+        }
+        await dataService.updateMatch(tid, pid, patch);
+    };
+
     // ── Activar partido (Supabase pizarra_cancha_state) ─────────────────────
     const handleActivar = async () => {
         if (!user) return;
@@ -347,12 +371,8 @@ export default function MarkerControlPage() {
             // Transición estricta al iniciar desde Marker:
             // SCHEDULED -> WARM_UP (si hay cronómetro) o IN_PROGRESS.
             if (torneoIdActivar && partidoIdActivar && !String(partidoIdActivar).startsWith('live_')) {
-                const hasTimer = true;
-                await dataService.updateMatch(String(torneoIdActivar), String(partidoIdActivar), {
-                    status: hasTimer ? 'WARM_UP' : 'IN_PROGRESS',
-                    startedAt: new Date().toISOString(),
-                    ...(hasTimer ? {} : { actualStartTime: new Date().toISOString() }),
-                });
+                finishedLockRef.current = false;
+                await updateMatchStatus(String(partidoIdActivar), 'WARM_UP', String(torneoIdActivar));
             }
             setShowSetup(false);
         } catch (err) {
@@ -456,6 +476,37 @@ export default function MarkerControlPage() {
     const actualizarMarcadorLocal = async (patch: Record<string, any>) => {
         // Build next state based on current best-known state (ref)
         const curData = canchaDataRef.current || {};
+        if (finishedLockRef.current) {
+            alert('Este partido ya está FINALIZADO y no puede modificarse.');
+            return;
+        }
+        const tid = String(curData?.torneo_id || '').trim();
+        const pid = String(curData?.partido_id || '').trim();
+        if (tid && pid && !pid.startsWith('live_')) {
+            const nowMs = Date.now();
+            if (nowMs - lastFinishedCheckRef.current.at > 1500) {
+                try {
+                    const rows = await dataService.getMatches(tid);
+                    const current = rows.find((m: any) => String(m?.id) === pid);
+                    const isFinished = String(current?.status || '').toUpperCase() === 'FINISHED';
+                    lastFinishedCheckRef.current = { at: nowMs, finished: isFinished };
+                    if (isFinished) {
+                        finishedLockRef.current = true;
+                        alert('Este partido ya está FINALIZADO y no permite cambios.');
+                        return;
+                    }
+                } catch (err) {
+                    if (err instanceof Error && err.message.includes('FINISHED')) {
+                        alert('Este partido ya está FINALIZADO y no permite cambios.');
+                        return;
+                    }
+                }
+            } else if (lastFinishedCheckRef.current.finished) {
+                finishedLockRef.current = true;
+                alert('Este partido ya está FINALIZADO y no permite cambios.');
+                return;
+            }
+        }
         const marcadorPrev = curData.marcador || {};
         
         // Deep merge only for 'marcador' level keys that are objects
@@ -712,9 +763,8 @@ export default function MarkerControlPage() {
             const setScores = (params.historicoSets || [])
                 .slice(0, normalSetCount)
                 .map((s) => ({ t1: Number(s?.local ?? 0) || 0, t2: Number(s?.visitante ?? 0) || 0 }));
+            await updateMatchStatus(String(pid), 'FINISHED', String(tid));
             await dataService.updateMatch(String(tid), String(pid), {
-                status: 'FINISHED',
-                finishedAt: new Date().toISOString(),
                 sets: { t1: params.sets.local || 0, t2: params.sets.visitante || 0 },
                 games: {
                     t1: params.finalGames?.local ?? 0,
@@ -753,7 +803,7 @@ export default function MarkerControlPage() {
                 await dataService.updateMatch(String(tid), String(nextMatch.id), {
                     court: courtNumber,
                     ...(courtIndex !== undefined ? { courtIndex } : {}),
-                    status: 'READY',
+                    status: 'SCHEDULED',
                     readyAt: new Date().toISOString(),
                 });
 
@@ -1250,10 +1300,7 @@ export default function MarkerControlPage() {
             const pid = String(curData?.partido_id || '').trim();
             if (tid && pid && !pid.startsWith('live_')) {
                 try {
-                    await dataService.updateMatch(tid, pid, {
-                        status: 'IN_PROGRESS',
-                        actualStartTime: new Date().toISOString(),
-                    });
+                    await updateMatchStatus(pid, 'IN_PROGRESS', tid);
                 } catch (e) {
                     console.warn('[Marker] No se pudo mover a IN_PROGRESS:', e);
                 }

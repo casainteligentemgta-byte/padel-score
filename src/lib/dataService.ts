@@ -284,6 +284,38 @@ export const dataService = {
         }
     },
 
+    async getScheduledMatches(tournamentId: string) {
+        const rows = await this.getMatches(tournamentId);
+        return rows
+            .filter((m: any) => this.normalizeMatchStatus(m?.status) === 'SCHEDULED')
+            .sort((a: any, b: any) => {
+                const aN = Number(a?.match_number ?? a?.matchNumber ?? a?.order ?? a?.orden);
+                const bN = Number(b?.match_number ?? b?.matchNumber ?? b?.order ?? b?.orden);
+                const aOrder = Number.isFinite(aN) ? aN : Number.MAX_SAFE_INTEGER;
+                const bOrder = Number.isFinite(bN) ? bN : Number.MAX_SAFE_INTEGER;
+                return aOrder - bOrder;
+            });
+    },
+
+    async getLiveMatchesByTournament(tournamentId: string) {
+        const rows = await this.getMatches(tournamentId);
+        return rows.filter((m: any) => {
+            const s = this.normalizeMatchStatus(m?.status);
+            return s === 'WARM_UP' || s === 'IN_PROGRESS';
+        });
+    },
+
+    async getFinishedMatches(tournamentId: string) {
+        const rows = await this.getMatches(tournamentId);
+        return rows
+            .filter((m: any) => this.normalizeMatchStatus(m?.status) === 'FINISHED')
+            .sort((a: any, b: any) => {
+                const aMs = new Date(a?.updated_at || a?.updatedAt || a?.actualEndTime || a?.finishedAt || 0).getTime();
+                const bMs = new Date(b?.updated_at || b?.updatedAt || b?.actualEndTime || b?.finishedAt || 0).getTime();
+                return bMs - aMs;
+            });
+    },
+
     async updateMatch(tournamentId: string, matchId: string, data: any) {
         const { data: row } = await supabase()
             .from('tournament_matches')
@@ -1950,7 +1982,7 @@ export const dataService = {
 
                 const live = (matches || []).filter((m: any) => {
                     const status = m.data?.status;
-                    return status === 'LIVE' || status === 'IN_PROGRESS' || status === 'STARTED';
+                    return status === 'WARM_UP' || status === 'IN_PROGRESS';
                 }).map((m: any) => {
                     const tournament = { id: t.id, ...t.data };
                     const matchData = m.data || {};
