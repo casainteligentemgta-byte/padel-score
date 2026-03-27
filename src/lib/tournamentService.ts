@@ -2,7 +2,7 @@ import { getSupabaseClient } from './supabase/client';
 import { dataService } from './dataService';
 import { TournamentType } from '@/types/tournament';
 import { MatchStatus } from '@/types/tournament';
-import * as tournamentCore from './tournamentCore';
+import { buildPlayoffsFromGroupResults, type Match as EngineMatch, type Team as EngineTeam } from './tournamentEngine';
 
 const now = () => new Date().toISOString();
 
@@ -507,7 +507,7 @@ export async function generatePlayoffs(tournamentId: string, categoryId: string)
 
     const teamsArr = Array.isArray(tournament.teams) ? tournament.teams : [];
     
-    // 4. Calcular Rankings por Grupo
+    // 4. Calcular Rankings por Grupo (motor nuevo, puro e inmutable)
     const groups: Record<string, { teams: any[]; matches: any[] }> = {};
     groupMatches.forEach(m => {
       const gName = m.groupName || 'A';
@@ -534,11 +534,39 @@ export async function generatePlayoffs(tournamentId: string, categoryId: string)
       throw new Error("Se requieren al menos 2 grupos para generar semifinales automáticas.");
     }
 
-    const rankingA = tournamentCore.getRanking(groups[groupKeys[0]].teams, groups[groupKeys[0]].matches);
-    const rankingB = tournamentCore.getRanking(groups[groupKeys[1]].teams, groups[groupKeys[1]].matches);
+    const gA = groupKeys[0];
+    const gB = groupKeys[1];
+    const allTeams: EngineTeam[] = [];
+    const allGroupMatches: EngineMatch[] = [];
 
-    // 5. Generar Semifinales
-    const sfMatches = tournamentCore.generateSemifinals(rankingA, rankingB);
+    [gA, gB].forEach((gName) => {
+      const g = groups[gName];
+      (g?.teams || []).forEach((t: any) => {
+        allTeams.push({
+          id: String(t.id),
+          name: String(t.name || t.id),
+          groupId: gName,
+        });
+      });
+      (g?.matches || []).forEach((m: any) => {
+        allGroupMatches.push({
+          id: String(m.id),
+          phase: 'GROUP',
+          groupId: gName,
+          homeTeamId: String(m.team1Id),
+          awayTeamId: String(m.team2Id),
+          homeScore: Number(m.score1 ?? 0),
+          awayScore: Number(m.score2 ?? 0),
+          finished: m.status === MatchStatus.FINISHED,
+        });
+      });
+    });
+
+    const { semifinals } = buildPlayoffsFromGroupResults(allTeams, allGroupMatches, gA, gB);
+    const sfMatches = semifinals.map((sf) => ({
+      team1Id: sf.homeTeamId,
+      team2Id: sf.awayTeamId,
+    }));
     
     // 6. Preparar payloads para Supabase
     const ts = Date.now().toString(36);
@@ -573,6 +601,25 @@ export async function generatePlayoffs(tournamentId: string, categoryId: string)
     console.error('[generatePlayoffs] Error:', error);
     return { success: false, error: error.message || error };
   }
+}
+
+/**
+ * Cierra grupos y genera playoffs en un solo paso.
+ * Wrapper explícito para panel/admin.
+ */
+export async function closeGroupsAndGeneratePlayoffs(
+  tournamentId: string,
+  categoryId: string,
+): Promise<{ success: boolean; matchesCreated?: number; message?: string; error?: any }> {
+  const result = await generatePlayoffs(tournamentId, categoryId);
+  if (!result.success) {
+    return { ...result, message: 'No se pudieron cerrar grupos y generar playoffs.' };
+  }
+  return {
+    success: true,
+    matchesCreated: result.matchesCreated ?? 0,
+    message: `Playoffs generados correctamente (${result.matchesCreated ?? 0} partidos).`,
+  };
 }
 
 

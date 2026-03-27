@@ -19,7 +19,7 @@ import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
-import { validateTournamentIntegrity, generatePlayoffs } from '@/lib/tournamentService';
+import { closeGroupsAndGeneratePlayoffs, validateTournamentIntegrity } from '@/lib/tournamentService';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 interface EnrichedMatch {
@@ -1140,10 +1140,18 @@ export default function ControlPanel() {
 function StandingsView({ tournament, matches }: { tournament: any; matches: EnrichedMatch[] }) {
     const [isGenerating, setIsGenerating] = useState(false);
     const [msg, setMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [lastAudit, setLastAudit] = useState<string | null>(null);
+
+    const categoryId = useMemo(() => matches[0]?.categoryId || 'DEFAULT', [matches]);
+    const categoryMatches = useMemo(
+        () => matches.filter(m => (m.categoryId || 'DEFAULT') === categoryId),
+        [matches, categoryId]
+    );
 
     const groupMatches = useMemo(() => 
-        matches.filter(m => m.stage === 'GROUP_STAGE' || (m.stage === 'OPEN' && !!m.groupName)),
-        [matches]
+        categoryMatches.filter(m => m.stage === 'GROUP_STAGE' || (m.stage === 'OPEN' && !!m.groupName)),
+        [categoryMatches]
     );
     
     const allFinished = useMemo(() => 
@@ -1152,8 +1160,12 @@ function StandingsView({ tournament, matches }: { tournament: any; matches: Enri
     );
     
     const hasPlayoffs = useMemo(() => 
-        matches.some(m => m.stage === 'PLAYOFFS'),
-        [matches]
+        categoryMatches.some(m => m.stage === 'PLAYOFFS'),
+        [categoryMatches]
+    );
+    const pendingGroupCount = useMemo(
+        () => groupMatches.filter(m => m.status !== MatchStatus.FINISHED).length,
+        [groupMatches]
     );
 
     const groupRankings = useMemo(() => {
@@ -1302,7 +1314,7 @@ function StandingsView({ tournament, matches }: { tournament: any; matches: Enri
                 {!allFinished && !hasPlayoffs && (
                     <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-full">
                         <AlertCircle className="w-3 h-3 text-amber-500" />
-                        <span className="text-[9px] font-black uppercase tracking-widest text-amber-500">Pendiente: {groupMatches.filter(m => m.status !== MatchStatus.FINISHED).length} partidos</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-amber-500">Pendiente: {pendingGroupCount} partidos</span>
                     </div>
                 )}
 
@@ -1317,25 +1329,15 @@ function StandingsView({ tournament, matches }: { tournament: any; matches: Enri
                     </motion.div>
                 )}
 
+                {lastAudit && (
+                    <div className="text-[9px] font-mono text-white/35 border border-white/10 rounded-xl px-3 py-2">
+                        {lastAudit}
+                    </div>
+                )}
+
                 <button
                     disabled={!allFinished || hasPlayoffs || isGenerating}
-                    onClick={async () => {
-                        setIsGenerating(true);
-                        setMsg(null);
-                        try {
-                            const catId = matches[0]?.categoryId || 'DEFAULT';
-                            const res = await generatePlayoffs(tournament.id, catId);
-                            if (res.success) {
-                                setMsg({ type: 'success', text: `¡Éxito! Se han generado los partidos de Playoff.` });
-                            } else {
-                                setMsg({ type: 'error', text: `Error: ${res.error}` });
-                            }
-                        } catch (e: any) {
-                            setMsg({ type: 'error', text: `Excepción: ${e.message}` });
-                        } finally {
-                            setIsGenerating(false);
-                        }
-                    }}
+                    onClick={() => setConfirmOpen(true)}
                     className={`flex items-center gap-3 px-8 py-4 rounded-2xl font-black italic uppercase tracking-tighter text-xs transition-all duration-500
                         ${allFinished && !hasPlayoffs 
                             ? 'bg-padel-primary text-black hover:scale-105 active:scale-95 shadow-[0_4px_20px_rgba(204,255,0,0.3)]' 
@@ -1355,6 +1357,55 @@ function StandingsView({ tournament, matches }: { tournament: any; matches: Enri
                         </>
                     )}
                 </button>
+
+                {confirmOpen && (
+                    <div className="w-full max-w-md rounded-2xl border border-white/10 bg-black/70 p-4 space-y-3">
+                        <p className="text-xs text-white/80 font-black uppercase tracking-wide">
+                            Confirmar generación de playoffs
+                        </p>
+                        <p className="text-[11px] text-white/60">
+                            Categoría: <span className="text-white/90 font-mono">{String(categoryId)}</span>.
+                            Se crearán cruces de semifinales para esta categoría.
+                        </p>
+                        <div className="flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                className="px-3 py-2 text-[10px] rounded-xl border border-white/15 text-white/80 hover:bg-white/5"
+                                onClick={() => setConfirmOpen(false)}
+                                disabled={isGenerating}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                className="px-3 py-2 text-[10px] rounded-xl bg-padel-primary text-black font-black uppercase"
+                                disabled={isGenerating}
+                                onClick={async () => {
+                                    setIsGenerating(true);
+                                    setMsg(null);
+                                    try {
+                                        const res = await closeGroupsAndGeneratePlayoffs(tournament.id, categoryId);
+                                        if (res.success) {
+                                            setMsg({ type: 'success', text: res.message || '¡Éxito! Se han generado los partidos de Playoff.' });
+                                            setLastAudit(`[${new Date().toISOString()}] Playoffs generados por acción manual · category=${String(categoryId)} · created=${res.matchesCreated ?? 0}`);
+                                        } else {
+                                            setMsg({ type: 'error', text: `Error: ${String(res.error || 'No se pudieron generar los playoffs.')}` });
+                                            setLastAudit(`[${new Date().toISOString()}] Fallo al generar playoffs · category=${String(categoryId)} · error=${String(res.error || 'unknown')}`);
+                                        }
+                                    } catch (e: any) {
+                                        setMsg({ type: 'error', text: `Excepción: ${e.message}` });
+                                        setLastAudit(`[${new Date().toISOString()}] Excepción en generación de playoffs · category=${String(categoryId)} · error=${String(e?.message || 'unknown')}`);
+                                    } finally {
+                                        setIsGenerating(false);
+                                        setConfirmOpen(false);
+                                    }
+                                }}
+                            >
+                                Confirmar y generar
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </motion.div>
     );
