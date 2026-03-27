@@ -248,9 +248,10 @@ function ControlMatchCard({
     /** Lista de jugadores del torneo para sugerencias en el editor */
     allPlayers?: { name: string; lastName?: string }[];
 }) {
-    const isLive = match.status === MatchStatus.LIVE;
-    const isPending = match.status === MatchStatus.PENDING;
-    const isFinished = match.status === MatchStatus.FINISHED;
+    const s = match.status?.toString().toUpperCase();
+    const isLive = s === 'LIVE';
+    const isPending = s === 'PENDING';
+    const isFinished = s === 'FINISHED';
 
     // ── Edit names state ─────────────────────────────────────────────────
     const extractName = (team: any, player: 'p1' | 'p2') => {
@@ -678,23 +679,9 @@ export default function ControlPanel() {
             if (currentTournament) updateData(currentTournament, currentMatches);
         });
 
-        // 2. Firestore Subscriptions (Fallback / Event view support)
-        let unsubFT = () => { };
-        let unsubFM = () => { };
-
-        if (db) {
-            unsubFT = onSnapshot(doc(db, 'tournaments', id), (snap) => {
-                if (!snap.exists()) return;
-                currentTournament = { id: snap.id, ...snap.data() };
-                if (currentMatches.length > 0) updateData(currentTournament, currentMatches);
-            });
-
-            unsubFM = onSnapshot(collection(db, 'tournaments', id, 'matches'), (snap) => {
-                if (snap.empty) return;
-                currentMatches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                if (currentTournament) updateData(currentTournament, currentMatches);
-            });
-        }
+        // 2. Firestore Subscriptions (Removed as they cause state conflicts with Supabase)
+        // let unsubFT = () => { };
+        // let unsubFM = () => { };
 
         // Safety timeout
         const timeout = setTimeout(() => setLoading(false), 10000);
@@ -702,8 +689,6 @@ export default function ControlPanel() {
         return () => {
             if (typeof unsubT === 'function') unsubT();
             if (typeof unsubM === 'function') unsubM();
-            unsubFT();
-            unsubFM();
             clearTimeout(timeout);
         };
     }, [id, authLoading, tournament?.teams]);
@@ -919,35 +904,39 @@ export default function ControlPanel() {
         finally { setUpdatingId(null); }
     };
 
-    const liveMatches = matches.filter(m => m.status === MatchStatus.LIVE);
-    const finishedMatches = matches.filter(m => m.status === MatchStatus.FINISHED)
+    const liveMatches = matches.filter(m => m.status?.toString().toUpperCase() === 'LIVE');
+    const finishedMatches = matches.filter(m => m.status?.toString().toUpperCase() === 'FINISHED')
         .sort((a, b) => {
-            const timeA = new Date(a.actualEndTime || a.updatedAt || 0).getTime();
-            const timeB = new Date(b.actualEndTime || b.updatedAt || 0).getTime();
+            const timeA = new Date(a.actualEndTime || a.updatedAt || a.updated_at || 0).getTime();
+            const timeB = new Date(b.actualEndTime || b.updatedAt || b.updated_at || 0).getTime();
             return timeB - timeA; // Más recientes arriba
         });
-    const pendingMatches = matches.filter(m => m.status === MatchStatus.PENDING);
+    const pendingMatches = matches.filter(m => m.status?.toString().toUpperCase() === 'PENDING');
 
     // En 'Activa' mostramos: En Vivo, Pendientes con Pista asignada y Finalizados recientemente
     const activePhaseMatches = matches.filter(m => {
-        if (m.status === MatchStatus.LIVE) return true;
-        if (m.status === MatchStatus.PENDING) {
+        const s = m.status?.toString().toUpperCase();
+        if (s === 'LIVE') return true;
+        if (s === 'PENDING') {
             return m.court !== undefined && m.court !== null && m.court !== '';
         }
         return false;
     }).sort((a, b) => {
         // Orden: LIVE primero, luego PENDING, luego FINISHED
+        const sA = a.status?.toString().toUpperCase() || '';
+        const sB = b.status?.toString().toUpperCase() || '';
         const score: Record<string, number> = { 
-            [MatchStatus.LIVE]: 1, 
-            [MatchStatus.PENDING]: 2, 
-            [MatchStatus.FINISHED]: 3 
+            'LIVE': 1, 
+            'PENDING': 2, 
+            'FINISHED': 3 
         };
-        return (score[a.status] || 99) - (score[b.status] || 99);
+        return (score[sA] || 99) - (score[sB] || 99);
     });
 
-    const proximosMatches = matches.filter(m =>
-        m.status === MatchStatus.PENDING && (m.court === undefined || m.court === null || m.court === '')
-    );
+    const proximosMatches = matches.filter(m => {
+        const s = m.status?.toString().toUpperCase();
+        return s === 'PENDING' && (m.court === undefined || m.court === null || m.court === '');
+    });
 
     const progress = matches.length > 0 ? (finishedMatches.length / matches.length) * 100 : 0;
 
