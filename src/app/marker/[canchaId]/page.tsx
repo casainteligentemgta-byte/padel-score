@@ -430,12 +430,16 @@ export default function MarkerControlPage() {
                 }
                 : null;
                 
-            await persistFinishedMatchFromMarker({
+            const finalized = await persistFinishedMatchFromMarker({
                 sets: curSets,
                 historicoSets: curHist,
                 finalGames: curGames,
                 ...(stbScore ? { superTiebreakScore: stbScore } : {}),
             });
+            // persistFinishedMatchFromMarker ya: guarda FINISHED, encola siguiente partido en esta pizarra o deja cancha libre, y navega.
+            // No volver a vaciar la pizarra aquí: antes borraba el siguiente partido y el mapping.
+            if (finalized) return;
+
             await dataService.setPizarraCanchaState(canchaId, {
                 estado: 'espera',
                 active_match_id: null,
@@ -752,11 +756,11 @@ export default function MarkerControlPage() {
         historicoSets: Array<{ local: number; visitante: number }>;
         finalGames?: { local: number; visitante: number } | null;
         superTiebreakScore?: { t1: number; t2: number } | null;
-    }) => {
+    }): Promise<boolean> => {
         const curData = canchaDataRef.current || {};
         const tid = curData?.torneo_id;
         const pid = curData?.partido_id;
-        if (!tid || !pid || String(pid).startsWith('live_')) return;
+        if (!tid || !pid || String(pid).startsWith('live_')) return false;
         try {
             const totalSets = (params.sets.local || 0) + (params.sets.visitante || 0);
             const normalSetCount = params.superTiebreakScore ? Math.max(totalSets - 1, 0) : totalSets;
@@ -828,6 +832,18 @@ export default function MarkerControlPage() {
                 const tournament = await dataService.getTournament(String(tid));
                 const { team1, team2 } = resolveMatchTeamLines(nextMatch, tournament);
 
+                let match_format: string | undefined =
+                    (nextMatch as any)?.rrMatchFormat ?? (nextMatch as any)?.matchFormat;
+                let tie_break_type: 'TB' | 'STB' | undefined = (nextMatch as any)?.tieBreakType;
+                let golden_point = false;
+                if (tournament) {
+                    match_format =
+                        match_format ?? (tournament as any)?.rrMatchFormat ?? (tournament as any)?.matchFormat;
+                    tie_break_type = tie_break_type || tournament.tieBreakType;
+                    golden_point = tournament.scoringSystem === 'GOLDEN_POINT';
+                }
+                const sets_to_win_match = deriveSetsToWinMatch(match_format, tie_break_type);
+
                 await dataService.setPizarraCanchaState(canchaId, {
                     estado: 'ready',
                     active_match_id: String(nextMatch.id),
@@ -841,8 +857,12 @@ export default function MarkerControlPage() {
                         puntos: { local: '0', visitante: '0' },
                         historico_sets: [],
                         modo_puntos: 'normal',
-                        golden_point: false,
+                        golden_point,
                         super_tiebreak: false,
+                        match_format,
+                        tie_break_type,
+                        sets_to_win_match,
+                        court: courtNumber,
                         equipo_1: { nombre: team1 || 'Equipo 1', color: '#CCFF00' },
                         equipo_2: { nombre: team2 || 'Equipo 2', color: '#FF5500' },
                         cronometro: { running: false, startedAt: null, elapsedSec: 0 },
@@ -890,8 +910,10 @@ export default function MarkerControlPage() {
                     router.push('/tournaments?status=programado');
                 }
             }, 600);
+            return true;
         } catch (e) {
             console.warn('[Marker] Persistir FINISHED en match:', e);
+            return false;
         }
     };
 
