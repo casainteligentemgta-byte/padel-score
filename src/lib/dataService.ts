@@ -116,15 +116,31 @@ export const dataService = {
     },
 
     /**
+     * En vivo en el hub: marker (WARM_UP / IN_PROGRESS) y flujos legacy (LIVE / PAUSED / STARTED).
+     */
+    isMatchEnVivoStatus(status: unknown): boolean {
+        const s = this.normalizeMatchStatus(status);
+        return (
+            s === 'WARM_UP' ||
+            s === 'IN_PROGRESS' ||
+            s === 'LIVE' ||
+            s === 'PAUSED' ||
+            s === 'STARTED'
+        );
+    },
+
+    /**
      * Partidos que deben listarse como finalizados en el hub.
-     * Incluye recuperación si `status` quedó en IN_PROGRESS por un segundo merge con JSON obsoleto (caso STB / 2 sets).
+     * Incluye recuperación si `status` no llegó a FINISHED (merge, marcador sin setScores, etc.).
      */
     isMatchFinishedLike(m: any): boolean {
         const s = this.normalizeMatchStatus(m?.status);
         if (s === 'FINISHED') return true;
         const t1 = Number(m?.sets?.t1 ?? m?.sets?.local ?? 0) || 0;
         const t2 = Number(m?.sets?.t2 ?? m?.sets?.visitante ?? 0) || 0;
-        if (t1 < 2 && t2 < 2) return false;
+        const needRaw = Number(m?.sets_to_win_match ?? m?.setsToWinMatch);
+        const need = Number.isFinite(needRaw) && needRaw >= 1 ? needRaw : 2;
+        if (t1 >= need || t2 >= need) return true;
         const stb = m?.superTiebreakScore;
         if (stb && typeof stb === 'object' && (t1 >= 2 || t2 >= 2)) return true;
         const scores = m?.setScores;
@@ -140,6 +156,7 @@ export const dataService = {
         };
         return list
             .filter((m: any) => this.isMatchPorComenzarStatus(m?.status))
+            .filter((m: any) => !this.isMatchFinishedLike(m))
             .filter((m: any) => {
                 if (!excludedMatchIds || excludedMatchIds.size === 0) return true;
                 return !excludedMatchIds.has(String(m?.id || ''));
@@ -150,8 +167,7 @@ export const dataService = {
     listMatchesEnVivo(matches: any[]): any[] {
         const list = Array.isArray(matches) ? matches : [];
         return list.filter((m: any) => {
-            const s = this.normalizeMatchStatus(m?.status);
-            if (s !== 'WARM_UP' && s !== 'IN_PROGRESS') return false;
+            if (!this.isMatchEnVivoStatus(m?.status)) return false;
             if (this.isMatchFinishedLike(m)) return false;
             return true;
         });

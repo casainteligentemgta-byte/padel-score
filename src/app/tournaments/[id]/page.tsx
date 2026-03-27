@@ -994,7 +994,7 @@ export default function TournamentDashboard() {
         const s = normalizeStatus(m?.status);
 
         if (activeTab === 'Todos') return true;
-        if (activeTab === 'En Vivo') return s === 'WARM_UP' || s === 'IN_PROGRESS';
+        if (activeTab === 'En Vivo') return dataService.isMatchEnVivoStatus(m?.status);
         if (activeTab === 'Por Comenzar') {
             return dataService.isMatchPorComenzarStatus(m?.status);
         }
@@ -1046,9 +1046,10 @@ export default function TournamentDashboard() {
         const courtKey = match.courtId ?? match.courtIndex ?? null;
         if (courtKey === null) return null;
 
-        // Buscar partido LIVE en la misma cancha
+        // Partido en curso en la misma cancha (marker o legacy)
         const liveOnCourt = matches.find((m: any) =>
-            normalizeStatus(m.status) === 'IN_PROGRESS' &&
+            dataService.isMatchEnVivoStatus(m?.status) &&
+            !dataService.isMatchFinishedLike(m) &&
             (m.courtId ?? m.courtIndex ?? null) === courtKey &&
             m.actualStartTime
         );
@@ -1963,8 +1964,11 @@ export default function TournamentDashboard() {
                                             const [t2p1, t2p2] = resolveNames(match.team2, match.team2Name);
                                             const delayInfo = getDelayInfo(match);
                                             const statusUp = normalizeStatus(match.status);
-                                            const isLive = statusUp === 'WARM_UP' || statusUp === 'IN_PROGRESS';
-                                            const isPorComenzar = dataService.isMatchPorComenzarStatus(match.status);
+                                            const isFinishedCard = dataService.isMatchFinishedLike(match);
+                                            const isLive =
+                                                dataService.isMatchEnVivoStatus(match.status) && !isFinishedCard;
+                                            const isPorComenzar =
+                                                dataService.isMatchPorComenzarStatus(match.status) && !isFinishedCard;
                                             const isEnCola = false;
                                             const cardBg = isLive
                                                 ? 'bg-[#39ff14]/20 border-[#39ff14]/50 shadow-[0_0_20px_rgba(57,255,20,0.15)]'
@@ -2025,7 +2029,7 @@ export default function TournamentDashboard() {
                                                                             <AutoShrinkName
                                                                                 name={match.courtName ?? (match.court != null ? `Pista ${match.court}` : (match.courtIndex != null ? `Pista ${match.courtIndex + 1}` : 'Pista –'))}
                                                                                 style={{ fontSize: '11px' }}
-                                                                                className={`font-black uppercase tracking-widest italic ${match.status === MatchStatus.LIVE ? 'text-padel-primary' : 'text-gray-500'}`}
+                                                                                className={`font-black uppercase tracking-widest italic ${dataService.isMatchEnVivoStatus(match.status) && !isFinishedCard ? 'text-padel-primary' : 'text-gray-500'}`}
                                                                             />
                                                                         </div>
                                                                         {tournament?.category && (
@@ -2054,9 +2058,9 @@ export default function TournamentDashboard() {
                                                                         )}
                                                                     </div>
                                                                     {/* Badge derecho: prioridad EN VIVO > Finalizado > DEMORADO > fase */}
-                                                                    {match.status === MatchStatus.LIVE ? (
+                                                                    {isLive ? (
                                                                         <span className="text-[9px] font-black text-red-500 uppercase italic tracking-widest animate-pulse border border-red-500/30 px-2 py-1 rounded-full bg-red-500/5 flex-shrink-0">● En Vivo</span>
-                                                                    ) : match.status === MatchStatus.FINISHED ? (
+                                                                    ) : isFinishedCard ? (
                                                                         <span className="text-[9px] font-black text-white/30 uppercase italic tracking-widest border border-white/10 px-2 py-1 rounded-full bg-white/5 flex-shrink-0">Finalizado</span>
                                                                     ) : delayInfo ? (
                                                                         <span className="text-[9px] font-black text-orange-400 bg-orange-500/10 border border-orange-500/30 px-2 py-1 rounded-full italic uppercase tracking-widest animate-pulse flex-shrink-0">
@@ -2087,7 +2091,7 @@ export default function TournamentDashboard() {
                                                                     {/* Body: Pizarra tipo marcador (nombres + P/G/S) o score por sets si finalizado */}
                                                                     {(() => {
                                                                         // Partido finalizado: mostrar solo score del Set 1, Set 2 y STB (si hubo)
-                                                                        if (match.status === MatchStatus.FINISHED) {
+                                                                        if (isFinishedCard) {
                                                                             const setScores = match.setScores || [];
                                                                             const stb = match.superTiebreakScore;
                                                                             const parts: string[] = [];
@@ -2113,8 +2117,7 @@ export default function TournamentDashboard() {
                                                                         const statusUp = String(match?.status || '').toUpperCase();
                                                                         const isActive =
                                                                             markerLiveMatchIds.has(String(match.id)) ||
-                                                                            statusUp === 'WARM_UP' ||
-                                                                            statusUp === 'IN_PROGRESS';
+                                                                            dataService.isMatchEnVivoStatus(match?.status);
                                                                         const isSTB = liveMarker?.super_tiebreak === true || match.matchFormat === 'SUPER_TIEBREAK' || match.superTiebreak;
                                                                         const isTB = !isSTB && (liveMarker?.modo_puntos === 'tiebreak' || match.matchFormat === 'TIEBREAK' || match.tiebreak);
                                                                         const showExtra = isSTB || isTB;
@@ -2146,7 +2149,7 @@ export default function TournamentDashboard() {
                                                                             activeTab !== 'Por Comenzar' &&
                                                                             (activeTab !== 'Todos' && activeTab !== 'Fase de Grupo'
                                                                                 ? true
-                                                                                : match.status === MatchStatus.FINISHED);
+                                                                                : isFinishedCard);
 
                                                                         const ServingBall = () => (
                                                                             <motion.div
@@ -2329,8 +2332,7 @@ export default function TournamentDashboard() {
                                                                                     match?.id &&
                                                                                     (
                                                                                         markerLiveMatchIds.has(String(match.id)) ||
-                                                                                        String(match?.status || '').toUpperCase() === 'WARM_UP' ||
-                                                                                        String(match?.status || '').toUpperCase() === 'IN_PROGRESS'
+                                                                                        dataService.isMatchEnVivoStatus(match?.status)
                                                                                     )
                                                                                         ? `/tournaments/${id}/display/${match.id}`
                                                                                         : id
@@ -2605,7 +2607,8 @@ export default function TournamentDashboard() {
                                     </div>
 
                                     <div className="space-y-3 pt-4">
-                                        {selectedMatch.status === MatchStatus.LIVE ? (
+                                        {dataService.isMatchEnVivoStatus(selectedMatch?.status) &&
+                                        !dataService.isMatchFinishedLike(selectedMatch) ? (
                                             <button
                                                 onClick={() => {
                                                     finishMatch(selectedMatch.id);
