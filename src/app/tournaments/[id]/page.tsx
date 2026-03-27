@@ -162,6 +162,7 @@ export default function TournamentDashboard() {
                     const pid = String(data?.partido_id || '').trim();
                     if (!pid || pid.startsWith('live_')) return;
                     liveIds.add(pid);
+                    activeIds.add(pid); // alinear con cola: partido en pizarra no debe quedar en "Por comenzar"
                     liveDataByMatch[pid] = data?.marcador || null;
                 });
                 await Promise.all(checks);
@@ -2015,13 +2016,16 @@ export default function TournamentDashboard() {
                                             const midCard = String(match?.id ?? '');
                                             const isFinishedCard = dataService.isMatchFinishedLike(match);
                                             const onPizarra = markerLiveMatchIds.has(midCard);
+                                            // En "Por comenzar" nunca estilo verde (en vivo): esa pestaña es solo cola; el verde solo en "En Vivo".
                                             const isLive =
+                                                activeTab !== 'Por Comenzar' &&
                                                 !isFinishedCard &&
                                                 (dataService.isMatchEnVivoStatus(match.status) || onPizarra);
                                             const isPorComenzar =
-                                                dataService.isMatchPorComenzarStatus(match.status) &&
-                                                !isFinishedCard &&
-                                                !onPizarra;
+                                                (activeTab === 'Por Comenzar' && !isFinishedCard) ||
+                                                (dataService.isMatchPorComenzarStatus(match.status) &&
+                                                    !isFinishedCard &&
+                                                    !onPizarra);
                                             const isEnCola = false;
                                             const cardBg = isLive
                                                 ? 'bg-[#39ff14]/20 border-[#39ff14]/50 shadow-[0_0_20px_rgba(57,255,20,0.15)]'
@@ -2082,7 +2086,7 @@ export default function TournamentDashboard() {
                                                                             <AutoShrinkName
                                                                                 name={match.courtName ?? (match.court != null ? `Pista ${match.court}` : (match.courtIndex != null ? `Pista ${match.courtIndex + 1}` : 'Pista –'))}
                                                                                 style={{ fontSize: '11px' }}
-                                                                                className={`font-black uppercase tracking-widest italic ${dataService.isMatchEnVivoStatus(match.status) && !isFinishedCard ? 'text-padel-primary' : 'text-gray-500'}`}
+                                                                                className={`font-black uppercase tracking-widest italic ${isLive ? 'text-padel-primary' : 'text-gray-500'}`}
                                                                             />
                                                                         </div>
                                                                         {tournament?.category && (
