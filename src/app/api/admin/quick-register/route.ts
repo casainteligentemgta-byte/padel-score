@@ -72,6 +72,9 @@ export async function POST(request: Request) {
       .select('id, email')
       .eq('email', email)
       .maybeSingle();
+    if (existing.error) {
+      return NextResponse.json({ error: existing.error.message }, { status: 400 });
+    }
 
     if (existing.data?.id) {
       profileId = existing.data.id as string;
@@ -90,20 +93,31 @@ export async function POST(request: Request) {
       }).select('id').single();
 
       if (insertRes.error || !insertRes.data?.id) {
-        // Fallback por si algunas columnas no existen todavía en la tabla
-        const fallback = await supabase.from('profiles').insert({
-          email,
-          name: fullName,
-          phone: phone || null,
-          unique_code: partnerCode,
-        }).select('id').single();
-        if (fallback.error || !fallback.data?.id) {
-          return NextResponse.json(
-            { error: fallback.error?.message || insertRes.error?.message || 'No se pudo crear perfil.' },
-            { status: 400 },
-          );
+        // Si hubo carrera por email único, reintentar lectura.
+        const retryExisting = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', email)
+          .maybeSingle();
+        if (retryExisting.data?.id) {
+          profileId = retryExisting.data.id as string;
+          profileExisted = true;
+        } else {
+          // Fallback por si algunas columnas no existen todavía en la tabla
+          const fallback = await supabase.from('profiles').insert({
+            email,
+            name: fullName,
+            phone: phone || null,
+            unique_code: partnerCode,
+          }).select('id').single();
+          if (fallback.error || !fallback.data?.id) {
+            return NextResponse.json(
+              { error: fallback.error?.message || insertRes.error?.message || 'No se pudo crear perfil.' },
+              { status: 400 },
+            );
+          }
+          profileId = fallback.data.id as string;
         }
-        profileId = fallback.data.id as string;
       } else {
         profileId = insertRes.data.id as string;
       }
@@ -115,8 +129,11 @@ export async function POST(request: Request) {
       .from('inscriptions')
       .select('id')
       .eq('tournament_id', tournamentId)
-      .eq('participant_email', email)
+      .or(`participant_email.eq.${email},participant_id.eq.${profileId}`)
       .maybeSingle();
+    if (insExisting.error) {
+      return NextResponse.json({ error: insExisting.error.message }, { status: 400 });
+    }
 
     if (!insExisting.data?.id) {
       const ins = await supabase.from('inscriptions').insert({
