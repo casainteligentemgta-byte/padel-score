@@ -1885,7 +1885,7 @@ export default function TournamentDashboard() {
 
             {/* Content Area (pizarra / cuadro / listados) */}
             <div className={`ipad-scroll-area pb-20 ${isLiveDashboard ? (enableCourtScroll ? 'overflow-y-auto !pr-0' : 'overflow-hidden !pr-0') : (activeTab === 'Por Comenzar' ? (enableCourtScroll ? 'overflow-y-auto' : 'overflow-hidden') : '')}`}>
-                <main className={`${isLiveDashboard ? 'max-w-none w-full h-full p-2' : activeTab === 'Por Comenzar' ? 'max-w-4xl mx-auto w-full px-4 py-6 h-full flex flex-col' : 'max-w-4xl mx-auto w-full px-4 py-10'} transition-all duration-500`}>
+                <main className={`${isLiveDashboard ? 'max-w-none w-full min-h-0 p-3 py-5' : activeTab === 'Por Comenzar' ? 'max-w-4xl mx-auto w-full px-4 py-6 h-full flex flex-col' : 'max-w-4xl mx-auto w-full px-4 py-10'} transition-all duration-500`}>
                     <AnimatePresence mode="wait">
                         {activeTab === 'Grupos' ? (
                             <motion.div
@@ -1963,7 +1963,7 @@ export default function TournamentDashboard() {
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 className={isLiveDashboard
-                                    ? 'h-full flex flex-col p-6 bg-[radial-gradient(circle_at_top,_#1a1a1a_0%,_#000_100%)]'
+                                    ? 'w-full p-6 pb-10 bg-[radial-gradient(circle_at_top,_#1a1a1a_0%,_#000_100%)]'
                                     : activeTab === 'Por Comenzar'
                                         ? 'flex-1 flex flex-col min-h-0'
                                         : 'space-y-8'}
@@ -1985,7 +1985,7 @@ export default function TournamentDashboard() {
                                         const count = displayMatches.filter((m: any) => m && m.team1 && m.team2).length;
                                         const cols = _numCanchas <= 1 ? 1 : _numCanchas <= 2 ? 2 : 3;
                                         const gridCols = cols === 1 ? 'grid-cols-1' : cols === 2 ? 'grid-cols-2' : 'grid-cols-3';
-                                        if (isLiveDashboard) return `grid ${gridCols} gap-4 h-full items-start`;
+                                        if (isLiveDashboard) return `grid ${gridCols} gap-4 items-start content-start w-full`;
                                         if (activeTab === 'Por Comenzar') return `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 flex-1 min-h-0 items-start`;
 
                                         return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start';
@@ -2041,10 +2041,10 @@ export default function TournamentDashboard() {
                                                     initial={{ opacity: 0, y: 10 }}
                                                     animate={{ opacity: 1, y: 0 }}
                                                     exit={{ opacity: 0, scale: 0.95 }}
-                                                    className={`w-full ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full flex flex-col' : ''}`}
+                                                    className={`w-full ${activeTab === 'Por Comenzar' ? 'h-full flex flex-col' : ''}`}
                                                 >
-                                                    <div className={`rounded-[2rem] shadow-[0_20px_60px_-8px_rgba(0,0,0,0.5),0_8px_24px_-4px_rgba(0,0,0,0.35),0_0_0_1px_rgba(0,0,0,0.2)] hover:shadow-[0_28px_70px_-10px_rgba(0,0,0,0.55),0_12px_28px_-4px_rgba(0,0,0,0.4),0_0_0_1px_rgba(0,0,0,0.25)] transition-all ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full' : ''}`}>
-                                                        <div className={`rounded-[2rem] overflow-hidden border flex flex-col h-full hover:border-white/25 transition-all ${(isLiveDashboard || activeTab === 'Por Comenzar') ? 'h-full' : ''} ${cardBg}`}>
+                                                    <div className={`rounded-[2rem] shadow-[0_20px_60px_-8px_rgba(0,0,0,0.5),0_8px_24px_-4px_rgba(0,0,0,0.35),0_0_0_1px_rgba(0,0,0,0.2)] hover:shadow-[0_28px_70px_-10px_rgba(0,0,0,0.55),0_12px_28px_-4px_rgba(0,0,0,0.4),0_0_0_1px_rgba(0,0,0,0.25)] transition-all ${activeTab === 'Por Comenzar' ? 'h-full' : isLiveDashboard ? 'h-auto' : ''}`}>
+                                                        <div className={`rounded-[2rem] overflow-hidden border flex flex-col hover:border-white/25 transition-all ${activeTab === 'Por Comenzar' ? 'h-full' : isLiveDashboard ? 'h-auto min-h-0' : 'h-full'} ${cardBg}`}>
 
                                                             {/* ── Franja superior: Nº partido · Hora · Pista · Categoría · Género ─────────────────── */}
                                                             <div className={`px-4 pt-3 pb-2.5 border-b border-white/[0.10] flex flex-col gap-2 ${isLive ? 'bg-[#39ff14]/15' : isPorComenzar ? 'bg-[#ff9500]/15' : isEnCola ? 'bg-red-500/10' : 'bg-white/[0.07]'}`}>
@@ -2143,8 +2143,8 @@ export default function TournamentDashboard() {
                                                             </div>
 
                                                             {/* ── Contenido scrollable + nav fijo abajo (Control, Pizarra, Cámaras, ADS) ─────────────────── */}
-                                                            <div className="flex flex-col min-h-0 flex-1">
-                                                                <div className="flex-1 min-h-0 overflow-auto">
+                                                            <div className={`flex flex-col min-h-0 ${isLiveDashboard ? '' : 'flex-1'}`}>
+                                                                <div className={`${isLiveDashboard ? 'min-h-0 overflow-visible' : 'flex-1 min-h-0 overflow-auto'}`}>
                                                                     {/* Body: Pizarra tipo marcador (nombres + P/G/S) o score por sets si finalizado */}
                                                                     {(() => {
                                                                         // Partido finalizado: mostrar solo score del Set 1, Set 2 y STB (si hubo)
