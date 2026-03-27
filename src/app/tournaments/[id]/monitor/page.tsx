@@ -6,6 +6,7 @@ import { dataService } from '@/lib/dataService';
 import { MatchStatus } from '@/types/tournament';
 import { Monitor, Wifi, WifiOff, Maximize2 } from 'lucide-react';
 import { useRouteSegment } from '@/lib/useRouteSegment';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
 // ── Grid layouts según número de canchas activas ─────────────────────────────
 // Máximo 6 canchas (La Margarita)
@@ -31,6 +32,8 @@ export default function MonitorCanchas() {
     const [tournament, setTournament] = useState<any>(null);
     const [activeMatches, setActiveMatches] = useState<ActiveMatch[]>([]);
     const [loading, setLoading] = useState(true);
+    const [noCourtsAssigned, setNoCourtsAssigned] = useState(false);
+    const [highlightedCourts, setHighlightedCourts] = useState<Record<string, number>>({});
     const [focusedIdx, setFocusedIdx] = useState<number | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -54,10 +57,61 @@ export default function MonitorCanchas() {
     // ── Supabase realtime: escuchar partidos LIVE ───────────────────────────
     useEffect(() => {
         if (!id) return;
+
+        console.log('ID del Torneo:', id);
         setLoading(true);
+        setNoCourtsAssigned(false);
 
         let currentTournament: any = null;
         let currentMatches: any[] = [];
+
+        const validateAssignedCourts = async () => {
+            try {
+                const supabase = getSupabaseClient();
+                if (!supabase) return;
+
+                // Verificación explícita por tournament_id.
+                const { data, error } = await supabase
+                    .from('pizarra_cancha')
+                    .select('court_number')
+                    .eq('tournament_id', id);
+
+                if (error) {
+                    console.warn('[Monitor] Error cargando canchas asignadas:', error);
+                    return;
+                }
+
+                console.log('[Monitor] Canchas asignadas (raw):', data);
+                console.log('[Monitor] Total canchas asignadas:', data?.length ?? 0);
+                console.log(
+                    '[Monitor] Números de cancha asignados:',
+                    (data || []).map((r: { court_number: number }) => r.court_number)
+                );
+
+                if (!data || data.length === 0) {
+                    setNoCourtsAssigned(true);
+                }
+            } catch (err) {
+                console.error('[Monitor] Excepción cargando canchas asignadas:', err);
+            }
+        };
+
+        void validateAssignedCourts();
+
+        const supabase = getSupabaseClient();
+        const pizarraChannel = supabase
+            ?.channel(`monitor-pizarra-${id}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'pizarra_cancha', filter: `tournament_id=eq.${id}` },
+                (payload) => {
+                    const row = payload.new as { court_number?: number } | null;
+                    const courtNumber = Number(row?.court_number);
+                    if (!Number.isFinite(courtNumber)) return;
+                    setHighlightedCourts((prev) => ({ ...prev, [String(courtNumber)]: Date.now() + 8000 }));
+                }
+            )
+            .subscribe();
 
         const updateData = (t: any, ms: any[]) => {
             if (!t) return;
@@ -112,10 +166,29 @@ export default function MonitorCanchas() {
         });
 
         return () => {
+            if (pizarraChannel) pizarraChannel.unsubscribe();
             if (typeof unsubT === 'function') unsubT();
             if (typeof unsubM === 'function') unsubM();
         };
     }, [id]);
+
+    useEffect(() => {
+        const hasActiveHighlights = Object.keys(highlightedCourts).length > 0;
+        if (!hasActiveHighlights) return;
+
+        const timer = window.setInterval(() => {
+            const now = Date.now();
+            setHighlightedCourts((prev) => {
+                const next: Record<string, number> = {};
+                for (const [k, expiresAt] of Object.entries(prev)) {
+                    if (expiresAt > now) next[k] = expiresAt;
+                }
+                return next;
+            });
+        }, 1000);
+
+        return () => window.clearInterval(timer);
+    }, [highlightedCourts]);
 
     const count = activeMatches.length;
     const gridCfg = GRID_CONFIG[Math.max(1, Math.min(count, 6))];
@@ -126,6 +199,27 @@ export default function MonitorCanchas() {
             <Monitor className="w-12 h-12 text-[#ccff00] animate-pulse" />
             <p className="text-[#ccff00] font-black italic uppercase tracking-widest text-[11px]">
                 Conectando Monitor...
+            </p>
+        </div>
+    );
+
+    // ── Sin partidos activos ───────────────────────────────────────────────
+    if (noCourtsAssigned) return (
+        <div className="h-screen bg-[#050505] flex flex-col items-center justify-center gap-6 text-center">
+            <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-6 py-3 border-b border-white/[0.04]">
+                <div className="flex items-center gap-2">
+                    <Monitor className="w-4 h-4 text-[#ccff00]" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#ccff00]">Monitor Canchas</span>
+                    <span className="text-[9px] text-gray-700 font-bold">— {tournament?.name || id}</span>
+                </div>
+                <button onClick={toggleFullscreen} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-all">
+                    <Maximize2 className="w-3.5 h-3.5 text-gray-500" />
+                </button>
+            </div>
+
+            <WifiOff className="w-16 h-16 text-gray-800" />
+            <p className="text-xl font-black italic uppercase tracking-tighter text-white/20">
+                No hay canchas asignadas a este torneo
             </p>
         </div>
     );
@@ -235,6 +329,7 @@ export default function MonitorCanchas() {
                             tournamentId={id}
                             isFocused={true}
                             onClick={() => setFocusedIdx(null)}
+                            isHighlighted={false}
                         />
                     </motion.div>
                 ) : (
@@ -253,6 +348,7 @@ export default function MonitorCanchas() {
                                 tournamentId={id}
                                 isFocused={false}
                                 onClick={() => setFocusedIdx(idx)}
+                                isHighlighted={Boolean(highlightedCourts[String(match.court)])}
                             />
                         ))}
 
@@ -278,11 +374,13 @@ function CourtCell({
     tournamentId,
     isFocused,
     onClick,
+    isHighlighted,
 }: {
     match: ActiveMatch;
     tournamentId: string;
     isFocused: boolean;
     onClick: () => void;
+    isHighlighted: boolean;
 }) {
     const displayUrl = `/tournaments/${tournamentId}/display/${match.id}`;
     const [assigning, setAssigning] = useState<number | null>(null);
@@ -302,7 +400,10 @@ function CourtCell({
     };
 
     return (
-        <div className="relative w-full h-full bg-black overflow-hidden group cursor-pointer" onClick={onClick}>
+        <div
+            className={`relative w-full h-full bg-black overflow-hidden group cursor-pointer ${isHighlighted ? 'ring-2 ring-emerald-400/80 ring-inset' : ''}`}
+            onClick={onClick}
+        >
             {/* Iframe de la pizarra completa */}
             <iframe
                 src={displayUrl}
@@ -359,6 +460,13 @@ function CourtCell({
 
             {/* Hover glow border */}
             <div className="absolute inset-0 border-2 border-transparent group-hover:border-[#ccff00]/30 transition-all duration-300 pointer-events-none rounded-sm" />
+            {isHighlighted && (
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 px-2 py-1 rounded-lg bg-emerald-500/20 border border-emerald-400/60 backdrop-blur-md pointer-events-none">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-emerald-300">
+                        Lista para entrar
+                    </span>
+                </div>
+            )}
         </div>
     );
 }

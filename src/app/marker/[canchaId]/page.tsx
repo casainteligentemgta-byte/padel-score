@@ -698,14 +698,101 @@ export default function MarkerControlPage() {
                 setScores,
                 ...(params.superTiebreakScore ? { superTiebreakScore: params.superTiebreakScore } : {}),
             });
-            
-            // LIMPIAR LA CANCHA PARA QUE NO SIGA SALIENDO EN VIVO
-            await dataService.setPizarraCanchaState(canchaId, {
-                estado: 'disponible',
-                torneo_id: null,
-                partido_id: null,
-                marcador: null,
-            });
+
+            const allMatches = await dataService.getMatches(String(tid));
+            const toNum = (v: unknown, fallback = Number.MAX_SAFE_INTEGER) => {
+                const n = Number(v);
+                return Number.isFinite(n) ? n : fallback;
+            };
+            const getOrder = (m: any, idx: number) =>
+                toNum(m?.match_number ?? m?.matchNumber ?? m?.order ?? m?.orden, idx + 1);
+
+            const normalizeStatus = (s: unknown) => String(s || '').trim().toUpperCase();
+            const scheduledMatches = (allMatches || [])
+                .filter((m: any) => String(m?.id) !== String(pid))
+                .filter((m: any) => normalizeStatus(m?.status) === 'SCHEDULED');
+            const fallbackPendingMatches = (allMatches || [])
+                .filter((m: any) => String(m?.id) !== String(pid))
+                .filter((m: any) => normalizeStatus(m?.status) === 'PENDING');
+
+            const queue = (scheduledMatches.length > 0 ? scheduledMatches : fallbackPendingMatches)
+                .sort((a: any, b: any) => getOrder(a, 0) - getOrder(b, 0));
+
+            const nextMatch = queue[0] || null;
+            const courtNumber = (() => {
+                const fromCurrent = toNum(curData?.marcador?.court ?? curData?.court, NaN);
+                if (Number.isFinite(fromCurrent)) return fromCurrent;
+                const m = String(canchaId || '').match(/(\d+)/);
+                return m ? Number(m[1]) : NaN;
+            })();
+            const courtIndex = Number.isFinite(courtNumber) ? Math.max(0, Number(courtNumber) - 1) : undefined;
+
+            if (nextMatch && Number.isFinite(courtNumber)) {
+                await dataService.updateMatch(String(tid), String(nextMatch.id), {
+                    court: courtNumber,
+                    ...(courtIndex !== undefined ? { courtIndex } : {}),
+                    status: 'READY',
+                    readyAt: new Date().toISOString(),
+                });
+
+                // Mantener mapeo cancha -> partido para monitor/displays.
+                try {
+                    await fetch('/api/pizarra-cancha', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            courtNumber,
+                            tournamentId: String(tid),
+                            matchId: String(nextMatch.id),
+                        }),
+                    });
+                } catch (e) {
+                    console.warn('[Marker] pizarra-cancha auto-asignación:', e);
+                }
+
+                const tournament = await dataService.getTournament(String(tid));
+                const { team1, team2 } = resolveMatchTeamLines(nextMatch, tournament);
+
+                await dataService.setPizarraCanchaState(canchaId, {
+                    estado: 'ready',
+                    marker_uid: null,
+                    marker_nombre: null,
+                    torneo_id: String(tid),
+                    partido_id: String(nextMatch.id),
+                    marcador: {
+                        sets: { local: 0, visitante: 0 },
+                        games: { local: 0, visitante: 0 },
+                        puntos: { local: '0', visitante: '0' },
+                        historico_sets: [],
+                        modo_puntos: 'normal',
+                        golden_point: false,
+                        super_tiebreak: false,
+                        equipo_1: { nombre: team1 || 'Equipo 1', color: '#CCFF00' },
+                        equipo_2: { nombre: team2 || 'Equipo 2', color: '#FF5500' },
+                        cronometro: { running: false, startedAt: null, elapsedSec: 0 },
+                        saque: { equipo: 1, jugador: 1 },
+                        ultimo_update: Date.now(),
+                    },
+                    animacion_actual: {
+                        id: 'next_match_ready',
+                        ts: Date.now(),
+                        title: 'Siguiente Partido',
+                    },
+                    publicidad: { override_local: false, imagen_url_local: null },
+                    pizarra_refresh_nonce:
+                        typeof curData?.pizarra_refresh_nonce === 'number' && Number.isFinite(curData.pizarra_refresh_nonce)
+                            ? curData.pizarra_refresh_nonce + 1
+                            : 1,
+                });
+            } else {
+                // Si no hay siguiente partido en cola, dejar cancha libre.
+                await dataService.setPizarraCanchaState(canchaId, {
+                    estado: 'disponible',
+                    torneo_id: null,
+                    partido_id: null,
+                    marcador: null,
+                });
+            }
 
             // Redirigir siempre al terminar el partido
             setTimeout(() => {
@@ -1596,7 +1683,7 @@ export default function MarkerControlPage() {
             </div>
 
             {/* ── Acciones fijas del marker (siempre visibles) ───────────────── */}
-            <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-6 pb-4 z-50">
+            <div className="fixed bottom-20 md:bottom-16 left-1/2 -translate-x-1/2 w-full max-w-lg px-6 z-50">
                 <div className="bg-[#0a0a0a]/90 border border-white/10 rounded-3xl px-3 py-3 space-y-2 backdrop-blur-md">
                     <div className="grid grid-cols-3 gap-2">
                         <button
