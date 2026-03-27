@@ -105,6 +105,38 @@ function sanitizeObject(obj: any): any {
 }
 
 export const dataService = {
+    normalizeMatchStatus(status: unknown): string {
+        return String(status || '').trim().toUpperCase();
+    },
+
+    listMatchesPorComenzar(matches: any[]): any[] {
+        const list = Array.isArray(matches) ? matches : [];
+        const toOrder = (m: any, idx: number) => {
+            const n = Number(m?.match_number ?? m?.matchNumber ?? m?.order ?? m?.orden);
+            return Number.isFinite(n) ? n : idx + 1;
+        };
+        return list
+            .filter((m: any) => this.normalizeMatchStatus(m?.status) === 'SCHEDULED')
+            .sort((a: any, b: any) => toOrder(a, 0) - toOrder(b, 0));
+    },
+
+    listMatchesEnVivo(matches: any[]): any[] {
+        const list = Array.isArray(matches) ? matches : [];
+        return list.filter((m: any) => {
+            const s = this.normalizeMatchStatus(m?.status);
+            return s === 'WARM_UP' || s === 'IN_PROGRESS';
+        });
+    },
+
+    listMatchesTerminados(matches: any[]): any[] {
+        const list = Array.isArray(matches) ? matches : [];
+        const toMs = (m: any) =>
+            new Date(m?.updated_at || m?.updatedAt || m?.actualEndTime || m?.finishedAt || 0).getTime();
+        return list
+            .filter((m: any) => this.normalizeMatchStatus(m?.status) === 'FINISHED')
+            .sort((a: any, b: any) => toMs(b) - toMs(a));
+    },
+
     // Time Synchronization
     async syncSystemClock() {
         if (clockSynced) return;

@@ -903,30 +903,42 @@ export default function ControlPanel() {
         finally { setUpdatingId(null); }
     };
 
-    const liveMatches = matches.filter(m => m.status?.toString().toUpperCase() === 'LIVE');
-    const finishedMatches = matches.filter(m => m.status?.toString().toUpperCase() === 'FINISHED')
+    const normalizeStatus = (status: unknown) => String(status || '').trim().toUpperCase();
+    const getMatchOrder = (m: any, idx: number) => {
+        const n = Number(m?.match_number ?? m?.matchNumber ?? m?.order ?? m?.orden);
+        return Number.isFinite(n) ? n : idx + 1;
+    };
+    const liveMatches = matches.filter(m => {
+        const s = normalizeStatus(m.status);
+        return s === 'WARM_UP' || s === 'IN_PROGRESS';
+    });
+    const finishedMatches = matches
+        .filter(m => normalizeStatus(m.status) === 'FINISHED')
         .sort((a, b) => {
-            const timeA = new Date(a.actualEndTime || a.updatedAt || a.updated_at || 0).getTime();
-            const timeB = new Date(b.actualEndTime || b.updatedAt || b.updated_at || 0).getTime();
-            return timeB - timeA; // Más recientes arriba
+            const timeA = new Date(a.updatedAt || a.updated_at || a.actualEndTime || a.finishedAt || 0).getTime();
+            const timeB = new Date(b.updatedAt || b.updated_at || b.actualEndTime || b.finishedAt || 0).getTime();
+            return timeB - timeA;
         });
-    const pendingMatches = matches.filter(m => m.status?.toString().toUpperCase() === 'PENDING');
+    const pendingMatches = matches
+        .filter(m => normalizeStatus(m.status) === 'SCHEDULED')
+        .sort((a, b) => getMatchOrder(a, 0) - getMatchOrder(b, 0));
 
     // En 'Activa' mostramos: En Vivo, Pendientes con Pista asignada y Finalizados recientemente
     const activePhaseMatches = matches.filter(m => {
         const s = m.status?.toString().toUpperCase();
-        if (s === 'LIVE') return true;
-        if (s === 'PENDING') {
+        if (s === 'WARM_UP' || s === 'IN_PROGRESS') return true;
+        if (s === 'SCHEDULED') {
             return m.court !== undefined && m.court !== null && m.court !== '';
         }
         return false;
     }).sort((a, b) => {
-        // Orden: LIVE primero, luego PENDING, luego FINISHED
+        // Orden: EN_VIVO primero, luego SCHEDULED
         const sA = a.status?.toString().toUpperCase() || '';
         const sB = b.status?.toString().toUpperCase() || '';
         const score: Record<string, number> = { 
-            'LIVE': 1, 
-            'PENDING': 2, 
+            'WARM_UP': 1,
+            'IN_PROGRESS': 1,
+            'SCHEDULED': 2, 
             'FINISHED': 3 
         };
         return (score[sA] || 99) - (score[sB] || 99);
@@ -934,7 +946,7 @@ export default function ControlPanel() {
 
     const proximosMatches = matches.filter(m => {
         const s = m.status?.toString().toUpperCase();
-        return s === 'PENDING' && (m.court === undefined || m.court === null || m.court === '');
+        return s === 'SCHEDULED' && (m.court === undefined || m.court === null || m.court === '');
     });
 
     const progress = matches.length > 0 ? (finishedMatches.length / matches.length) * 100 : 0;

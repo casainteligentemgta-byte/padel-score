@@ -15,6 +15,10 @@ type NameDuplicatePrompt = {
   candidateEmail?: string | null;
   candidatePhone?: string | null;
 } | null;
+type CategoryOption = {
+  key: string;
+  label: string;
+};
 
 function toTitleCase(input: string): string {
   return input
@@ -72,7 +76,7 @@ export default function AdminTournamentPlayersPage() {
     };
   }, [tournamentId]);
 
-  const categories = useMemo(() => {
+  const categories = useMemo<CategoryOption[]>(() => {
     const raw = Array.isArray(tournament?.inscriptionCategories)
       ? tournament.inscriptionCategories
       : Array.isArray(tournament?.categories)
@@ -83,7 +87,7 @@ export default function AdminTournamentPlayersPage() {
         key: String(c?.key || c?.id || c?.category || ''),
         label: String(c?.name || c?.key || c?.id || c?.category || ''),
       }))
-      .filter((c: { key: string }) => c.key);
+      .filter((c: CategoryOption) => c.key);
   }, [tournament]);
 
   const submitQuickRegister = async (opts?: {

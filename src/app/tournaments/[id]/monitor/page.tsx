@@ -136,7 +136,10 @@ export default function MonitorCanchas() {
             };
 
             const processed: ActiveMatch[] = ms
-                .filter((m: any) => m.status?.toString().toUpperCase() === 'LIVE')
+                .filter((m: any) => {
+                    const s = String(m?.status || '').toUpperCase();
+                    return s === 'WARM_UP' || s === 'IN_PROGRESS';
+                })
                 .map((m: any, idx: number) => {
                     return {
                         id: m.id || `match_${idx}`,

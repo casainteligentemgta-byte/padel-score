@@ -922,64 +922,52 @@ export default function TournamentDashboard() {
     // Fallback
     if (_numCanchas <= 0) _numCanchas = 1;
 
-    // Pending del slot más próximo, limitados a _numCanchas
-    const _pending = matches
-        .filter(mx => mx.status === MatchStatus.PENDING)
-        .sort((a, b) => _toMsT(a.scheduledTime) - _toMsT(b.scheduledTime));
-    const _earliestMin = _pending.length > 0 ? _toMin(_pending[0].scheduledTime) : null;
-    const _nextSlot = _earliestMin !== null && _earliestMin > 0
-        ? _pending.filter(p => _toMin(p.scheduledTime) === _earliestMin)
-        : _pending;
+    const normalizeStatus = (status: unknown) => String(status || '').trim().toUpperCase();
+    const getMatchOrder = (m: any, idx: number) => {
+        const n = Number(m?.match_number ?? m?.matchNumber ?? m?.order ?? m?.orden);
+        return Number.isFinite(n) ? n : idx + 1;
+    };
+    const getUpdatedMs = (m: any) =>
+        new Date(m?.updated_at || m?.updatedAt || m?.actualEndTime || m?.finishedAt || 0).getTime();
     const _courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
-    // Clave compuesta estable aunque el ID sea undefined (matches se regeneran en cada render)
-    const _mkKey = (p: any) => `${_toMin(p.scheduledTime)}_${_courtNum(p)}`;
 
-    // Por Comenzar: mostrar exactamente los partidos que caben en las pistas disponibles (ej: 3 en El Bodeguero)
-    const _nextUpKeys = new Set(_pending.slice(0, _numCanchas).map(_mkKey));
-
-    // En Vivo: un solo partido por pista (no puede haber dos en vivo en la misma pista)
-    const _liveByCourt = new Map<number, any>();
-    for (const mx of matches) {
-        if (!markerLiveMatchIds.has(String(mx.id))) continue;
-        const c = _courtNum(mx);
-        if (c >= 1 && c <= _numCanchas && !_liveByCourt.has(c)) _liveByCourt.set(c, mx);
-    }
-    const _liveSorted = Array.from({ length: _numCanchas }, (_, i) => i + 1)
-        .map(c => _liveByCourt.get(c))
-        .filter(Boolean)
-        .sort((a, b) => _courtNum(a) - _courtNum(b));
-    const _allowedLiveIds = new Set(_liveSorted.map((mx: any) => mx.id));
+    const strictPorComenzar = dataService.listMatchesPorComenzar(matches);
+    const strictEnVivo = dataService
+        .listMatchesEnVivo(matches)
+        .sort((a: any, b: any) => _courtNum(a) - _courtNum(b));
+    const strictTerminados = dataService.listMatchesTerminados(matches);
 
     if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && !(window as any).__diagLogged2) {
         (window as any).__diagLogged2 = true;
         console.log('[PorComenzar] complexName:', _cxName, '→ numCanchas:', _numCanchas);
-        console.log('[PorComenzar] _earliestMin:', _earliestMin, '| _nextSlot:', _nextSlot.length, '| _nextUpKeys:', _nextUpKeys.size, '| keys:', [..._nextUpKeys]);
+        console.log('[Listas] PorComenzar/SCHEDULED:', strictPorComenzar.length, '| EnVivo/WARM_UP+IN_PROGRESS:', strictEnVivo.length, '| Terminados/FINISHED:', strictTerminados.length);
     }
 
 
     const filteredMatches = matches.filter(m => {
-        const isLiveByMarker = markerLiveMatchIds.has(String(m.id));
-        const isFinishedDefinitive =
-            m.status === MatchStatus.FINISHED ||
-            Boolean((m as any)?.finishedAt) ||
-            Boolean((m as any)?.actualEndTime);
+        const s = normalizeStatus(m?.status);
 
         if (activeTab === 'Todos') return true;
-        if (activeTab === 'En Vivo') return _allowedLiveIds.has(m.id);
+        if (activeTab === 'En Vivo') return s === 'WARM_UP' || s === 'IN_PROGRESS';
         if (activeTab === 'Por Comenzar') {
-            // Si ya fue iniciado por marker o ya terminó, no puede seguir en "Por Comenzar".
-            return !isLiveByMarker && !isFinishedDefinitive && _nextUpKeys.has(_mkKey(m));
+            return s === 'SCHEDULED';
         }
 
-        if (activeTab === 'Finalizados') return isFinishedDefinitive;
+        if (activeTab === 'Finalizados') return s === 'FINISHED';
         if (activeTab === 'Grupos' || activeTab === 'Ranking') return false;
         // Fase del cuadro
         if (activeTab === 'Fase de Grupo') return m.stage === 'GROUP_STAGE';
         return m.stage === 'MAIN_DRAW' && getStageLabel(m) === activeTab;
     });
 
-    // En "En Vivo" mostrar tarjetas ordenadas por pista (1, 2, 3…) para que la primera sea siempre Pista 1
-    const displayMatches = activeTab === 'En Vivo' ? _liveSorted : filteredMatches;
+    const displayMatches =
+        activeTab === 'Por Comenzar'
+            ? strictPorComenzar
+            : activeTab === 'En Vivo'
+            ? strictEnVivo
+            : activeTab === 'Finalizados'
+            ? strictTerminados
+            : filteredMatches;
 
     const isLiveDashboard = activeTab === 'En Vivo' && filteredMatches.length > 0 && filteredMatches.length <= _numCanchas;
     const enableCourtScroll = _numCanchas > 3 && (activeTab === 'Por Comenzar' || isLiveDashboard);
@@ -1007,14 +995,14 @@ export default function TournamentDashboard() {
      * Retorna null si el partido está en tiempo, o { delayMins, estimatedStartMs } si está demorado.
      */
     const getDelayInfo = (match: any): { delayMins: number; estimatedStartMs: number } | null => {
-        if (match.status !== MatchStatus.PENDING) return null;
+        if (normalizeStatus(match.status) !== 'SCHEDULED') return null;
 
         const courtKey = match.courtId ?? match.courtIndex ?? null;
         if (courtKey === null) return null;
 
         // Buscar partido LIVE en la misma cancha
         const liveOnCourt = matches.find((m: any) =>
-            m.status === MatchStatus.LIVE &&
+            normalizeStatus(m.status) === 'IN_PROGRESS' &&
             (m.courtId ?? m.courtIndex ?? null) === courtKey &&
             m.actualStartTime
         );
@@ -1928,9 +1916,10 @@ export default function TournamentDashboard() {
                                             const [t1p1, t1p2] = resolveNames(match.team1, match.team1Name);
                                             const [t2p1, t2p2] = resolveNames(match.team2, match.team2Name);
                                             const delayInfo = getDelayInfo(match);
-                                            const isLive = match.status === MatchStatus.LIVE;
-                                            const isPorComenzar = _nextUpKeys.has(_mkKey(match));
-                                            const isEnCola = match.status === MatchStatus.PENDING && !isPorComenzar;
+                                            const statusUp = normalizeStatus(match.status);
+                                            const isLive = statusUp === 'WARM_UP' || statusUp === 'IN_PROGRESS';
+                                            const isPorComenzar = statusUp === 'SCHEDULED';
+                                            const isEnCola = false;
                                             const cardBg = isLive
                                                 ? 'bg-[#39ff14]/20 border-[#39ff14]/50 shadow-[0_0_20px_rgba(57,255,20,0.15)]'
                                                 : isPorComenzar

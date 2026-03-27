@@ -318,6 +318,7 @@ export default function MarkerControlPage() {
 
             await dataService.setPizarraCanchaState(canchaId, {
                 estado: 'en_vivo',
+                active_match_id: partidoIdActivar,
                 marker_uid: user.uid,
                 marker_nombre: profile?.name || user.email || 'Marker',
                 torneo_id: torneoIdActivar,
@@ -342,6 +343,17 @@ export default function MarkerControlPage() {
                 publicidad: { override_local: false, imagen_url_local: null },
                 pizarra_refresh_nonce: 0,
             });
+
+            // Transición estricta al iniciar desde Marker:
+            // SCHEDULED -> WARM_UP (si hay cronómetro) o IN_PROGRESS.
+            if (torneoIdActivar && partidoIdActivar && !String(partidoIdActivar).startsWith('live_')) {
+                const hasTimer = true;
+                await dataService.updateMatch(String(torneoIdActivar), String(partidoIdActivar), {
+                    status: hasTimer ? 'WARM_UP' : 'IN_PROGRESS',
+                    startedAt: new Date().toISOString(),
+                    ...(hasTimer ? {} : { actualStartTime: new Date().toISOString() }),
+                });
+            }
             setShowSetup(false);
         } catch (err) {
             console.error('[Marker] Error activando cancha:', err);
@@ -406,6 +418,7 @@ export default function MarkerControlPage() {
             });
             await dataService.setPizarraCanchaState(canchaId, {
                 estado: 'espera',
+                active_match_id: null,
                 marker_uid: null,
                 marker_nombre: null,
                 torneo_id: null,
@@ -711,11 +724,7 @@ export default function MarkerControlPage() {
             const scheduledMatches = (allMatches || [])
                 .filter((m: any) => String(m?.id) !== String(pid))
                 .filter((m: any) => normalizeStatus(m?.status) === 'SCHEDULED');
-            const fallbackPendingMatches = (allMatches || [])
-                .filter((m: any) => String(m?.id) !== String(pid))
-                .filter((m: any) => normalizeStatus(m?.status) === 'PENDING');
-
-            const queue = (scheduledMatches.length > 0 ? scheduledMatches : fallbackPendingMatches)
+            const queue = scheduledMatches
                 .sort((a: any, b: any) => getOrder(a, 0) - getOrder(b, 0));
 
             const nextMatch = queue[0] || null;
@@ -755,6 +764,7 @@ export default function MarkerControlPage() {
 
                 await dataService.setPizarraCanchaState(canchaId, {
                     estado: 'ready',
+                    active_match_id: String(nextMatch.id),
                     marker_uid: null,
                     marker_nombre: null,
                     torneo_id: String(tid),
@@ -788,6 +798,7 @@ export default function MarkerControlPage() {
                 // Si no hay siguiente partido en cola, dejar cancha libre.
                 await dataService.setPizarraCanchaState(canchaId, {
                     estado: 'disponible',
+                    active_match_id: null,
                     torneo_id: null,
                     partido_id: null,
                     marcador: null,
