@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { MatchStatus } from '@/types/tournament';
 import TVScoreboardDisplay from '@/components/TVScoreboardDisplay';
 import { RefreshCw } from 'lucide-react';

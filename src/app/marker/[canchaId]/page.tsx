@@ -50,6 +50,7 @@ export default function MarkerControlPage() {
         j3: '',
         j4: '',
     });
+    const [showJugadoresEdit, setShowJugadoresEdit] = useState(false);
 
     const searchParams = useSearchParams();
     // Soporte para jugadores individuales (p1/p2 = equipo 1, p3/p4 = equipo 2)
