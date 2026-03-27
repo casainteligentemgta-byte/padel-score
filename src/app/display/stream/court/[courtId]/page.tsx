@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, doc } from 'firebase/firestore';
 import { MatchStatus } from '@/types/tournament';
+import { dataService } from '@/lib/dataService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchParams } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
@@ -19,40 +18,27 @@ export default function GenericStreamOverlay() {
     const [currentSponsorIdx, setCurrentSponsorIdx] = useState(0);
 
     useEffect(() => {
-        const q = query(collection(db, 'tournaments'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            let foundMatch: any = null;
-            let foundTourney: any = null;
+        const unsubscribe = dataService.subscribeToLiveMatches((allMatches) => {
+            const matchIndex = parseInt(courtId) - 1;
+            const courtMatch = allMatches.find(m => 
+                (m.court === parseInt(courtId) || m.courtIndex === matchIndex) &&
+                (!complexFilter || m.complexName === complexFilter)
+            );
 
-            snapshot.docs.forEach(docSnap => {
-                if (foundMatch) return;
-                const tData = docSnap.data();
-
-                // Filtro por complejo
-                if (complexFilter && tData.complexName !== complexFilter) return;
-
-                if (tData.matches) {
-                    const match = tData.matches.find((m: any) =>
-                        m.court === parseInt(courtId) &&
-                        (m.status === MatchStatus.LIVE || m.status === 'LIVE' || m.status === 'IN_PROGRESS')
-                    );
-                    if (match) {
-                        foundMatch = match;
-                        foundTourney = { id: docSnap.id, ...tData };
-                    }
-                }
-            });
-
-            if (foundMatch) {
-                const team1 = foundMatch.team1Index > 0 ? foundTourney.teams?.[foundMatch.team1Index - 1] : null;
-                const team2 = foundMatch.team2Index > 0 ? foundTourney.teams?.[foundMatch.team2Index - 1] : null;
-
+            if (courtMatch) {
                 setActiveMatch({
-                    ...foundMatch,
-                    team1Name: team1 ? `${team1.p1.name} / ${team1.p2.name}` : 'TBD',
-                    team2Name: team2 ? `${team2.p1.name} / ${team2.p2.name}` : 'TBD',
+                    ...courtMatch,
+                    team1Name: courtMatch.t1Name || 'TBD',
+                    team2Name: courtMatch.t2Name || 'TBD',
                 });
-                setTournament(foundTourney);
+                setTournament({
+                    id: courtMatch.tournamentId,
+                    name: courtMatch.tournamentName,
+                    broadcastingSettings: {
+                        primaryColor: courtMatch.primaryColor,
+                        bannerText: courtMatch.bannerText
+                    }
+                });
             } else {
                 setActiveMatch(null);
                 setTournament(null);
@@ -61,7 +47,7 @@ export default function GenericStreamOverlay() {
         });
 
         return () => unsubscribe();
-    }, [courtId]);
+    }, [courtId, complexFilter]);
 
     // Sponsor rotation
     const sponsors = tournament?.broadcastingSettings?.sponsors || [];

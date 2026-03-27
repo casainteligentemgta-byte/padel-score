@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
@@ -31,6 +31,11 @@ export default function MarkerControlPage() {
     const [accessDenied, setAccessDenied] = useState(false);
 
     const [canchaData, setCanchaData] = useState<any>(null);
+    const canchaDataRef = useRef<any>(null);
+    useEffect(() => {
+        canchaDataRef.current = canchaData;
+    }, [canchaData]);
+
     const [loadingCancha, setLoadingCancha] = useState(true);
     const [activando, setActivando] = useState(false);
     const [equipo1, setEquipo1] = useState({ nombre: 'Equipo 1', color: '#CCFF00' });
@@ -38,7 +43,7 @@ export default function MarkerControlPage() {
     const [showSetup, setShowSetup] = useState(false);
     const [cronSeconds, setCronSeconds] = useState(0);
     const [refrescandoPizarra, setRefrescandoPizarra] = useState(false);
-    const [showJugadoresEdit, setShowJugadoresEdit] = useState(false);
+    const [refrescoExitoso, setRefrescoExitoso] = useState(false);
     const [jugadoresDraft, setJugadoresDraft] = useState({
         j1: '',
         j2: '',
@@ -227,22 +232,22 @@ export default function MarkerControlPage() {
         let cancelled = false;
         (async () => {
             try {
-                const [tourney, matches] = await Promise.all([
-                    dataService.getTournament(String(tid)),
-                    dataService.getMatches(String(tid)),
-                ]);
+                const tourney = await dataService.getTournament(String(tid));
+                const matches = await dataService.getMatches(String(tid));
                 if (cancelled) return;
                 const found = matches.find((x: any) => x.id === pid);
                 if (!found) return;
                 const { team1, team2 } = resolveMatchTeamLines(found, tourney);
-                const cur = await dataService.getPizarraCanchaState(canchaId);
-                const data = cur?.data || {};
+                
+                // Usar referencia local en lugar de GET red
+                const data = canchaDataRef.current || {};
                 const mar = data.marcador || {};
                 const cur1 = (mar.equipo_1?.nombre || '').trim();
                 const cur2 = (mar.equipo_2?.nombre || '').trim();
                 const next1 = isGenericEquipoNombre(cur1, 'Equipo 1') ? team1 : cur1;
                 const next2 = isGenericEquipoNombre(cur2, 'Equipo 2') ? team2 : cur2;
                 if (next1 === cur1 && next2 === cur2) return;
+                
                 await dataService.setPizarraCanchaState(canchaId, {
                     ...data,
                     marcador: {
@@ -347,41 +352,51 @@ export default function MarkerControlPage() {
 
     /** Pide a las pizarras enlazadas a esta cancha que recarguen (incrementa nonce en Supabase). */
     const handleRefrescarPizarra = async () => {
-        if (refrescandoPizarra) return;
+        if (refrescandoPizarra || refrescoExitoso) return;
         setRefrescandoPizarra(true);
         try {
-            const cur = await dataService.getPizarraCanchaState(canchaId);
-            const data = cur?.data || {};
+            const data = canchaDataRef.current || {};
             const prev = typeof data.pizarra_refresh_nonce === 'number' && Number.isFinite(data.pizarra_refresh_nonce)
                 ? data.pizarra_refresh_nonce
                 : 0;
-            await dataService.setPizarraCanchaState(canchaId, {
+            
+            const nextData = {
                 ...data,
                 pizarra_refresh_nonce: prev + 1,
-            });
+            };
+            
+            setCanchaData(nextData);
+            await dataService.setPizarraCanchaState(canchaId, nextData);
+            
+            setRefrescoExitoso(true);
+            setTimeout(() => setRefrescoExitoso(false), 2000);
         } catch (err) {
             console.error('[Marker] Refrescar pizarra:', err);
             alert('No se pudo enviar el refresco a la pizarra. Revisa la conexión.');
         } finally {
-            setTimeout(() => setRefrescandoPizarra(false), 600);
+            setRefrescandoPizarra(false);
         }
     };
 
     // ── Desactivar partido ──────────────────────────────────────────────────
     const handleDesactivar = async () => {
         if (!confirm('¿Terminar el partido y poner la cancha en espera?')) return;
+        const curData = canchaDataRef.current || {};
+        const curMarcador = curData.marcador;
+        
         try {
-            const curSets = marcador?.sets || { local: 0, visitante: 0 };
-            const curGames = marcador?.games || { local: 0, visitante: 0 };
-            const curHist = marcador?.historico_sets || [];
-            const curModo = String(marcador?.modo_puntos || '');
-            const isStb = marcador?.super_tiebreak === true || curModo === 'super_tiebreak';
+            const curSets = curMarcador?.sets || { local: 0, visitante: 0 };
+            const curGames = curMarcador?.games || { local: 0, visitante: 0 };
+            const curHist = curMarcador?.historico_sets || [];
+            const curModo = String(curMarcador?.modo_puntos || '');
+            const isStb = curMarcador?.super_tiebreak === true || curModo === 'super_tiebreak';
             const stbScore = isStb
                 ? {
-                    t1: Number(marcador?.puntos?.local ?? 0) || 0,
-                    t2: Number(marcador?.puntos?.visitante ?? 0) || 0,
+                    t1: Number(curMarcador?.puntos?.local ?? 0) || 0,
+                    t2: Number(curMarcador?.puntos?.visitante ?? 0) || 0,
                 }
                 : null;
+                
             await persistFinishedMatchFromMarker({
                 sets: curSets,
                 historicoSets: curHist,
@@ -397,7 +412,7 @@ export default function MarkerControlPage() {
                 marcador: null,
                 publicidad: { override_local: false, imagen_url_local: null },
             });
-            const tid = canchaData?.torneo_id;
+            const tid = curData?.torneo_id;
             if (tid) {
                 router.push(`/tournaments/${tid}?tab=por-comenzar`);
             } else {
@@ -411,25 +426,34 @@ export default function MarkerControlPage() {
     // ── Operaciones de puntos (Supabase pizarra_cancha_state) ────────────────
     // Actualiza primero el estado local para que el marcador responda al instante,
     // y luego sincroniza con Supabase (best-effort).
-    const actualizarMarcadorLocal = async (patch: Record<string, unknown>) => {
-        // Optimistic UI: actualizar inmediatamente el estado local
-        setCanchaData((prev: any) => {
-            const data = prev || {};
-            const marcadorPrev = data.marcador || {};
-            return {
-                ...data,
-                marcador: { ...marcadorPrev, ...patch, ultimo_update: Date.now() },
-            };
-        });
+    const actualizarMarcadorLocal = async (patch: Record<string, any>) => {
+        // Build next state based on current best-known state (ref)
+        const curData = canchaDataRef.current || {};
+        const marcadorPrev = curData.marcador || {};
+        
+        // Deep merge only for 'marcador' level keys that are objects
+        const nextMarcador = { ...marcadorPrev };
+        for (const key in patch) {
+            const val = patch[key];
+            if (val !== null && typeof val === 'object' && !Array.isArray(val) && marcadorPrev[key]) {
+                nextMarcador[key] = { ...marcadorPrev[key], ...val };
+            } else {
+                nextMarcador[key] = val;
+            }
+        }
+        nextMarcador.ultimo_update = Date.now();
 
+        const nextData = {
+            ...curData,
+            marcador: nextMarcador,
+        };
+
+        // 1. Optimistic UI: actualizar inmediatamente el estado local
+        setCanchaData(nextData);
+
+        // 2. Sincronizar con Supabase (best-effort)
         try {
-            const cur = await dataService.getPizarraCanchaState(canchaId);
-            const data = cur?.data || {};
-            const marcadorPrev = data.marcador || {};
-            await dataService.setPizarraCanchaState(canchaId, {
-                ...data,
-                marcador: { ...marcadorPrev, ...patch, ultimo_update: Date.now() },
-            });
+            await dataService.setPizarraCanchaState(canchaId, nextData);
         } catch (err) {
             console.error('[Marker] Error actualizando marcador en Supabase:', err);
         }
@@ -463,7 +487,9 @@ export default function MarkerControlPage() {
     };
 
     const saveJugadoresEditor = async () => {
-        if (!marcador || !canchaId || !canchaData) return;
+        const currentMarcador = canchaDataRef.current?.marcador;
+        const curData = canchaDataRef.current;
+        if (!currentMarcador || !canchaId || !curData) return;
 
         const t1p1 = jugadoresDraft.j1.trim() || 'Jugador 1';
         const t1p2 = jugadoresDraft.j2.trim() || 'Jugador 2';
@@ -491,8 +517,8 @@ export default function MarkerControlPage() {
         });
 
         // 2) Best-effort: persiste también el match si existe (si no, al menos se ve en pizarra)
-        const tid = canchaData?.torneo_id;
-        const pid = canchaData?.partido_id;
+        const tid = curData?.torneo_id;
+        const pid = curData?.partido_id;
         if (tid && pid && !String(pid).startsWith('live_')) {
             try {
                 const matches = await dataService.getMatches(String(tid));
@@ -556,10 +582,9 @@ export default function MarkerControlPage() {
                             ? false
                             : undefined;
                 if (!mf && !tb && gp === undefined) return;
-                const cur = await dataService.getPizarraCanchaState(canchaId);
-                const data = cur?.data || {};
+                const data = canchaDataRef.current || {};
                 const mar = data.marcador || {};
-                await dataService.setPizarraCanchaState(canchaId, {
+                const nextData = {
                     ...data,
                     marcador: {
                         ...mar,
@@ -569,22 +594,9 @@ export default function MarkerControlPage() {
                         ...(gp !== undefined ? { golden_point: gp } : {}),
                         ultimo_update: Date.now(),
                     },
-                });
-                setCanchaData((prev: any) => {
-                    const d = prev || {};
-                    const m = d.marcador || {};
-                    return {
-                        ...d,
-                        marcador: {
-                            ...m,
-                            ...(mf ? { match_format: mf } : {}),
-                            ...(tb ? { tie_break_type: tb } : {}),
-                            sets_to_win_match: setsToWin,
-                            ...(gp !== undefined ? { golden_point: gp } : {}),
-                            ultimo_update: Date.now(),
-                        },
-                    };
-                });
+                };
+                setCanchaData(nextData);
+                await dataService.setPizarraCanchaState(canchaId, nextData);
             } catch (e) {
                 console.warn('[Marker] Enriquecer formato:', e);
             }
@@ -663,8 +675,9 @@ export default function MarkerControlPage() {
         finalGames?: { local: number; visitante: number } | null;
         superTiebreakScore?: { t1: number; t2: number } | null;
     }) => {
-        const tid = canchaData?.torneo_id;
-        const pid = canchaData?.partido_id;
+        const curData = canchaDataRef.current || {};
+        const tid = curData?.torneo_id;
+        const pid = curData?.partido_id;
         if (!tid || !pid || String(pid).startsWith('live_')) return;
         try {
             const totalSets = (params.sets.local || 0) + (params.sets.visitante || 0);
@@ -769,19 +782,18 @@ export default function MarkerControlPage() {
         });
     };
 
-    const winGame = async (equipo: 'local' | 'visitante') => {
-        if (!marcador) return;
-        if (marcador.modo_puntos && marcador.modo_puntos !== 'normal') return;
+    const winGame = async (m: any, equipo: 'local' | 'visitante') => {
+        if (!m) return;
+        if (m.modo_puntos && m.modo_puntos !== 'normal') return;
 
-        const rules = getRulesSafe(marcador);
-        const otroEquipo = equipo === 'local' ? 'visitante' : 'local';
-        const games = marcador.games || { local: 0, visitante: 0 };
-        const newGames = { ...games, [equipo]: games[equipo] + 1 };
+        const rules = getRulesSafe(m);
+        const games = m.games || { local: 0, visitante: 0 };
+        const newGames = { ...games, [equipo]: (games[equipo] || 0) + 1 };
         const g1 = newGames.local;
         const g2 = newGames.visitante;
 
         if (isSetCompleteByGames(g1, g2, rules.gamesToWinSet)) {
-            await applySetWonByGames(marcador, equipo, newGames);
+            await applySetWonByGames(m, equipo, newGames);
         } else if (shouldEnterSetTiebreak(g1, g2, rules.tiebreakGamesEntry)) {
             await actualizarMarcadorLocal({
                 games: newGames,
@@ -798,10 +810,13 @@ export default function MarkerControlPage() {
     };
 
     const cambiarPunto = async (equipo: 'local' | 'visitante', delta: 1 | -1) => {
-        if (!marcador) return;
+        // Usar referencia local para evitar desincronización por clics rápidos
+        const currentMarcador = canchaDataRef.current?.marcador;
+        if (!currentMarcador) return;
+
         const otroEquipo = equipo === 'local' ? 'visitante' : 'local';
-        const puntosActual = marcador.puntos || {};
-        const modo = marcador.modo_puntos || 'normal';
+        const puntosActual = currentMarcador.puntos || {};
+        const modo = currentMarcador.modo_puntos || 'normal';
 
         if (modo === 'normal') {
             const actual = puntosActual[equipo];
@@ -809,7 +824,7 @@ export default function MarkerControlPage() {
 
             if (delta === 1) {
                 if (actual === 'AD') {
-                    await winGame(equipo);
+                    await winGame(currentMarcador, equipo);
                     return;
                 }
                 if (actual === '40') {
@@ -820,17 +835,17 @@ export default function MarkerControlPage() {
                         });
                         return;
                     } else if (actualOtro === '40') {
-                        if (marcador.golden_point) {
-                            await winGame(equipo);
+                        if (currentMarcador.golden_point) {
+                            await winGame(currentMarcador, equipo);
                         } else {
                             await actualizarMarcadorLocal({
-                                puntos: { ...puntosActual, [equipo]: 'AD' }
+                                puntos: { [equipo]: 'AD' } // smarter merge now handles keeping currentOtro
                             });
                         }
                         return;
                     } else {
                         // El otro no tiene 40 o AD, ganamos el game
-                        await winGame(equipo);
+                        await winGame(currentMarcador, equipo);
                         return;
                     }
                 }
@@ -839,27 +854,27 @@ export default function MarkerControlPage() {
                 const nextPoint = PUNTOS_NORMAL[idx + 1];
                 if (nextPoint && nextPoint !== 'AD') {
                     await actualizarMarcadorLocal({
-                        puntos: { ...puntosActual, [equipo]: nextPoint }
+                        puntos: { [equipo]: nextPoint }
                     });
                 }
             } else {
                 // delta -1 (restar punto manualmente)
                 if (actual === 'AD') {
                     await actualizarMarcadorLocal({
-                        puntos: { ...puntosActual, [equipo]: '40' }
+                        puntos: { [equipo]: '40' }
                     });
                     return;
                 }
                 const idx = PUNTOS_NORMAL.indexOf(actual);
                 if (idx > 0) {
                     await actualizarMarcadorLocal({
-                        puntos: { ...puntosActual, [equipo]: PUNTOS_NORMAL[idx - 1] }
+                        puntos: { [equipo]: PUNTOS_NORMAL[idx - 1] }
                     });
                 }
             }
         } else {
-            const rules = getRulesSafe(marcador);
-            const isStb = marcador.super_tiebreak === true || modo === 'super_tiebreak';
+            const rules = getRulesSafe(currentMarcador);
+            const isStb = currentMarcador.super_tiebreak === true || modo === 'super_tiebreak';
             const target = isStb ? rules.superTiebreakPointsToWin : rules.setTiebreakPointsToWin;
             const actual = parseInt(String(puntosActual[equipo] || '0'), 10) || 0;
             const actualOtro = parseInt(String(puntosActual[otroEquipo] || '0'), 10) || 0;
@@ -868,7 +883,7 @@ export default function MarkerControlPage() {
                 const nuevo = actual + 1;
                 if (winsTiebreakPoints(nuevo, actualOtro, target)) {
                     if (isStb) {
-                        const s0 = marcador.sets || { local: 0, visitante: 0 };
+                        const s0 = currentMarcador.sets || { local: 0, visitante: 0 };
                         const newSets = {
                             local: s0.local || 0,
                             visitante: s0.visitante || 0,
@@ -876,38 +891,41 @@ export default function MarkerControlPage() {
                         };
                         const finalLocal = equipo === 'local' ? nuevo : actualOtro;
                         const finalVisit = equipo === 'visitante' ? nuevo : actualOtro;
+                        const hist = { local: finalLocal, visitante: finalVisit };
+                        const nextHistorico = [...(currentMarcador.historico_sets || []), hist];
+
                         await actualizarMarcadorLocal({
                             sets: newSets,
                             games: { local: 0, visitante: 0 },
                             puntos: { local: '0', visitante: '0' },
                             modo_puntos: 'normal',
                             super_tiebreak: false,
-                            historico_sets: [...(marcador.historico_sets || []), { local: finalLocal, visitante: finalVisit }],
-                            cronometro: freezeCronometro(marcador.cronometro),
+                            historico_sets: nextHistorico,
+                            cronometro: freezeCronometro(currentMarcador.cronometro),
                         });
                         await persistFinishedMatchFromMarker({
                             sets: newSets,
-                            historicoSets: [...(marcador.historico_sets || []), { local: finalLocal, visitante: finalVisit }],
+                            historicoSets: nextHistorico,
                             superTiebreakScore: { t1: finalLocal, t2: finalVisit },
                         });
                         alert(
                             `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${newSets.local}-${newSets.visitante})`
                         );
                     } else {
-                        const g = marcador.games || { local: 0, visitante: 0 };
+                        const g = currentMarcador.games || { local: 0, visitante: 0 };
                         const hist =
                             equipo === 'local'
                                 ? { local: g.local + 1, visitante: g.visitante }
                                 : { local: g.local, visitante: g.visitante + 1 };
-                        const s0 = marcador.sets || { local: 0, visitante: 0 };
+                        const s0 = currentMarcador.sets || { local: 0, visitante: 0 };
                         const newSets = {
                             local: s0.local || 0,
                             visitante: s0.visitante || 0,
                             [equipo]: (s0[equipo] || 0) + 1,
                         };
-                        const newHistorico = [...(marcador.historico_sets || []), hist];
+                        const newHistorico = [...(currentMarcador.historico_sets || []), hist];
                         let matchOver = newSets.local >= rules.setsToWinMatch || newSets.visitante >= rules.setsToWinMatch;
-                        if (matchOver && mustContinueAfterFirstSet(marcador, newSets)) {
+                        if (matchOver && mustContinueAfterFirstSet(currentMarcador, newSets)) {
                             matchOver = false;
                         }
                         const enterStb =
@@ -915,7 +933,7 @@ export default function MarkerControlPage() {
                             rules.usesSuperTiebreakDecider &&
                             newSets.local === 1 &&
                             newSets.visitante === 1 &&
-                            marcador.super_tiebreak !== true;
+                            currentMarcador.super_tiebreak !== true;
 
                         if (matchOver) {
                             await actualizarMarcadorLocal({
@@ -925,7 +943,7 @@ export default function MarkerControlPage() {
                                 modo_puntos: 'normal',
                                 super_tiebreak: false,
                                 historico_sets: newHistorico,
-                                cronometro: freezeCronometro(marcador.cronometro),
+                                cronometro: freezeCronometro(currentMarcador.cronometro),
                             });
                             await persistFinishedMatchFromMarker({
                                 sets: newSets,
@@ -957,40 +975,41 @@ export default function MarkerControlPage() {
                     }
                 } else {
                     await actualizarMarcadorLocal({
-                        puntos: { ...puntosActual, [equipo]: String(nuevo) },
+                        puntos: { [equipo]: String(nuevo) },
                     });
                 }
             } else {
                 const nuevo = Math.max(0, actual - 1);
                 await actualizarMarcadorLocal({
-                    puntos: { ...puntosActual, [equipo]: String(nuevo) },
+                    puntos: { [equipo]: String(nuevo) },
                 });
             }
         }
     };
 
     const cambiarGame = async (equipo: 'local' | 'visitante', delta: 1 | -1) => {
-        if (!marcador) return;
-        if (marcador.modo_puntos && marcador.modo_puntos !== 'normal') return;
+        const currentMarcador = canchaDataRef.current?.marcador;
+        if (!currentMarcador) return;
+        if (currentMarcador.modo_puntos && currentMarcador.modo_puntos !== 'normal') return;
 
-        const rules = getRulesSafe(marcador);
-        const actual = marcador.games?.[equipo] || 0;
+        const rules = getRulesSafe(currentMarcador);
+        const actual = currentMarcador.games?.[equipo] || 0;
         const nuevo = Math.max(0, actual + delta);
 
         if (delta !== 1) {
             await actualizarMarcadorLocal({
-                games: { ...marcador.games, [equipo]: nuevo },
+                games: { [equipo]: nuevo },
                 puntos: { local: '0', visitante: '0' },
             });
             return;
         }
 
-        const newGames = { ...(marcador.games || { local: 0, visitante: 0 }), [equipo]: nuevo };
+        const newGames = { ...(currentMarcador.games || { local: 0, visitante: 0 }), [equipo]: nuevo };
         const g1 = newGames.local;
         const g2 = newGames.visitante;
 
         if (isSetCompleteByGames(g1, g2, rules.gamesToWinSet)) {
-            await applySetWonByGames(marcador, equipo, newGames);
+            await applySetWonByGames(currentMarcador, equipo, newGames);
         } else if (shouldEnterSetTiebreak(g1, g2, rules.tiebreakGamesEntry)) {
             await actualizarMarcadorLocal({
                 games: newGames,
@@ -1007,11 +1026,13 @@ export default function MarkerControlPage() {
     };
 
     const cambiarSet = async (equipo: 'local' | 'visitante', delta: 1 | -1) => {
-        if (!marcador) return;
-        const rules = getRulesSafe(marcador);
+        const currentMarcador = canchaDataRef.current?.marcador;
+        if (!currentMarcador) return;
+        const rules = getRulesSafe(currentMarcador);
         const need = rules.setsToWinMatch;
-        const nuevo = Math.max(0, (marcador.sets?.[equipo] || 0) + delta);
-        let finalCron = marcador.cronometro;
+        const nuevo = Math.max(0, (currentMarcador.sets?.[equipo] || 0) + delta);
+        
+        let finalCron = currentMarcador.cronometro;
         if (nuevo >= need && finalCron && finalCron.running && finalCron.startedAt) {
             finalCron = {
                 running: false,
@@ -1019,22 +1040,24 @@ export default function MarkerControlPage() {
                 elapsedSec: (finalCron.elapsedSec || 0) + Math.floor((dataService.getSyncedNow() - finalCron.startedAt) / 1000),
             };
         }
+        
         await actualizarMarcadorLocal({
-            sets: { ...marcador.sets, [equipo]: nuevo },
+            sets: { [equipo]: nuevo },
             games: { local: 0, visitante: 0 },
             puntos: { local: '0', visitante: '0' },
             modo_puntos: 'normal',
             super_tiebreak: false,
             cronometro: finalCron,
         });
+
         if (nuevo >= need) {
             const setsFinal = {
-                ...(marcador.sets || { local: 0, visitante: 0 }),
+                ...(currentMarcador.sets || { local: 0, visitante: 0 }),
                 [equipo]: nuevo,
             } as { local: number; visitante: number };
             await persistFinishedMatchFromMarker({
                 sets: setsFinal,
-                historicoSets: marcador.historico_sets || [],
+                historicoSets: currentMarcador.historico_sets || [],
             });
             alert(
                 `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${setsFinal.local}-${setsFinal.visitante})`
@@ -1043,8 +1066,9 @@ export default function MarkerControlPage() {
     };
 
     const toggleGoldenPoint = async () => {
-        if (!marcador) return;
-        await actualizarMarcadorLocal({ golden_point: !marcador.golden_point });
+        const currentMarcador = canchaDataRef.current?.marcador;
+        if (!currentMarcador) return;
+        await actualizarMarcadorLocal({ golden_point: !currentMarcador.golden_point });
     };
 
     const formatCron = (seconds: number): string => {
@@ -1084,8 +1108,9 @@ export default function MarkerControlPage() {
     }, [marcador?.cronometro, canchaId]);
 
     const toggleCronometro = async () => {
-        if (!marcador) return;
-        const curCron = marcador.cronometro ?? { running: false, startedAt: null, elapsedSec: 0 };
+        const currentMarcador = canchaDataRef.current?.marcador;
+        if (!currentMarcador) return;
+        const curCron = currentMarcador.cronometro ?? { running: false, startedAt: null, elapsedSec: 0 };
         const elapsedSec = Number(curCron.elapsedSec ?? 0) || 0;
 
         if (curCron.running && curCron.startedAt != null) {
@@ -1112,22 +1137,25 @@ export default function MarkerControlPage() {
     }, [isEnVivo, canchaId, marcador]);
 
     const toggleAsistenciaMedica = async () => {
-        if (!marcador) return;
+        const currentMarcador = canchaDataRef.current?.marcador;
+        if (!currentMarcador) return;
         await actualizarMarcadorLocal({
-            asistencia_medica_active: !marcador.asistencia_medica_active,
+            asistencia_medica_active: !currentMarcador.asistencia_medica_active,
         });
     };
 
     const toggleMesaTecnica = async () => {
-        if (!marcador) return;
+        const currentMarcador = canchaDataRef.current?.marcador;
+        if (!currentMarcador) return;
         await actualizarMarcadorLocal({
-            mesa_tecnica_active: !marcador.mesa_tecnica_active,
+            mesa_tecnica_active: !currentMarcador.mesa_tecnica_active,
         });
     };
 
     const requestCambioCancha = async () => {
-        if (!marcador) return;
-        const cur = Number(marcador.cambio_cancha_count ?? 0) || 0;
+        const currentMarcador = canchaDataRef.current?.marcador;
+        if (!currentMarcador) return;
+        const cur = Number(currentMarcador.cambio_cancha_count ?? 0) || 0;
         await actualizarMarcadorLocal({
             cambio_cancha_count: cur + 1,
             cambio_cancha_requestedAt: Date.now(),
@@ -1233,12 +1261,16 @@ export default function MarkerControlPage() {
                             <button
                                 type="button"
                                 onClick={handleRefrescarPizarra}
-                                disabled={refrescandoPizarra}
+                                disabled={refrescandoPizarra || refrescoExitoso}
                                 title="Recarga la ventana de la pizarra enlazada a esta cancha (útil si la TV se quedó pillada)"
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/15 bg-white/5 text-[9px] font-black uppercase tracking-widest text-gray-300 hover:bg-white/10 hover:border-padel-primary/40 hover:text-padel-primary transition-colors disabled:opacity-40"
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border transition-all disabled:opacity-60 ${
+                                    refrescoExitoso
+                                        ? 'bg-green-500/20 border-green-500/50 text-green-400'
+                                        : 'bg-white/5 border-white/15 text-gray-300 hover:bg-white/10 hover:border-padel-primary/40 hover:text-padel-primary'
+                                } text-[9px] font-black uppercase tracking-widest`}
                             >
                                 <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${refrescandoPizarra ? 'animate-spin' : ''}`} />
-                                Refrescar pizarra
+                                {refrescoExitoso ? 'Recargado ✓' : 'Refrescar pizarra'}
                             </button>
                         )}
                         <div className={`flex items-center gap-2 px-4 py-2 rounded-full border text-[10px] font-black uppercase tracking-widest ${isEnVivo ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-gray-800/50 border-white/10 text-gray-600'}`}>

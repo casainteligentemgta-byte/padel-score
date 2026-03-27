@@ -4,8 +4,7 @@ import React, { useState } from 'react';
 import {
     FileText, Share2, Edit3, Plus, X, Save, Download
 } from 'lucide-react';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { dataService } from '@/lib/dataService';
 import { formatCategory } from '../utils';
 
 interface RulesViewProps {
@@ -66,10 +65,17 @@ export const RulesView: React.FC<RulesViewProps> = ({ tournaments, canManage }) 
     const handleSaveGroup = async (tids: string[]) => {
         setSaving(true);
         try {
-            const batch = tids.map(tid => updateDoc(doc(db, 'tournaments', tid), {
-                'rules.content': editContent,
-                'rules.manuals': editManuals
-            }));
+            const batch = tids.map(tid => {
+                const existing = tournaments[tid];
+                return dataService.updateTournament(tid, {
+                    ...existing,
+                    rules: {
+                        ...(existing.rules || {}),
+                        content: editContent,
+                        manuals: editManuals
+                    }
+                });
+            });
             await Promise.all(batch);
             setEditingIdx(null);
         } catch (e) {

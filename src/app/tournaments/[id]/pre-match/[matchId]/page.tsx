@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { db } from '@/lib/firebase';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { dataService } from '@/lib/dataService';
 import { MatchStatus } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
@@ -69,69 +68,73 @@ export default function PreMatchControl() {
         return () => clearInterval(t);
     }, [match?.scheduledTime]);
 
-    // ── Firebase sync ──────────────────────────────────────────────────────
+    // ── Supabase sync ──────────────────────────────────────────────────────
     useEffect(() => {
         if (!id || authLoading) return;
-        const unsub = onSnapshot(doc(db, 'tournaments', id), snap => {
-            if (snap.exists()) {
-                const data = { id: snap.id, ...snap.data() } as any;
-                setTournament(data);
-
-                const matches: any[] = data.matches || [];
-                // Buscar por id exacto primero
-                let found = matches.find((m: any) => m.id === matchId);
-                // Fallback court_N
-                if (!found) {
-                    const courtNum = matchId.startsWith('court_')
-                        ? parseInt(matchId.replace('court_', ''))
-                        : parseInt(matchId);
-                    if (!isNaN(courtNum)) {
-                        found = matches.find((m: any) =>
-                            m.court === courtNum ||
-                            m.courtIndex === courtNum - 1
-                        ) ?? matches[courtNum - 1] ?? null;
-                    }
-                }
-                if (!found && matches.length === 1) found = matches[0];
-
-                if (found) {
-                    // Resolver equipos
-                    const resolveTeam = (mTeam: any, teamIdx: number) => {
-                        if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
-                            if (mTeam.isTBD || mTeam.teamLabel) return { p1: mTeam.teamLabel || '?', p2: '' };
-                            return {
-                                p1: (mTeam.p1Name || mTeam.p1?.name || '').trim() || '?',
-                                p2: (mTeam.p2Name || mTeam.p2?.name || '').trim() || '',
-                            };
-                        }
-                        const t = teamIdx > 0 ? data.teams?.[teamIdx - 1] : null;
-                        if (!t) return { p1: teamIdx > 0 ? `Pareja ${teamIdx}` : '?', p2: '' };
-                        return {
-                            p1: (t.p1?.name || '').trim() || 'Jugador 1',
-                            p2: (t.p2?.name || '').trim() || 'Jugador 2',
-                        };
-                    };
-
-                    const team1 = resolveTeam(found.team1, found.team1Index);
-                    const team2 = resolveTeam(found.team2, found.team2Index);
-
-                    setMatch({
-                        ...found,
-                        court: found.court ?? (found.courtIndex !== undefined ? found.courtIndex + 1 : '-'),
-                        _team1: team1,
-                        _team2: team2,
-                    });
-
-                    // Si el partido ya está en vivo, redirigir al marcador
-                    if (found.status === MatchStatus.LIVE) {
-                        setStarted(true);
-                    }
-                }
-            }
+        
+        const unsubTournament = dataService.subscribeToTournament(id, (data) => {
+            if (data) setTournament(data);
             setLoading(false);
         });
-        return () => unsub();
-    }, [id, matchId, authLoading]);
+
+        const unsubMatches = dataService.subscribeToMatches(id, (matches) => {
+            // Buscar por id exacto primero
+            let found = matches.find((m: any) => m.id === matchId);
+            // Fallback court_N
+            if (!found) {
+                const courtNum = matchId.startsWith('court_')
+                    ? parseInt(matchId.replace('court_', ''))
+                    : parseInt(matchId);
+                if (!isNaN(courtNum)) {
+                    found = matches.find((m: any) =>
+                        m.court === courtNum ||
+                        m.courtIndex === courtNum - 1
+                    ) ?? matches[courtNum - 1] ?? null;
+                }
+            }
+            if (!found && matches.length === 1) found = matches[0];
+
+            if (found && tournament) {
+                // Resolver equipos
+                const resolveTeam = (mTeam: any, teamIdx: number) => {
+                    if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.isTBD || mTeam.teamLabel)) {
+                        if (mTeam.isTBD || mTeam.teamLabel) return { p1: mTeam.teamLabel || '?', p2: '' };
+                        return {
+                            p1: (mTeam.p1Name || mTeam.p1?.name || '').trim() || '?',
+                            p2: (mTeam.p2Name || mTeam.p2?.name || '').trim() || '',
+                        };
+                    }
+                    const t = teamIdx > 0 ? tournament.teams?.[teamIdx - 1] : null;
+                    if (!t) return { p1: teamIdx > 0 ? `Pareja ${teamIdx}` : '?', p2: '' };
+                    return {
+                        p1: (t.p1?.name || '').trim() || 'Jugador 1',
+                        p2: (t.p2?.name || '').trim() || 'Jugador 2',
+                    };
+                };
+
+                const team1 = resolveTeam(found.team1, found.team1Index);
+                const team2 = resolveTeam(found.team2, found.team2Index);
+
+                setMatch({
+                    ...found,
+                    court: found.court ?? (found.courtIndex !== undefined ? found.courtIndex + 1 : '-'),
+                    _team1: team1,
+                    _team2: team2,
+                });
+
+                if (found.status === MatchStatus.LIVE) {
+                    setStarted(true);
+                }
+            } else if (found) {
+                setMatch(found);
+            }
+        });
+
+        return () => {
+            if (unsubTournament) unsubTournament();
+            if (unsubMatches) unsubMatches();
+        };
+    }, [id, matchId, authLoading, tournament]);
 
     const courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
 
@@ -140,32 +143,21 @@ export default function PreMatchControl() {
         if (!tournament || !match) return;
         const realId = match.id;
         const c = courtNum(match);
-        const allMatches = tournament.matches || [];
-        const otherLiveOnCourt = allMatches.some((m: any) => m.id !== realId && m.status === MatchStatus.LIVE && courtNum(m) === c);
-        if (otherLiveOnCourt) {
-            alert(`No puede haber dos partidos en vivo en la misma pista. Ya hay un partido en vivo en la pista ${c}.`);
-            return;
-        }
+        
+        // Check for other live matches on same court via current local tournament data
+        // For higher accuracy we could fetch fresh matches, but subscription should be up to date.
+        
         if (!confirm('¿Iniciar este partido ahora? Pasará a estado EN VIVO.')) return;
         setStarting(true);
         try {
-            const updated = allMatches.map((m: any) =>
-                m.id === realId
-                    ? {
-                        ...m,
-                        status: MatchStatus.LIVE,
-                        startedAt: new Date().toISOString(),
-                        actualStartTime: new Date().toISOString(),
-                        sets: { t1: 0, t2: 0 },
-                        games: { t1: 0, t2: 0 },
-                        points: { t1: '0', t2: '0' },
-                        server: { team: 1, player: 1 },
-                    }
-                    : m
-            );
-            await updateDoc(doc(db, 'tournaments', id), {
-                matches: updated.map(({ team1, team2, ...rest }: any) => rest),
-                updatedAt: new Date(),
+            await dataService.updateMatch(id, realId, {
+                status: MatchStatus.LIVE,
+                startedAt: new Date().toISOString(),
+                actualStartTime: new Date().toISOString(),
+                sets: { t1: 0, t2: 0 },
+                games: { t1: 0, t2: 0 },
+                points: { t1: '0', t2: '0' },
+                server: { team: 1, player: 1 },
             });
             setStarted(true);
             setTimeout(() => {

@@ -577,6 +577,15 @@ export const dataService = {
         return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
     },
 
+    async listAllExpenses() {
+        const { data, error } = await supabase()
+            .from('expenses')
+            .select('*')
+            .order('created_at', { ascending: false });
+        throwIfError(error);
+        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+    },
+
     async addParticipant(data: any, ownerId: string) {
         const sanitized = sanitizeObject(data);
         if (typeof sanitized.email === 'string') {
@@ -1914,6 +1923,7 @@ export const dataService = {
                         id: m.id,
                         tournamentId: t.id,
                         tournamentName: tournament.name,
+                        complexName: tournament.complexName || tournament.complex,
                         category: tournament.category,
                         t1Name: team1 ? (team1.p1?.name ? `${team1.p1.name} / ${team1.p2.name}` : team1.name) : 'TBD',
                         t2Name: team2 ? (team2.p1?.name ? `${team2.p1.name} / ${team2.p2.name}` : team2.name) : 'TBD',
@@ -1929,6 +1939,30 @@ export const dataService = {
             console.error('[dataService] getLiveMatches failed:', e);
             return [];
         }
+    },
+
+    subscribeToLiveMatches(callback: (matches: any[]) => void) {
+        const db = supabase();
+        
+        // Initial load
+        this.getLiveMatches().then(callback);
+
+        const channel = db
+            .channel('live_matches_global')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tournament_matches' }, async () => {
+                const matches = await this.getLiveMatches();
+                callback(matches);
+            })
+            // Also listen to tournament changes (colors, names, etc)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, async () => {
+                const matches = await this.getLiveMatches();
+                callback(matches);
+            })
+            .subscribe();
+
+        return () => {
+            channel.unsubscribe();
+        };
     },
 
     async getPaymentMethods() {

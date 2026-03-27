@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query } from 'firebase/firestore';
 import { Trophy, Zap, Clock, Users, ChevronRight, Play, LayoutDashboard, Radio } from 'lucide-react';
+import { dataService } from '@/lib/dataService';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
@@ -17,32 +16,8 @@ export default function LiveBracketsPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const q = query(collection(db, 'tournaments'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const allLiveMatches: any[] = [];
-            snapshot.docs.forEach(docSnap => {
-                const tournament = docSnap.data();
-                if (tournament.matches) {
-                    tournament.matches.forEach((m: any) => {
-                        // Consideramos "En Vivo" si tiene status 'LIVE'
-                        if (m.status === MatchStatus.LIVE || m.status === 'LIVE' || m.status === 'IN_PROGRESS') {
-                            const team1 = m.team1Index > 0 ? tournament.teams?.[m.team1Index - 1] : null;
-                            const team2 = m.team2Index > 0 ? tournament.teams?.[m.team2Index - 1] : null;
-
-                            allLiveMatches.push({
-                                ...m,
-                                tournamentName: tournament.name,
-                                tournamentId: docSnap.id,
-                                category: tournament.category,
-                                t1Name: team1 ? `${team1.p1.name} / ${team1.p2.name}` : 'TBD',
-                                t2Name: team2 ? `${team2.p1.name} / ${team2.p2.name}` : 'TBD',
-                                primaryColor: tournament.broadcastingSettings?.primaryColor || '#ccff00'
-                            });
-                        }
-                    });
-                }
-            });
-            setMatches(allLiveMatches);
+        const unsubscribe = dataService.subscribeToLiveMatches((liveMatches) => {
+            setMatches(liveMatches);
             setLoading(false);
         });
 

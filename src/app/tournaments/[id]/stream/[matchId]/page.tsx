@@ -2,11 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { db } from '@/lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { dataService } from '@/lib/dataService';
 import { MatchStatus } from '@/types/tournament';
 import { Monitor, Layout, Tv } from 'lucide-react';
-import Link from 'next/link';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 
 export default function StreamerOverlay() {
@@ -32,35 +30,37 @@ export default function StreamerOverlay() {
         return () => clearInterval(interval);
     }, [sponsors.length]);
 
-    // Fetch tournament and match data
+    // Fetch tournament data
     useEffect(() => {
         if (!id) return;
-
-        const docRef = doc(db, 'tournaments', id);
-        const unsubscribe = onSnapshot(docRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const tourneyData = { id: docSnap.id, ...docSnap.data() } as any;
-                setTournament(tourneyData);
-
-                if (tourneyData.matches) {
-                    const foundMatch = tourneyData.matches.find((m: any) => m.id === matchId);
-                    if (foundMatch) {
-                        const team1 = foundMatch.team1Index > 0 ? tourneyData.teams?.[foundMatch.team1Index - 1] : null;
-                        const team2 = foundMatch.team2Index > 0 ? tourneyData.teams?.[foundMatch.team2Index - 1] : null;
-
-                        setMatch({
-                            ...foundMatch,
-                            team1Name: team1 ? `${team1.p1.name} / ${team1.p2.name}` : 'TBD',
-                            team2Name: team2 ? `${team2.p1.name} / ${team2.p2.name}` : 'TBD',
-                        });
-                    }
-                }
-            }
+        const unsub = dataService.subscribeToTournament(id, (data) => {
+            if (data) setTournament(data);
             setLoading(false);
         });
+        return () => { if (unsub) unsub(); };
+    }, [id]);
 
-        return () => unsubscribe();
-    }, [id, matchId]);
+    // Fetch match data
+    useEffect(() => {
+        if (!id || !matchId) return;
+        const unsub = dataService.subscribeToMatches(id, (matches) => {
+            const foundMatch = matches.find((m: any) => m.id === matchId);
+            if (foundMatch && tournament) {
+                const team1 = foundMatch.team1Index > 0 ? tournament.teams?.[foundMatch.team1Index - 1] : null;
+                const team2 = foundMatch.team2Index > 0 ? tournament.teams?.[foundMatch.team2Index - 1] : null;
+
+                setMatch({
+                    ...foundMatch,
+                    team1Name: team1 ? `${team1.p1.name} / ${team1.p2.name}` : 'TBD',
+                    team2Name: team2 ? `${team2.p1.name} / ${team2.p2.name}` : 'TBD',
+                });
+            } else if (foundMatch) {
+                // If tournament not yet loaded, set match with what we have
+                setMatch(foundMatch);
+            }
+        });
+        return () => { if (unsub) unsub(); };
+    }, [id, matchId, tournament]);
 
     if (loading || !match) return null;
 

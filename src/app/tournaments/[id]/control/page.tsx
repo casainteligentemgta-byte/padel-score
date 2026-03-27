@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Trophy, Clock, Activity, Settings, LayoutDashboard,
@@ -13,14 +13,13 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { MatchStatus, TournamentType } from '@/types/tournament';
+import { getRanking, RankedTeam } from '@/lib/tournamentCore';
 import { dataService } from '@/lib/dataService';
-import { db } from '@/lib/firebase';
-import { doc, onSnapshot, collection } from 'firebase/firestore';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
-import { validateTournamentIntegrity } from '@/lib/tournamentService';
+import { validateTournamentIntegrity, generatePlayoffs } from '@/lib/tournamentService';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 interface EnrichedMatch {
@@ -576,7 +575,7 @@ export default function ControlPanel() {
     const [loading, setLoading] = useState(true);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
     const [currentTime, setCurrentTime] = useState(new Date());
-    const [activePhaseTab, setActivePhaseTab] = useState<'activa' | 'proximos' | 'finalizados'>('activa');
+    const [activePhaseTab, setActivePhaseTab] = useState<'activa' | 'proximos' | 'finalizados' | 'posiciones'>('activa');
 
     const canOperate = isAdmin || (!!user && !!tournament && tournament.ownerId === user.uid) || profile?.role === 'marker';
 
@@ -1024,20 +1023,32 @@ export default function ControlPanel() {
                     </div>
                 </header>
 
-                <div className="flex-shrink-0 flex items-center gap-1 px-4 lg:px-6 pt-3 pb-2 border-b border-white/[0.04]">
-                    {(['activa', 'proximos', 'finalizados'] as const).map(tab => (
+                <div className="flex-shrink-0 flex items-center gap-1 px-4 lg:px-6 pt-3 pb-2 border-b border-white/[0.04] bg-white/[0.01]">
+                    {(['activa', 'proximos', 'finalizados', 'posiciones'] as const).map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActivePhaseTab(tab)}
-                            className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all 
-                                ${activePhaseTab === tab ? 'bg-white/[0.08] text-white' : 'text-gray-600 hover:text-gray-400'}`}
+                            className={`px-3.5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all relative group
+                                ${activePhaseTab === tab 
+                                    ? 'bg-padel-primary/10 text-padel-primary' 
+                                    : 'text-gray-600 hover:text-gray-400 hover:bg-white/[0.03]'}`}
                         >
-                            <span className="capitalize">{tab}</span>
-                            {tab === 'activa' && activePhaseMatches.length > 0 && (
-                                <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-white/10 text-[7px]">{activePhaseMatches.length}</span>
+                            <span className="flex items-center gap-2">
+                                {tab === 'posiciones' && <Trophy className="w-3 h-3" />}
+                                {tab}
+                            </span>
+                            
+                            {activePhaseTab === tab && (
+                                <motion.div 
+                                    layoutId="activeTabUnderline"
+                                    className="absolute bottom-0 left-2 right-2 h-0.5 bg-padel-primary rounded-t-full shadow-[0_0_10px_#ccff00]" 
+                                />
                             )}
-                            {tab === 'finalizados' && finishedMatches.length > 0 && (
-                                <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-white/10 text-[7px]">{finishedMatches.length}</span>
+
+                            {tab === 'activa' && activePhaseMatches.length > 0 && (
+                                <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-padel-primary/20 text-padel-primary text-[7px] border border-padel-primary/30">
+                                    {activePhaseMatches.length}
+                                </span>
                             )}
                         </button>
                     ))}
@@ -1104,6 +1115,8 @@ export default function ControlPanel() {
                             ))}
                         </div>
                     )}
+
+                    {activePhaseTab === 'posiciones' && <StandingsView tournament={tournament} matches={matches} />}
                 </main>
                 <footer className="flex-shrink-0 h-9 flex items-center gap-4 px-4 lg:px-6 border-t border-white/[0.04] bg-black/20">
                     <div className="flex items-center gap-1.5">
@@ -1120,5 +1133,229 @@ export default function ControlPanel() {
                 </footer>
             </div>
         </div>
+    );
+}
+
+// ── Standings View Component ──────────────────────────────────────────────
+function StandingsView({ tournament, matches }: { tournament: any; matches: EnrichedMatch[] }) {
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [msg, setMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+    const groupMatches = useMemo(() => 
+        matches.filter(m => m.stage === 'GROUP_STAGE' || (m.stage === 'OPEN' && !!m.groupName)),
+        [matches]
+    );
+    
+    const allFinished = useMemo(() => 
+        groupMatches.length > 0 && groupMatches.every(m => m.status === MatchStatus.FINISHED),
+        [groupMatches]
+    );
+    
+    const hasPlayoffs = useMemo(() => 
+        matches.some(m => m.stage === 'PLAYOFFS'),
+        [matches]
+    );
+
+    const groupRankings = useMemo(() => {
+        if (!tournament || !matches.length) return {};
+        
+        const groups: Record<string, { teams: Set<string>; matches: any[] }> = {};
+        
+        // Extraer los equipos y partidos de grupo
+        groupMatches.forEach(m => {
+            const gName = m.groupName || 'A';
+            if (!groups[gName]) groups[gName] = { teams: new Set(), matches: [] };
+            
+            // Usamos sets ganados como indicador de puntuación para el Delta (Regla Padel)
+            groups[gName].matches.push({
+                id: m.id,
+                team1Id: m.team1Index !== undefined ? String(m.team1Index) : m.team1.name,
+                team2Id: m.team2Index !== undefined ? String(m.team2Index) : m.team2.name,
+                score1: m.sets?.t1 || 0,
+                score2: m.sets?.t2 || 0,
+                status: m.status,
+                group: gName
+            });
+            
+            if (m.team1Index !== undefined) groups[gName].teams.add(String(m.team1Index));
+            if (m.team2Index !== undefined) groups[gName].teams.add(String(m.team2Index));
+        });
+
+        const results: Record<string, RankedTeam[]> = {};
+        Object.entries(groups).forEach(([gName, data]) => {
+            const groupTeams: any[] = Array.from(data.teams).map(tid => {
+                const teamIndex = parseInt(tid);
+                const teamsArr = Array.isArray(tournament?.teams) ? tournament.teams : [];
+                const team = teamIndex > 0 ? teamsArr[teamIndex - 1] : null;
+                return {
+                    id: tid,
+                    name: team ? [team.p1?.name, team.p2?.name].filter(Boolean).join(' · ') : `Pareja ${tid}`
+                };
+            });
+            results[gName] = getRanking(groupTeams, data.matches);
+        });
+        
+        return results;
+    }, [tournament, matches]);
+
+    if (Object.keys(groupRankings).length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-40">
+                <Trophy className="w-12 h-12" />
+                <p className="text-[10px] font-black uppercase tracking-widest italic">No hay datos de fase de grupos disponibles.</p>
+            </div>
+        );
+    }
+
+    return (
+        <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-10 pb-20"
+        >
+            {Object.entries(groupRankings).map(([gName, ranking]) => (
+                <div key={gName} className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-1.5 h-6 bg-padel-primary rounded-full shadow-[0_0_15px_#ccff00]" />
+                            <h3 className="text-sm font-black italic uppercase tracking-widest text-white/90">GRUPO {gName}</h3>
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-1 bg-white/[0.03] border border-white/[0.06] rounded-full">
+                            <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">3 PTS Victoria</span>
+                            <div className="w-1 h-3 bg-white/10" />
+                            <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">1 PTS Empate</span>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-3xl overflow-hidden shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-white/[0.04] border-b border-white/[0.08]">
+                                    <th className="px-5 py-4 text-[9px] font-black uppercase tracking-[0.2em] text-gray-400">#</th>
+                                    <th className="px-5 py-4 text-[9px] font-black uppercase tracking-[0.2em] text-padel-primary">Equipo / Pareja</th>
+                                    <th className="px-4 py-4 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center">PJ</th>
+                                    <th className="px-4 py-4 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center">PG</th>
+                                    <th className="px-4 py-4 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center">PTS</th>
+                                    <th className="px-5 py-4 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 text-center italic">Sets +/-</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/[0.04]">
+                                {ranking.map((tr, idx) => {
+                                    const isTopTwo = idx < 2;
+                                    return (
+                                        <tr key={tr.id} className="hover:bg-white/[0.01] transition-colors group">
+                                            <td className="px-5 py-5">
+                                                <span className={`w-7 h-7 flex items-center justify-center rounded-xl text-[11px] font-black italic border transition-all duration-300
+                                                    ${idx === 0 ? 'bg-padel-primary/20 border-padel-primary/50 text-padel-primary shadow-[0_0_20px_rgba(204,255,0,0.15)] scale-110' : 
+                                                      idx === 1 ? 'bg-white/10 border-white/20 text-white shadow-lg' : 'bg-transparent border-white/5 text-gray-600'}`}>
+                                                    {idx + 1}
+                                                </span>
+                                            </td>
+                                            <td className="px-5 py-5 relative">
+                                                <div className="flex flex-col">
+                                                    <span className={`text-xs font-black italic uppercase tracking-tight transition-all duration-300
+                                                        ${isTopTwo ? 'text-white translate-x-1' : 'text-gray-500 group-hover:text-gray-300'}`}>
+                                                        {tr.name}
+                                                    </span>
+                                                    {isTopTwo && (
+                                                        <span className="text-[7px] font-black uppercase tracking-widest text-padel-primary/40 leading-none mt-1">
+                                                            ZONA CLASIFICACIÓN
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {isTopTwo && (
+                                                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-8 bg-padel-primary/40 shadow-[0_0_10px_#ccff00]" />
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-5 text-center text-xs font-mono font-bold text-gray-500">{tr.matchesPlayed}</td>
+                                            <td className="px-4 py-5 text-center text-xs font-mono font-bold text-gray-500">{tr.victories}</td>
+                                            <td className={`px-4 py-5 text-center text-sm font-black italic tabular-nums transition-all group-hover:scale-110
+                                                ${idx === 0 ? 'text-padel-primary' : 'text-gray-100'}`}>
+                                                {tr.totalPoints}
+                                            </td>
+                                            <td className={`px-5 py-5 text-center text-xs font-mono font-bold tabular-nums
+                                                ${tr.pointDiff > 0 ? 'text-green-500/80' : tr.pointDiff < 0 ? 'text-red-500/80' : 'text-gray-700'}`}>
+                                                {tr.pointDiff > 0 ? `+${tr.pointDiff}` : tr.pointDiff}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ))}
+
+            {/* Acciones de Fase de Grupos */}
+            <div className="mt-12 p-8 bg-padel-primary/[0.03] border border-padel-primary/20 rounded-[2.5rem] flex flex-col items-center gap-6 text-center">
+                <div className="w-16 h-16 bg-padel-primary/10 rounded-3xl flex items-center justify-center text-padel-primary">
+                    <Trophy className="w-8 h-8" />
+                </div>
+                
+                <div className="space-y-2">
+                    <h4 className="text-sm font-black italic uppercase tracking-widest text-white">Generar Fase Final (Playoffs)</h4>
+                    <p className="text-[10px] font-bold text-gray-500 max-w-xs leading-relaxed">
+                        Una vez finalizados todos los partidos de grupo, podrás generar automáticamente los cruces de semifinales (1A vs 2B y 1B vs 2A).
+                    </p>
+                </div>
+
+                {!allFinished && !hasPlayoffs && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-full">
+                        <AlertCircle className="w-3 h-3 text-amber-500" />
+                        <span className="text-[9px] font-black uppercase tracking-widest text-amber-500">Pendiente: {groupMatches.filter(m => m.status !== MatchStatus.FINISHED).length} partidos</span>
+                    </div>
+                )}
+
+                {msg && (
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className={`text-[10px] font-black uppercase tracking-widest px-6 py-3 rounded-2xl border
+                            ${msg.type === 'success' ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`}
+                    >
+                        {msg.text}
+                    </motion.div>
+                )}
+
+                <button
+                    disabled={!allFinished || hasPlayoffs || isGenerating}
+                    onClick={async () => {
+                        setIsGenerating(true);
+                        setMsg(null);
+                        try {
+                            const catId = matches[0]?.categoryId || 'DEFAULT';
+                            const res = await generatePlayoffs(tournament.id, catId);
+                            if (res.success) {
+                                setMsg({ type: 'success', text: `¡Éxito! Se han generado los partidos de Playoff.` });
+                            } else {
+                                setMsg({ type: 'error', text: `Error: ${res.error}` });
+                            }
+                        } catch (e: any) {
+                            setMsg({ type: 'error', text: `Excepción: ${e.message}` });
+                        } finally {
+                            setIsGenerating(false);
+                        }
+                    }}
+                    className={`flex items-center gap-3 px-8 py-4 rounded-2xl font-black italic uppercase tracking-tighter text-xs transition-all duration-500
+                        ${allFinished && !hasPlayoffs 
+                            ? 'bg-padel-primary text-black hover:scale-105 active:scale-95 shadow-[0_4px_20px_rgba(204,255,0,0.3)]' 
+                            : 'bg-white/5 text-gray-700 cursor-not-allowed border border-white/5'}`}
+                >
+                    {isGenerating ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : hasPlayoffs ? (
+                        <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            Cruces Generados
+                        </>
+                    ) : (
+                        <>
+                            <Play className="w-4 h-4 fill-current" />
+                            Generar Semifinales
+                        </>
+                    )}
+                </button>
+            </div>
+        </motion.div>
     );
 }

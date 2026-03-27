@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { collection, getDocs } from 'firebase/firestore';
 import { requireAuth } from '@/lib/authServerSupabase';
 import { checkRateLimit } from '@/lib/rateLimit';
 
@@ -10,17 +9,12 @@ export async function GET(req: Request) {
     const authResult = await requireAuth(req);
     if (authResult instanceof NextResponse) return authResult;
     try {
-        // Carga Firebase solo en runtime
-        const { db } = await import('@/lib/firebase');
-        const [tournamentsSnap, expensesSnap, participantsSnap] = await Promise.all([
-            getDocs(collection(db, 'tournaments')),
-            getDocs(collection(db, 'expenses')),
-            getDocs(collection(db, 'participants'))
+        const { dataService } = await import('@/lib/dataService');
+        const [tournaments, expenses, players] = await Promise.all([
+            dataService.listAllTournaments(),
+            dataService.listAllExpenses(),
+            dataService.getAllParticipants()
         ]);
-
-        const tournaments = tournamentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const expenses = expensesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const players = participantsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
         // Resumen simplificado para no saturar el contexto de la IA
         const stats = {

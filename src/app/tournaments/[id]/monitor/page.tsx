@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { db } from '@/lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { dataService } from '@/lib/dataService';
 import { MatchStatus } from '@/types/tournament';
 import { Monitor, Wifi, WifiOff, Maximize2 } from 'lucide-react';
 import { useRouteSegment } from '@/lib/useRouteSegment';
@@ -52,29 +51,39 @@ export default function MonitorCanchas() {
         return () => document.removeEventListener('fullscreenchange', handler);
     }, []);
 
-    // ── Firebase realtime: escuchar partidos LIVE ───────────────────────────
+    // ── Supabase realtime: escuchar partidos LIVE ───────────────────────────
     useEffect(() => {
         if (!id) return;
-        const unsub = onSnapshot(doc(db, 'tournaments', id), snap => {
-            if (!snap.exists()) { setLoading(false); return; }
-            const data = { id: snap.id, ...snap.data() } as any;
-            setTournament(data);
+        setLoading(true);
 
-            const numCanchas = Math.max(1, Number(data.totalCourts) || (data.courtNames?.length ?? 6));
-            const matches: ActiveMatch[] = (data.matches || [])
-                .filter((m: any) => m.status === MatchStatus.LIVE)
+        let currentTournament: any = null;
+        let currentMatches: any[] = [];
+
+        const updateData = (t: any, ms: any[]) => {
+            if (!t) return;
+            setTournament(t);
+
+            const numCanchas = Math.max(1, Number(t.totalCourts) || (t.courtNames?.length ?? 6));
+            
+            const resolveTeamName = (mTeam: any, teamIdx: number) => {
+                const PLACEHOLDER_RE = /pareja|jugador|placeholder/i;
+                if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.teamLabel)) {
+                    const p1 = (mTeam.p1Name || mTeam.p1?.name || '').trim();
+                    const p2 = (mTeam.p2Name || mTeam.p2?.name || '').trim();
+                    const hasReal = (p1 && !PLACEHOLDER_RE.test(p1)) || (p2 && !PLACEHOLDER_RE.test(p2));
+                    if (hasReal) {
+                        return [p1, p2].filter(Boolean).join(' · ') || '?';
+                    }
+                    if (mTeam.teamLabel) return mTeam.teamLabel;
+                }
+                const foundTeam = teamIdx > 0 ? (Array.isArray(t.teams) ? t.teams[teamIdx - 1] : null) : null;
+                if (!foundTeam) return `Pareja ${teamIdx || '?'}`;
+                return [(foundTeam.p1?.name || '').trim(), (foundTeam.p2?.name || '').trim()].filter(Boolean).join(' · ') || `Pareja ${teamIdx}`;
+            };
+
+            const processed: ActiveMatch[] = ms
+                .filter((m: any) => m.status?.toString().toUpperCase() === 'LIVE')
                 .map((m: any, idx: number) => {
-                    const resolveTeamName = (mTeam: any, teamIdx: number) => {
-                        if (mTeam?.p1 || mTeam?.p1Name) {
-                            const p1 = (mTeam.p1Name || mTeam.p1?.name || '').trim();
-                            const p2 = (mTeam.p2Name || mTeam.p2?.name || '').trim();
-                            return [p1, p2].filter(Boolean).join(' · ') || '?';
-                        }
-                        const t = teamIdx > 0 ? data.teams?.[teamIdx - 1] : null;
-                        if (!t) return `Pareja ${teamIdx || idx + 1}`;
-                        return [(t.p1?.name || '').trim(), (t.p2?.name || '').trim()].filter(Boolean).join(' · ') || `Pareja ${teamIdx}`;
-                    };
-
                     return {
                         id: m.id || `match_${idx}`,
                         court: m.court ?? (m.courtIndex !== undefined ? m.courtIndex + 1 : idx + 1),
@@ -84,12 +93,28 @@ export default function MonitorCanchas() {
                     };
                 })
                 .sort((a: ActiveMatch, b: ActiveMatch) => Number(a.court) - Number(b.court))
-                .slice(0, numCanchas); // máximo = canchas del complejo
+                .slice(0, numCanchas);
 
-            setActiveMatches(matches);
+            setActiveMatches(processed);
             setLoading(false);
+        };
+
+        const unsubT = dataService.subscribeToTournament(id, (t) => {
+            if (!t) { setLoading(false); return; }
+            currentTournament = t;
+            if (currentMatches.length > 0) updateData(currentTournament, currentMatches);
         });
-        return () => unsub();
+
+        const unsubM = dataService.subscribeToMatches(id, (ms) => {
+            currentMatches = ms || [];
+            if (currentTournament) updateData(currentTournament, currentMatches);
+            else if (ms === null || ms?.length === 0) setLoading(false);
+        });
+
+        return () => {
+            if (typeof unsubT === 'function') unsubT();
+            if (typeof unsubM === 'function') unsubM();
+        };
     }, [id]);
 
     const count = activeMatches.length;

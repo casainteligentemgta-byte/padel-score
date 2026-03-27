@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ref, onValue, off } from 'firebase/database';
 import { rtdb } from '@/lib/rtdb';
@@ -28,10 +28,7 @@ function courtSetCell(
         return h?.[team] ?? 0;
     }
     if (setIdx === currentSet) {
-        if (modo === 'super_tiebreak' && currentSet >= 3) {
-            return Number(marcador?.puntos?.[team] ?? 0);
-        }
-        if (modo === 'tiebreak') {
+        if (modo === 'super_tiebreak' || modo === 'tiebreak') {
             return Number(marcador?.puntos?.[team] ?? 0);
         }
         return games[team] ?? 0;
@@ -153,6 +150,21 @@ export default function CourtDisplayPage() {
         });
         return unsub;
     }, [canchaId]);
+
+    // ── Refresco remoto via Nonce ──────────────────────────────────────────
+    const lastNonceRef = useRef<number | null>(null);
+    const currentNonce = pizarraData?.pizarra_refresh_nonce ?? canchaData?.pizarra_refresh_nonce;
+    
+    useEffect(() => {
+        if (currentNonce !== undefined && currentNonce !== null) {
+            if (lastNonceRef.current !== null && currentNonce !== lastNonceRef.current) {
+                console.log('[CourtDisplay] Refresh nonce changed, reloading...');
+                window.location.reload();
+            }
+            lastNonceRef.current = currentNonce;
+        }
+    }, [currentNonce]);
+
 
     const effectiveCancha = pizarraData ?? canchaData;
     const isEnVivo = effectiveCancha?.estado === 'en_vivo';

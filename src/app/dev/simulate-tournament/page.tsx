@@ -4,8 +4,6 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { dataService } from '@/lib/dataService';
 import { useAuth } from '@/lib/AuthContext';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { MatchStatus } from '@/types/tournament';
 import Sidebar from '@/components/Sidebar';
@@ -64,9 +62,8 @@ export default function SimulateTournamentPage() {
         }
         const load = async () => {
             try {
-                const snap = await getDoc(doc(db, 'tournaments', selectedId));
-                if (snap.exists()) setTournament({ id: snap.id, ...snap.data() });
-                else setTournament(null);
+                const t = await dataService.getTournament(selectedId);
+                setTournament(t);
             } catch (e) {
                 console.error(e);
                 setTournament(null);
@@ -137,9 +134,9 @@ export default function SimulateTournamentPage() {
         setMessage(null);
         try {
             const updated = runOneSimulation(matches, next);
-            await updateDoc(doc(db, 'tournaments', selectedId), {
-                matches: stripMatches(updated),
-                updatedAt: new Date()
+            await dataService.updateTournament(selectedId, {
+                ...tournament,
+                matches: stripMatches(updated)
             });
             setTournament({ ...tournament, matches: updated });
             setMessage(`Partido simulado: ${next.roundName || 'Grupo'} (${updated.find(m => m.id === next.id)?.score || ''}).`);
@@ -174,9 +171,9 @@ export default function SimulateTournamentPage() {
                 setSimulating(false);
                 return;
             }
-            await updateDoc(doc(db, 'tournaments', selectedId), {
-                matches: stripMatches(current),
-                updatedAt: new Date()
+            await dataService.updateTournament(selectedId, {
+                ...tournament,
+                matches: stripMatches(current)
             });
             setTournament({ ...tournament, matches: current });
             setMessage(`Se simularon ${count} partido(s). Torneo listo hasta la final.`);

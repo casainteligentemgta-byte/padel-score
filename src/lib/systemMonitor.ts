@@ -1,16 +1,18 @@
-import { db } from './firebase';
-import { collection, addDoc, serverTimestamp, query, limit, orderBy, getDocs } from 'firebase/firestore';
+import { getSupabaseClient } from './supabase/client';
 
 export type LogLevel = 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
 
 export interface SystemLog {
+    id?: string;
     level: LogLevel;
     module: string;
     message: string;
     userId?: string;
     details?: any;
-    timestamp: any;
+    timestamp: string;
 }
+
+const TABLE_NAME = 'system_logs';
 
 export const systemMonitor = {
     /**
@@ -19,26 +21,45 @@ export const systemMonitor = {
     async log(level: LogLevel, module: string, message: string, userId?: string, details?: any) {
         console.log(`[VIGILANCIA] [${level}] [${module}] ${message}`);
         try {
-            await addDoc(collection(db, 'system_logs'), {
+            const client = getSupabaseClient();
+            if (!client) return;
+
+            await client.from(TABLE_NAME).insert({
                 level,
                 module,
                 message,
-                userId: userId || 'system',
+                user_id: userId || 'system',
                 details: details || {},
-                timestamp: serverTimestamp()
             });
         } catch (error) {
             console.error('[VIGILANCIA] Error al guardar log:', error);
         }
     },
 
-    async getRecentLogs(count = 50) {
-        const q = query(
-            collection(db, 'system_logs'),
-            orderBy('timestamp', 'desc'),
-            limit(count)
-        );
-        const snap = await getDocs(q);
-        return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    async getRecentLogs(count = 50): Promise<SystemLog[]> {
+        try {
+            const client = getSupabaseClient();
+            if (!client) return [];
+
+            const { data, error } = await client
+                .from(TABLE_NAME)
+                .select('*')
+                .order('timestamp', { ascending: false })
+                .limit(count);
+
+            if (error) throw error;
+            return (data || []).map(d => ({
+                id: d.id,
+                level: d.level,
+                module: d.module,
+                message: d.message,
+                userId: d.user_id,
+                details: d.details,
+                timestamp: d.timestamp
+            }));
+        } catch (error) {
+            console.error('[VIGILANCIA] Error fetching logs:', error);
+            return [];
+        }
     }
 };

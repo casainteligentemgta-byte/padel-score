@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot as onSnapshotFirebase } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
 import { MatchStatus } from '@/types/tournament';
 import TVScoreboardDisplay from '@/components/TVScoreboardDisplay';
 import { RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
+import { dataService } from '@/lib/dataService';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import {
@@ -34,53 +33,53 @@ export default function TVCourtDisplayPage() {
     } | null>(null);
 
     useEffect(() => {
-        const q = query(collection(db, 'tournaments'), where('status', '==', 'active'));
-        const unsubFirebase = onSnapshotFirebase(q, (snapshot) => {
-            let foundMatch = null;
-            let foundTournament = null;
-            snapshot.docs.forEach((tournamentDoc) => {
-                const tData = tournamentDoc.data();
-                if (complexFilter && tData.complexName !== complexFilter) return;
-                const matches = tData.matches || [];
-                const matchOnCourt = matches.find(
-                    (m: any) =>
-                        (m.court === parseInt(courtId) || m.courtIndex === parseInt(courtId) - 1) &&
-                        m.status === MatchStatus.LIVE,
-                );
-                if (matchOnCourt) {
-                    foundMatch = matchOnCourt;
-                    foundTournament = { id: tournamentDoc.id, ...tData };
-                    const team1 = matchOnCourt.team1Index > 0 ? tData.teams?.[matchOnCourt.team1Index - 1] : null;
-                    const team2 = matchOnCourt.team2Index > 0 ? tData.teams?.[matchOnCourt.team2Index - 1] : null;
-                    foundMatch.t1Name = team1 ? `${team1.p1.name} / ${team1.p2.name}` : 'TBD';
-                    foundMatch.t2Name = team2 ? `${team2.p1.name} / ${team2.p2.name}` : 'TBD';
+        const unsubscribeMatches = dataService.subscribeToLiveMatches((allMatches) => {
+            const matchIndex = parseInt(courtId) - 1;
+            const courtMatch = allMatches.find(m => 
+                (m.court === parseInt(courtId) || m.courtIndex === matchIndex) &&
+                (!complexFilter || m.complexName === complexFilter)
+            );
 
-                    foundMatch.teamA = {
-                        player1: { name: team1?.p1?.name || '---' },
-                        player2: { name: team1?.p2?.name || '---' },
-                        sets: matchOnCourt.sets?.t1 || 0,
-                        games: matchOnCourt.games?.t1 || 0,
-                        points: matchOnCourt.points?.t1 || 0,
-                    };
-                    foundMatch.teamB = {
-                        player1: { name: team2?.p1?.name || '---' },
-                        player2: { name: team2?.p2?.name || '---' },
-                        sets: matchOnCourt.sets?.t2 || 0,
-                        games: matchOnCourt.games?.t2 || 0,
-                        points: matchOnCourt.points?.t2 || 0,
-                    };
+            if (courtMatch) {
+                const tData = {
+                    id: courtMatch.tournamentId,
+                    name: courtMatch.tournamentName,
+                    primaryColor: courtMatch.primaryColor
+                };
 
-                    const prevSets: string[] = [];
-                    if (matchOnCourt.games_sets) {
-                        matchOnCourt.games_sets.forEach((set: any) => {
-                            prevSets.push(`${set.t1}-${set.t2}`);
-                        });
-                    }
-                    foundMatch.prevSets = prevSets;
+                const teamA = {
+                    player1: { name: courtMatch.team1?.p1?.name || (courtMatch.t1Name?.split(' / ')[0]) || '---' },
+                    player2: { name: courtMatch.team1?.p2?.name || (courtMatch.t1Name?.split(' / ')[1]) || '---' },
+                    sets: courtMatch.sets?.t1 || 0,
+                    games: courtMatch.games?.t1 || 0,
+                    points: courtMatch.points?.t1 || 0,
+                };
+                const teamB = {
+                    player1: { name: courtMatch.team2?.p1?.name || (courtMatch.t2Name?.split(' / ')[0]) || '---' },
+                    player2: { name: courtMatch.team2?.p2?.name || (courtMatch.t2Name?.split(' / ')[1]) || '---' },
+                    sets: courtMatch.sets?.t2 || 0,
+                    games: courtMatch.games?.t2 || 0,
+                    points: courtMatch.points?.t2 || 0,
+                };
+
+                const prevSets: string[] = [];
+                if (courtMatch.games_sets) {
+                    courtMatch.games_sets.forEach((set: any) => {
+                        prevSets.push(`${set.t1}-${set.t2}`);
+                    });
                 }
-            });
-            setActiveMatch(foundMatch);
-            setTournament(foundTournament);
+
+                setActiveMatch({
+                    ...courtMatch,
+                    teamA,
+                    teamB,
+                    prevSets
+                });
+                setTournament(tData);
+            } else {
+                setActiveMatch(null);
+                setTournament(null);
+            }
             setLoading(false);
         });
 
@@ -140,7 +139,7 @@ export default function TVCourtDisplayPage() {
             .subscribe();
 
         return () => {
-            unsubFirebase();
+            unsubscribeMatches();
             tickerChannel?.unsubscribe();
             displayChannel?.unsubscribe();
         };

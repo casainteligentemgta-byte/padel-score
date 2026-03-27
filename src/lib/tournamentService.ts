@@ -2,6 +2,7 @@ import { getSupabaseClient } from './supabase/client';
 import { dataService } from './dataService';
 import { TournamentType } from '@/types/tournament';
 import { MatchStatus } from '@/types/tournament';
+import * as tournamentCore from './tournamentCore';
 
 const now = () => new Date().toISOString();
 
@@ -473,5 +474,105 @@ export const validateTournamentIntegrity = (tournament: any) => {
   const { isReady, errors } = checkTournamentReady(tournament);
   return { canLive: isReady, issues: errors };
 };
+
+/**
+ * Genera partidos de eliminación directa (Playoffs) basados en el ranking final de grupos.
+ * Actualmente soporta el cruce en X (1A vs 2B, 1B vs 2A).
+ */
+export async function generatePlayoffs(tournamentId: string, categoryId: string): Promise<{ success: boolean; matchesCreated?: number; error?: any }> {
+  try {
+    const supabase = getSupabaseClient();
+    if (!supabase) throw new Error('Supabase no configurado');
+
+    // 1. Obtener todos los partidos de la categoría
+    const { data: matches, error: mErr } = await supabase
+      .from('tournament_matches')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .eq('categoryId', categoryId);
+
+    if (mErr) throw mErr;
+    if (!matches || matches.length === 0) throw new Error('No se encontraron partidos para esta categoría.');
+
+    // 2. Verificar que todos los partidos de fase de grupos estén finalizados
+    const groupMatches = matches.filter(m => m.stage === 'GROUP_STAGE' || (m.stage === 'OPEN' && !!m.groupName));
+    const pendingCount = groupMatches.filter(m => m.status !== MatchStatus.FINISHED).length;
+    if (pendingCount > 0) {
+      throw new Error(`Hay ${pendingCount} partidos de grupo pendientes de finalizar.`);
+    }
+
+    // 3. Obtener el torneo para los nombres de los equipos
+    const tournament = await dataService.getTournament(tournamentId);
+    if (!tournament) throw new Error('Torneo no encontrado');
+
+    const teamsArr = Array.isArray(tournament.teams) ? tournament.teams : [];
+    
+    // 4. Calcular Rankings por Grupo
+    const groups: Record<string, { teams: any[]; matches: any[] }> = {};
+    groupMatches.forEach(m => {
+      const gName = m.groupName || 'A';
+      if (!groups[gName]) groups[gName] = { teams: [], matches: [] };
+      groups[gName].matches.push({
+        id: m.id,
+        team1Id: String(m.team1Index),
+        team2Id: String(m.team2Index),
+        score1: m.sets?.t1 || 0,
+        score2: m.sets?.t2 || 0,
+        status: m.status
+      });
+      // Asegurar que los IDs de equipo estén en la lista del grupo
+      if (!groups[gName].teams.some(t => t.id === String(m.team1Index))) {
+        groups[gName].teams.push({ id: String(m.team1Index), name: m.team1Name });
+      }
+      if (!groups[gName].teams.some(t => t.id === String(m.team2Index))) {
+        groups[gName].teams.push({ id: String(m.team2Index), name: m.team2Name });
+      }
+    });
+
+    const groupKeys = Object.keys(groups).sort();
+    if (groupKeys.length < 2) {
+      throw new Error("Se requieren al menos 2 grupos para generar semifinales automáticas.");
+    }
+
+    const rankingA = tournamentCore.getRanking(groups[groupKeys[0]].teams, groups[groupKeys[0]].matches);
+    const rankingB = tournamentCore.getRanking(groups[groupKeys[1]].teams, groups[groupKeys[1]].matches);
+
+    // 5. Generar Semifinales
+    const sfMatches = tournamentCore.generateSemifinals(rankingA, rankingB);
+    
+    // 6. Preparar payloads para Supabase
+    const ts = Date.now().toString(36);
+    const playoffPayloads = sfMatches.map((sf, idx) => {
+      // Buscar data original de los equipos clasificados
+      const t1Data = teamsArr.find((_: any, i: number) => i === parseInt(sf.team1Id) - 1);
+      const t2Data = teamsArr.find((_: any, i: number) => i === parseInt(sf.team2Id) - 1);
+
+      return {
+        id: `sf-${categoryId}-${idx + 1}-${ts}`,
+        tournament_id: tournamentId,
+        team1: t1Data,
+        team2: t2Data,
+        team1Name: t1Data ? (t1Data.p1?.name + (t1Data.p2?.name ? ` / ${t1Data.p2.name}` : '')) : 'Clasificado 1',
+        team2Name: t2Data ? (t2Data.p1?.name + (t2Data.p2?.name ? ` / ${t2Data.p2.name}` : '')) : 'Clasificado 2',
+        team1Index: parseInt(sf.team1Id),
+        team2Index: parseInt(sf.team2Id),
+        roundName: 'Semifinal',
+        status: MatchStatus.PENDING,
+        stage: 'PLAYOFFS',
+        categoryId: categoryId,
+        matchNumber: 100 + idx, // Rango especial para playoffs
+        scheduledTime: now() // Por defecto ahora, el admin lo ajustará
+      };
+    });
+
+    // 7. Insertar masivamente
+    const { inserted } = await dataService.createMatchesBulk(tournamentId, playoffPayloads);
+
+    return { success: true, matchesCreated: inserted };
+  } catch (error: any) {
+    console.error('[generatePlayoffs] Error:', error);
+    return { success: false, error: error.message || error };
+  }
+}
 
 

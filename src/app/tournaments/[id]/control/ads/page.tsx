@@ -33,16 +33,14 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
-import { db, storage } from '@/lib/firebase';
 import { rtdb } from '@/lib/rtdb';
 import { ref as rtdbRef, set as rtdbSet, onValue, off } from 'firebase/database';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import type { MediaContent } from '@/lib/supabase/publicidad';
 import { useRouteSegment } from '@/lib/useRouteSegment';
+import { dataService } from '@/lib/dataService';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Page
@@ -127,14 +125,12 @@ export default function AdsManagement() {
         if (!authLoading && !isAdmin) router.push('/');
     }, [isAdmin, authLoading, router]);
 
-    // ── Firestore listener
+    // ── Supabase/dataService listener
     useEffect(() => {
         if (!id || authLoading || !isAdmin) return;
-        const docRef = doc(db, 'tournaments', id);
-        const unsubscribe = onSnapshot(docRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setTournament({ id: docSnap.id, ...data });
+        const unsubscribe = dataService.subscribeToTournament(id, (data) => {
+            if (data) {
+                setTournament(data);
                 const bs = data.broadcastingSettings || {};
                 // ADS
                 setAdFrequency(bs.adFrequencySeconds || 60);
@@ -156,7 +152,7 @@ export default function AdsManagement() {
             }
             setLoading(false);
         });
-        return () => unsubscribe();
+        return () => { if (unsubscribe) unsubscribe(); };
     }, [id, authLoading, isAdmin]);
 
     // ── Cargar imágenes de biblioteca de Supabase (media_content.tipo = 'imagen') ──
@@ -193,20 +189,25 @@ export default function AdsManagement() {
         return () => off(carouselRef, 'value', handler);
     }, []);
 
-    // ── File upload helper
+    // ── File upload helper (using dataService/Supabase)
     const handleFileUpload = async (file: File, type: 'ad' | 'sponsor', index: number) => {
         const key = `${type}-${index}`;
         setUploading(key);
         try {
-            const fileRef = ref(storage, `tournaments/${id}/${type}/${Date.now()}_${file.name}`);
-            await uploadBytes(fileRef, file);
-            const url = await getDownloadURL(fileRef);
-            if (type === 'ad') {
-                const newUrls = [...adMediaUrls];
-                newUrls[index] = url;
-                setAdMediaUrls(newUrls);
+            const bucketName = type === 'sponsor' ? 'patrocinantes' : 'publicidad';
+            const filePath = `${id}/${type}/${Date.now()}_${file.name}`;
+            const url = await dataService.uploadFile(file, filePath, bucketName);
+            
+            if (url) {
+                if (type === 'ad') {
+                    const newUrls = [...adMediaUrls];
+                    newUrls[index] = url;
+                    setAdMediaUrls(newUrls);
+                } else {
+                    updateSponsor(index, 'logoUrl', url);
+                }
             } else {
-                updateSponsor(index, 'logoUrl', url);
+                throw new Error('No URL returned from upload');
             }
         } catch (error) { console.error(error); alert('Error al subir el archivo'); }
         finally { setUploading(null); }
@@ -225,21 +226,21 @@ export default function AdsManagement() {
     const addAd = () => setAdMediaUrls([...adMediaUrls, '']);
     const removeAd = (i: number) => setAdMediaUrls(adMediaUrls.filter((_, idx) => idx !== i));
 
-    // ── Carrusel helpers
+    // ── Carrusel helpers (using RTDB + Supabase Storage)
     const handleCarouselUpload = async (file: File, imgId?: string) => {
         const key = imgId || `new_${Date.now()}`;
         setUploadingCarousel(key);
         try {
-            const fileRef = ref(storage, `tournaments/carousel/${Date.now()}_${file.name}`);
-            await uploadBytes(fileRef, file);
-            const url = await getDownloadURL(fileRef);
-            if (imgId) {
-                // Actualizar imagen existente
-                setCarouselImages(prev => prev.map(img => img.id === imgId ? { ...img, url } : img));
-            } else {
-                // Agregar nueva
-                const newImg: CarouselImage = { id: key, url, orden: carouselImages.length, activa: true };
-                setCarouselImages(prev => [...prev, newImg]);
+            const filePath = `carousel/${Date.now()}_${file.name}`;
+            const url = await dataService.uploadFile(file, filePath, 'publicidad');
+            
+            if (url) {
+                if (imgId) {
+                    setCarouselImages(prev => prev.map(img => img.id === imgId ? { ...img, url } : img));
+                } else {
+                    const newImg: CarouselImage = { id: key, url, orden: carouselImages.length, activa: true };
+                    setCarouselImages(prev => [...prev, newImg]);
+                }
             }
         } catch (e) { console.error(e); alert('Error al subir imagen'); }
         finally { setUploadingCarousel(null); }
@@ -282,11 +283,11 @@ export default function AdsManagement() {
         setSelectedLibraryImageId('');
     };
 
-    // ── Save
+    // ── Save (using dataService/Supabase)
     const handleSave = async () => {
         setSaving(true);
         try {
-            await updateDoc(doc(db, 'tournaments', id), {
+            await dataService.updateTournament(id, {
                 broadcastingSettings: {
                     // ADS
                     adFrequencySeconds: adFrequency,
@@ -317,9 +318,15 @@ export default function AdsManagement() {
     const handleSaveCameras = async () => {
         setSavingCameras(true);
         try {
-            await updateDoc(doc(db, 'tournaments', id), {
-                'broadcastingSettings.cameras': cameras,
-                updatedAt: new Date(),
+            // merge with existing broadcastingSettings or just update nested?
+            // dataService.updateTournament handles merging? no, object replacement usually.
+            // Better to get current state if we don't want to lose everything.
+            // But we already have the state from the listener.
+            await dataService.updateTournament(id, {
+                broadcastingSettings: {
+                    ...tournament?.broadcastingSettings,
+                    cameras: cameras
+                }
             });
             setShowSavedToast(true);
             setTimeout(() => setShowSavedToast(false), 2000);
@@ -730,9 +737,9 @@ export default function AdsManagement() {
                                                                     if (!file) return;
                                                                     setUploading('clock-bg');
                                                                     try {
-                                                                        const fileRef = ref(storage, `tournaments/${id}/broadcast/clock_${Date.now()}_${file.name}`);
-                                                                        await uploadBytes(fileRef, file);
-                                                                        setClockImageUrl(await getDownloadURL(fileRef));
+                                                                        const filePath = `${id}/broadcast/clock_${Date.now()}_${file.name}`;
+                                                                        const url = await dataService.uploadFile(file, filePath, 'publicidad');
+                                                                        if (url) setClockImageUrl(url);
                                                                     } catch (err) { console.error(err); }
                                                                     finally { setUploading(null); }
                                                                 }} />

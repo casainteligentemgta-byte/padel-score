@@ -10,8 +10,7 @@ import {
     Shield, Zap, Globe, Gauge, AlertTriangle, MonitorPlay,
     Cpu, HardDrive, Network, Clock, Info
 } from 'lucide-react';
-import { db } from '@/lib/firebase';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { dataService } from '@/lib/dataService';
 import { useAuth } from '@/lib/AuthContext';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
@@ -381,40 +380,59 @@ export default function BroadcastingPage() {
 
     const canOperate = isAdmin || isMarker;
 
-    // Firebase realtime
+    // Supabase Real-time Synchronization
     useEffect(() => {
-        const unsub = onSnapshot(doc(db, 'tournaments', id), snap => {
-            if (snap.exists()) {
-                const data = { id: snap.id, ...snap.data() } as any;
+        setLoading(true);
+        
+        // 1. Subscribe to tournament configuration
+        const unsubTournament = dataService.subscribeToTournament(id, (data) => {
+            if (data) {
                 setTournament(data);
 
-                // Cargar cámaras guardadas
+                // Load saved cameras
                 if (data.broadcastingSettings?.cameras) {
                     setCameras(data.broadcastingSettings.cameras);
                 }
-                // Cargar config de ads
+                // Load ads configuration
                 if (data.broadcastingSettings?.globalAds !== undefined) {
                     setGlobalAds(data.broadcastingSettings.globalAds);
                 }
                 if (data.broadcastingSettings?.adUrl) {
                     setAdUrl(data.broadcastingSettings.adUrl);
                 }
-
-                // Partidos en vivo
-                const live = (data.matches || []).filter((m: any) => m.status === MatchStatus.LIVE);
-                setLiveMatches(live);
             }
             setLoading(false);
         });
-        return () => unsub();
+
+        // 2. Subscribe to matches to detect live status
+        const unsubMatches = dataService.subscribeToMatches(id, (matches) => {
+            const live = (matches || []).filter((m: any) => 
+                m.status === MatchStatus.LIVE || 
+                m.status === 'LIVE' || 
+                m.status === 'IN_PROGRESS' ||
+                m.status === 'STARTED'
+            );
+            setLiveMatches(live);
+        });
+
+        return () => {
+            unsubTournament();
+            unsubMatches();
+        };
     }, [id]);
 
     const saveCameras = async (updated: CameraFeed[]) => {
         setCameras(updated);
-        await updateDoc(doc(db, 'tournaments', id), {
-            'broadcastingSettings.cameras': updated,
-            updatedAt: new Date(),
-        });
+        try {
+            await dataService.updateTournament(id, {
+                broadcastingSettings: {
+                    ...(tournament?.broadcastingSettings || {}),
+                    cameras: updated
+                }
+            });
+        } catch (error) {
+            console.error('[Broadcasting] Error saving cameras:', error);
+        }
     };
 
     const handleSaveCamera = (updated: CameraFeed) => {
@@ -440,18 +458,26 @@ export default function BroadcastingPage() {
     const saveGlobalAds = async () => {
         setSavingAds(true);
         try {
-            // Actualizar todos los partidos con forcedAds
-            const updatedMatches = (tournament?.matches || []).map((m: any) => ({
-                ...m,
-                forcedAds: globalAds,
-                current_ad_url: adUrl || undefined,
-            }));
-            await updateDoc(doc(db, 'tournaments', id), {
-                'broadcastingSettings.globalAds': globalAds,
-                'broadcastingSettings.adUrl': adUrl,
-                matches: updatedMatches,
-                updatedAt: new Date(),
+            // 1. Update tournament global setting
+            await dataService.updateTournament(id, {
+                broadcastingSettings: {
+                    ...(tournament?.broadcastingSettings || {}),
+                    globalAds: globalAds,
+                    adUrl: adUrl
+                }
             });
+
+            // 2. Push to all matches in Supabase
+            // We fetch current matches to iterate or use a massive update if the service allowed it
+            const allMatches = await dataService.getMatches(id);
+            for (const match of allMatches) {
+                await dataService.updateMatch(id, match.id, {
+                    forcedAds: globalAds,
+                    current_ad_url: adUrl || null
+                });
+            }
+        } catch (error) {
+            console.error('[Broadcasting] Error pushing ads:', error);
         } finally {
             setSavingAds(false);
         }
@@ -685,7 +711,7 @@ export default function BroadcastingPage() {
                 <footer className="flex-shrink-0 h-9 flex items-center gap-4 px-4 lg:px-6 border-t border-white/[0.04] bg-black/20">
                     <div className="flex items-center gap-1.5">
                         <Wifi className="w-3 h-3 text-green-500" />
-                        <span className="text-[7px] font-black uppercase text-gray-700 tracking-widest">Firebase Sync</span>
+                        <span className="text-[7px] font-black uppercase text-gray-700 tracking-widest">Supabase Sync</span>
                     </div>
                     {liveMatches.length > 0 ? (
                         <div className="flex items-center gap-2">
