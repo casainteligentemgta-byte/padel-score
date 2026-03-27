@@ -7,10 +7,29 @@ type QuickRegisterBody = {
   fullName?: string;
   email?: string;
   phone?: string;
+  duplicateDecision?: 'use_existing' | 'create_new';
+  existingProfileId?: string;
 };
 
 function sanitize(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
+}
+
+function toTitleCase(input: string): string {
+  return input
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(' ');
+}
+
+function normalizeName(input: string): string {
+  return sanitize(input).toLowerCase().replace(/\s+/g, ' ');
+}
+
+function normalizePhone(input: string): string {
+  return sanitize(input).replace(/[\s\-()]/g, '');
 }
 
 function randomCode(len = 6): string {
@@ -43,11 +62,14 @@ export async function POST(request: Request) {
     const body = (await request.json()) as QuickRegisterBody;
     const tournamentId = sanitize(body.tournamentId);
     const categoryKey = sanitize(body.categoryKey);
-    const fullName = sanitize(body.fullName);
+    const fullName = toTitleCase(sanitize(body.fullName));
+    const normalizedFullName = normalizeName(fullName);
     const email = sanitize(body.email).toLowerCase();
-    const phone = sanitize(body.phone);
+    const phone = normalizePhone(sanitize(body.phone));
+    const duplicateDecision = body.duplicateDecision;
+    const existingProfileId = sanitize(body.existingProfileId);
 
-    if (!tournamentId || !fullName || !email) {
+    if (!tournamentId || !normalizedFullName || !email) {
       return NextResponse.json(
         { error: 'Campos obligatorios: tournamentId, fullName, email.' },
         { status: 400 },
@@ -66,10 +88,11 @@ export async function POST(request: Request) {
     // 1) Buscar perfil por email
     let profileId = '';
     let profileExisted = false;
+    let linkedByDuplicate = false;
 
     const existing = await supabase
       .from('profiles')
-      .select('id, email')
+      .select('id, email, name, full_name, phone')
       .eq('email', email)
       .maybeSingle();
     if (existing.error) {
@@ -79,7 +102,76 @@ export async function POST(request: Request) {
     if (existing.data?.id) {
       profileId = existing.data.id as string;
       profileExisted = true;
+      linkedByDuplicate = true;
     } else {
+      // 2) Duplicado por teléfono (normalizado)
+      if (phone) {
+        const phRows = await supabase
+          .from('profiles')
+          .select('id, name, full_name, phone')
+          .not('phone', 'is', null)
+          .limit(5000);
+        if (phRows.error) {
+          return NextResponse.json({ error: phRows.error.message }, { status: 400 });
+        }
+        const phoneMatch = (phRows.data || []).find((p: any) => normalizePhone(String(p.phone || '')) === phone);
+        if (phoneMatch?.id) {
+          const ownerName = String(phoneMatch.full_name || phoneMatch.name || 'otro perfil').trim();
+          return NextResponse.json(
+            {
+              error: `Este teléfono ya pertenece a ${ownerName}.`,
+              code: 'PHONE_DUPLICATE',
+              duplicateProfileId: phoneMatch.id,
+              duplicateProfileName: ownerName,
+            },
+            { status: 409 },
+          );
+        }
+      }
+
+      // 3) Duplicado por nombre exacto ignorando mayúsculas/minúsculas
+      const nameRows = await supabase
+        .from('profiles')
+        .select('id, name, full_name, email, phone')
+        .limit(5000);
+      if (nameRows.error) {
+        return NextResponse.json({ error: nameRows.error.message }, { status: 400 });
+      }
+      const nameMatch = (nameRows.data || []).find((p: any) => {
+        const pName = normalizeName(String(p.full_name || p.name || ''));
+        return pName !== '' && pName === normalizedFullName;
+      });
+      if (nameMatch?.id && duplicateDecision !== 'create_new' && duplicateDecision !== 'use_existing') {
+        const candidateName = toTitleCase(String(nameMatch.full_name || nameMatch.name || fullName));
+        return NextResponse.json(
+          {
+            error: `Ya existe un ${candidateName} en el sistema, ¿deseas usar el perfil existente o crear uno nuevo?`,
+            code: 'NAME_DUPLICATE_CONFIRM',
+            candidate: {
+              id: nameMatch.id,
+              full_name: candidateName,
+              email: nameMatch.email || null,
+              phone: nameMatch.phone || null,
+            },
+          },
+          { status: 409 },
+        );
+      }
+      if (duplicateDecision === 'use_existing') {
+        const selectedId = existingProfileId || String(nameMatch?.id || '');
+        if (!selectedId) {
+          return NextResponse.json(
+            { error: 'No se recibió perfil existente para vincular.', code: 'MISSING_EXISTING_PROFILE' },
+            { status: 400 },
+          );
+        }
+        profileId = selectedId;
+        profileExisted = true;
+        linkedByDuplicate = true;
+      }
+
+      // 4) Crear perfil ghost (solo si no se eligió usar existente)
+      if (!profileId) {
       // 2) Crear perfil ghost (Shadow Profile)
       const partnerCode = await buildUniquePartnerCode(supabase);
       const insertRes = await supabase.from('profiles').insert({
@@ -92,7 +184,7 @@ export async function POST(request: Request) {
         unique_code: partnerCode,
       }).select('id').single();
 
-      if (insertRes.error || !insertRes.data?.id) {
+        if (insertRes.error || !insertRes.data?.id) {
         // Si hubo carrera por email único, reintentar lectura.
         const retryExisting = await supabase
           .from('profiles')
@@ -118,12 +210,13 @@ export async function POST(request: Request) {
           }
           profileId = fallback.data.id as string;
         }
-      } else {
-        profileId = insertRes.data.id as string;
+        } else {
+          profileId = insertRes.data.id as string;
+        }
       }
     }
 
-    // 3) Asignar al torneo: crear inscripción rápida si no existe
+    // 5) Asignar al torneo: crear inscripción rápida si no existe
     let inscriptionCreated = false;
     const insExisting = await supabase
       .from('inscriptions')
@@ -164,8 +257,11 @@ export async function POST(request: Request) {
       success: true,
       profileId,
       profileExisted,
+      linkedByDuplicate,
       inscriptionCreated,
-      message: 'Jugador añadido al sistema y al torneo',
+      message: linkedByDuplicate
+        ? 'Jugador ya registrado. Vinculando automáticamente al torneo actual'
+        : 'Jugador añadido al sistema y al torneo',
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Error interno' }, { status: 500 });

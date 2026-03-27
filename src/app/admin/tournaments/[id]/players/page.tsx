@@ -9,6 +9,25 @@ import { useRouteSegment } from '@/lib/useRouteSegment';
 import Sidebar from '@/components/Sidebar';
 
 type ToastState = { type: 'success' | 'error'; text: string } | null;
+type NameDuplicatePrompt = {
+  candidateId: string;
+  candidateName: string;
+  candidateEmail?: string | null;
+  candidatePhone?: string | null;
+} | null;
+
+function toTitleCase(input: string): string {
+  return input
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(' ');
+}
+
+function normalizePhone(input: string): string {
+  return input.trim().replace(/[\s\-()]/g, '');
+}
 
 export default function AdminTournamentPlayersPage() {
   const { isAdmin, loading: authLoading } = useAuth();
@@ -24,6 +43,7 @@ export default function AdminTournamentPlayersPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [categoryKey, setCategoryKey] = useState('');
+  const [nameDuplicatePrompt, setNameDuplicatePrompt] = useState<NameDuplicatePrompt>(null);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) router.push('/');
@@ -66,28 +86,47 @@ export default function AdminTournamentPlayersPage() {
       .filter((c: { key: string }) => c.key);
   }, [tournament]);
 
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const submitQuickRegister = async (opts?: {
+    duplicateDecision?: 'use_existing' | 'create_new';
+    existingProfileId?: string;
+  }) => {
     if (!tournamentId || !fullName.trim() || !email.trim()) return;
-
     setSaving(true);
     setToast(null);
     try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedFullName = toTitleCase(fullName.trim());
+      const normalizedPhone = normalizePhone(phone || '');
+
       const res = await fetch('/api/admin/quick-register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tournamentId,
           categoryKey: categoryKey || undefined,
-          fullName: fullName.trim(),
-          email: email.trim().toLowerCase(),
-          phone: phone.trim() || undefined,
+          fullName: normalizedFullName,
+          email: normalizedEmail,
+          phone: normalizedPhone || undefined,
+          duplicateDecision: opts?.duplicateDecision,
+          existingProfileId: opts?.existingProfileId,
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || 'No se pudo registrar.');
+      if (!res.ok) {
+        if (res.status === 409 && json?.code === 'NAME_DUPLICATE_CONFIRM' && json?.candidate?.id) {
+          setNameDuplicatePrompt({
+            candidateId: String(json.candidate.id),
+            candidateName: String(json.candidate.full_name || json.candidate.name || 'Perfil existente'),
+            candidateEmail: json.candidate.email || null,
+            candidatePhone: json.candidate.phone || null,
+          });
+          return;
+        }
+        throw new Error(json?.error || 'No se pudo registrar.');
+      }
 
-      setToast({ type: 'success', text: 'Jugador añadido al sistema y al torneo' });
+      setNameDuplicatePrompt(null);
+      setToast({ type: 'success', text: String(json?.message || 'Jugador añadido al sistema y al torneo') });
       setFullName('');
       setEmail('');
       setPhone('');
@@ -99,6 +138,11 @@ export default function AdminTournamentPlayersPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    await submitQuickRegister();
   };
 
   if (authLoading || loadingTournament) {
@@ -190,6 +234,44 @@ export default function AdminTournamentPlayersPage() {
               >
                 {toast.type === 'success' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
                 {toast.text}
+              </div>
+            )}
+
+            {nameDuplicatePrompt && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
+                <p className="text-xs font-black uppercase text-amber-300 tracking-wide">
+                  Duplicado por nombre detectado
+                </p>
+                <p className="text-xs text-white/85">
+                  Ya existe <span className="font-bold">{nameDuplicatePrompt.candidateName}</span> en el sistema.
+                </p>
+                <p className="text-[11px] text-white/60">
+                  {nameDuplicatePrompt.candidateEmail ? `Email: ${nameDuplicatePrompt.candidateEmail}` : ''}{' '}
+                  {nameDuplicatePrompt.candidatePhone ? `· Tel: ${nameDuplicatePrompt.candidatePhone}` : ''}
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() =>
+                      submitQuickRegister({
+                        duplicateDecision: 'use_existing',
+                        existingProfileId: nameDuplicatePrompt.candidateId,
+                      })
+                    }
+                    className="px-3 py-2 rounded-lg text-[10px] font-black uppercase bg-emerald-500/20 border border-emerald-500/40 text-emerald-300"
+                  >
+                    Usar perfil existente
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => submitQuickRegister({ duplicateDecision: 'create_new' })}
+                    className="px-3 py-2 rounded-lg text-[10px] font-black uppercase bg-white/10 border border-white/20 text-white/90"
+                  >
+                    Crear perfil nuevo
+                  </button>
+                </div>
               </div>
             )}
 
