@@ -2,8 +2,6 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ref, onValue, off } from 'firebase/database';
-import { rtdb } from '@/lib/rtdb';
 import { dataService } from '@/lib/dataService';
 import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
 import { MonitorOff, Megaphone, Wifi, Zap } from 'lucide-react';
@@ -120,40 +118,24 @@ export default function CourtDisplayPage() {
     const venueFilter = searchParams.get('complex') || searchParams.get('venue') || null;
     useThreeFingerDragExit('/');
 
-    const [canchaData, setCanchaData] = useState<any>(null);
     const [pizarraData, setPizarraData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const playlists = useCourtPlaylists(canchaId, venueFilter);
     useCourtDisplayHeartbeat(canchaId);
 
-    // ── Escuchar estado de la cancha en RTDB (respaldo) ───────────────────
-    useEffect(() => {
-        if (!rtdb) return;
-        const canchaRef = ref(rtdb, `canchas/${canchaId}`);
-        const handler = (snap: any) => {
-            setCanchaData(snap.val());
-            setLoading(false);
-        };
-        onValue(canchaRef, handler, (err) => {
-            console.error(`[CourtDisplay] Error:`, err);
-            setLoading(false);
-        });
-        return () => off(canchaRef, 'value', handler);
-    }, [canchaId]);
-
-    // ── Supabase pizarra (misma fuente que marker / árbitro) ───────────────
+    // ── Fuente única: Supabase pizarra (misma fuente que marker / árbitro) ─
     useEffect(() => {
         if (!canchaId) return;
-        setLoading(false);
         const unsub = dataService.subscribePizarraCanchaState(canchaId, (state) => {
             setPizarraData(state?.data ?? null);
+            setLoading(false);
         });
         return unsub;
     }, [canchaId]);
 
     // ── Refresco remoto via Nonce ──────────────────────────────────────────
     const lastNonceRef = useRef<number | null>(null);
-    const currentNonce = pizarraData?.pizarra_refresh_nonce ?? canchaData?.pizarra_refresh_nonce;
+    const currentNonce = pizarraData?.pizarra_refresh_nonce;
     
     useEffect(() => {
         if (currentNonce !== undefined && currentNonce !== null) {
@@ -165,8 +147,7 @@ export default function CourtDisplayPage() {
         }
     }, [currentNonce]);
 
-
-    const effectiveCancha = pizarraData ?? canchaData;
+    const effectiveCancha = pizarraData;
     const isEnVivo = effectiveCancha?.estado === 'en_vivo';
     const marcador = effectiveCancha?.marcador;
 

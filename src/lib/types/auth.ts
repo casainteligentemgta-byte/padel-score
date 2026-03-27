@@ -9,3 +9,19 @@ export interface AppUser {
     displayName?: string | null;
     photoURL?: string | null;
 }
+
+export type ProfileStatus = 'PENDING' | 'COMPLETE';
+
+/**
+ * Perfil progresivo de usuario (tabla `profiles`).
+ * `is_ghost = true`: creado por admin sin onboarding completo.
+ */
+export interface Profile {
+    id: string; // UUID de Supabase Auth
+    email: string;
+    full_name: string;
+    avatar_url?: string | null;
+    phone?: string | null;
+    is_ghost: boolean;
+    status: ProfileStatus;
+}
