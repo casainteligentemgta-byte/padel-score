@@ -426,6 +426,19 @@ export default function MarkerControlPage() {
                 marcador: null,
                 publicidad: { override_local: false, imagen_url_local: null },
             });
+            const m = String(canchaId || '').match(/(\d+)/);
+            const courtNumber = m ? Number(m[1]) : NaN;
+            if (Number.isFinite(courtNumber)) {
+                try {
+                    await fetch('/api/pizarra-cancha', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ courtNumber }),
+                    });
+                } catch (e) {
+                    console.warn('[Marker] limpiar mapping cancha:', e);
+                }
+            }
             const tid = curData?.torneo_id;
             if (tid) {
                 router.push(`/tournaments/${tid}?tab=por-comenzar`);
@@ -796,6 +809,17 @@ export default function MarkerControlPage() {
                 });
             } else {
                 // Si no hay siguiente partido en cola, dejar cancha libre.
+                if (Number.isFinite(courtNumber)) {
+                    try {
+                        await fetch('/api/pizarra-cancha', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ courtNumber }),
+                        });
+                    } catch (e) {
+                        console.warn('[Marker] limpiar pizarra-cancha:', e);
+                    }
+                }
                 await dataService.setPizarraCanchaState(canchaId, {
                     estado: 'disponible',
                     active_match_id: null,
@@ -1209,6 +1233,7 @@ export default function MarkerControlPage() {
     const toggleCronometro = async () => {
         const currentMarcador = canchaDataRef.current?.marcador;
         if (!currentMarcador) return;
+        const curData = canchaDataRef.current || {};
         const curCron = currentMarcador.cronometro ?? { running: false, startedAt: null, elapsedSec: 0 };
         const elapsedSec = Number(curCron.elapsedSec ?? 0) || 0;
 
@@ -1219,6 +1244,20 @@ export default function MarkerControlPage() {
             await actualizarMarcadorLocal({
                 cronometro: { running: true, startedAt: dataService.getSyncedNow(), elapsedSec },
             });
+
+            // Transición de calentamiento a partido en curso.
+            const tid = String(curData?.torneo_id || '').trim();
+            const pid = String(curData?.partido_id || '').trim();
+            if (tid && pid && !pid.startsWith('live_')) {
+                try {
+                    await dataService.updateMatch(tid, pid, {
+                        status: 'IN_PROGRESS',
+                        actualStartTime: new Date().toISOString(),
+                    });
+                } catch (e) {
+                    console.warn('[Marker] No se pudo mover a IN_PROGRESS:', e);
+                }
+            }
         }
     };
 
@@ -1425,7 +1464,7 @@ export default function MarkerControlPage() {
                                 className="w-full bg-padel-primary text-black py-5 rounded-3xl font-black uppercase italic tracking-tight text-base flex items-center justify-center gap-3 shadow-[0_20px_40px_rgba(204,255,0,0.25)] hover:shadow-[0_20px_60px_rgba(204,255,0,0.4)] transition-all disabled:opacity-50"
                             >
                                 {activando ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
-                                INICIAR PARTIDO
+                                INICIAR CALENTAMIENTO
                             </motion.button>
                     </div>
                 )}
@@ -1750,7 +1789,7 @@ export default function MarkerControlPage() {
                                     : 'bg-padel-primary/15 border-padel-primary/40 text-padel-primary hover:bg-padel-primary/25'
                             }`}
                         >
-                            {marcador?.cronometro?.running ? 'EN MARCHA' : 'INICIAR'}
+                            {marcador?.cronometro?.running ? 'EN MARCHA' : 'EMPEZAR PARTIDO'}
                         </button>
                     </div>
                 </div>

@@ -48,6 +48,7 @@ import AutoShrinkName from '@/components/AutoShrinkName';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getAuthHeaders } from '@/lib/apiAuth';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
 
 
@@ -83,6 +84,7 @@ export default function TournamentDashboard() {
     const [manualError, setManualError] = useState<string | null>(null);
     const [markerLiveMatchIds, setMarkerLiveMatchIds] = useState<Set<string>>(new Set());
     const [markerLiveByMatchId, setMarkerLiveByMatchId] = useState<Record<string, any>>({});
+    const [activeBoardMatchIds, setActiveBoardMatchIds] = useState<Set<string>>(new Set());
     const [p1Query, setP1Query] = useState('');
     const [p2Query, setP2Query] = useState('');
     const [p1Matches, setP1Matches] = useState<ParticipantOption[]>([]);
@@ -147,9 +149,12 @@ export default function TournamentDashboard() {
 
                 const liveIds = new Set<string>();
                 const liveDataByMatch: Record<string, any> = {};
+                const activeIds = new Set<string>();
                 const checks = Array.from(courtNums).map(async (courtNum) => {
                     const state = await dataService.getPizarraCanchaState(`cancha_${courtNum}`);
                     const data = state?.data || {};
+                    const activePid = String(data?.active_match_id || '').trim();
+                    if (activePid && !activePid.startsWith('live_')) activeIds.add(activePid);
                     if (data?.estado !== 'en_vivo') return;
                     if (String(data?.torneo_id || '') !== String(id)) return;
                     const pid = String(data?.partido_id || '').trim();
@@ -161,11 +166,13 @@ export default function TournamentDashboard() {
                 if (!cancelled) {
                     setMarkerLiveMatchIds(liveIds);
                     setMarkerLiveByMatchId(liveDataByMatch);
+                    setActiveBoardMatchIds(activeIds);
                 }
             } catch {
                 if (!cancelled) {
                     setMarkerLiveMatchIds(new Set());
                     setMarkerLiveByMatchId({});
+                    setActiveBoardMatchIds(new Set());
                 }
             }
         };
@@ -337,6 +344,46 @@ export default function TournamentDashboard() {
             unsubMatches();
         };
     }, [id, authLoading, activeGroup, tournament?.teams, isAdmin, user, isMigrating]);
+
+    // Realtime estricto por cambios de estado en matches:
+    // cuando cambia `status`, refrescamos UI local y forzamos re-sync visual.
+    useEffect(() => {
+        if (!id) return;
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+
+        const channel = supabase
+            .channel(`matches-status-${id}`)
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'tournament_matches', filter: `tournament_id=eq.${id}` },
+                async (payload) => {
+                    const before = String((payload.old as any)?.data?.status || '').toUpperCase();
+                    const after = String((payload.new as any)?.data?.status || '').toUpperCase();
+                    if (!after || before === after) return;
+
+                    // Update optimista local para que "salte" entre columnas sin esperar polling.
+                    const matchId = String((payload.new as any)?.id || '');
+                    if (matchId) {
+                        setMatches((prev) =>
+                            prev.map((m) =>
+                                String(m?.id) === matchId
+                                    ? { ...m, status: after, updatedAt: new Date().toISOString(), updated_at: new Date().toISOString() }
+                                    : m
+                            )
+                        );
+                    }
+
+                    // Re-sync completo para evitar drift de datos derivados.
+                    router.refresh();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            channel.unsubscribe();
+        };
+    }, [id, router]);
 
     const stripMatches = (matches: any[]) => matches.map(m => {
         const { team1, team2, ...rest } = m;
@@ -931,7 +978,7 @@ export default function TournamentDashboard() {
         new Date(m?.updated_at || m?.updatedAt || m?.actualEndTime || m?.finishedAt || 0).getTime();
     const _courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
 
-    const strictPorComenzar = dataService.listMatchesPorComenzar(matches);
+    const strictPorComenzar = dataService.listMatchesPorComenzar(matches, activeBoardMatchIds);
     const strictEnVivo = dataService
         .listMatchesEnVivo(matches)
         .sort((a: any, b: any) => _courtNum(a) - _courtNum(b));
@@ -2064,7 +2111,11 @@ export default function TournamentDashboard() {
                                                                         }
 
                                                                         const liveMarker = markerLiveByMatchId[String(match.id)];
-                                                                        const isActive = markerLiveMatchIds.has(String(match.id)) || match.status === MatchStatus.LIVE;
+                                                                        const statusUp = String(match?.status || '').toUpperCase();
+                                                                        const isActive =
+                                                                            markerLiveMatchIds.has(String(match.id)) ||
+                                                                            statusUp === 'WARM_UP' ||
+                                                                            statusUp === 'IN_PROGRESS';
                                                                         const isSTB = liveMarker?.super_tiebreak === true || match.matchFormat === 'SUPER_TIEBREAK' || match.superTiebreak;
                                                                         const isTB = !isSTB && (liveMarker?.modo_puntos === 'tiebreak' || match.matchFormat === 'TIEBREAK' || match.tiebreak);
                                                                         const showExtra = isSTB || isTB;
@@ -2274,7 +2325,19 @@ export default function TournamentDashboard() {
                                                                                 <span className="text-[7px] font-black uppercase tracking-widest leading-none">Control</span>
                                                                             </Link>
                                                                             <Link
-                                                                                href={id && match?.id && (markerLiveMatchIds.has(String(match.id)) || match.status === MatchStatus.LIVE) ? `/tournaments/${id}/display/${match.id}` : id ? `/tournaments/${id}/monitor` : '#'}
+                                                                                href={
+                                                                                    id &&
+                                                                                    match?.id &&
+                                                                                    (
+                                                                                        markerLiveMatchIds.has(String(match.id)) ||
+                                                                                        String(match?.status || '').toUpperCase() === 'WARM_UP' ||
+                                                                                        String(match?.status || '').toUpperCase() === 'IN_PROGRESS'
+                                                                                    )
+                                                                                        ? `/tournaments/${id}/display/${match.id}`
+                                                                                        : id
+                                                                                        ? `/tournaments/${id}/monitor`
+                                                                                        : '#'
+                                                                                }
                                                                                 target={id ? '_blank' : undefined}
                                                                                 className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-white transition-all active:scale-90 border-r border-white/5"
                                                                             >

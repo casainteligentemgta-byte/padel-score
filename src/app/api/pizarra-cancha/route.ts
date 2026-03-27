@@ -35,3 +35,28 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ ok: true });
 }
+
+export async function DELETE(req: Request) {
+    const supabase = getSupabaseServiceClient();
+    if (!supabase) {
+        return NextResponse.json({ error: 'No configurado' }, { status: 501 });
+    }
+    let body: { courtNumber: number };
+    try {
+        body = await req.json();
+    } catch {
+        return NextResponse.json({ error: 'JSON inválido' }, { status: 400 });
+    }
+    const num = Number(body?.courtNumber);
+    if (![1, 2, 3].includes(num)) {
+        return NextResponse.json({ error: 'courtNumber debe ser 1, 2 o 3' }, { status: 400 });
+    }
+    const { error } = await supabase
+        .from('pizarra_cancha')
+        .delete()
+        .eq('court_number', num);
+    if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true });
+}

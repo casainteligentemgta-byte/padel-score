@@ -109,7 +109,7 @@ export const dataService = {
         return String(status || '').trim().toUpperCase();
     },
 
-    listMatchesPorComenzar(matches: any[]): any[] {
+    listMatchesPorComenzar(matches: any[], excludedMatchIds?: Set<string>): any[] {
         const list = Array.isArray(matches) ? matches : [];
         const toOrder = (m: any, idx: number) => {
             const n = Number(m?.match_number ?? m?.matchNumber ?? m?.order ?? m?.orden);
@@ -117,6 +117,10 @@ export const dataService = {
         };
         return list
             .filter((m: any) => this.normalizeMatchStatus(m?.status) === 'SCHEDULED')
+            .filter((m: any) => {
+                if (!excludedMatchIds || excludedMatchIds.size === 0) return true;
+                return !excludedMatchIds.has(String(m?.id || ''));
+            })
             .sort((a: any, b: any) => toOrder(a, 0) - toOrder(b, 0));
     },
 
@@ -287,6 +291,11 @@ export const dataService = {
             .eq('tournament_id', tournamentId)
             .eq('id', matchId)
             .single();
+        const currentStatus = this.normalizeMatchStatus((row as any)?.data?.status);
+        const nextStatus = this.normalizeMatchStatus(data?.status ?? (row as any)?.data?.status);
+        if (currentStatus === 'FINISHED' && nextStatus !== 'FINISHED') {
+            throw new Error('El partido ya está FINISHED y no puede modificarse.');
+        }
         const merged = { ...(row?.data || {}), ...data };
         const { error } = await supabase()
             .from('tournament_matches')

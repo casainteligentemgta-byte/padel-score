@@ -24,6 +24,20 @@ export async function PATCH(
         }
         const { status, score, actualStartTime, actualEndTime } = body;
 
+        const existing = await prisma.match.findUnique({
+            where: { id },
+            select: { id: true, status: true }
+        });
+        if (!existing) {
+            return NextResponse.json({ error: 'Match no encontrado' }, { status: 404 });
+        }
+        if (existing.status === MatchStatus.FINISHED) {
+            return NextResponse.json(
+                { error: 'El partido ya está FINISHED y no admite cambios.' },
+                { status: 409 }
+            );
+        }
+
         // 1. Actualizar el match actual
         const updatedMatch = await prisma.match.update({
             where: { id },
