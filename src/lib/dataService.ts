@@ -105,6 +105,12 @@ function sanitizeObject(obj: any): any {
     return result;
 }
 
+/**
+ * Hub del torneo — ciclo de vida (una sección excluye a las otras salvo datos incoherentes en BD):
+ * 1. Por comenzar: aún no han empezado (PENDING/SCHEDULED), no en pista activa en pizarra.
+ * 2. En vivo: iniciados (WARM_UP, IN_PROGRESS, LIVE, …) y no terminados; o en pizarra con partido activo (ver merge en page).
+ * 3. Finalizados: FINISHED o datos equivalentes (fechas de cierre, resultado cerrado según formato).
+ */
 export const dataService = {
     normalizeMatchStatus(status: unknown): string {
         return String(status || '').trim().toUpperCase();
@@ -174,6 +180,7 @@ export const dataService = {
         };
         return list
             .filter((m: any) => this.isMatchPorComenzarStatus(m?.status))
+            .filter((m: any) => !this.isMatchEnVivoStatus(m?.status))
             .filter((m: any) => !this.isMatchFinishedLike(m))
             .filter((m: any) => {
                 if (!excludedMatchIds || excludedMatchIds.size === 0) return true;

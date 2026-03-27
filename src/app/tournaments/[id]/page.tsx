@@ -1040,7 +1040,11 @@ export default function TournamentDashboard() {
             );
         }
         if (activeTab === 'Por Comenzar') {
-            return dataService.isMatchPorComenzarStatus(m?.status);
+            return (
+                dataService.isMatchPorComenzarStatus(m?.status) &&
+                !dataService.isMatchEnVivoStatus(m?.status) &&
+                !dataService.isMatchFinishedLike(m)
+            );
         }
 
         if (activeTab === 'Finalizados') return dataService.isMatchFinishedLike(m);
