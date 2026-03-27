@@ -136,7 +136,7 @@ export const dataService = {
      */
     isMatchFinishedLike(m: any): boolean {
         const s = this.normalizeMatchStatus(m?.status);
-        if (s === 'FINISHED' || s === 'FINALIZADO' || s === 'COMPLETE') return true;
+        if (s === 'FINISHED' || s === 'FINALIZADO' || s === 'COMPLETE' || s === 'COMPLETED') return true;
 
         const endIso = m?.finishedAt || m?.actualEndTime;
         if (endIso) {
@@ -375,7 +375,32 @@ export const dataService = {
             });
     },
 
+    /** Normaliza patch al cerrar partido para que el hub siempre detecte Finalizados. */
+    normalizeFinishedMatchPatch(patch: Record<string, any>): Record<string, any> {
+        const out = { ...patch };
+        if (out.status == null) return out;
+        const ns = this.normalizeMatchStatus(out.status);
+        if (ns !== 'FINISHED' && ns !== 'COMPLETE' && ns !== 'COMPLETED' && ns !== 'FINALIZADO') return out;
+        out.status = 'FINISHED';
+        const nowIso = new Date().toISOString();
+        const toIso = (v: unknown): string | null => {
+            if (v == null) return null;
+            if (v instanceof Date) return isNaN(v.getTime()) ? null : v.toISOString();
+            if (typeof v === 'string' && v.trim()) return v;
+            const d = new Date(v as string | number);
+            return isNaN(d.getTime()) ? null : d.toISOString();
+        };
+        const endIso = toIso(out.actualEndTime) || toIso(out.finishedAt) || nowIso;
+        if (!toIso(out.finishedAt)) out.finishedAt = endIso;
+        if (!toIso(out.actualEndTime)) out.actualEndTime = endIso;
+        return out;
+    },
+
     async updateMatch(tournamentId: string, matchId: string, data: any) {
+        const patch =
+            data && typeof data === 'object'
+                ? this.normalizeFinishedMatchPatch({ ...data })
+                : data;
         const { data: row } = await supabase()
             .from('tournament_matches')
             .select('data')
@@ -383,11 +408,13 @@ export const dataService = {
             .eq('id', matchId)
             .single();
         const currentStatus = this.normalizeMatchStatus((row as any)?.data?.status);
-        const nextStatus = this.normalizeMatchStatus(data?.status ?? (row as any)?.data?.status);
+        const nextStatus = this.normalizeMatchStatus(
+            (patch as any)?.status ?? (row as any)?.data?.status
+        );
         if (currentStatus === 'FINISHED' && nextStatus !== 'FINISHED') {
             throw new Error('El partido ya está FINISHED y no puede modificarse.');
         }
-        const merged = { ...(row?.data || {}), ...data };
+        const merged = { ...(row?.data || {}), ...patch };
         const { error } = await supabase()
             .from('tournament_matches')
             .update({ data: merged, updated_at: now() })

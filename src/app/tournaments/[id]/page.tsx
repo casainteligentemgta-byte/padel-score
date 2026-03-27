@@ -360,22 +360,33 @@ export default function TournamentDashboard() {
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'tournament_matches', filter: `tournament_id=eq.${id}` },
                 async (payload) => {
+                    const rowData = (payload.new as any)?.data || {};
                     const before = String((payload.old as any)?.data?.status || '').toUpperCase();
-                    const after = String((payload.new as any)?.data?.status || '').toUpperCase();
+                    const after = String(rowData?.status || '').toUpperCase();
 
-                    // Update optimista local para que "salte" entre columnas sin esperar polling.
                     const matchId = String((payload.new as any)?.id || '');
                     if (matchId && after && before !== after) {
                         setMatches((prev) =>
-                            prev.map((m) =>
-                                String(m?.id) === matchId
-                                    ? { ...m, status: after, updatedAt: new Date().toISOString(), updated_at: new Date().toISOString() }
-                                    : m
-                            )
+                            prev.map((m) => {
+                                if (String(m?.id) !== matchId) return m;
+                                return {
+                                    ...m,
+                                    status: after,
+                                    finishedAt: rowData.finishedAt ?? m.finishedAt,
+                                    actualEndTime: rowData.actualEndTime ?? m.actualEndTime,
+                                    sets: rowData.sets ?? m.sets,
+                                    setScores: rowData.setScores ?? m.setScores,
+                                    superTiebreakScore: rowData.superTiebreakScore ?? m.superTiebreakScore,
+                                    score: rowData.score ?? m.score,
+                                    games: rowData.games ?? m.games,
+                                    points: rowData.points ?? m.points,
+                                    updatedAt: new Date().toISOString(),
+                                    updated_at: new Date().toISOString(),
+                                };
+                            })
                         );
                     }
 
-                    // Re-sync completo de listas ante INSERT/UPDATE/DELETE.
                     router.refresh();
                 }
             )
