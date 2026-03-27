@@ -986,7 +986,7 @@ export default function TournamentDashboard() {
     if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && !(window as any).__diagLogged2) {
         (window as any).__diagLogged2 = true;
         console.log('[PorComenzar] complexName:', _cxName, '→ numCanchas:', _numCanchas);
-        console.log('[Listas] PorComenzar/SCHEDULED:', strictPorComenzar.length, '| EnVivo/WARM_UP+IN_PROGRESS:', strictEnVivo.length, '| Terminados/FINISHED:', strictTerminados.length);
+        console.log('[Listas] PorComenzar/SCHEDULED+PENDING:', strictPorComenzar.length, '| EnVivo/WARM_UP+IN_PROGRESS:', strictEnVivo.length, '| Terminados/FINISHED:', strictTerminados.length);
     }
 
 
@@ -996,7 +996,7 @@ export default function TournamentDashboard() {
         if (activeTab === 'Todos') return true;
         if (activeTab === 'En Vivo') return s === 'WARM_UP' || s === 'IN_PROGRESS';
         if (activeTab === 'Por Comenzar') {
-            return s === 'SCHEDULED';
+            return dataService.isMatchPorComenzarStatus(m?.status);
         }
 
         if (activeTab === 'Finalizados') return s === 'FINISHED';
@@ -1041,7 +1041,7 @@ export default function TournamentDashboard() {
      * Retorna null si el partido está en tiempo, o { delayMins, estimatedStartMs } si está demorado.
      */
     const getDelayInfo = (match: any): { delayMins: number; estimatedStartMs: number } | null => {
-        if (normalizeStatus(match.status) !== 'SCHEDULED') return null;
+        if (!dataService.isMatchPorComenzarStatus(match.status)) return null;
 
         const courtKey = match.courtId ?? match.courtIndex ?? null;
         if (courtKey === null) return null;
@@ -1964,7 +1964,7 @@ export default function TournamentDashboard() {
                                             const delayInfo = getDelayInfo(match);
                                             const statusUp = normalizeStatus(match.status);
                                             const isLive = statusUp === 'WARM_UP' || statusUp === 'IN_PROGRESS';
-                                            const isPorComenzar = statusUp === 'SCHEDULED';
+                                            const isPorComenzar = dataService.isMatchPorComenzarStatus(match.status);
                                             const isEnCola = false;
                                             const cardBg = isLive
                                                 ? 'bg-[#39ff14]/20 border-[#39ff14]/50 shadow-[0_0_20px_rgba(57,255,20,0.15)]'

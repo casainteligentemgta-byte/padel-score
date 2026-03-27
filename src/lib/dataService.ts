@@ -109,6 +109,12 @@ export const dataService = {
         return String(status || '').trim().toUpperCase();
     },
 
+    /** Partidos aún no iniciados: generación usa PENDING; flujo Marker/Hub puede usar SCHEDULED. */
+    isMatchPorComenzarStatus(status: unknown): boolean {
+        const s = this.normalizeMatchStatus(status);
+        return s === 'SCHEDULED' || s === 'PENDING';
+    },
+
     listMatchesPorComenzar(matches: any[], excludedMatchIds?: Set<string>): any[] {
         const list = Array.isArray(matches) ? matches : [];
         const toOrder = (m: any, idx: number) => {
@@ -116,7 +122,7 @@ export const dataService = {
             return Number.isFinite(n) ? n : idx + 1;
         };
         return list
-            .filter((m: any) => this.normalizeMatchStatus(m?.status) === 'SCHEDULED')
+            .filter((m: any) => this.isMatchPorComenzarStatus(m?.status))
             .filter((m: any) => {
                 if (!excludedMatchIds || excludedMatchIds.size === 0) return true;
                 return !excludedMatchIds.has(String(m?.id || ''));
@@ -287,7 +293,7 @@ export const dataService = {
     async getScheduledMatches(tournamentId: string) {
         const rows = await this.getMatches(tournamentId);
         return rows
-            .filter((m: any) => this.normalizeMatchStatus(m?.status) === 'SCHEDULED')
+            .filter((m: any) => this.isMatchPorComenzarStatus(m?.status))
             .sort((a: any, b: any) => {
                 const aN = Number(a?.match_number ?? a?.matchNumber ?? a?.order ?? a?.orden);
                 const bN = Number(b?.match_number ?? b?.matchNumber ?? b?.order ?? b?.orden);

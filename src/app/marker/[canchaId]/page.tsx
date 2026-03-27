@@ -786,7 +786,10 @@ export default function MarkerControlPage() {
             const normalizeStatus = (s: unknown) => String(s || '').trim().toUpperCase();
             const scheduledMatches = (allMatches || [])
                 .filter((m: any) => String(m?.id) !== String(pid))
-                .filter((m: any) => normalizeStatus(m?.status) === 'SCHEDULED');
+                .filter((m: any) => {
+                    const s = normalizeStatus(m?.status);
+                    return s === 'SCHEDULED' || s === 'PENDING';
+                });
             const queue = scheduledMatches
                 .sort((a: any, b: any) => getOrder(a, 0) - getOrder(b, 0));
 
