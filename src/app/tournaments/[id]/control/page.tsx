@@ -767,12 +767,32 @@ export default function ControlPanel() {
         setMatches(prev => prev.map(m => m.id === matchId ? optimisticMatch : m));
 
         try {
+            const endIso = new Date().toISOString();
             const updatedData = {
                 ...stripMatchForDb(match),
                 status: MatchStatus.FINISHED,
-                actualEndTime: new Date().toISOString()
+                actualEndTime: endIso,
+                finishedAt: endIso
             };
             await dataService.updateMatch(id, matchId, updatedData);
+            const c = courtNum(match);
+            if (c > 0) {
+                try {
+                    const canchaId = `cancha_${c}`;
+                    const cur = await dataService.getPizarraCanchaState(canchaId);
+                    const pdata = cur?.data || {};
+                    await dataService.setPizarraCanchaState(canchaId, {
+                        ...pdata,
+                        estado: 'finalizado',
+                        torneo_id: id,
+                        partido_id: null,
+                        active_match_id: null,
+                        pizarra_refresh_nonce: (Number(pdata.pizarra_refresh_nonce) || 0) + 1
+                    });
+                } catch (e) {
+                    console.warn('[Control] finishMatch pizarra cleanup:', e);
+                }
+            }
         } catch (e) { 
             console.error(e);
             alert('Error al finalizar el partido. Verifica tu conexión.');

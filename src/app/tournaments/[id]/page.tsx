@@ -154,9 +154,11 @@ export default function TournamentDashboard() {
                 const checks = Array.from(courtNums).map(async (courtNum) => {
                     const state = await dataService.getPizarraCanchaState(`cancha_${courtNum}`);
                     const data = state?.data || {};
+                    const est = String(data?.estado || '');
+                    // Partido cerrado en pizarra: no usar ids viejos para excluir "Por comenzar" ni fusionar En vivo
+                    if (est === 'finalizado') return;
                     const activePid = String(data?.active_match_id || '').trim();
                     if (activePid && !activePid.startsWith('live_')) activeIds.add(activePid);
-                    const est = String(data?.estado || '');
                     // Marcador: en_vivo = partido en curso; ready = siguiente asignado con marcador (sigue mostrando P/G/S)
                     if (est !== 'en_vivo' && est !== 'ready') return;
                     if (String(data?.torneo_id || '') !== String(id)) return;

@@ -132,10 +132,28 @@ export default function RefereeScoreboard() {
         }
 
         if (!tournament || !match) return;
+        const endIso = new Date().toISOString();
         await dataService.updateMatch(id, match.id, {
             status: MatchStatus.FINISHED,
-            finishedAt: new Date().toISOString()
+            finishedAt: endIso,
+            actualEndTime: endIso
         });
+        // Liberar la pizarra: si queda en_vivo + partido_id, el hub sigue excluyendo la cola "Por comenzar"
+        try {
+            const canchaId = `cancha_${matchCourt}`;
+            const cur = await dataService.getPizarraCanchaState(canchaId);
+            const pdata = cur?.data || {};
+            await dataService.setPizarraCanchaState(canchaId, {
+                ...pdata,
+                estado: 'finalizado',
+                torneo_id: id,
+                partido_id: null,
+                active_match_id: null,
+                pizarra_refresh_nonce: (Number(pdata.pizarra_refresh_nonce) || 0) + 1
+            });
+        } catch (e) {
+            console.warn('[Score] handleFinishMatch pizarra cleanup:', e);
+        }
         router.push(`/tournaments/${id}?tab=finalizados`);
     };
 
