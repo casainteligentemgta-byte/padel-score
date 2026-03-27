@@ -108,11 +108,12 @@ export default function TournamentDashboard() {
     const canManageMatches = isOwner || isAdmin || (profile?.role === 'marker' && (markerCanchas?.length ?? 0) > 0);
     const canManageTournament = isOwner || isAdmin;
 
-    // Sincronizar pestaña con query ?tab= (desde marcador: atrás → En vivo o Por Comenzar)
+    // Sincronizar pestaña con query ?tab= (marcador / enlaces externos)
     useEffect(() => {
         const tab = searchParams.get('tab');
         if (tab === 'live') setActiveTab('En Vivo');
         else if (tab === 'por-comenzar') setActiveTab('Por Comenzar');
+        else if (tab === 'finalizados') setActiveTab('Finalizados');
     }, [searchParams]);
 
     // En Vivo visible para todos
@@ -1006,7 +1007,9 @@ export default function TournamentDashboard() {
           })
         : matches;
 
-    const strictPorComenzar = dataService.listMatchesPorComenzar(hubMatches, activeBoardMatchIds);
+    /** Cola hub: excluir partido en pizarra (active_match / partido_id) y cualquier id marcado en vivo por pizarra. */
+    const excludedFromPorComenzar = new Set<string>([...activeBoardMatchIds, ...markerLiveMatchIds]);
+    const strictPorComenzar = dataService.listMatchesPorComenzar(hubMatches, excludedFromPorComenzar);
     // Incluir partidos que el marcador tiene en pizarra aunque el JSON del torneo aún diga PENDING/SCHEDULED
     const strictEnVivo = (() => {
         const fromStatus = dataService.listMatchesEnVivo(hubMatches);
@@ -1041,10 +1044,13 @@ export default function TournamentDashboard() {
             );
         }
         if (activeTab === 'Por Comenzar') {
+            const mid = String(m?.id ?? '');
             return (
                 dataService.isMatchPorComenzarStatus(m?.status) &&
                 !dataService.isMatchEnVivoStatus(m?.status) &&
-                !dataService.isMatchFinishedLike(m)
+                !dataService.isMatchFinishedLike(m) &&
+                !activeBoardMatchIds.has(mid) &&
+                !markerLiveMatchIds.has(mid)
             );
         }
 

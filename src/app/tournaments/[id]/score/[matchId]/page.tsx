@@ -136,7 +136,7 @@ export default function RefereeScoreboard() {
             status: MatchStatus.FINISHED,
             finishedAt: new Date().toISOString()
         });
-        router.push(`/tournaments/${id}?tab=por-comenzar`);
+        router.push(`/tournaments/${id}?tab=finalizados`);
     };
 
     const updateManualScore = async (side: 't1' | 't2', field: 'games' | 'sets' | 'points', value: any) => {
@@ -1064,7 +1064,12 @@ export default function RefereeScoreboard() {
                     <p className="text-gray-400 text-sm font-medium mb-8">Solo el personal autorizado (ADMIN o MARKER) puede controlar el marcador de este partido.</p>
                     <button
                         onClick={() => {
-                            const tab = match?.status === MatchStatus.LIVE ? 'live' : 'por-comenzar';
+                            const tab =
+                                match?.status === MatchStatus.FINISHED
+                                    ? 'finalizados'
+                                    : match?.status === MatchStatus.LIVE
+                                      ? 'live'
+                                      : 'por-comenzar';
                             router.push(`/tournaments/${id}?tab=${tab}`);
                         }}
                         className="w-full py-4 bg-white text-black rounded-2xl font-black italic uppercase tracking-widest text-[10px] hover:scale-[1.02] transition-all"
@@ -1127,7 +1132,12 @@ export default function RefereeScoreboard() {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => {
-                            const tab = match?.status === MatchStatus.LIVE ? 'live' : 'por-comenzar';
+                            const tab =
+                                match?.status === MatchStatus.FINISHED
+                                    ? 'finalizados'
+                                    : match?.status === MatchStatus.LIVE
+                                      ? 'live'
+                                      : 'por-comenzar';
                             router.push(`/tournaments/${id}?tab=${tab}`);
                         }}
                         className="w-12 h-12 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all group shrink-0"
