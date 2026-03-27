@@ -979,12 +979,27 @@ export default function TournamentDashboard() {
         new Date(m?.updated_at || m?.updatedAt || m?.actualEndTime || m?.finishedAt || 0).getTime();
     const _courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
 
-    const strictPorComenzar = dataService.listMatchesPorComenzar(matches, activeBoardMatchIds);
+    // Formato del torneo en cada partido (muchas filas en DB no duplican rrMatchFormat / tieBreakType)
+    const hubMatches = tournament
+        ? matches.map((m: any) => {
+              const rr = (tournament as any)?.rrMatchFormat ?? (tournament as any)?.matchFormat;
+              const tb = (tournament as any)?.tieBreakType;
+              return {
+                  ...m,
+                  rrMatchFormat: m.rrMatchFormat ?? m.match_format ?? m.matchFormat ?? rr,
+                  matchFormat: m.matchFormat ?? m.match_format ?? rr,
+                  tieBreakType: m.tieBreakType ?? m.tie_break_type ?? tb,
+                  tie_break_type: m.tie_break_type ?? m.tieBreakType ?? tb,
+              };
+          })
+        : matches;
+
+    const strictPorComenzar = dataService.listMatchesPorComenzar(hubMatches, activeBoardMatchIds);
     // Incluir partidos que el marcador tiene en pizarra aunque el JSON del torneo aún diga PENDING/SCHEDULED
     const strictEnVivo = (() => {
-        const fromStatus = dataService.listMatchesEnVivo(matches);
+        const fromStatus = dataService.listMatchesEnVivo(hubMatches);
         const byId = new Map<string, any>(fromStatus.map((m: any) => [String(m?.id ?? ''), m]));
-        for (const m of matches) {
+        for (const m of hubMatches) {
             const mid = String(m?.id ?? '');
             if (!mid || mid.startsWith('live_')) continue;
             if (dataService.isMatchFinishedLike(m)) continue;
@@ -993,7 +1008,7 @@ export default function TournamentDashboard() {
         }
         return Array.from(byId.values()).sort((a: any, b: any) => _courtNum(a) - _courtNum(b));
     })();
-    const strictTerminados = dataService.listMatchesTerminados(matches);
+    const strictTerminados = dataService.listMatchesTerminados(hubMatches);
 
     if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && !(window as any).__diagLogged2) {
         (window as any).__diagLogged2 = true;
@@ -1002,7 +1017,7 @@ export default function TournamentDashboard() {
     }
 
 
-    const filteredMatches = matches.filter(m => {
+    const filteredMatches = hubMatches.filter(m => {
         const s = normalizeStatus(m?.status);
 
         if (activeTab === 'Todos') return true;

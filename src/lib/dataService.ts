@@ -1,6 +1,7 @@
 import { getSupabaseClient } from './supabase/client';
 import { sanitizeString } from './apiValidation';
 import { getAuthHeaders } from './apiAuth';
+import { getScoringRules } from './matchScoringRules';
 
 const supabase = () => {
     const c = getSupabaseClient();
@@ -135,12 +136,29 @@ export const dataService = {
      */
     isMatchFinishedLike(m: any): boolean {
         const s = this.normalizeMatchStatus(m?.status);
-        if (s === 'FINISHED') return true;
+        if (s === 'FINISHED' || s === 'FINALIZADO' || s === 'COMPLETE') return true;
+
+        const endIso = m?.finishedAt || m?.actualEndTime;
+        if (endIso) {
+            const ms = new Date(endIso as string | Date).getTime();
+            if (!isNaN(ms) && ms > 0) return true;
+        }
+
         const t1 = Number(m?.sets?.t1 ?? m?.sets?.local ?? 0) || 0;
         const t2 = Number(m?.sets?.t2 ?? m?.sets?.visitante ?? 0) || 0;
+
+        const mf = (m as any)?.rrMatchFormat ?? (m as any)?.match_format ?? (m as any)?.matchFormat;
+        const tbtRaw = (m as any)?.tieBreakType ?? (m as any)?.tie_break_type;
+        const tbtUp = String(tbtRaw || '').toUpperCase();
+        const tbtArg: 'TB' | 'STB' | undefined =
+            tbtUp === 'STB' ? 'STB' : tbtUp === 'TB' ? 'TB' : undefined;
+        const rules = getScoringRules(mf, tbtArg);
+        let need = rules.setsToWinMatch;
         const needRaw = Number(m?.sets_to_win_match ?? m?.setsToWinMatch);
-        const need = Number.isFinite(needRaw) && needRaw >= 1 ? needRaw : 2;
+        if (Number.isFinite(needRaw) && needRaw >= 1) need = needRaw;
+
         if (t1 >= need || t2 >= need) return true;
+
         const stb = m?.superTiebreakScore;
         if (stb && typeof stb === 'object' && (t1 >= 2 || t2 >= 2)) return true;
         const scores = m?.setScores;
