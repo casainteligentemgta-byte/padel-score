@@ -767,8 +767,15 @@ export default function MarkerControlPage() {
             const setScores = (params.historicoSets || [])
                 .slice(0, normalSetCount)
                 .map((s) => ({ t1: Number(s?.local ?? 0) || 0, t2: Number(s?.visitante ?? 0) || 0 }));
-            await updateMatchStatus(String(pid), 'FINISHED', String(tid));
+            // Un solo update con status FINISHED: dos writes seguidos podían leer JSON obsoleto en el 2º merge
+            // y dejar el partido en IN_PROGRESS (muy visible tras STB / 2 sets + desempate).
+            const nowIso = new Date().toISOString();
+            finishedLockRef.current = true;
             await dataService.updateMatch(String(tid), String(pid), {
+                status: 'FINISHED',
+                finishedAt: nowIso,
+                actualEndTime: nowIso,
+                updatedAt: nowIso,
                 sets: { t1: params.sets.local || 0, t2: params.sets.visitante || 0 },
                 games: {
                     t1: params.finalGames?.local ?? 0,

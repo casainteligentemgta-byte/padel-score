@@ -115,6 +115,23 @@ export const dataService = {
         return s === 'SCHEDULED' || s === 'PENDING';
     },
 
+    /**
+     * Partidos que deben listarse como finalizados en el hub.
+     * Incluye recuperación si `status` quedó en IN_PROGRESS por un segundo merge con JSON obsoleto (caso STB / 2 sets).
+     */
+    isMatchFinishedLike(m: any): boolean {
+        const s = this.normalizeMatchStatus(m?.status);
+        if (s === 'FINISHED') return true;
+        const t1 = Number(m?.sets?.t1 ?? m?.sets?.local ?? 0) || 0;
+        const t2 = Number(m?.sets?.t2 ?? m?.sets?.visitante ?? 0) || 0;
+        if (t1 < 2 && t2 < 2) return false;
+        const stb = m?.superTiebreakScore;
+        if (stb && typeof stb === 'object' && (t1 >= 2 || t2 >= 2)) return true;
+        const scores = m?.setScores;
+        if (Array.isArray(scores) && scores.length >= 2 && (t1 >= 2 || t2 >= 2)) return true;
+        return false;
+    },
+
     listMatchesPorComenzar(matches: any[], excludedMatchIds?: Set<string>): any[] {
         const list = Array.isArray(matches) ? matches : [];
         const toOrder = (m: any, idx: number) => {
@@ -134,7 +151,9 @@ export const dataService = {
         const list = Array.isArray(matches) ? matches : [];
         return list.filter((m: any) => {
             const s = this.normalizeMatchStatus(m?.status);
-            return s === 'WARM_UP' || s === 'IN_PROGRESS';
+            if (s !== 'WARM_UP' && s !== 'IN_PROGRESS') return false;
+            if (this.isMatchFinishedLike(m)) return false;
+            return true;
         });
     },
 
@@ -143,7 +162,7 @@ export const dataService = {
         const toMs = (m: any) =>
             new Date(m?.updated_at || m?.updatedAt || m?.actualEndTime || m?.finishedAt || 0).getTime();
         return list
-            .filter((m: any) => this.normalizeMatchStatus(m?.status) === 'FINISHED')
+            .filter((m: any) => this.isMatchFinishedLike(m))
             .sort((a: any, b: any) => toMs(b) - toMs(a));
     },
 
@@ -314,7 +333,7 @@ export const dataService = {
     async getFinishedMatches(tournamentId: string) {
         const rows = await this.getMatches(tournamentId);
         return rows
-            .filter((m: any) => this.normalizeMatchStatus(m?.status) === 'FINISHED')
+            .filter((m: any) => this.isMatchFinishedLike(m))
             .sort((a: any, b: any) => {
                 const aMs = new Date(a?.updated_at || a?.updatedAt || a?.actualEndTime || a?.finishedAt || 0).getTime();
                 const bMs = new Date(b?.updated_at || b?.updatedAt || b?.actualEndTime || b?.finishedAt || 0).getTime();

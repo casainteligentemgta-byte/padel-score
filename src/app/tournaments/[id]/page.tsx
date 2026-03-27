@@ -999,7 +999,7 @@ export default function TournamentDashboard() {
             return dataService.isMatchPorComenzarStatus(m?.status);
         }
 
-        if (activeTab === 'Finalizados') return s === 'FINISHED';
+        if (activeTab === 'Finalizados') return dataService.isMatchFinishedLike(m);
         if (activeTab === 'Grupos' || activeTab === 'Ranking') return false;
         // Fase del cuadro
         if (activeTab === 'Fase de Grupo') return m.stage === 'GROUP_STAGE';
