@@ -155,7 +155,9 @@ export default function TournamentDashboard() {
                     const data = state?.data || {};
                     const activePid = String(data?.active_match_id || '').trim();
                     if (activePid && !activePid.startsWith('live_')) activeIds.add(activePid);
-                    if (data?.estado !== 'en_vivo') return;
+                    const est = String(data?.estado || '');
+                    // Marcador: en_vivo = partido en curso; ready = siguiente asignado con marcador (sigue mostrando P/G/S)
+                    if (est !== 'en_vivo' && est !== 'ready') return;
                     if (String(data?.torneo_id || '') !== String(id)) return;
                     const pid = String(data?.partido_id || '').trim();
                     if (!pid || pid.startsWith('live_')) return;
@@ -177,7 +179,7 @@ export default function TournamentDashboard() {
             }
         };
         loadMarkerLiveIds();
-        const t = setInterval(loadMarkerLiveIds, 3000);
+        const t = setInterval(loadMarkerLiveIds, 1500);
         return () => {
             cancelled = true;
             clearInterval(t);
@@ -978,9 +980,19 @@ export default function TournamentDashboard() {
     const _courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
 
     const strictPorComenzar = dataService.listMatchesPorComenzar(matches, activeBoardMatchIds);
-    const strictEnVivo = dataService
-        .listMatchesEnVivo(matches)
-        .sort((a: any, b: any) => _courtNum(a) - _courtNum(b));
+    // Incluir partidos que el marcador tiene en pizarra aunque el JSON del torneo aún diga PENDING/SCHEDULED
+    const strictEnVivo = (() => {
+        const fromStatus = dataService.listMatchesEnVivo(matches);
+        const byId = new Map<string, any>(fromStatus.map((m: any) => [String(m?.id ?? ''), m]));
+        for (const m of matches) {
+            const mid = String(m?.id ?? '');
+            if (!mid || mid.startsWith('live_')) continue;
+            if (dataService.isMatchFinishedLike(m)) continue;
+            if (!markerLiveMatchIds.has(mid)) continue;
+            if (!byId.has(mid)) byId.set(mid, m);
+        }
+        return Array.from(byId.values()).sort((a: any, b: any) => _courtNum(a) - _courtNum(b));
+    })();
     const strictTerminados = dataService.listMatchesTerminados(matches);
 
     if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && !(window as any).__diagLogged2) {
@@ -994,7 +1006,13 @@ export default function TournamentDashboard() {
         const s = normalizeStatus(m?.status);
 
         if (activeTab === 'Todos') return true;
-        if (activeTab === 'En Vivo') return dataService.isMatchEnVivoStatus(m?.status);
+        if (activeTab === 'En Vivo') {
+            const mid = String(m?.id ?? '');
+            return (
+                (dataService.isMatchEnVivoStatus(m?.status) || markerLiveMatchIds.has(mid)) &&
+                !dataService.isMatchFinishedLike(m)
+            );
+        }
         if (activeTab === 'Por Comenzar') {
             return dataService.isMatchPorComenzarStatus(m?.status);
         }
@@ -1964,11 +1982,16 @@ export default function TournamentDashboard() {
                                             const [t2p1, t2p2] = resolveNames(match.team2, match.team2Name);
                                             const delayInfo = getDelayInfo(match);
                                             const statusUp = normalizeStatus(match.status);
+                                            const midCard = String(match?.id ?? '');
                                             const isFinishedCard = dataService.isMatchFinishedLike(match);
+                                            const onPizarra = markerLiveMatchIds.has(midCard);
                                             const isLive =
-                                                dataService.isMatchEnVivoStatus(match.status) && !isFinishedCard;
+                                                !isFinishedCard &&
+                                                (dataService.isMatchEnVivoStatus(match.status) || onPizarra);
                                             const isPorComenzar =
-                                                dataService.isMatchPorComenzarStatus(match.status) && !isFinishedCard;
+                                                dataService.isMatchPorComenzarStatus(match.status) &&
+                                                !isFinishedCard &&
+                                                !onPizarra;
                                             const isEnCola = false;
                                             const cardBg = isLive
                                                 ? 'bg-[#39ff14]/20 border-[#39ff14]/50 shadow-[0_0_20px_rgba(57,255,20,0.15)]'
@@ -2146,10 +2169,11 @@ export default function TournamentDashboard() {
                                                                         const team1Label = [fmt(t1p1), t1p2 ? fmt(t1p2) : ''].filter(Boolean).join(' · ') || 'Equipo 1';
                                                                         const team2Label = [fmt(t2p1), t2p2 ? fmt(t2p2) : ''].filter(Boolean).join(' · ') || 'Equipo 2';
                                                                         const showPgsCols =
-                                                                            activeTab !== 'Por Comenzar' &&
-                                                                            (activeTab !== 'Todos' && activeTab !== 'Fase de Grupo'
-                                                                                ? true
-                                                                                : isFinishedCard);
+                                                                            activeTab === 'En Vivo' ||
+                                                                            (activeTab !== 'Por Comenzar' &&
+                                                                                (activeTab !== 'Todos' && activeTab !== 'Fase de Grupo'
+                                                                                    ? true
+                                                                                    : isFinishedCard));
 
                                                                         const ServingBall = () => (
                                                                             <motion.div
