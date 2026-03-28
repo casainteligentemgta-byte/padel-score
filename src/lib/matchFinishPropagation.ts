@@ -2,6 +2,7 @@ import { MatchStatus } from '@/types/tournament';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { dataService } from '@/lib/dataService';
 import { hydrateGroupQualifierSlots, knockoutHydrationDiffers } from '@/lib/groupQualifierHydration';
+import { hydrateFinalFromFinishedSemifinals } from '@/lib/knockoutWinnerHydration';
 
 /** Quita metadatos de fila antes de persistir en `tournament_matches.data`. Se conservan team1/team2 para no dejar TBD obsoleto al fusionar con `row.data`. */
 export function stripMatchForPersistence(m: any) {
@@ -34,11 +35,6 @@ export function computeMatchesAfterMatchFinish(
             ? finishedMatch.team1Index
             : finishedMatch.team2Index;
 
-    const roundUpper = (x: any) => (x.roundName || '').toUpperCase();
-    const isSemi = (x: any) => roundUpper(x).includes('SEMIFINAL') || x.stage === 'SEMIFINAL';
-    const isFinalMatch = (x: any) =>
-        x.roundName === 'FINAL' || roundUpper(x) === 'FINAL' || x.stage === 'FINAL';
-
     let updatedMatches = matches.map((m) => {
         if (m.id === matchId) {
             return { ...m, status: MatchStatus.FINISHED, score: finalScore };
@@ -64,31 +60,13 @@ export function computeMatchesAfterMatchFinish(
             }
         }
 
-        if (
-            finishedMatch.stage === 'MAIN_DRAW' &&
-            isSemi(finishedMatch) &&
-            !finishedMatch.bracketPosition &&
-            isFinalMatch(m)
-        ) {
-            const semis = matches
-                .filter((mx: any) => isSemi(mx))
-                .sort(
-                    (a: any, b: any) =>
-                        new Date(a.scheduledTime || 0).getTime() -
-                            new Date(b.scheduledTime || 0).getTime() ||
-                        String(a.id || '').localeCompare(String(b.id || ''))
-                );
-            const semiIndex = semis.findIndex((s: any) => s.id === matchId);
-            if (semiIndex === 0) return { ...m, team1Index: winnerIndex };
-            if (semiIndex === 1) return { ...m, team2Index: winnerIndex };
-        }
-
         return m;
     });
 
     if (tournament) {
         updatedMatches = hydrateGroupQualifierSlots(updatedMatches, tournament);
     }
+    updatedMatches = hydrateFinalFromFinishedSemifinals(updatedMatches, tournament);
 
     const autocorrected = ScheduleEngine.recalculateRemainingMatches(
         updatedMatches,
@@ -117,10 +95,13 @@ export async function syncGroupQualifierSlotsToDatabaseIfNeeded(params: {
     updateMatch: MatchFinishUpdateFn;
 }): Promise<void> {
     const { tournamentId, tournament, rawMatches, updateMatch } = params;
-    if (!tournament?.groupAssignments || Object.keys(tournament.groupAssignments).length === 0) return;
     if (!Array.isArray(rawMatches) || rawMatches.length === 0) return;
 
-    const hydrated = hydrateGroupQualifierSlots(rawMatches.map((m) => ({ ...m })), tournament);
+    let hydrated = rawMatches.map((m) => ({ ...m }));
+    if (tournament?.groupAssignments && Object.keys(tournament.groupAssignments).length > 0) {
+        hydrated = hydrateGroupQualifierSlots(hydrated, tournament);
+    }
+    hydrated = hydrateFinalFromFinishedSemifinals(hydrated, tournament);
 
     for (const after of hydrated) {
         const before = rawMatches.find((r) => String(r?.id) === String(after?.id));

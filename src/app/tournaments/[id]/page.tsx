@@ -43,6 +43,7 @@ import {
     syncGroupQualifierSlotsToDatabaseIfNeeded,
 } from '@/lib/matchFinishPropagation';
 import { hydrateGroupQualifierSlots } from '@/lib/groupQualifierHydration';
+import { hydrateFinalFromFinishedSemifinals } from '@/lib/knockoutWinnerHydration';
 import { shouldAutoFinishBySetsReferee } from '@/lib/matchFinishGuards';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -402,12 +403,12 @@ export default function TournamentDashboard() {
             try {
                 const tNow = tournamentRef.current;
                 const teamsRef = tNow?.teams || [];
-                let rowsForEnrich = rawMatches;
+                let rowsForEnrich = rawMatches.map((m: any) => ({ ...m }));
                 if (tNow?.groupAssignments && Object.keys(tNow.groupAssignments).length > 0) {
-                    rowsForEnrich = hydrateGroupQualifierSlots(
-                        rawMatches.map((m: any) => ({ ...m })),
-                        tNow,
-                    );
+                    rowsForEnrich = hydrateGroupQualifierSlots(rowsForEnrich, tNow);
+                }
+                rowsForEnrich = hydrateFinalFromFinishedSemifinals(rowsForEnrich, tNow);
+                if (tNow) {
                     void syncGroupQualifierSlotsToDatabaseIfNeeded({
                         tournamentId: String(id),
                         tournament: tNow,
@@ -441,9 +442,7 @@ export default function TournamentDashboard() {
         : '';
 
     useEffect(() => {
-        if (!id || !groupAssignmentsKey) return;
-        const t = tournamentRef.current;
-        if (!t?.groupAssignments || Object.keys(t.groupAssignments).length === 0) return;
+        if (!id || !tournament?.id) return;
         let cancelled = false;
         const timer = window.setTimeout(() => {
             (async () => {
@@ -451,7 +450,7 @@ export default function TournamentDashboard() {
                     const raw = await dataService.getMatches(String(id));
                     if (cancelled) return;
                     const tLatest = tournamentRef.current;
-                    if (!tLatest?.groupAssignments) return;
+                    if (!tLatest) return;
                     await syncGroupQualifierSlotsToDatabaseIfNeeded({
                         tournamentId: String(id),
                         tournament: tLatest,
@@ -459,7 +458,7 @@ export default function TournamentDashboard() {
                         updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
                     });
                 } catch (e) {
-                    console.warn('[syncGroupQualifier on load]', e);
+                    console.warn('[syncKnockoutHydration on load]', e);
                 }
             })();
         }, 600);
@@ -467,7 +466,7 @@ export default function TournamentDashboard() {
             cancelled = true;
             window.clearTimeout(timer);
         };
-    }, [id, groupAssignmentsKey]);
+    }, [id, tournament?.id, groupAssignmentsKey]);
 
     // Realtime: en INSERT/UPDATE no fusionar fila a mano — chocaba con subscribeToMatches (getMatches)
     // y podía dejar status PENDING encima de un partido ya FINISHED en BD. Solo DELETE optimista + refresh.
