@@ -780,24 +780,6 @@ export default function ControlPanel() {
                 matchId,
                 updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
             });
-            const c = courtNum(match);
-            if (c > 0) {
-                try {
-                    const canchaId = `cancha_${c}`;
-                    const cur = await dataService.getPizarraCanchaState(canchaId);
-                    const pdata = cur?.data || {};
-                    await dataService.setPizarraCanchaState(canchaId, {
-                        ...pdata,
-                        estado: 'finalizado',
-                        torneo_id: id,
-                        partido_id: null,
-                        active_match_id: null,
-                        pizarra_refresh_nonce: (Number(pdata.pizarra_refresh_nonce) || 0) + 1
-                    });
-                } catch (e) {
-                    console.warn('[Control] finishMatch pizarra cleanup:', e);
-                }
-            }
         } catch (e) { 
             console.error(e);
             alert('Error al finalizar el partido. Verifica tu conexión.');

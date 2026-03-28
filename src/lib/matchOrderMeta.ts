@@ -15,7 +15,8 @@ function firstDefinedOrder(data: Record<string, unknown>): number | null {
 
 /**
  * Infiere número de partido 1-based desde ids habituales:
- * - `m-{catKey}-{n}-{suffix}` → n (si n≥1) o n+1 (si n=0, generador maestro histórico)
+ * - `m-{catKey}-{n}-{suffix}` → n si n≥1; si n===0 legacy (generador maestro antiguo) → n+1.
+ *   Los generadores actuales usan n = orden de partido (1, 2, 3…), alineado con tournamentService.
  * - `match-{idx}-...` (new-tournament) → idx+1
  */
 export function inferMatchOrderFromId(id: unknown): number | null {

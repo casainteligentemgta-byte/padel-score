@@ -41,6 +41,7 @@ import {
     shouldEnterSetTiebreak,
     winsTiebreakPoints,
 } from '@/lib/matchScoringRules';
+import { shouldAutoFinishBySetsReferee } from '@/lib/matchFinishGuards';
 
 export default function RefereeScoreboard() {
     const id = useRouteSegment('id');
@@ -63,7 +64,13 @@ export default function RefereeScoreboard() {
     /** Número de pista destino mientras aplica traslado atómico (pista libre). */
     const [courtMoveBusy, setCourtMoveBusy] = useState<number | null>(null);
 
-    const matchCourt = match?.court ?? (match?.courtIndex != null ? match.courtIndex + 1 : 1);
+    /** Pista ≥1 para pizarra y hub. `court: 0` en BD hacía matchCourt=0 → `if (!matchCourt)` cortaba la sync a pizarra_cancha_state y el hub no veía en_vivo/partido_id. */
+    const matchCourt = (() => {
+        const raw = match?.court ?? (match?.courtIndex != null ? match.courtIndex + 1 : undefined);
+        const n = Number(raw);
+        if (Number.isFinite(n) && n >= 1) return n;
+        return 1;
+    })();
 
     const impliedCourtCount = useMemo(() => {
         if (!tournament) return Math.max(6, matchCourt);
@@ -227,9 +234,74 @@ export default function RefereeScoreboard() {
 
     const updateManualScore = async (side: 't1' | 't2', field: 'games' | 'sets' | 'points', value: any) => {
         if (!tournament || !match) return;
-        await dataService.updateMatch(id, match.id, {
-            [field]: { ...match[field], [side]: field === 'points' ? value : Math.max(0, value) }
-        });
+        const nextField = {
+            ...(match[field] && typeof match[field] === 'object' ? match[field] : {}),
+            [side]: field === 'points' ? value : Math.max(0, value),
+        };
+        const patch: Record<string, unknown> = { [field]: nextField };
+
+        if (field === 'sets') {
+            const prospective = {
+                ...match,
+                ...patch,
+                matchFormat: match.matchFormat || match.match_format || tournament?.rrMatchFormat,
+            };
+            const st = String(match.status || '').toUpperCase();
+            const liveLike =
+                st === 'LIVE' ||
+                st === 'IN_PROGRESS' ||
+                st === 'PAUSED' ||
+                st === 'STARTED' ||
+                st === 'WARM_UP';
+            if (liveLike && shouldAutoFinishBySetsReferee(prospective, tournament)) {
+                const endIso = new Date().toISOString();
+                patch.status = MatchStatus.FINISHED;
+                patch.finishedAt = endIso;
+                patch.actualEndTime = endIso;
+                patch.superTiebreak = false;
+                patch.isTiebreak = false;
+                setMatch((prev: any) => (prev ? { ...prev, ...patch } : prev));
+                try {
+                    const rows = await dataService.getMatches(id);
+                    const merged = rows.map((r: any) => (r.id === match.id ? { ...r, ...patch } : r));
+                    const { finalMatches } = await persistMatchFinishWithPropagation({
+                        tournamentId: id,
+                        bufferMinutes: tournament?.bufferMinutes ?? 15,
+                        matches: merged,
+                        matchId: match.id,
+                        updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
+                    });
+                    const closed = finalMatches.find((m: any) => m.id === match.id);
+                    if (closed) {
+                        setMatch((prev: any) =>
+                            prev
+                                ? {
+                                      ...closed,
+                                      team1: prev.team1,
+                                      team2: prev.team2,
+                                      matchFormat: prev.matchFormat ?? closed.matchFormat,
+                                      tieBreakType: prev.tieBreakType ?? closed.tieBreakType,
+                                  }
+                                : prev
+                        );
+                    }
+                } catch (err) {
+                    console.error('[updateManualScore] cierre por sets:', err);
+                    setMatch(match);
+                    alert('Error al cerrar el partido. Revisa la conexión.');
+                }
+                return;
+            }
+        }
+
+        setMatch((prev: any) => (prev ? { ...prev, ...patch } : prev));
+        try {
+            await dataService.updateMatch(id, match.id, patch);
+        } catch (err) {
+            console.error('[updateManualScore]', err);
+            setMatch(match);
+            alert('Error al guardar el ajuste.');
+        }
     };
 
 
@@ -307,7 +379,11 @@ export default function RefereeScoreboard() {
     const startMatch = async () => {
         if (!tournament || !match) return;
         const realId = match.id;
-        const courtNum = (m: any) => Number(m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : 0));
+        const courtNum = (m: any) => {
+            const raw = m?.court ?? (m?.courtIndex != null ? (m.courtIndex as number) + 1 : undefined);
+            const n = Number(raw);
+            return Number.isFinite(n) && n >= 1 ? n : 1;
+        };
         const c = courtNum(match);
 
         try {
@@ -352,12 +428,12 @@ export default function RefereeScoreboard() {
 
     // ── Sincronizar marcador a pizarra_cancha_state (para displays por cancha) ──
     useEffect(() => {
-        if (!matchCourt) return;
-        
+        if (!match?.id) return;
+
         // Solo sincronizamos si está LIVE o si acaba de terminar (para enviar el estado final)
         const isLive = match?.status === MatchStatus.LIVE;
         const isFinished = match?.status === MatchStatus.FINISHED;
-        
+
         if (!isLive && !isFinished) return;
 
         const canchaId = `cancha_${matchCourt}`;
@@ -717,6 +793,62 @@ export default function RefereeScoreboard() {
         };
     }, [id, matchId]);
 
+    /** Si el marcador en BD quedó LIVE con sets ya ganadores (marker u otro cliente), cerrar una vez vía propagación. */
+    const scoreHealFinishLastAttemptRef = useRef(0);
+    useEffect(() => {
+        if (!id || !match?.id || !tournament || loading) return;
+        const st = String(match.status || '').toUpperCase();
+        if (!['LIVE', 'IN_PROGRESS', 'PAUSED', 'STARTED', 'WARM_UP'].includes(st)) return;
+        if (!shouldAutoFinishBySetsReferee(match, tournament)) return;
+        const nowTs = Date.now();
+        if (nowTs - scoreHealFinishLastAttemptRef.current < 5000) return;
+        scoreHealFinishLastAttemptRef.current = nowTs;
+
+        (async () => {
+            try {
+                const rows = await dataService.getMatches(id);
+                const fresh = rows.find((r: any) => r.id === match.id);
+                if (!fresh) return;
+                if (String(fresh.status || '').toUpperCase() === 'FINISHED') return;
+                if (!shouldAutoFinishBySetsReferee(fresh, tournament)) return;
+
+                const endIso = new Date().toISOString();
+                const finishPatch = {
+                    status: MatchStatus.FINISHED,
+                    finishedAt: endIso,
+                    actualEndTime: endIso,
+                    superTiebreak: false,
+                    isTiebreak: false,
+                };
+                const merged = rows.map((r: any) =>
+                    r.id === match.id ? { ...r, ...finishPatch } : r
+                );
+                await persistMatchFinishWithPropagation({
+                    tournamentId: id,
+                    bufferMinutes: tournament?.bufferMinutes ?? 15,
+                    matches: merged,
+                    matchId: match.id,
+                    updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
+                });
+            } catch (e) {
+                console.warn('[Score] auto-cierre por sets en BD:', e);
+            }
+        })();
+    }, [
+        id,
+        loading,
+        tournament,
+        match?.id,
+        match?.status,
+        match?.sets?.t1,
+        match?.sets?.t2,
+        match?.superTiebreak,
+        match?.sets_to_win_match,
+        match?.setsToWinMatch,
+        match?.matchFormat,
+        match?.match_format,
+    ]);
+
     const saveHistory = () => {
         if (match) {
             setHistory(prev => [...prev, JSON.parse(JSON.stringify(match))].slice(-10));
@@ -861,7 +993,10 @@ export default function RefereeScoreboard() {
             return;
         }
 
-        const rules = getScoringRules(match.matchFormat || tournament?.matchFormat, tournament?.tieBreakType);
+        const rules = getScoringRules(
+            match.matchFormat || match.match_format || (tournament as any)?.rrMatchFormat || tournament?.matchFormat,
+            match.tieBreakType || tournament?.tieBreakType,
+        );
 
         newGames[side]++;
         const g1 = newGames.t1;
@@ -934,9 +1069,9 @@ export default function RefereeScoreboard() {
     const winSet = async (side: 't1' | 't2', finalGames: { t1: number, t2: number }) => {
         const rules = getScoringRules(
             match.matchFormat || match.match_format || (tournament as any)?.rrMatchFormat || tournament?.matchFormat,
-            tournament?.tieBreakType,
+            match.tieBreakType || tournament?.tieBreakType,
         );
-        let newSets = { t1: match.sets?.t1 || 0, t2: match.sets?.t2 || 0 };
+        let newSets = { t1: Number(match.sets?.t1) || 0, t2: Number(match.sets?.t2) || 0 };
         newSets[side]++;
 
         const isCompletingSuperTB = match.superTiebreak === true;
@@ -945,18 +1080,32 @@ export default function RefereeScoreboard() {
             ? (match.setScores || [])
             : [...(match.setScores || []), { t1: finalGames.t1, t2: finalGames.t2 }];
 
-        const isMatchFinished =
-            newSets.t1 >= rules.setsToWinMatch || newSets.t2 >= rules.setsToWinMatch;
+        let need = rules.setsToWinMatch;
+        const needRaw = Number(match?.sets_to_win_match ?? match?.setsToWinMatch);
+        if (Number.isFinite(needRaw) && needRaw >= 1) need = needRaw;
 
-        const enterStb =
-            !isMatchFinished &&
-            rules.usesSuperTiebreakDecider &&
-            newSets.t1 === 1 &&
-            newSets.t2 === 1 &&
-            !isCompletingSuperTB;
+        const t1n = newSets.t1;
+        const t2n = newSets.t2;
+        const setsReachWin = t1n >= need || t2n >= need;
 
         let nextSuperTb = !!(match.superTiebreak ?? false);
+        const enterStb =
+            !setsReachWin &&
+            rules.usesSuperTiebreakDecider &&
+            t1n === 1 &&
+            t2n === 1 &&
+            !isCompletingSuperTB;
         if (enterStb) nextSuperTb = true;
+
+        const isMatchFinished = shouldAutoFinishBySetsReferee(
+            {
+                ...match,
+                sets: newSets,
+                superTiebreak: nextSuperTb,
+                matchFormat: match.matchFormat || match.match_format || (tournament as any)?.rrMatchFormat,
+            },
+            tournament
+        );
         if (isMatchFinished) nextSuperTb = false;
 
         const finishedAt = isMatchFinished ? new Date().toISOString() : match.finishedAt || null;

@@ -644,9 +644,11 @@ export default function MasterGeneratorPage() {
 
                         const isGroupStage = m.roundName === 'Fase de Grupos';
                         const displayOrder = i + 1;
+                        // Segmento del id 1-based (como tournamentService): si fuera `i` (0-based),
+                        // inferMatchOrderFromId trataría ...-1- como orden 1 y colisionaría con ...-0-.
                         return {
                             ...m,
-                            id: m.id || `m-${cat.id}-${i}-${Date.now().toString(36)}`,
+                            id: m.id || `m-${cat.id}-${displayOrder}-${Date.now().toString(36)}`,
                             scheduledTime: typeof m.scheduledTime === 'string' ? m.scheduledTime : (m.scheduledTime instanceof Date ? m.scheduledTime.toISOString() : new Date().toISOString()),
                             status: m.status ?? MatchStatus.PENDING,
                             stage: isGroupStage ? 'GROUP_STAGE' : (m.roundName?.includes('Consolación') ? 'CONSOLATION' : 'MAIN_DRAW'),

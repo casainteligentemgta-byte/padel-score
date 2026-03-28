@@ -7,6 +7,8 @@
  *   npx tsx scripts/backfill-match-order.ts --dry-run
  *   npx tsx scripts/backfill-match-order.ts
  *   npx tsx scripts/backfill-match-order.ts --tournament <uuid>
+ *   npx tsx scripts/backfill-match-order.ts --tournament <uuid> --dedupe-order
+ *     (asigna orden 1..N por fecha programada + id; corrige torneos viejos del generador maestro 0-based)
  *
  * Requiere .env.local con NEXT_PUBLIC_SUPABASE_URL.
  * Recomendado: SUPABASE_SERVICE_ROLE_KEY (evita bloqueos RLS al actualizar).
@@ -48,13 +50,15 @@ function parseArgs() {
   const argv = process.argv.slice(2);
   let dryRun = false;
   let tournamentId: string | null = null;
+  let dedupeOrder = false;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--dry-run') dryRun = true;
+    else if (argv[i] === '--dedupe-order') dedupeOrder = true;
     else if (argv[i] === '--tournament' && argv[i + 1]) {
       tournamentId = argv[++i]!;
     }
   }
-  return { dryRun, tournamentId };
+  return { dryRun, tournamentId, dedupeOrder };
 }
 
 function dataNeedsWrite(
@@ -74,7 +78,12 @@ function dataNeedsWrite(
 }
 
 loadEnvLocal();
-const { dryRun, tournamentId } = parseArgs();
+const { dryRun, tournamentId, dedupeOrder } = parseArgs();
+
+if (dedupeOrder && !tournamentId) {
+  console.error(`${TAG} --dedupe-order requiere --tournament <uuid>`);
+  process.exit(1);
+}
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
 const key =
@@ -93,7 +102,64 @@ if (!process.env.SUPABASE_SERVICE_ROLE_KEY && !process.env.SUPABASE_SERVICE_KEY)
 const supabase = createClient(url, key);
 const PAGE = 500;
 
+async function dedupeOrdersOneTournament(tid: string, dry: boolean) {
+  const { data: rows, error } = await supabase
+    .from('tournament_matches')
+    .select('id, tournament_id, data')
+    .eq('tournament_id', tid);
+  if (error) {
+    console.error(`${TAG} dedupe:`, error.message);
+    process.exit(1);
+  }
+  const list = rows || [];
+  list.sort((a, b) => {
+    const ta = new Date(String((a.data as any)?.scheduledTime || 0)).getTime();
+    const tb = new Date(String((b.data as any)?.scheduledTime || 0)).getTime();
+    if (ta !== tb) return ta - tb;
+    return String(a.id).localeCompare(String(b.id));
+  });
+  let toWrite = 0;
+  let written = 0;
+  const errors: string[] = [];
+  for (let i = 0; i < list.length; i++) {
+    const row = list[i]!;
+    const prev = (row.data && typeof row.data === 'object' ? row.data : {}) as Record<string, unknown>;
+    const ord = i + 1;
+    const merged = {
+      ...prev,
+      match_number: ord,
+      matchNumber: ord,
+      order: ord,
+      orden: ord,
+    };
+    if ('id' in merged) delete merged.id;
+    if (!dataNeedsWrite(prev, merged)) continue;
+    toWrite++;
+    if (dry) continue;
+    const { error: upErr } = await supabase
+      .from('tournament_matches')
+      .update({ data: merged, updated_at: new Date().toISOString() })
+      .eq('id', row.id)
+      .eq('tournament_id', row.tournament_id);
+    if (upErr) errors.push(`${row.id}: ${upErr.message}`);
+    else written++;
+  }
+  console.log(
+    `${TAG} dedupe-order ${dry ? '(dry-run) ' : ''}torneo ${tid}: ${list.length} partidos, filas a escribir: ${toWrite}.` +
+      (dry ? '' : ` Actualizadas: ${written}.`),
+  );
+  if (errors.length) {
+    errors.slice(0, 15).forEach((e) => console.error('  ', e));
+    process.exit(1);
+  }
+}
+
 async function main() {
+  if (dedupeOrder && tournamentId) {
+    await dedupeOrdersOneTournament(tournamentId, dryRun);
+    return;
+  }
+
   let from = 0;
   let scanned = 0;
   let toUpdate = 0;

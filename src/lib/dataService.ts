@@ -2209,6 +2209,78 @@ export const dataService = {
     },
 
     /**
+     * Pone `estado: finalizado` y limpia ids en todas las pistas donde aún figure este partido.
+     * Evita hub/pantallas colgadas en EN VIVO si se finalizó desde el hub, control con court=0, o hubo desfase de pista.
+     */
+    /** Clave `cancha_N` para `pizarra_cancha_state` (coherente con sala de marcador: pista ≥ 1). */
+    courtToPizarraCanchaId(match: any): string {
+        const raw = match?.court ?? (match?.courtIndex != null ? Number(match.courtIndex) + 1 : undefined);
+        const n = Number(raw);
+        const c = Number.isFinite(n) && n >= 1 ? n : 1;
+        return `cancha_${c}`;
+    },
+
+    /**
+     * RPC atómico: fusiona resultado en `tournament_matches.data` y libera la pista en `pizarra_cancha_state`.
+     * Requiere migración `023_finalizar_partido_y_liberar_cancha.sql` y sesión autenticada (dueño del torneo o admin).
+     */
+    async finalizarPartidoYLiberarCanchaRpc(params: {
+        tournamentId: string;
+        matchId: string;
+        canchaId: string;
+        finalData: Record<string, unknown>;
+    }): Promise<void> {
+        const { data, error } = await supabase().rpc('finalizar_partido_y_liberar_cancha', {
+            p_match_id: params.matchId,
+            p_tournament_id: params.tournamentId,
+            p_cancha_id: params.canchaId,
+            p_final_data: params.finalData,
+        });
+        throwIfError(error);
+        const out = data as { ok?: boolean; error?: string } | null;
+        if (!out?.ok) {
+            throw new Error(out?.error || 'finalizar_partido_y_liberar_cancha');
+        }
+    },
+
+    async clearPizarraCanchaForMatch(tournamentId: string, matchId: string, maxCourts = 16): Promise<void> {
+        const normTid = (s: string) => String(s || '').replace(/-/g, '').toLowerCase();
+        const tidWant = normTid(String(tournamentId || ''));
+        const mid = String(matchId || '').trim();
+        if (!tidWant || !mid) return;
+
+        for (let c = 1; c <= maxCourts; c++) {
+            const canchaId = `cancha_${c}`;
+            let state: { data?: any } | null;
+            try {
+                state = await this.getPizarraCanchaState(canchaId);
+            } catch {
+                continue;
+            }
+            const data = state?.data || {};
+            const pid = String(data?.partido_id || '').trim();
+            const active = String(data?.active_match_id || '').trim();
+            const hit = pid === mid || active === mid;
+            if (!hit) continue;
+            const tidRow = normTid(String(data?.torneo_id || ''));
+            if (tidRow && tidRow !== tidWant) continue;
+
+            try {
+                await this.setPizarraCanchaState(canchaId, {
+                    ...data,
+                    estado: 'finalizado',
+                    torneo_id: tournamentId,
+                    partido_id: null,
+                    active_match_id: null,
+                    pizarra_refresh_nonce: (Number(data.pizarra_refresh_nonce) || 0) + 1,
+                });
+            } catch (e) {
+                console.warn('[dataService] clearPizarraCanchaForMatch', canchaId, e);
+            }
+        }
+    },
+
+    /**
      * Monitor admin: libera la cancha en emergencia (debe existir el RPC en Supabase).
      * Ajusta la clave si tu función SQL usa otro nombre de parámetro (p. ej. p_cancha_id).
      */

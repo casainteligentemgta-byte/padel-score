@@ -1,5 +1,6 @@
 import { MatchStatus } from '@/types/tournament';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
+import { dataService } from '@/lib/dataService';
 
 /** Quita campos de vista / metadatos de fila antes de persistir en `tournament_matches.data`. */
 export function stripMatchForPersistence(m: any) {
@@ -118,6 +119,27 @@ export async function persistMatchFinishWithPropagation(params: {
     }
 
     await updateMatch(tournamentId, matchId, stripMatchForPersistence(finished));
+
+    const stripFinished = stripMatchForPersistence(finished) as Record<string, unknown>;
+    try {
+        await dataService.finalizarPartidoYLiberarCanchaRpc({
+            tournamentId,
+            matchId,
+            canchaId: dataService.courtToPizarraCanchaId(finished),
+            finalData: stripFinished,
+        });
+    } catch (e) {
+        console.warn(
+            '[persistMatchFinishWithPropagation] RPC finalizar_partido_y_liberar_cancha (¿migración 023 aplicada?):',
+            e,
+        );
+    }
+
+    try {
+        await dataService.clearPizarraCanchaForMatch(tournamentId, matchId);
+    } catch (e) {
+        console.warn('[persistMatchFinishWithPropagation] Limpieza pizarra_cancha_state:', e);
+    }
 
     const others = finalMatches.filter((m) => m.id !== matchId);
     const settled = await Promise.allSettled(

@@ -10,7 +10,10 @@ export function shouldAutoFinishBySetsReferee(match: any, tournament: any): bool
     if (s === 'FINISHED' || s === 'FINALIZADO' || s === 'COMPLETE' || s === 'COMPLETED') return false;
 
     const rules = getScoringRules(
-        match?.matchFormat || tournament?.matchFormat,
+        match?.matchFormat ||
+            match?.match_format ||
+            tournament?.rrMatchFormat ||
+            tournament?.matchFormat,
         match?.tieBreakType || tournament?.tieBreakType
     );
     let need = rules.setsToWinMatch;

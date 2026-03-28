@@ -37,6 +37,7 @@ import { MatchStatus, TournamentType, ScheduleConfig } from '@/types/tournament'
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { persistMatchFinishWithPropagation, shouldSuggestAutoMainDraw } from '@/lib/matchFinishPropagation';
+import { shouldAutoFinishBySetsReferee } from '@/lib/matchFinishGuards';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
@@ -157,6 +158,15 @@ export default function TournamentDashboard() {
                 const liveIds = new Set<string>();
                 const liveDataByMatch: Record<string, any> = {};
                 const activeIds = new Set<string>();
+                const rowByMatchId = new Map<string, any>();
+                matches.forEach((m: any) => {
+                    const mid = String(m?.id ?? '');
+                    if (mid) rowByMatchId.set(mid, m);
+                });
+                const isFinishedInHub = (mid: string) => {
+                    const row = rowByMatchId.get(mid);
+                    return row ? dataService.isMatchFinishedLike(row) : false;
+                };
                 const checks = courtNums.map(async (courtNum) => {
                     const state = await dataService.getPizarraCanchaState(`cancha_${courtNum}`);
                     const data = state?.data || {};
@@ -164,12 +174,15 @@ export default function TournamentDashboard() {
                     // Partido cerrado en pizarra: no usar ids viejos para excluir "Por comenzar" ni fusionar En vivo
                     if (est === 'finalizado') return;
                     const activePid = String(data?.active_match_id || '').trim();
-                    if (activePid && !activePid.startsWith('live_')) activeIds.add(activePid);
+                    if (activePid && !activePid.startsWith('live_') && !isFinishedInHub(activePid)) {
+                        activeIds.add(activePid);
+                    }
                     // Marcador: en_vivo = partido en curso; ready = siguiente asignado con marcador (sigue mostrando P/G/S)
                     if (est !== 'en_vivo' && est !== 'ready') return;
                     if (!sameTournament(data?.torneo_id, String(id))) return;
                     const pid = String(data?.partido_id || '').trim();
                     if (!pid || pid.startsWith('live_')) return;
+                    if (isFinishedInHub(pid)) return;
                     liveIds.add(pid);
                     activeIds.add(pid); // alinear con cola: partido en pizarra no debe quedar en "Por comenzar"
                     liveDataByMatch[pid] = data?.marcador || null;
@@ -428,6 +441,55 @@ export default function TournamentDashboard() {
             channel.unsubscribe();
         };
     }, [id, router]);
+
+    /** LIVE con sets ganadores pero sin FINISHED en BD (p. ej. marker u hojas sueltas): cerrar y desbloquear cola. Solo quien puede gestionar partidos. */
+    const hubHealFinishLastByMatchRef = useRef<Record<string, number>>({});
+    useEffect(() => {
+        if (!id || !tournament || !canManageMatches || matches.length === 0) return;
+        const now = Date.now();
+        const cooldownMs = 8000;
+        for (const m of matches) {
+            if (!shouldAutoFinishBySetsReferee(m, tournament)) continue;
+            const st = String(m.status || '').toUpperCase();
+            if (!['LIVE', 'IN_PROGRESS', 'PAUSED', 'STARTED', 'WARM_UP'].includes(st)) continue;
+            const mid = String(m.id || '');
+            if (!mid) continue;
+            const last = hubHealFinishLastByMatchRef.current[mid] || 0;
+            if (now - last < cooldownMs) continue;
+            hubHealFinishLastByMatchRef.current[mid] = now;
+
+            (async () => {
+                try {
+                    const rows = await dataService.getMatches(String(id));
+                    const fresh = rows.find((r: any) => r.id === mid);
+                    if (!fresh) return;
+                    if (String(fresh.status || '').toUpperCase() === 'FINISHED') return;
+                    if (!shouldAutoFinishBySetsReferee(fresh, tournament)) return;
+
+                    const endIso = new Date().toISOString();
+                    const finishPatch = {
+                        status: MatchStatus.FINISHED,
+                        finishedAt: endIso,
+                        actualEndTime: endIso,
+                        superTiebreak: false,
+                        isTiebreak: false,
+                    };
+                    const merged = rows.map((r: any) =>
+                        r.id === mid ? { ...r, ...finishPatch } : r
+                    );
+                    await persistMatchFinishWithPropagation({
+                        tournamentId: String(id),
+                        bufferMinutes: tournament.bufferMinutes || 15,
+                        matches: merged,
+                        matchId: mid,
+                        updateMatch: (tid, mId, d) => dataService.updateMatch(tid, mId, d),
+                    });
+                } catch (e) {
+                    console.warn('[Hub] auto-cierre por sets:', mid, e);
+                }
+            })();
+        }
+    }, [id, tournament, matches, canManageMatches]);
 
     const generateMainDraw = async (currentMatches?: any[]) => {
         if (!tournament || !isRoundRobin) return;
