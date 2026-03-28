@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -190,6 +190,47 @@ export default function TournamentDashboard() {
             clearInterval(t);
         };
     }, [id, matches, (tournament as any)?.totalCourts]);
+
+    /** Nº de partidos en “En vivo” (misma regla que strictEnVivo en render) para transición automática a Finalizados. */
+    const hubLiveMatchCount = useMemo(() => {
+        if (!tournament) return 0;
+        const rr = (tournament as any)?.rrMatchFormat ?? (tournament as any)?.matchFormat;
+        const tb = (tournament as any)?.tieBreakType;
+        const hubMatches = matches.map((m: any) => ({
+            ...m,
+            rrMatchFormat: m.rrMatchFormat ?? m.match_format ?? m.matchFormat ?? rr,
+            matchFormat: m.matchFormat ?? m.match_format ?? rr,
+            tieBreakType: m.tieBreakType ?? m.tie_break_type ?? tb,
+            tie_break_type: m.tie_break_type ?? m.tieBreakType ?? tb,
+        }));
+        const fromStatus = dataService.listMatchesEnVivo(hubMatches);
+        const byId = new Map<string, any>(fromStatus.map((m: any) => [String(m?.id ?? ''), m]));
+        for (const m of hubMatches) {
+            const mid = String(m?.id ?? '');
+            if (!mid || mid.startsWith('live_')) continue;
+            if (dataService.isMatchFinishedLike(m)) continue;
+            if (!markerLiveMatchIds.has(mid)) continue;
+            if (!byId.has(mid)) byId.set(mid, m);
+        }
+        return byId.size;
+    }, [tournament, matches, markerLiveMatchIds]);
+
+    const prevHubLiveCountRef = useRef<number | null>(null);
+    useEffect(() => {
+        prevHubLiveCountRef.current = null;
+    }, [id]);
+
+    useEffect(() => {
+        if (!tournament || loading) {
+            return;
+        }
+        const prev = prevHubLiveCountRef.current;
+        if (activeTab === 'En Vivo' && prev !== null && prev > 0 && hubLiveMatchCount === 0) {
+            setActiveTab('Finalizados');
+            router.replace(`/tournaments/${id}?tab=finalizados`, { scroll: false });
+        }
+        prevHubLiveCountRef.current = hubLiveMatchCount;
+    }, [hubLiveMatchCount, activeTab, tournament, loading, id, router]);
 
     // Búsqueda realtime de participantes para inscripción manual (siempre antes de cualquier return de render).
     useEffect(() => {
@@ -2336,8 +2377,8 @@ export default function TournamentDashboard() {
                                                                     })()}
                                                                 </div>
 
-                                                                {/* Nav bar fijo abajo: Control, Pizarra, Cámaras, ADS — Por Comenzar y En Vivo */}
-                                                                {(activeTab === 'Por Comenzar' || activeTab === 'En Vivo') && (
+                                                                {/* Dock inferior solo en cola: en "En Vivo" el partido ya está en pista; evita barra duplicada */}
+                                                                {activeTab === 'Por Comenzar' && (
                                                                     <div className="px-2 pb-2 shrink-0">
                                                                         <nav className="grid grid-cols-4 border border-white/5 bg-white/5 backdrop-blur-md py-1.5 rounded-xl shadow-lg">
                                                                             <Link

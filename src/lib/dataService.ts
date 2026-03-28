@@ -192,8 +192,9 @@ export const dataService = {
     listMatchesEnVivo(matches: any[]): any[] {
         const list = Array.isArray(matches) ? matches : [];
         return list.filter((m: any) => {
-            if (!this.isMatchEnVivoStatus(m?.status)) return false;
+            // Prioridad: un partido cerrado nunca debe listarse como en vivo (p. ej. status desincronizado).
             if (this.isMatchFinishedLike(m)) return false;
+            if (!this.isMatchEnVivoStatus(m?.status)) return false;
             return true;
         });
     },
