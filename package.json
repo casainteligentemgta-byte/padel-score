@@ -14,7 +14,9 @@
     "lint": "next lint",
     "test:tournament": "tsx scripts/test-tournament-engine.ts",
     "verify:ceo": "node scripts/verify-ceo.mjs",
-    "open-inscriptions": "node scripts/open-tournament-inscriptions.mjs"
+    "open-inscriptions": "node scripts/open-tournament-inscriptions.mjs",
+    "exercise:finish-match": "node scripts/mark-match-finished.mjs",
+    "backfill:match-order": "tsx scripts/backfill-match-order.ts"
   },
   "description": "",
   "dependencies": {

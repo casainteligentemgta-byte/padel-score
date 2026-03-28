@@ -172,6 +172,9 @@ export async function initializeTournamentWithPlaceholders(
           scheduledTime: scheduledTime.toISOString(),
           categoryId: categoryKey,
           matchNumber: currentMatchNumber,
+          match_number: currentMatchNumber,
+          order: currentMatchNumber,
+          orden: currentMatchNumber,
         });
       }
     }
@@ -589,6 +592,9 @@ export async function generatePlayoffs(tournamentId: string, categoryId: string)
         stage: 'PLAYOFFS',
         categoryId: categoryId,
         matchNumber: 100 + idx, // Rango especial para playoffs
+        match_number: 100 + idx,
+        order: 100 + idx,
+        orden: 100 + idx,
         scheduledTime: now() // Por defecto ahora, el admin lo ajustará
       };
     });

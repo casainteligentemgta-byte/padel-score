@@ -643,6 +643,7 @@ export default function MasterGeneratorPage() {
                         const team2Index = m.team2Index ?? (t2Id ? teamIdToIndex.get(String(t2Id)) : undefined);
 
                         const isGroupStage = m.roundName === 'Fase de Grupos';
+                        const displayOrder = i + 1;
                         return {
                             ...m,
                             id: m.id || `m-${cat.id}-${i}-${Date.now().toString(36)}`,
@@ -651,6 +652,10 @@ export default function MasterGeneratorPage() {
                             stage: isGroupStage ? 'GROUP_STAGE' : (m.roundName?.includes('Consolación') ? 'CONSOLATION' : 'MAIN_DRAW'),
                             matchFormat: effectiveMatchFormat,
                             tieBreakType: effectiveTieBreakType,
+                            matchNumber: displayOrder,
+                            match_number: displayOrder,
+                            order: displayOrder,
+                            orden: displayOrder,
                             ...(team1Index != null && { team1Index }),
                             ...(team2Index != null && { team2Index }),
                         };

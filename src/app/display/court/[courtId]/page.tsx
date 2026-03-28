@@ -311,18 +311,23 @@ export default function CourtDisplayPage() {
                                     const label = is3rdSTB ? 'STB' : s === 3 && fmt === 'TIEBREAK' ? 'TB' : `SET ${s}`;
                                     const v1 = courtSetCell(s, 'local', marcador, currentSet);
                                     const v2 = courtSetCell(s, 'visitante', marcador, currentSet);
+                                    const cellCls = (v: string | number) => {
+                                        const str = String(v);
+                                        const wide = str !== '—' && str.length >= 2;
+                                        return `font-black tabular-nums leading-tight ${wide ? 'text-lg' : 'text-xl'}`;
+                                    };
                                     return (
-                                        <div key={s} className="flex flex-col gap-1 border-l border-white/10 first:border-l-0 pl-2">
+                                        <div key={s} className="flex flex-col gap-1 border-l border-white/10 first:border-l-0 pl-2 min-w-0">
                                             <span className="text-[8px] font-black uppercase tracking-widest text-gray-500">{label}</span>
-                                            <span className="text-xl font-black tabular-nums" style={{ color: marcador?.equipo_1?.color || '#CCFF00' }}>{v1}</span>
-                                            <span className="text-xl font-black tabular-nums" style={{ color: marcador?.equipo_2?.color || '#FF5500' }}>{v2}</span>
+                                            <span className={cellCls(v1)} style={{ color: marcador?.equipo_1?.color || '#CCFF00' }}>{v1}</span>
+                                            <span className={cellCls(v2)} style={{ color: marcador?.equipo_2?.color || '#FF5500' }}>{v2}</span>
                                         </div>
                                     );
                                 })}
-                                <div className="flex flex-col gap-1 border-l border-padel-primary/40 pl-2 justify-center">
+                                <div className="flex flex-col gap-1 border-l border-padel-primary/40 pl-2 justify-center min-w-[3.25rem]">
                                     <span className="text-[8px] font-black uppercase tracking-widest text-padel-primary">PTS</span>
-                                    <span className="text-2xl font-black tabular-nums text-padel-primary">{ptsL}</span>
-                                    <span className="text-2xl font-black tabular-nums text-orange-400">{ptsV}</span>
+                                    <span className={`font-black tabular-nums text-padel-primary ${String(ptsL).length >= 2 ? 'text-xl' : 'text-2xl'}`}>{ptsL}</span>
+                                    <span className={`font-black tabular-nums text-orange-400 ${String(ptsV).length >= 2 ? 'text-xl' : 'text-2xl'}`}>{ptsV}</span>
                                 </div>
                             </div>
                         </div>
@@ -385,14 +390,14 @@ function TeamPanel({ nombre, color, sets, games, puntos, side }: {
 
             {/* Games y Sets */}
             <div className="flex items-center gap-6">
-                <div className="text-center">
+                <div className="text-center min-w-[2.5rem]">
                     <p className="text-[8px] font-black uppercase tracking-[0.4em] text-gray-600">Sets</p>
-                    <p className="font-black text-3xl" style={{ color }}>{sets}</p>
+                    <p className={`font-black tabular-nums ${sets >= 10 ? 'text-2xl' : 'text-3xl'}`} style={{ color }}>{sets}</p>
                 </div>
                 <div className="w-px h-8 bg-white/10" />
-                <div className="text-center">
+                <div className="text-center min-w-[2.5rem]">
                     <p className="text-[8px] font-black uppercase tracking-[0.4em] text-gray-600">Games</p>
-                    <p className="font-black text-3xl text-white">{games}</p>
+                    <p className={`font-black tabular-nums text-white ${games >= 10 ? 'text-2xl' : 'text-3xl'}`}>{games}</p>
                 </div>
             </div>
         </div>

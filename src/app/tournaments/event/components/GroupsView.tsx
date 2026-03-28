@@ -100,6 +100,7 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
     const isSimple = activeTournament?.type === 'AMERICANO_INDIVIDUAL';
     const qualifyingSpots = Math.min(2, rows.length);
     const groupLetter = gName.length === 1 ? gName : gName.replace('Grupo', '').trim();
+    const rankCol = rows.length >= 10 ? 'minmax(28px,auto)' : '24px';
 
     return (
         <motion.div
@@ -134,7 +135,7 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
                 <div className="h-full bg-[#ccff00] transition-all duration-700" style={{ width: `${pct}%` }} />
             </div>
 
-            <div className="grid px-4 py-2 bg-white/[0.03] border-b border-white/[0.05]" style={{ gridTemplateColumns: isSimple ? '24px 1fr 34px 34px 34px 34px 34px 42px 42px' : '24px 1fr 32px 32px 32px 32px 32px 38px 38px 42px' }}>
+            <div className="grid px-4 py-2 bg-white/[0.03] border-b border-white/[0.05]" style={{ gridTemplateColumns: isSimple ? `${rankCol} 1fr 34px 34px 34px 34px 34px 42px 42px` : `${rankCol} 1fr 32px 32px 32px 32px 32px 38px 38px 42px` }}>
                 <span className="text-[8px] font-black text-gray-700 uppercase tracking-wider text-center">#</span>
                 <span className="text-[8px] font-black text-gray-700 uppercase tracking-wider pl-1">{isSimple ? 'Jugador' : 'Pareja'}</span>
                 <span className="text-[8px] font-black text-gray-700 uppercase tracking-wider text-center">PJ</span>
@@ -154,16 +155,16 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
                     const diff = row.JF - row.JC;
                     return (
                         <div key={row.id} className={`grid px-4 py-3 items-center transition-colors hover:bg-white/[0.03] ${isLeader ? 'bg-[#ccff00]/[0.04]' : ''}`}
-                            style={{ gridTemplateColumns: isSimple ? '24px 1fr 34px 34px 34px 34px 34px 42px 42px' : '24px 1fr 32px 32px 32px 32px 32px 38px 38px 42px' }}>
+                            style={{ gridTemplateColumns: isSimple ? `${rankCol} 1fr 34px 34px 34px 34px 34px 42px 42px` : `${rankCol} 1fr 32px 32px 32px 32px 32px 38px 38px 42px` }}>
                             <div className="flex justify-center">
                                 {idx === 0 ? (
-                                    <div className="w-5 h-5 rounded-md bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center">
+                                    <div className="w-5 h-5 rounded-md bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center shrink-0">
                                         <Trophy className="w-2.5 h-2.5 text-yellow-400" />
                                     </div>
                                 ) : qualifying ? (
-                                    <div className="w-5 h-5 rounded-md bg-[#ccff00]/20 border border-[#ccff00]/40 flex items-center justify-center text-[7px] font-black text-[#ccff00]">{idx + 1}</div>
+                                    <div className={`${idx + 1 >= 10 ? 'min-w-5 px-1' : 'w-5'} h-5 rounded-md bg-[#ccff00]/20 border border-[#ccff00]/40 flex items-center justify-center font-black text-[#ccff00] shrink-0 tabular-nums ${idx + 1 >= 10 ? 'text-[6px]' : 'text-[7px]'}`}>{idx + 1}</div>
                                 ) : (
-                                    <div className="w-5 h-5 rounded-md bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[7px] font-black text-gray-600">{idx + 1}</div>
+                                    <div className={`${idx + 1 >= 10 ? 'min-w-5 px-1' : 'w-5'} h-5 rounded-md bg-white/[0.04] border border-white/[0.06] flex items-center justify-center font-black text-gray-600 shrink-0 tabular-nums ${idx + 1 >= 10 ? 'text-[6px]' : 'text-[7px]'}`}>{idx + 1}</div>
                                 )}
                             </div>
                             <div className="flex items-center gap-1.5 min-w-0 pl-1">

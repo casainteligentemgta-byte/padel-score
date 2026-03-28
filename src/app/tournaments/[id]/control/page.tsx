@@ -1298,7 +1298,7 @@ function StandingsView({ tournament, matches }: { tournament: any; matches: Enri
                                     return (
                                         <tr key={tr.id} className="hover:bg-white/[0.01] transition-colors group">
                                             <td className="px-5 py-5">
-                                                <span className={`w-7 h-7 flex items-center justify-center rounded-xl text-[11px] font-black italic border transition-all duration-300
+                                                <span className={`${idx + 1 >= 10 ? 'min-w-7 px-1.5 text-[10px]' : 'w-7 text-[11px]'} h-7 flex items-center justify-center rounded-xl font-black italic border transition-all duration-300 tabular-nums shrink-0
                                                     ${idx === 0 ? 'bg-padel-primary/20 border-padel-primary/50 text-padel-primary shadow-[0_0_20px_rgba(204,255,0,0.15)] scale-110' : 
                                                       idx === 1 ? 'bg-white/10 border-white/20 text-white shadow-lg' : 'bg-transparent border-white/5 text-gray-600'}`}>
                                                     {idx + 1}

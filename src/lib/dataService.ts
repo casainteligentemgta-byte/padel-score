@@ -2,6 +2,7 @@ import { getSupabaseClient } from './supabase/client';
 import { sanitizeString } from './apiValidation';
 import { getAuthHeaders } from './apiAuth';
 import { getScoringRules } from './matchScoringRules';
+import { syncMatchOrderFields } from './matchOrderMeta';
 
 const supabase = () => {
     const c = getSupabaseClient();
@@ -106,6 +107,38 @@ function sanitizeObject(obj: any): any {
 }
 
 /**
+ * Sets ganados desde setScores (+ STB si aún no hay ganador) cuando `sets.t1`/`t2` van desfasados
+ * (simulación, merge realtime parcial, marcador que escribe solo setScores).
+ */
+function inferSetWinsFromMarks(m: any, need: number): { w1: number; w2: number } {
+    let w1 = 0;
+    let w2 = 0;
+    const scores = m?.setScores;
+    if (Array.isArray(scores)) {
+        for (const row of scores) {
+            if (!row || typeof row !== 'object') continue;
+            const o = row as Record<string, unknown>;
+            const a = Number(o.t1 ?? (row as any).team1 ?? (row as any).local);
+            const b = Number(o.t2 ?? (row as any).team2 ?? (row as any).visitante);
+            if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+            if (a > b) w1++;
+            else if (b > a) w2++;
+        }
+    }
+    const stb = m?.superTiebreakScore;
+    if (stb && typeof stb === 'object' && w1 < need && w2 < need) {
+        const o = stb as Record<string, unknown>;
+        const a = Number(o.t1 ?? (stb as any).team1);
+        const b = Number(o.t2 ?? (stb as any).team2);
+        if (Number.isFinite(a) && Number.isFinite(b) && a !== b && (a > 0 || b > 0)) {
+            if (a > b) w1++;
+            else w2++;
+        }
+    }
+    return { w1, w2 };
+}
+
+/**
  * Hub del torneo — ciclo de vida (una sección excluye a las otras salvo datos incoherentes en BD):
  * 1. Por comenzar: aún no han empezado (PENDING/SCHEDULED), no en pista activa en pizarra.
  * 2. En vivo: iniciados (WARM_UP, IN_PROGRESS, LIVE, …) y no terminados; o en pizarra con partido activo (ver merge en page).
@@ -165,10 +198,9 @@ export const dataService = {
 
         if (t1 >= need || t2 >= need) return true;
 
-        const stb = m?.superTiebreakScore;
-        if (stb && typeof stb === 'object' && (t1 >= 2 || t2 >= 2)) return true;
-        const scores = m?.setScores;
-        if (Array.isArray(scores) && scores.length >= 2 && (t1 >= 2 || t2 >= 2)) return true;
+        const inferred = inferSetWinsFromMarks(m, need);
+        if (inferred.w1 >= need || inferred.w2 >= need) return true;
+
         return false;
     },
 
@@ -422,7 +454,12 @@ export const dataService = {
         if (currentStatus === 'FINISHED' && nextStatus !== 'FINISHED') {
             throw new Error('El partido ya está FINISHED y no puede modificarse.');
         }
-        const merged = { ...(row?.data || {}), ...patch };
+        const merged = syncMatchOrderFields({
+            ...(row?.data || {}),
+            ...patch,
+            id: matchId,
+        });
+        if ('id' in merged) delete merged.id;
         const { error } = await supabase()
             .from('tournament_matches')
             .update({ data: merged, updated_at: now() })
@@ -455,12 +492,14 @@ export const dataService = {
     async createMatch(tournamentId: string, data: any) {
         const id = data.id || crypto.randomUUID?.() || `m_${Date.now()}`;
         const { id: _id, ...rest } = data;
+        const synced = syncMatchOrderFields({ ...rest, id });
+        const { id: _dropId, ...blob } = synced;
         const { error } = await supabase()
             .from('tournament_matches')
             .insert({
                 id,
                 tournament_id: tournamentId,
-                data: rest,
+                data: blob,
                 created_at: now(),
                 updated_at: now(),
             });
@@ -474,10 +513,12 @@ export const dataService = {
         const rows = matchesData.map((data) => {
             const id = data.id || crypto.randomUUID?.() || `m_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
             const { id: _id, ...rest } = data;
+            const synced = syncMatchOrderFields({ ...rest, id });
+            const { id: _dropId, ...blob } = synced;
             return {
                 id,
                 tournament_id: tournamentId,
-                data: rest,
+                data: blob,
                 created_at: now(),
                 updated_at: now(),
             };

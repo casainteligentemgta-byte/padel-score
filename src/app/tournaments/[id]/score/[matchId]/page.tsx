@@ -143,9 +143,14 @@ export default function RefereeScoreboard() {
         return entries.sort((a, b) => a[0].localeCompare(b[0])).slice(0, 6);
     }, [animacionesMarcador]);
 
+    const matchFormatForRules =
+        match?.matchFormat ||
+        match?.match_format ||
+        (tournament as any)?.rrMatchFormat ||
+        tournament?.matchFormat;
     const scoringRules = useMemo(
-        () => getScoringRules(match?.matchFormat || tournament?.matchFormat, tournament?.tieBreakType),
-        [match?.matchFormat, tournament?.matchFormat, tournament?.tieBreakType]
+        () => getScoringRules(matchFormatForRules, tournament?.tieBreakType),
+        [matchFormatForRules, tournament?.tieBreakType]
     );
 
     const handlePadAnimacion = async (animId: string) => {
@@ -927,7 +932,10 @@ export default function RefereeScoreboard() {
     };
 
     const winSet = async (side: 't1' | 't2', finalGames: { t1: number, t2: number }) => {
-        const rules = getScoringRules(match.matchFormat || tournament?.matchFormat, tournament?.tieBreakType);
+        const rules = getScoringRules(
+            match.matchFormat || match.match_format || (tournament as any)?.rrMatchFormat || tournament?.matchFormat,
+            tournament?.tieBreakType,
+        );
         let newSets = { t1: match.sets?.t1 || 0, t2: match.sets?.t2 || 0 };
         newSets[side]++;
 
@@ -1468,17 +1476,17 @@ export default function RefereeScoreboard() {
                     </div>
 
                     {/* Vertical Stats (Games/Sets) on the inner edge */}
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 z-20 bg-black/20 backdrop-blur-md border border-white/5 py-4 px-2.5 rounded-2xl">
-                        <div className="flex flex-col items-center">
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 z-20 bg-black/20 backdrop-blur-md border border-white/5 py-4 px-2.5 rounded-2xl min-w-[3rem]">
+                        <div className="flex flex-col items-center w-full">
                             <span className="text-[8px] font-black uppercase text-gray-500 tracking-[0.2em] mb-1">G</span>
-                            <span className="text-4xl font-black italic tabular-nums text-padel-primary leading-none">
+                            <span className={`font-black italic tabular-nums text-padel-primary leading-none text-center w-full ${(match.games?.t1 ?? 0) >= 10 ? 'text-3xl' : 'text-4xl'}`}>
                                 {match.games?.t1 ?? 0}
                             </span>
                         </div>
                         <div className="w-6 h-px bg-white/10" />
-                        <div className="flex flex-col items-center">
+                        <div className="flex flex-col items-center w-full">
                             <span className="text-[8px] font-black uppercase text-gray-500 tracking-[0.2em] mb-1">S</span>
-                            <span className="text-4xl font-black italic tabular-nums text-white leading-none">
+                            <span className={`font-black italic tabular-nums text-white leading-none text-center w-full ${(match.sets?.t1 ?? 0) >= 10 ? 'text-3xl' : 'text-4xl'}`}>
                                 {match.sets?.t1 ?? 0}
                             </span>
                         </div>
@@ -1495,7 +1503,7 @@ export default function RefereeScoreboard() {
                             <Minus className="w-5 h-5" />
                         </motion.button>
 
-                        <div className="flex flex-col items-center px-4 min-w-[80px]">
+                        <div className={`flex flex-col items-center px-4 ${String(match.points?.t1 || '0').length >= 2 ? 'min-w-[96px]' : 'min-w-[80px]'}`}>
                             <span className="text-[8px] font-black uppercase text-gray-500 tracking-widest mb-0.5">Points</span>
                             <AnimatePresence mode="wait">
                                 <motion.span
@@ -1503,7 +1511,7 @@ export default function RefereeScoreboard() {
                                     initial={{ y: 5, opacity: 0 }}
                                     animate={{ y: 0, opacity: 1 }}
                                     exit={{ y: -5, opacity: 0 }}
-                                    className="text-4xl font-black italic tabular-nums text-white leading-none text-glow"
+                                    className={`font-black italic tabular-nums text-white leading-none text-glow text-center ${String(match.points?.t1 || '0').length >= 2 ? 'text-3xl' : 'text-4xl'}`}
                                 >
                                     {match.points?.t1 || '0'}
                                 </motion.span>
@@ -1527,7 +1535,7 @@ export default function RefereeScoreboard() {
                                     key={i}
                                     whileHover={{ scale: 1.02, boxShadow: '0 6px 20px -4px rgba(204,255,0,0.25)' }}
                                     whileTap={{ scale: 0.92, boxShadow: 'inset 0 3px 8px rgba(0,0,0,0.4)' }}
-                                    className="aspect-square min-h-[38px] rounded-xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 text-[10px] font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors"
+                                    className={`aspect-square min-h-[38px] rounded-xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors ${i >= 10 ? 'text-[8px] px-0.5' : 'text-[10px]'}`}
                                 >
                                     {i}
                                 </motion.button>
@@ -1539,7 +1547,7 @@ export default function RefereeScoreboard() {
                                     key={i}
                                     whileHover={{ scale: 1.02, boxShadow: '0 6px 20px -4px rgba(204,255,0,0.25)' }}
                                     whileTap={{ scale: 0.92, boxShadow: 'inset 0 3px 8px rgba(0,0,0,0.4)' }}
-                                    className="aspect-square min-h-[38px] rounded-xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 text-[10px] font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors"
+                                    className={`aspect-square min-h-[38px] rounded-xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors ${i >= 10 ? 'text-[8px] px-0.5' : 'text-[10px]'}`}
                                 >
                                     {i}
                                 </motion.button>
@@ -1580,17 +1588,17 @@ export default function RefereeScoreboard() {
                     </div>
 
                     {/* Vertical Stats (Games/Sets) on the inner edge */}
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 z-20 bg-black/20 backdrop-blur-md border border-white/5 py-4 px-2.5 rounded-2xl">
-                        <div className="flex flex-col items-center">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 z-20 bg-black/20 backdrop-blur-md border border-white/5 py-4 px-2.5 rounded-2xl min-w-[3rem]">
+                        <div className="flex flex-col items-center w-full">
                             <span className="text-[8px] font-black uppercase text-gray-500 tracking-[0.2em] mb-1">G</span>
-                            <span className="text-4xl font-black italic tabular-nums text-padel-primary leading-none">
+                            <span className={`font-black italic tabular-nums text-padel-primary leading-none text-center w-full ${(match.games?.t2 ?? 0) >= 10 ? 'text-3xl' : 'text-4xl'}`}>
                                 {match.games?.t2 ?? 0}
                             </span>
                         </div>
                         <div className="w-6 h-px bg-white/10" />
-                        <div className="flex flex-col items-center">
+                        <div className="flex flex-col items-center w-full">
                             <span className="text-[8px] font-black uppercase text-gray-500 tracking-[0.2em] mb-1">S</span>
-                            <span className="text-4xl font-black italic tabular-nums text-white leading-none">
+                            <span className={`font-black italic tabular-nums text-white leading-none text-center w-full ${(match.sets?.t2 ?? 0) >= 10 ? 'text-3xl' : 'text-4xl'}`}>
                                 {match.sets?.t2 ?? 0}
                             </span>
                         </div>
@@ -1607,7 +1615,7 @@ export default function RefereeScoreboard() {
                             <Minus className="w-5 h-5" />
                         </motion.button>
 
-                        <div className="flex flex-col items-center px-4 min-w-[80px]">
+                        <div className={`flex flex-col items-center px-4 ${String(match.points?.t2 || '0').length >= 2 ? 'min-w-[96px]' : 'min-w-[80px]'}`}>
                             <span className="text-[8px] font-black uppercase text-gray-500 tracking-widest mb-0.5">Points</span>
                             <AnimatePresence mode="wait">
                                 <motion.span
@@ -1615,7 +1623,7 @@ export default function RefereeScoreboard() {
                                     initial={{ y: 5, opacity: 0 }}
                                     animate={{ y: 0, opacity: 1 }}
                                     exit={{ y: -5, opacity: 0 }}
-                                    className="text-4xl font-black italic tabular-nums text-white leading-none text-glow"
+                                    className={`font-black italic tabular-nums text-white leading-none text-glow text-center ${String(match.points?.t2 || '0').length >= 2 ? 'text-3xl' : 'text-4xl'}`}
                                 >
                                     {match.points?.t2 || '0'}
                                 </motion.span>
@@ -1639,7 +1647,7 @@ export default function RefereeScoreboard() {
                                     key={i}
                                     whileHover={{ scale: 1.02, boxShadow: '0 6px 20px -4px rgba(204,255,0,0.25)' }}
                                     whileTap={{ scale: 0.92, boxShadow: 'inset 0 3px 8px rgba(0,0,0,0.4)' }}
-                                    className="aspect-square min-h-[38px] rounded-xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 text-[10px] font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors"
+                                    className={`aspect-square min-h-[38px] rounded-xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors ${i >= 10 ? 'text-[8px] px-0.5' : 'text-[10px]'}`}
                                 >
                                     {i}
                                 </motion.button>
@@ -1651,7 +1659,7 @@ export default function RefereeScoreboard() {
                                     key={i}
                                     whileHover={{ scale: 1.02, boxShadow: '0 6px 20px -4px rgba(204,255,0,0.25)' }}
                                     whileTap={{ scale: 0.92, boxShadow: 'inset 0 3px 8px rgba(0,0,0,0.4)' }}
-                                    className="aspect-square min-h-[38px] rounded-xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 text-[10px] font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors"
+                                    className={`aspect-square min-h-[38px] rounded-xl bg-gradient-to-b from-zinc-700/90 to-zinc-900 border border-white/20 font-black tabular-nums text-white/90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.5)] hover:border-padel-primary/40 hover:from-zinc-600/90 hover:to-zinc-800 active:from-zinc-800 active:to-zinc-950 transition-colors ${i >= 10 ? 'text-[8px] px-0.5' : 'text-[10px]'}`}
                                 >
                                     {i}
                                 </motion.button>

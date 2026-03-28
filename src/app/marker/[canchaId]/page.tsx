@@ -440,6 +440,17 @@ export default function MarkerControlPage() {
             // No volver a vaciar la pizarra aquí: antes borraba el siguiente partido y el mapping.
             if (finalized) return;
 
+            const tidEarly = String(curData?.torneo_id || '').trim();
+            const pidEarly = String(curData?.partido_id || '').trim();
+            // Partido real del torneo: no vaciar pizarra sin FINISHED en BD (el hub no lo mostraría en Finalizados).
+            if (tidEarly && pidEarly && !pidEarly.startsWith('live_')) {
+                alert(
+                    'No se pudo guardar el partido como finalizado en el torneo (conexión o error al escribir). ' +
+                        'La pizarra no se ha limpiado para no perder el estado. Revisa la red e inténtalo de nuevo.',
+                );
+                return;
+            }
+
             await dataService.setPizarraCanchaState(canchaId, {
                 estado: 'espera',
                 active_match_id: null,
@@ -745,9 +756,12 @@ export default function MarkerControlPage() {
     };
 
     const mustContinueAfterFirstSet = (m: any, newSets: { local: number; visitante: number }) => {
+        const rules = getRulesSafe(m);
+        // Formato a 1 set: al cerrar el único set el partido debe terminar (no forzar “seguir”).
+        if (rules.setsToWinMatch <= 1) return false;
         const totalFinishedSets = (newSets.local || 0) + (newSets.visitante || 0);
         if (totalFinishedSets !== 1) return false;
-        // Regla operativa solicitada: nunca terminar partido al cerrar el primer set.
+        // 2+ sets: nunca dar el partido por terminado solo al ganar el primer set.
         return true;
     };
 

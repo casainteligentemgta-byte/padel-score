@@ -77,6 +77,13 @@ export default function GenericStreamOverlay() {
     const primaryColor = tournament?.broadcastingSettings?.primaryColor || '#ccff00';
     const isMedicalTimeout = activeMatch.status === MatchStatus.PAUSED;
 
+    const g1 = Number(activeMatch.games?.t1 ?? 0) || 0;
+    const g2 = Number(activeMatch.games?.t2 ?? 0) || 0;
+    const gameBox = (n: number) =>
+        n >= 10
+            ? 'min-w-8 h-8 px-1 rounded-lg flex items-center justify-center font-black italic text-base tabular-nums bg-white/10'
+            : 'w-8 h-8 rounded-lg flex items-center justify-center font-black italic text-lg tabular-nums bg-white/10';
+
     return (
         <div className="fixed inset-0 pointer-events-none font-outfit overflow-hidden">
             {/* Bottom Scoreboard */}
@@ -106,8 +113,8 @@ export default function GenericStreamOverlay() {
                             )}
                         </div>
                         <div className="flex items-center gap-2 ml-4">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black italic text-lg bg-white/10" style={{ border: `1px solid ${primaryColor}20`, color: primaryColor }}>
-                                {activeMatch.games?.t1 || 0}
+                            <div className={gameBox(g1)} style={{ border: `1px solid ${primaryColor}20`, color: primaryColor }}>
+                                {g1}
                             </div>
                         </div>
                     </div>
@@ -123,8 +130,8 @@ export default function GenericStreamOverlay() {
                     {/* Team 2 */}
                     <div className="flex-1 flex items-center px-8 text-right relative justify-end">
                         <div className="flex items-center gap-2 mr-4">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black italic text-lg bg-white/10" style={{ border: `1px solid ${primaryColor}20`, color: primaryColor }}>
-                                {activeMatch.games?.t2 || 0}
+                            <div className={gameBox(g2)} style={{ border: `1px solid ${primaryColor}20`, color: primaryColor }}>
+                                {g2}
                             </div>
                         </div>
                         <div className="flex flex-col flex-1 min-w-0">

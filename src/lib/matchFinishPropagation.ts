@@ -119,16 +119,24 @@ export async function persistMatchFinishWithPropagation(params: {
 
     await updateMatch(tournamentId, matchId, stripMatchForPersistence(finished));
 
-    await Promise.all(
-        finalMatches
-            .filter((m) => m.id !== matchId)
-            .map((m) =>
-                updateMatch(tournamentId, m.id, {
-                    ...stripMatchForPersistence(m),
-                    scheduledTime: m.scheduledTime,
-                })
-            )
+    const others = finalMatches.filter((m) => m.id !== matchId);
+    const settled = await Promise.allSettled(
+        others.map((m) =>
+            updateMatch(tournamentId, m.id, {
+                ...stripMatchForPersistence(m),
+                scheduledTime: m.scheduledTime,
+            })
+        )
     );
+    settled.forEach((r, i) => {
+        if (r.status === 'rejected') {
+            console.warn(
+                '[persistMatchFinishWithPropagation] Fallo al actualizar partido derivado:',
+                others[i]?.id,
+                r.reason,
+            );
+        }
+    });
 
     return { finalMatches };
 }

@@ -66,6 +66,14 @@ export default function StreamerOverlay() {
 
     const isMedicalTimeout = match.status === MatchStatus.PAUSED;
 
+    const setGamesBoxClass = (val: number | string) => {
+        const n = typeof val === 'number' ? val : Number(val);
+        const wide = Number.isFinite(n) && n >= 10;
+        return wide
+            ? 'min-w-8 h-8 px-1 rounded-lg flex items-center justify-center font-black italic text-base tabular-nums'
+            : 'w-8 h-8 rounded-lg flex items-center justify-center font-black italic text-lg tabular-nums';
+    };
+
     return (
         <div className="fixed inset-0 pointer-events-none font-outfit overflow-hidden">
             {/* Minimal Background (Chroma Green option or transparent) */}
@@ -136,9 +144,10 @@ export default function StreamerOverlay() {
                             {[1, 2, 3].map(setNum => {
                                 const currentSetCount = (match.sets?.t1 || 0) + (match.sets?.t2 || 0) + 1;
                                 if (setNum > currentSetCount && !match.games?.t1 && !match.games?.t2) return null;
+                                const t2Val = setNum === currentSetCount ? (match.games?.t2 || 0) : '-';
                                 return (
-                                    <div key={setNum} className={`w-8 h-8 rounded-lg flex items-center justify-center font-black italic text-lg ${setNum === currentSetCount ? 'bg-white/10 text-white' : 'text-white/20'}`} style={setNum === currentSetCount ? { border: `1px solid ${primaryColor}20`, color: primaryColor } : {}}>
-                                        {setNum === currentSetCount ? (match.games?.t2 || 0) : '-'}
+                                    <div key={setNum} className={`${setGamesBoxClass(t2Val as number | string)} ${setNum === currentSetCount ? 'bg-white/10 text-white' : 'text-white/20'}`} style={setNum === currentSetCount ? { border: `1px solid ${primaryColor}20`, color: primaryColor } : {}}>
+                                        {t2Val}
                                     </div>
                                 );
                             })}

@@ -139,20 +139,25 @@ export default function TournamentDashboard() {
         let cancelled = false;
         const loadMarkerLiveIds = async () => {
             try {
-                const courtNums = new Set<number>();
+                const totalCourts = Number((tournament as any)?.totalCourts ?? 0);
+                let maxFromMatches = 0;
                 matches.forEach((m: any) => {
                     const c = Number(m?.court ?? (m?.courtIndex != null ? Number(m.courtIndex) + 1 : 0));
-                    if (Number.isFinite(c) && c > 0) courtNums.add(c);
+                    if (Number.isFinite(c) && c > 0) maxFromMatches = Math.max(maxFromMatches, c);
                 });
-                const totalCourts = Number((tournament as any)?.totalCourts ?? 0);
-                if (totalCourts > 0) {
-                    for (let c = 1; c <= totalCourts; c++) courtNums.add(c);
-                }
+                // Antes: si totalCourts=0 y los partidos sin pista, courtNums quedaba vacío → nunca se leía
+                // pizarra_cancha_state (p. ej. marcador en cancha_1) y "En vivo" del hub ignoraba el partido.
+                const maxPoll = Math.min(16, Math.max(totalCourts, maxFromMatches, 4));
+                const courtNums: number[] = [];
+                for (let c = 1; c <= maxPoll; c++) courtNums.push(c);
+
+                const normTid = (s: string) => String(s || '').replace(/-/g, '').toLowerCase();
+                const sameTournament = (a: unknown, tid: string) => normTid(String(a ?? '')) === normTid(tid);
 
                 const liveIds = new Set<string>();
                 const liveDataByMatch: Record<string, any> = {};
                 const activeIds = new Set<string>();
-                const checks = Array.from(courtNums).map(async (courtNum) => {
+                const checks = courtNums.map(async (courtNum) => {
                     const state = await dataService.getPizarraCanchaState(`cancha_${courtNum}`);
                     const data = state?.data || {};
                     const est = String(data?.estado || '');
@@ -162,7 +167,7 @@ export default function TournamentDashboard() {
                     if (activePid && !activePid.startsWith('live_')) activeIds.add(activePid);
                     // Marcador: en_vivo = partido en curso; ready = siguiente asignado con marcador (sigue mostrando P/G/S)
                     if (est !== 'en_vivo' && est !== 'ready') return;
-                    if (String(data?.torneo_id || '') !== String(id)) return;
+                    if (!sameTournament(data?.torneo_id, String(id))) return;
                     const pid = String(data?.partido_id || '').trim();
                     if (!pid || pid.startsWith('live_')) return;
                     liveIds.add(pid);
@@ -393,9 +398,8 @@ export default function TournamentDashboard() {
         };
     }, [id, authLoading, activeGroup, tournament?.teams, isAdmin, user, isMigrating]);
 
-    // Realtime: fusionar siempre el JSON `data` del partido (no solo si cambió status).
-    // Si solo miramos before !== after, `payload.old` a menudo no trae data.status (replica identity)
-    // y el hub puede quedarse en LIVE sin listar el partido en Finalizados.
+    // Realtime: en INSERT/UPDATE no fusionar fila a mano — chocaba con subscribeToMatches (getMatches)
+    // y podía dejar status PENDING encima de un partido ya FINISHED en BD. Solo DELETE optimista + refresh.
     useEffect(() => {
         if (!id) return;
         const supabase = getSupabaseClient();
@@ -415,25 +419,6 @@ export default function TournamentDashboard() {
                         router.refresh();
                         return;
                     }
-                    const row = payload.new as any;
-                    const matchId = String(row?.id || '');
-                    const rowData = row?.data;
-                    if (!matchId || !rowData || typeof rowData !== 'object') {
-                        router.refresh();
-                        return;
-                    }
-                    setMatches((prev) =>
-                        prev.map((m) =>
-                            String(m?.id) !== matchId
-                                ? m
-                                : {
-                                      ...m,
-                                      ...rowData,
-                                      id: m.id,
-                                  }
-                        )
-                    );
-
                     router.refresh();
                 }
             )
@@ -1069,7 +1054,13 @@ export default function TournamentDashboard() {
             : filteredMatches;
 
     const isLiveDashboard = activeTab === 'En Vivo' && filteredMatches.length > 0 && filteredMatches.length <= _numCanchas;
-    const enableCourtScroll = _numCanchas > 3 && (activeTab === 'Por Comenzar' || isLiveDashboard);
+    /** Scroll vertical: Por comenzar siempre (antes con ≤3 pistas quedaba overflow-hidden). En vivo por pista, !pr-0 como antes. */
+    const mainScrollOverflowClass =
+        activeTab === 'Por Comenzar'
+            ? 'overflow-y-auto min-h-0'
+            : isLiveDashboard
+              ? 'overflow-y-auto min-h-0 !pr-0'
+              : '';
 
     const getLiveConfig = (count: number) => {
         // Uniform config for rows of three as requested
@@ -1519,7 +1510,7 @@ export default function TournamentDashboard() {
                     <div className="divide-y divide-white/5">
                         {rows.map((row, idx) => (
                             <div key={row.id} className="flex items-center gap-3 px-4 py-3">
-                                <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black ${idx === 0 ? 'bg-[#ccff00] text-black' : idx === 1 ? 'bg-white/20 text-white' : 'bg-white/5 text-gray-500'}`}>{idx + 1}</span>
+                                <span className={`${idx + 1 >= 10 ? 'min-w-5 px-1 text-[9px]' : 'w-5 text-[10px]'} h-5 flex items-center justify-center rounded-full font-black tabular-nums shrink-0 ${idx === 0 ? 'bg-[#ccff00] text-black' : idx === 1 ? 'bg-white/20 text-white' : 'bg-white/5 text-gray-500'}`}>{idx + 1}</span>
                                 <span className="flex-1 text-xs font-bold text-white truncate">{row.name}</span>
                                 <div className="flex gap-3 text-[10px] font-mono text-gray-400">
                                     <span title="Pts">{row.mWon}P</span>
@@ -1741,7 +1732,7 @@ export default function TournamentDashboard() {
                                         return (
                                             <tr key={entry.id} className={`group hover:bg-white/[0.03] transition-colors ${isPodium ? 'border-l-2 border-padel-primary/40' : ''}`}>
                                                 <td className="py-3 px-2">
-                                                    <span className={`w-5 h-5 flex items-center justify-center rounded-md text-[8px] font-black italic ${posColor}`}>{idx + 1}</span>
+                                                    <span className={`${idx + 1 >= 10 ? 'min-w-5 px-1 text-[7px]' : 'w-5 h-5 text-[8px]'} flex items-center justify-center rounded-md font-black italic tabular-nums shrink-0 ${posColor}`}>{idx + 1}</span>
                                                 </td>
                                                 <td className="py-3 px-2 min-w-[120px]">
                                                     <div className="flex items-center gap-2">
@@ -1853,43 +1844,41 @@ export default function TournamentDashboard() {
                 </div>
             </header>
 
-            {/* Tabs for content switching - Moved to top as requested */}
-            {!isLiveDashboard && (
-                <nav className="bg-[#0a0a0a]/60 backdrop-blur-md border-b border-white/5 py-3 sticky top-[4.5rem] z-50">
-                    <div className="max-w-4xl mx-auto px-4 overflow-x-auto hide-scrollbar">
-                        <div className="flex flex-nowrap items-center gap-2">
-                            {visibleTabs.map((tab, tabIdx) => {
-                                const isLive = tab === 'En Vivo';
-                                const isActive = activeTab === tab;
-                                return (
-                                    <button
-                                        key={`tab-top-${tabIdx}-${tab}`}
-                                        onClick={() => setActiveTab(tab)}
-                                        className={`flex-1 min-w-[90px] px-4 py-2.5 rounded-xl text-[10px] font-black italic uppercase tracking-widest transition-all duration-300 transform active:scale-95 border
-                                            ${isActive
-                                                ? isLive
-                                                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 border-red-500/50'
-                                                    : 'bg-padel-primary text-black shadow-lg shadow-padel-primary/20 border-padel-primary/50'
-                                                : 'bg-white/5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300 border-white/5'
-                                            }`}
-                                    >
-                                        {isLive ? (
-                                            <span className="flex items-center justify-center gap-1.5">
-                                                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : 'bg-red-500'} animate-pulse`} />
-                                                {tab}
-                                            </span>
-                                        ) : tab}
-                                    </button>
-                                );
-                            })}
-                        </div>
+            {/* Tabs: siempre visibles (también en vista “En vivo” por pista) para poder cambiar de filtro sin ir a Cuadro */}
+            <nav className="bg-[#0a0a0a]/60 backdrop-blur-md border-b border-white/5 py-3 sticky top-[4.5rem] z-50">
+                <div className={`mx-auto px-4 overflow-x-auto hide-scrollbar ${isLiveDashboard ? 'max-w-none' : 'max-w-4xl'}`}>
+                    <div className="flex flex-nowrap items-center gap-2">
+                        {visibleTabs.map((tab, tabIdx) => {
+                            const isLive = tab === 'En Vivo';
+                            const isActive = activeTab === tab;
+                            return (
+                                <button
+                                    key={`tab-top-${tabIdx}-${tab}`}
+                                    onClick={() => setActiveTab(tab)}
+                                    className={`flex-1 min-w-[90px] px-4 py-2.5 rounded-xl text-[10px] font-black italic uppercase tracking-widest transition-all duration-300 transform active:scale-95 border
+                                        ${isActive
+                                            ? isLive
+                                                ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 border-red-500/50'
+                                                : 'bg-padel-primary text-black shadow-lg shadow-padel-primary/20 border-padel-primary/50'
+                                            : 'bg-white/5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300 border-white/5'
+                                        }`}
+                                >
+                                    {isLive ? (
+                                        <span className="flex items-center justify-center gap-1.5">
+                                            <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : 'bg-red-500'} animate-pulse`} />
+                                            {tab}
+                                        </span>
+                                    ) : tab}
+                                </button>
+                            );
+                        })}
                     </div>
-                </nav>
-            )}
+                </div>
+            </nav>
 
             {/* Content Area (pizarra / cuadro / listados) */}
-            <div className={`ipad-scroll-area pb-20 ${isLiveDashboard ? (enableCourtScroll ? 'overflow-y-auto !pr-0' : 'overflow-hidden !pr-0') : (activeTab === 'Por Comenzar' ? (enableCourtScroll ? 'overflow-y-auto' : 'overflow-hidden') : '')}`}>
-                <main className={`${isLiveDashboard ? 'max-w-none w-full min-h-0 p-3 py-5' : activeTab === 'Por Comenzar' ? 'max-w-4xl mx-auto w-full px-4 py-6 h-full flex flex-col' : 'max-w-4xl mx-auto w-full px-4 py-10'} transition-all duration-500`}>
+            <div className={`ipad-scroll-area pb-20 ${mainScrollOverflowClass}`}>
+                <main className={`${isLiveDashboard ? 'max-w-none w-full min-h-0 p-3 py-5' : activeTab === 'Por Comenzar' ? 'max-w-4xl mx-auto w-full px-4 py-6 min-h-0 flex flex-col' : 'max-w-4xl mx-auto w-full px-4 py-10'} transition-all duration-500`}>
                     <AnimatePresence mode="wait">
                         {activeTab === 'Grupos' ? (
                             <motion.div
@@ -1935,7 +1924,7 @@ export default function TournamentDashboard() {
                                                     {calculateStandings().map((entry: any, idx: number) => (
                                                         <tr key={entry.id} className="group hover:bg-white/[0.02] transition-all">
                                                             <td className="py-6 px-4">
-                                                                <span className={`w-8 h-8 flex items-center justify-center rounded-xl text-xs font-black italic ${idx === 0 ? 'bg-padel-primary text-black' : idx < 3 ? 'bg-white/20 text-white' : 'bg-white/5 text-gray-500'}`}>{idx + 1}</span>
+                                                                <span className={`${idx + 1 >= 10 ? 'min-w-8 px-1.5 text-[10px]' : 'w-8 text-xs'} h-8 flex items-center justify-center rounded-xl font-black italic tabular-nums shrink-0 ${idx === 0 ? 'bg-padel-primary text-black' : idx < 3 ? 'bg-white/20 text-white' : 'bg-white/5 text-gray-500'}`}>{idx + 1}</span>
                                                             </td>
                                                             <td className="py-6 px-4">
                                                                 <div className="flex items-center gap-4">
@@ -1995,7 +1984,8 @@ export default function TournamentDashboard() {
                                         return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start';
                                     })()}>
                                         {displayMatches.filter((match: any) => match && match.team1 && match.team2).map((match: any, idx: number) => {
-                                            const matchNumber = matches.findIndex((m: any) => m === match || (m?.id && m.id === match?.id)) + 1;
+                                            const mi = matches.findIndex((m: any) => m?.id && match?.id && m.id === match.id);
+                                            const matchNumber = getMatchOrder(match, mi >= 0 ? mi : idx);
 
                                             // ── Resolver nombres de jugadores ──────────────────────────────────
                                             // Prioridad: teamLabel (TBD/knockout) > p1Name > p1.name > team1Name > '?'
@@ -2196,9 +2186,13 @@ export default function TournamentDashboard() {
 
                                                                         const fmt = (name: string) => {
                                                                             if (!name) return '';
-                                                                            const parts = name.trim().split(' ');
+                                                                            const trimmed = name.trim();
+                                                                            const parts = trimmed.split(/\s+/).filter(Boolean);
                                                                             if (parts.length === 1) return parts[0];
-                                                                            return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+                                                                            const last = parts[parts.length - 1];
+                                                                            // "Jugador 10", "Pareja 12", etc.: el último token es dorsal/número, no una inicial
+                                                                            if (/^\d+$/.test(last)) return trimmed;
+                                                                            return `${parts[0]} ${last[0]}.`;
                                                                         };
 
                                                                         const ROW_H = 'h-8';

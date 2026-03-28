@@ -345,6 +345,7 @@ export class ScheduleEngine {
 
             for (let p = 1; p <= matchesInRound; p++) {
                 const isFirstRound = r === 1;
+                const ord = matchCounter + 1;
                 const match: any = {
                     id: `bracket-r${r}-p${p}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
                     team1Index: isFirstRound ? pairs[p - 1]?.t1 || -1 : -1,
@@ -354,7 +355,11 @@ export class ScheduleEngine {
                     roundName: roundName,
                     bracketPosition: { round: r, position: p },
                     scheduledTime: new Date(currentTime),
-                    courtIndex: matchCounter % numCourts
+                    courtIndex: matchCounter % numCourts,
+                    match_number: ord,
+                    matchNumber: ord,
+                    order: ord,
+                    orden: ord,
                 };
 
                 bracketMatches.push(match);

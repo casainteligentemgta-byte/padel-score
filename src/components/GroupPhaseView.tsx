@@ -182,16 +182,19 @@ function ScoreInput({
 // ─── Rank badge ───────────────────────────────────────────────────────────────
 
 function RankBadge({ rank, qualifying }: { rank: number; qualifying: boolean }) {
+    const wide = rank >= 10;
+    const box = wide ? 'min-w-6 h-6 px-1' : 'w-6 h-6';
+    const numCls = wide ? 'text-[8px] tabular-nums' : 'text-[9px]';
     if (rank === 1) return (
-        <div className="w-6 h-6 rounded-md bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center">
+        <div className={`${box} rounded-md bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center shrink-0`}>
             <Trophy className="w-3 h-3 text-yellow-400" />
         </div>
     );
     if (rank === 2 && qualifying) return (
-        <div className="w-6 h-6 rounded-md bg-padel-primary/20 border border-padel-primary/40 flex items-center justify-center text-[9px] font-black text-padel-primary">2</div>
+        <div className={`${box} rounded-md bg-padel-primary/20 border border-padel-primary/40 flex items-center justify-center font-black text-padel-primary ${numCls} shrink-0`}>2</div>
     );
     return (
-        <div className="w-6 h-6 rounded-md bg-white/5 border border-white/5 flex items-center justify-center text-[9px] font-black text-gray-500">{rank}</div>
+        <div className={`${box} rounded-md bg-white/5 border border-white/5 flex items-center justify-center font-black text-gray-500 ${numCls} shrink-0`}>{rank}</div>
     );
 }
 
@@ -477,7 +480,7 @@ export default function GroupPhaseView({
                             <table className="w-full">
                                 <thead>
                                     <tr className="text-[9px] font-black uppercase tracking-widest text-gray-600 border-b border-white/5">
-                                        <th className="text-left py-3 px-5 w-8">#</th>
+                                        <th className="text-left py-3 px-5 min-w-8 w-10">#</th>
                                         <th className="text-left py-3 px-3">Pareja</th>
                                         <th className="text-center py-3 px-3 w-10" title="Partidos Jugados">PJ</th>
                                         <th className="text-center py-3 px-3 w-10" title="Partidos Ganados">PG</th>
