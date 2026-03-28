@@ -133,10 +133,20 @@ export default function RefereeScoreboard() {
 
         if (!tournament || !match) return;
         const endIso = new Date().toISOString();
+        // Última escritura con marcador completo: si solo mandamos FINISHED, un hub desincronizado
+        // puede no mostrar sets / setScores en Finalizados.
         await dataService.updateMatch(id, match.id, {
             status: MatchStatus.FINISHED,
             finishedAt: endIso,
-            actualEndTime: endIso
+            actualEndTime: endIso,
+            sets: match.sets,
+            games: match.games,
+            points: match.points,
+            setScores: match.setScores,
+            superTiebreakScore: match.superTiebreakScore,
+            isTiebreak: match.isTiebreak,
+            superTiebreak: match.superTiebreak,
+            server: match.server
         });
         // Liberar la pizarra: si queda en_vivo + partido_id, el hub sigue excluyendo la cola "Por comenzar"
         try {

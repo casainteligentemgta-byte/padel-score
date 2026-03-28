@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '@/lib/dataService';
 import { MatchStatus } from '@/types/tournament';
-import { Monitor, Wifi, WifiOff, Maximize2 } from 'lucide-react';
+import { Monitor, Wifi, WifiOff, Maximize2, Brush } from 'lucide-react';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { getSupabaseClient } from '@/lib/supabase/client';
 
@@ -27,6 +27,42 @@ interface ActiveMatch {
     status: MatchStatus;
 }
 
+function buildActiveMatches(t: any, ms: any[]): ActiveMatch[] {
+    if (!t) return [];
+    const numCanchas = Math.max(1, Number(t.totalCourts) || (t.courtNames?.length ?? 6));
+
+    const resolveTeamName = (mTeam: any, teamIdx: number) => {
+        const PLACEHOLDER_RE = /pareja|jugador|placeholder/i;
+        if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.teamLabel)) {
+            const p1 = (mTeam.p1Name || mTeam.p1?.name || '').trim();
+            const p2 = (mTeam.p2Name || mTeam.p2?.name || '').trim();
+            const hasReal = (p1 && !PLACEHOLDER_RE.test(p1)) || (p2 && !PLACEHOLDER_RE.test(p2));
+            if (hasReal) {
+                return [p1, p2].filter(Boolean).join(' · ') || '?';
+            }
+            if (mTeam.teamLabel) return mTeam.teamLabel;
+        }
+        const foundTeam = teamIdx > 0 ? (Array.isArray(t.teams) ? t.teams[teamIdx - 1] : null) : null;
+        if (!foundTeam) return `Pareja ${teamIdx || '?'}`;
+        return [(foundTeam.p1?.name || '').trim(), (foundTeam.p2?.name || '').trim()].filter(Boolean).join(' · ') || `Pareja ${teamIdx}`;
+    };
+
+    return ms
+        .filter((m: any) => {
+            const s = String(m?.status || '').toUpperCase();
+            return s === 'WARM_UP' || s === 'IN_PROGRESS';
+        })
+        .map((m: any, idx: number) => ({
+            id: m.id || `match_${idx}`,
+            court: m.court ?? (m.courtIndex !== undefined ? m.courtIndex + 1 : idx + 1),
+            team1Name: resolveTeamName(m.team1, m.team1Index),
+            team2Name: resolveTeamName(m.team2, m.team2Index),
+            status: m.status,
+        }))
+        .sort((a: ActiveMatch, b: ActiveMatch) => Number(a.court) - Number(b.court))
+        .slice(0, numCanchas);
+}
+
 export default function MonitorCanchas() {
     const id = useRouteSegment('id');
     const [tournament, setTournament] = useState<any>(null);
@@ -36,6 +72,27 @@ export default function MonitorCanchas() {
     const [highlightedCourts, setHighlightedCourts] = useState<Record<string, number>>({});
     const [focusedIdx, setFocusedIdx] = useState<number | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+    const refreshMonitorData = useCallback(async () => {
+        if (!id) return;
+        try {
+            const t = await dataService.getTournament(id);
+            const ms = await dataService.getMatches(id);
+            if (t) {
+                setTournament(t);
+                setActiveMatches(buildActiveMatches(t, ms || []));
+            }
+        } catch (e) {
+            console.warn('[Monitor] refreshMonitorData:', e);
+        }
+    }, [id]);
+
+    useEffect(() => {
+        if (!toastMsg) return;
+        const t = window.setTimeout(() => setToastMsg(null), 3500);
+        return () => window.clearTimeout(t);
+    }, [toastMsg]);
 
     // ── Fullscreen helper ──────────────────────────────────────────────────
     const toggleFullscreen = () => {
@@ -116,43 +173,7 @@ export default function MonitorCanchas() {
         const updateData = (t: any, ms: any[]) => {
             if (!t) return;
             setTournament(t);
-
-            const numCanchas = Math.max(1, Number(t.totalCourts) || (t.courtNames?.length ?? 6));
-            
-            const resolveTeamName = (mTeam: any, teamIdx: number) => {
-                const PLACEHOLDER_RE = /pareja|jugador|placeholder/i;
-                if (mTeam && (mTeam.p1 || mTeam.p1Name || mTeam.teamLabel)) {
-                    const p1 = (mTeam.p1Name || mTeam.p1?.name || '').trim();
-                    const p2 = (mTeam.p2Name || mTeam.p2?.name || '').trim();
-                    const hasReal = (p1 && !PLACEHOLDER_RE.test(p1)) || (p2 && !PLACEHOLDER_RE.test(p2));
-                    if (hasReal) {
-                        return [p1, p2].filter(Boolean).join(' · ') || '?';
-                    }
-                    if (mTeam.teamLabel) return mTeam.teamLabel;
-                }
-                const foundTeam = teamIdx > 0 ? (Array.isArray(t.teams) ? t.teams[teamIdx - 1] : null) : null;
-                if (!foundTeam) return `Pareja ${teamIdx || '?'}`;
-                return [(foundTeam.p1?.name || '').trim(), (foundTeam.p2?.name || '').trim()].filter(Boolean).join(' · ') || `Pareja ${teamIdx}`;
-            };
-
-            const processed: ActiveMatch[] = ms
-                .filter((m: any) => {
-                    const s = String(m?.status || '').toUpperCase();
-                    return s === 'WARM_UP' || s === 'IN_PROGRESS';
-                })
-                .map((m: any, idx: number) => {
-                    return {
-                        id: m.id || `match_${idx}`,
-                        court: m.court ?? (m.courtIndex !== undefined ? m.courtIndex + 1 : idx + 1),
-                        team1Name: resolveTeamName(m.team1, m.team1Index),
-                        team2Name: resolveTeamName(m.team2, m.team2Index),
-                        status: m.status,
-                    };
-                })
-                .sort((a: ActiveMatch, b: ActiveMatch) => Number(a.court) - Number(b.court))
-                .slice(0, numCanchas);
-
-            setActiveMatches(processed);
+            setActiveMatches(buildActiveMatches(t, ms));
             setLoading(false);
         };
 
@@ -256,9 +277,22 @@ export default function MonitorCanchas() {
         </div>
     );
 
+    const handleEmergencyResetSuccess = () => {
+        setToastMsg('Cancha liberada correctamente');
+        void refreshMonitorData();
+    };
+
     // ── Monitor Grid ───────────────────────────────────────────────────────
     return (
         <div className="h-screen w-screen bg-black overflow-hidden flex flex-col">
+            {toastMsg && (
+                <div
+                    className="fixed bottom-6 left-1/2 z-[200] -translate-x-1/2 px-4 py-2.5 rounded-xl bg-padel-primary text-black text-[10px] font-black uppercase tracking-widest shadow-lg border border-black/10"
+                    role="status"
+                >
+                    {toastMsg}
+                </div>
+            )}
 
             {/* ── Top bar (minimalist, se oculta en fullscreen focus) ─────── */}
             <AnimatePresence>
@@ -352,6 +386,7 @@ export default function MonitorCanchas() {
                                 isFocused={false}
                                 onClick={() => setFocusedIdx(idx)}
                                 isHighlighted={Boolean(highlightedCourts[String(match.court)])}
+                                onEmergencyResetSuccess={handleEmergencyResetSuccess}
                             />
                         ))}
 
@@ -378,15 +413,42 @@ function CourtCell({
     isFocused,
     onClick,
     isHighlighted,
+    onEmergencyResetSuccess,
 }: {
     match: ActiveMatch;
     tournamentId: string;
     isFocused: boolean;
     onClick: () => void;
     isHighlighted: boolean;
+    onEmergencyResetSuccess?: () => void;
 }) {
     const displayUrl = `/tournaments/${tournamentId}/display/${match.id}`;
     const [assigning, setAssigning] = useState<number | null>(null);
+    const [resetting, setResetting] = useState(false);
+
+    const courtStr = String(match.court ?? '').trim();
+    const canchaIdForRpc = /^cancha_/i.test(courtStr) ? courtStr : `cancha_${courtStr}`;
+
+    const handleEmergencyReset = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (
+            !window.confirm(
+                '¿Estás seguro de liberar esta cancha manualmente? El partido actual dejará de mostrarse en la TV.'
+            )
+        ) {
+            return;
+        }
+        setResetting(true);
+        try {
+            await dataService.rpcResetearCanchaEmergencia(canchaIdForRpc);
+            onEmergencyResetSuccess?.();
+        } catch (err) {
+            console.error('[Monitor] resetear_cancha_emergencia:', err);
+            alert('No se pudo liberar la cancha. Verifica el RPC en Supabase o tu conexión.');
+        } finally {
+            setResetting(false);
+        }
+    };
 
     const assignToCourt = async (courtNum: number, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -426,6 +488,15 @@ function CourtCell({
                 </div>
 
                 <div className="pointer-events-auto flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={handleEmergencyReset}
+                        disabled={resetting}
+                        title="Reset de emergencia: liberar cancha"
+                        className="p-1.5 rounded-lg bg-black/60 border border-white/5 text-red-500/50 hover:text-red-500 hover:border-red-500/30 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                    >
+                        <Brush className={`w-3.5 h-3.5 ${resetting ? 'animate-pulse' : ''}`} />
+                    </button>
                     {!isFocused && [1, 2, 3].map((n) => (
                         <button
                             key={n}

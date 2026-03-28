@@ -2166,6 +2166,17 @@ export const dataService = {
         throwIfError(error);
     },
 
+    /**
+     * Monitor admin: libera la cancha en emergencia (debe existir el RPC en Supabase).
+     * Ajusta la clave si tu función SQL usa otro nombre de parámetro (p. ej. p_cancha_id).
+     */
+    async rpcResetearCanchaEmergencia(canchaId: string): Promise<void> {
+        const { error } = await supabase().rpc('resetear_cancha_emergencia', {
+            cancha_id: canchaId,
+        });
+        throwIfError(error);
+    },
+
     subscribePizarraCanchaState(canchaId: string, callback: (state: { cancha_id: string; data: any } | null) => void): () => void {
         const db = supabase();
         this.getPizarraCanchaState(canchaId).then(callback);

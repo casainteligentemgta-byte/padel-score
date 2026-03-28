@@ -351,8 +351,9 @@ export default function TournamentDashboard() {
         };
     }, [id, authLoading, activeGroup, tournament?.teams, isAdmin, user, isMigrating]);
 
-    // Realtime estricto por cambios de estado en matches:
-    // cuando cambia `status`, refrescamos UI local y forzamos re-sync visual.
+    // Realtime: fusionar siempre el JSON `data` del partido (no solo si cambió status).
+    // Si solo miramos before !== after, `payload.old` a menudo no trae data.status (replica identity)
+    // y el hub puede quedarse en LIVE sin listar el partido en Finalizados.
     useEffect(() => {
         if (!id) return;
         const supabase = getSupabaseClient();
@@ -364,32 +365,32 @@ export default function TournamentDashboard() {
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'tournament_matches', filter: `tournament_id=eq.${id}` },
                 async (payload) => {
-                    const rowData = (payload.new as any)?.data || {};
-                    const before = String((payload.old as any)?.data?.status || '').toUpperCase();
-                    const after = String(rowData?.status || '').toUpperCase();
-
-                    const matchId = String((payload.new as any)?.id || '');
-                    if (matchId && after && before !== after) {
-                        setMatches((prev) =>
-                            prev.map((m) => {
-                                if (String(m?.id) !== matchId) return m;
-                                return {
-                                    ...m,
-                                    status: after,
-                                    finishedAt: rowData.finishedAt ?? m.finishedAt,
-                                    actualEndTime: rowData.actualEndTime ?? m.actualEndTime,
-                                    sets: rowData.sets ?? m.sets,
-                                    setScores: rowData.setScores ?? m.setScores,
-                                    superTiebreakScore: rowData.superTiebreakScore ?? m.superTiebreakScore,
-                                    score: rowData.score ?? m.score,
-                                    games: rowData.games ?? m.games,
-                                    points: rowData.points ?? m.points,
-                                    updatedAt: new Date().toISOString(),
-                                    updated_at: new Date().toISOString(),
-                                };
-                            })
-                        );
+                    if (payload.eventType === 'DELETE') {
+                        const delId = String((payload.old as any)?.id || '');
+                        if (delId) {
+                            setMatches((prev) => prev.filter((m) => String(m?.id) !== delId));
+                        }
+                        router.refresh();
+                        return;
                     }
+                    const row = payload.new as any;
+                    const matchId = String(row?.id || '');
+                    const rowData = row?.data;
+                    if (!matchId || !rowData || typeof rowData !== 'object') {
+                        router.refresh();
+                        return;
+                    }
+                    setMatches((prev) =>
+                        prev.map((m) =>
+                            String(m?.id) !== matchId
+                                ? m
+                                : {
+                                      ...m,
+                                      ...rowData,
+                                      id: m.id,
+                                  }
+                        )
+                    );
 
                     router.refresh();
                 }
