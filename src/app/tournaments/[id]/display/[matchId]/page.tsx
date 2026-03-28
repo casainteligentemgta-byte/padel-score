@@ -230,6 +230,8 @@ export default function FullScreenDisplay() {
 
     // ── Marcador en vivo del RTDB (escrito por el marker en tiempo real) ─────
     const [liveMarcador, setLiveMarcador] = useState<any>(null);
+    const [courtTransferBanner, setCourtTransferBanner] = useState<{ title: string; subtitle: string } | null>(null);
+    const courtTransferShownTsRef = useRef(0);
     const pizarraRefreshNonceBaselineRef = useRef<number | null>(null);
     const pizarraRefreshCanchaKeyRef = useRef<string>('');
     const [sponsorIdx, setSponsorIdx] = useState(0);
@@ -355,6 +357,12 @@ export default function FullScreenDisplay() {
             clearInterval(pollingInterval);
         };
     }, [match?.court, match?.courtIndex]);
+
+    useEffect(() => {
+        if (!courtTransferBanner) return;
+        const t = setTimeout(() => setCourtTransferBanner(null), 7500);
+        return () => clearTimeout(t);
+    }, [courtTransferBanner]);
 
     // 5. Obtener TODA la biblioteca de imágenes activa para el carrusel automático
     const fetchAllImages = async (sb: any) => {
@@ -1180,6 +1188,45 @@ export default function FullScreenDisplay() {
             className={`min-h-screen h-screen w-screen text-white overflow-hidden font-outfit relative flex flex-col transition-colors duration-1000 ${isFinal ? 'bg-[#000] border-8 border-[#FFD700]/20' : 'bg-[#050505]'}`}
             style={{ padding: 'clamp(6px,1vh,16px) clamp(8px,1.2vw,20px)', gap: 'clamp(4px,0.8vh,12px)' }}
         >
+            <AnimatePresence>
+                {courtTransferBanner && (
+                    <motion.div
+                        key="court-transfer-banner"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.35 }}
+                        className="fixed inset-0 z-[450] flex items-center justify-center pointer-events-none"
+                    >
+                        <div className="absolute inset-0 bg-black/88 backdrop-blur-md" />
+                        <motion.div
+                            initial={{ scale: 0.9, y: 24 }}
+                            animate={{ scale: 1, y: 0 }}
+                            className="relative z-10 text-center px-6 max-w-[min(96vw,56rem)]"
+                        >
+                            <motion.h2
+                                className="font-black italic uppercase tracking-tighter mb-5"
+                                style={{
+                                    fontSize: 'clamp(1.75rem, 7vw, 4.5rem)',
+                                    color: primaryColor,
+                                    textShadow: `0 0 50px ${primaryColor}99`,
+                                }}
+                                animate={{ scale: [1, 1.04, 1] }}
+                                transition={{ duration: 1.15, repeat: Infinity }}
+                            >
+                                {courtTransferBanner.title}
+                            </motion.h2>
+                            <p
+                                className="text-white font-black uppercase tracking-[0.28em] leading-relaxed"
+                                style={{ fontSize: 'clamp(0.7rem, 2.2vw, 1.35rem)' }}
+                            >
+                                {courtTransferBanner.subtitle}
+                            </p>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Grand Final ambient glow */}
             {isFinal && (
                 <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">

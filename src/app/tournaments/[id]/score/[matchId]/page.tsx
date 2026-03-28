@@ -26,6 +26,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { dataService } from '@/lib/dataService';
+import { getAuthHeaders } from '@/lib/apiAuth';
 import { rtdb } from '@/lib/rtdb';
 import { ref, update } from 'firebase/database';
 import { MatchStatus } from '@/types/tournament';
@@ -58,8 +59,44 @@ export default function RefereeScoreboard() {
         t2p2: '',
     });
     const [swappingCourtWith, setSwappingCourtWith] = useState<string | null>(null);
+    /** Número de pista destino mientras aplica traslado atómico (pista libre). */
+    const [courtMoveBusy, setCourtMoveBusy] = useState<number | null>(null);
 
     const matchCourt = match?.court ?? (match?.courtIndex != null ? match.courtIndex + 1 : 1);
+
+    const impliedCourtCount = useMemo(() => {
+        if (!tournament) return Math.max(6, matchCourt);
+        const names = tournament.courtNames;
+        if (Array.isArray(names) && names.length > 0) return Math.min(48, names.length);
+        const nc = Number(tournament.numCourts);
+        if (Number.isFinite(nc) && nc > 0) return Math.min(48, nc);
+        let max = 0;
+        for (const m of tournament.matches || []) {
+            const c = Number(m?.court ?? (m?.courtIndex != null ? m.courtIndex + 1 : 0));
+            if (c > max) max = c;
+        }
+        return Math.max(max, matchCourt, 4);
+    }, [tournament, matchCourt]);
+
+    /** Pistas sin partido LIVE ajeno (vacantes para traslado). */
+    const vacantCourts = useMemo(() => {
+        if (!tournament?.matches || !match?.id) return [];
+        const occupied = new Set<number>();
+        for (const m of tournament.matches) {
+            if (m.id === match.id) continue;
+            if (String(m.status || '').toUpperCase() !== 'LIVE') continue;
+            const c = Number(m?.court ?? (m?.courtIndex != null ? m.courtIndex + 1 : 0));
+            if (c > 0) occupied.add(c);
+        }
+        const list: number[] = [];
+        for (let c = 1; c <= impliedCourtCount; c++) {
+            if (c === matchCourt) continue;
+            if (occupied.has(c)) continue;
+            list.push(c);
+        }
+        return list;
+    }, [tournament?.matches, match?.id, matchCourt, impliedCourtCount]);
+
     const canControl = isAdmin || (profile?.role === 'marker' && canMarkInCancha(`cancha_${matchCourt}`)) || tournament?.ownerId === user?.uid;
 
     const primaryColor = tournament?.broadcastingSettings?.primaryColor || '#ccff00';
@@ -325,9 +362,16 @@ export default function RefereeScoreboard() {
             const marcador = data.marcador || {};
             const eq1 = marcador.equipo_1 || {};
             const eq2 = marcador.equipo_2 || {};
-            
+            const overlay = data.court_transfer_overlay as { ts?: number } | undefined;
+            const keepOverlay =
+                overlay &&
+                typeof overlay.ts === 'number' &&
+                Date.now() - overlay.ts < 12000;
+            const baseData = { ...data } as Record<string, unknown>;
+            if (!keepOverlay) delete baseData.court_transfer_overlay;
+
             return dataService.setPizarraCanchaState(canchaId, {
-                ...data,
+                ...baseData,
                 estado: isFinished ? 'finalizado' : 'en_vivo',
                 pizarra_refresh_nonce:
                     typeof data.pizarra_refresh_nonce === 'number' && Number.isFinite(data.pizarra_refresh_nonce)
@@ -1009,6 +1053,38 @@ export default function RefereeScoreboard() {
             console.error('[swapCourtWithPendingMatch]', e);
         } finally {
             setSwappingCourtWith(null);
+        }
+    };
+
+    /**
+     * Traslado atómico a una pista libre: RPC en servidor (pizarra origen/destino + tournament_matches).
+     * Realtime: la TV de la pista destino recibe `court_transfer_overlay` vía postgres_changes en pizarra_cancha_state.
+     */
+    const changeMatchCourt = async (toCourt: number) => {
+        if (!match || !id) return;
+        if (match.status !== MatchStatus.LIVE) {
+            alert('Solo se puede trasladar un partido en vivo.');
+            return;
+        }
+        setCourtMoveBusy(toCourt);
+        try {
+            const res = await fetch(
+                `/api/tournaments/${encodeURIComponent(id)}/matches/${encodeURIComponent(match.id)}/change-court`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+                    body: JSON.stringify({ toCourt, isGoldenPoint }),
+                }
+            );
+            const j = (await res.json().catch(() => ({}))) as { error?: string; match?: Record<string, unknown> };
+            if (!res.ok) throw new Error(j.error || 'No se pudo trasladar el partido');
+            if (j.match) setMatch((prev: any) => (prev ? { ...prev, ...j.match } : prev));
+            setShowMatchSelector(false);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Error al trasladar';
+            alert(msg);
+        } finally {
+            setCourtMoveBusy(null);
         }
     };
 
@@ -1759,14 +1835,69 @@ export default function RefereeScoreboard() {
                             <div className="p-8 border-b border-white/5 flex items-center justify-between">
                                 <div>
                                     <h3 className="text-2xl font-black italic uppercase tracking-tighter">Cambiar de cancha</h3>
-                                    <p className="text-xs font-black italic text-padel-primary uppercase tracking-[0.2em] mt-1">Intercambiar con un partido que no ha comenzado</p>
+                                    <p className="text-xs font-black italic text-padel-primary uppercase tracking-[0.2em] mt-1">
+                                        Pista libre (en vivo) o intercambio con un partido por comenzar
+                                    </p>
                                 </div>
                                 <button onClick={() => setShowMatchSelector(false)} className="p-3 bg-white/5 rounded-full hover:bg-white/10 transition-all text-gray-500">
                                     <RotateCcw className="w-5 h-5" />
                                 </button>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto p-8 space-y-4">
+                            <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                                {match?.status === MatchStatus.LIVE && (
+                                    <div className="space-y-3">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                                            Trasladar a pista libre
+                                        </p>
+                                        {vacantCourts.length === 0 ? (
+                                            <p className="text-sm text-white/35 italic py-4 text-center">
+                                                No hay pistas libres (todas tienen un partido en vivo u ocupadas en el calendario de pistas).
+                                            </p>
+                                        ) : (
+                                            <div className="grid gap-3 sm:grid-cols-2">
+                                                {vacantCourts.map((c) => {
+                                                    const label =
+                                                        Array.isArray(tournament?.courtNames) && tournament.courtNames[c - 1]
+                                                            ? tournament.courtNames[c - 1]
+                                                            : `Pista ${c}`;
+                                                    const busy = courtMoveBusy === c;
+                                                    return (
+                                                        <button
+                                                            key={c}
+                                                            type="button"
+                                                            disabled={courtMoveBusy !== null || !!swappingCourtWith}
+                                                            onClick={() => changeMatchCourt(c)}
+                                                            className="p-5 rounded-2xl border border-brand/30 bg-brand/5 text-left hover:bg-brand/10 transition-all disabled:opacity-40 disabled:pointer-events-none"
+                                                        >
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <div>
+                                                                    <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">
+                                                                        Vacante · LIVE
+                                                                    </span>
+                                                                    <p className="text-lg font-black text-brand mt-1">{label}</p>
+                                                                </div>
+                                                                {busy ? (
+                                                                    <RefreshCw className="w-5 h-5 text-brand animate-spin shrink-0" />
+                                                                ) : (
+                                                                    <span className="text-[10px] font-black text-brand uppercase tracking-widest shrink-0">
+                                                                        Trasladar
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="border-t border-white/10 pt-6 space-y-3">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                                        Intercambiar con partido pendiente
+                                    </p>
+                                </div>
                                 {tournament?.matches?.filter((m: any) => m.status === MatchStatus.PENDING && m.id !== match?.id).map((m: any) => {
                                     const otherCourt = m.court ?? (m.courtIndex != null ? m.courtIndex + 1 : '-');
                                     const courtLabel = m.courtName ?? (m.court != null ? `Pista ${m.court}` : (m.courtIndex != null ? `Pista ${m.courtIndex + 1}` : 'Pista –'));
@@ -1774,7 +1905,7 @@ export default function RefereeScoreboard() {
                                     return (
                                         <button
                                             key={m.id}
-                                            disabled={!!swappingCourtWith}
+                                            disabled={!!swappingCourtWith || courtMoveBusy !== null}
                                             onClick={() => swapCourtWithPendingMatch(m)}
                                             className="w-full p-6 rounded-3xl border text-left transition-all bg-white/5 border-white/5 hover:bg-white/10 disabled:opacity-50 disabled:pointer-events-none"
                                         >
