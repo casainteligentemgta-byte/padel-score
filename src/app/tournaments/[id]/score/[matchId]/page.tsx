@@ -26,6 +26,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { dataService } from '@/lib/dataService';
+import { persistMatchFinishWithPropagation } from '@/lib/matchFinishPropagation';
 import { getAuthHeaders } from '@/lib/apiAuth';
 import { rtdb } from '@/lib/rtdb';
 import { ref, update } from 'firebase/database';
@@ -170,9 +171,7 @@ export default function RefereeScoreboard() {
 
         if (!tournament || !match) return;
         const endIso = new Date().toISOString();
-        // Última escritura con marcador completo: si solo mandamos FINISHED, un hub desincronizado
-        // puede no mostrar sets / setScores en Finalizados.
-        await dataService.updateMatch(id, match.id, {
+        const finishPatch = {
             status: MatchStatus.FINISHED,
             finishedAt: endIso,
             actualEndTime: endIso,
@@ -183,8 +182,25 @@ export default function RefereeScoreboard() {
             superTiebreakScore: match.superTiebreakScore,
             isTiebreak: match.isTiebreak,
             superTiebreak: match.superTiebreak,
-            server: match.server
-        });
+            server: match.server,
+        };
+        try {
+            const rows = await dataService.getMatches(id);
+            const merged = rows.map((r: any) =>
+                r.id === match.id ? { ...r, ...finishPatch } : r
+            );
+            await persistMatchFinishWithPropagation({
+                tournamentId: id,
+                bufferMinutes: tournament?.bufferMinutes ?? 15,
+                matches: merged,
+                matchId: match.id,
+                updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
+            });
+        } catch (e) {
+            console.error('[Score] handleFinishMatch:', e);
+            alert('Error al finalizar el partido. Revisa la conexión e inténtalo de nuevo.');
+            return;
+        }
         // Liberar la pizarra: si queda en_vivo + partido_id, el hub sigue excluyendo la cola "Por comenzar"
         try {
             const canchaId = `cancha_${matchCourt}`;
@@ -957,7 +973,35 @@ export default function RefereeScoreboard() {
         setMatch({ ...match, ...updatedData });
 
         try {
-            await dataService.updateMatch(id, match.id, updatedData);
+            if (isMatchFinished) {
+                const rows = await dataService.getMatches(id);
+                const merged = rows.map((r: any) =>
+                    r.id === match.id ? { ...r, ...updatedData } : r
+                );
+                const { finalMatches } = await persistMatchFinishWithPropagation({
+                    tournamentId: id,
+                    bufferMinutes: tournament?.bufferMinutes ?? 15,
+                    matches: merged,
+                    matchId: match.id,
+                    updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
+                });
+                const closed = finalMatches.find((m: any) => m.id === match.id);
+                if (closed) {
+                    setMatch((prev: any) =>
+                        prev
+                            ? {
+                                  ...closed,
+                                  team1: prev.team1,
+                                  team2: prev.team2,
+                                  matchFormat: prev.matchFormat ?? closed.matchFormat,
+                                  tieBreakType: prev.tieBreakType ?? closed.tieBreakType,
+                              }
+                            : prev
+                    );
+                }
+            } else {
+                await dataService.updateMatch(id, match.id, updatedData);
+            }
 
             // ── Broadcast al RTDB para sincronización en tiempo real con la Pizarra ──
             if (rtdb) {

@@ -15,6 +15,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { MatchStatus, TournamentType } from '@/types/tournament';
 import { getRanking, RankedTeam } from '@/lib/tournamentCore';
 import { dataService } from '@/lib/dataService';
+import { persistMatchFinishWithPropagation } from '@/lib/matchFinishPropagation';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -757,24 +758,28 @@ export default function ControlPanel() {
         const match = matches.find(m => m.id === matchId);
         if (!match) return;
         setUpdatingId(matchId);
-        
-        // Optimistic update
-        const optimisticMatch = {
-            ...match,
-            status: MatchStatus.FINISHED,
-            actualEndTime: new Date().toISOString()
-        };
-        setMatches(prev => prev.map(m => m.id === matchId ? optimisticMatch : m));
 
         try {
             const endIso = new Date().toISOString();
-            const updatedData = {
-                ...stripMatchForDb(match),
-                status: MatchStatus.FINISHED,
-                actualEndTime: endIso,
-                finishedAt: endIso
-            };
-            await dataService.updateMatch(id, matchId, updatedData);
+            const rows = await dataService.getMatches(id);
+            const merged = rows.map((r: any) =>
+                r.id === matchId
+                    ? {
+                          ...r,
+                          ...stripMatchForDb(match),
+                          status: MatchStatus.FINISHED,
+                          actualEndTime: endIso,
+                          finishedAt: endIso,
+                      }
+                    : r
+            );
+            await persistMatchFinishWithPropagation({
+                tournamentId: id,
+                bufferMinutes: tournament?.bufferMinutes ?? 15,
+                matches: merged,
+                matchId,
+                updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
+            });
             const c = courtNum(match);
             if (c > 0) {
                 try {

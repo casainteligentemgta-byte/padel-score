@@ -36,6 +36,7 @@ import Link from 'next/link';
 import { MatchStatus, TournamentType, ScheduleConfig } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
+import { persistMatchFinishWithPropagation, shouldSuggestAutoMainDraw } from '@/lib/matchFinishPropagation';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
@@ -402,11 +403,6 @@ export default function TournamentDashboard() {
         };
     }, [id, router]);
 
-    const stripMatches = (matches: any[]) => matches.map(m => {
-        const { team1, team2, ...rest } = m;
-        return rest;
-    });
-
     const generateMainDraw = async (currentMatches?: any[]) => {
         if (!tournament || !isRoundRobin) return;
         setLoading(true);
@@ -462,84 +458,42 @@ export default function TournamentDashboard() {
             const finishedMatch = matches.find(m => m.id === matchId);
             if (!finishedMatch) return;
 
-            const finalScore = finishedMatch.score || (finishedMatch.sets ? `${finishedMatch.sets.t1}-${finishedMatch.sets.t2}` : '0-0');
-            const winnerIndex = finishedMatch.sets && finishedMatch.sets.t1 > finishedMatch.sets.t2
-                ? finishedMatch.team1Index
-                : finishedMatch.team2Index;
+            const endIso = new Date().toISOString();
+            const finalScore =
+                finishedMatch.score ||
+                (finishedMatch.sets ? `${finishedMatch.sets.t1}-${finishedMatch.sets.t2}` : '0-0');
+            const merged = matches.map(m =>
+                m.id === matchId
+                    ? {
+                          ...m,
+                          status: MatchStatus.FINISHED,
+                          actualEndTime: endIso,
+                          finishedAt: endIso,
+                          score: finalScore,
+                      }
+                    : m
+            );
 
-            let updatedMatches = matches.map(m => {
-                if (m.id === matchId) {
-                    return { ...m, status: MatchStatus.FINISHED, actualEndTime: new Date(), score: finalScore };
-                }
-
-                // Cuadro con bracketPosition (ScheduleEngine / Master)
-                if (finishedMatch.stage === 'MAIN_DRAW' && m.stage === 'MAIN_DRAW' && finishedMatch.bracketPosition) {
-                    const nextRound = finishedMatch.bracketPosition.round + 1;
-                    const nextPos = Math.ceil(finishedMatch.bracketPosition.position / 2);
-                    const isTeam1 = finishedMatch.bracketPosition.position % 2 !== 0;
-
-                    if (m.bracketPosition?.round === nextRound && m.bracketPosition?.position === nextPos) {
-                        return {
-                            ...m,
-                            [isTeam1 ? 'team1Index' : 'team2Index']: winnerIndex
-                        };
-                    }
-                }
-
-                // Semifinales + Final sin bracketPosition (flujo new-tournament: 2 grupos → SEMIFINALES → FINAL)
-                const roundUpper = (x: any) => (x.roundName || '').toUpperCase();
-                const isSemi = (x: any) => roundUpper(x).includes('SEMIFINAL') || x.stage === 'SEMIFINAL';
-                const isFinalMatch = (x: any) => x.roundName === 'FINAL' || (roundUpper(x) === 'FINAL') || x.stage === 'FINAL';
-                if (finishedMatch.stage === 'MAIN_DRAW' && isSemi(finishedMatch) && !finishedMatch.bracketPosition && isFinalMatch(m)) {
-                    const semis = matches.filter((mx: any) => isSemi(mx)).sort((a: any, b: any) =>
-                        new Date(a.scheduledTime || 0).getTime() - new Date(b.scheduledTime || 0).getTime() || (a.id || '').localeCompare(b.id || '')
-                    );
-                    const semiIndex = semis.findIndex((s: any) => s.id === matchId);
-                    if (semiIndex === 0) return { ...m, team1Index: winnerIndex };
-                    if (semiIndex === 1) return { ...m, team2Index: winnerIndex };
-                }
-
-                return m;
+            const { finalMatches } = await persistMatchFinishWithPropagation({
+                tournamentId: id,
+                bufferMinutes: tournament.bufferMinutes || 15,
+                matches: merged,
+                matchId,
+                updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
             });
-
-            const autocorrected = ScheduleEngine.recalculateRemainingMatches(updatedMatches, tournament.bufferMinutes || 15);
-            let finalMatches = updatedMatches.map(m => {
-                const update = autocorrected.find(u => u.id === m.id);
-                return update ? { ...m, scheduledTime: update.scheduledTime } : m;
-            });
-
-            await dataService.updateMatch(id, matchId, {
-                status: MatchStatus.FINISHED,
-                actualEndTime: new Date().toISOString(),
-                score: finalScore
-            });
-
-            // Actualizar partidos siguientes si es fase eliminatoria
-            const updates: Promise<any>[] = [];
-            finalMatches.forEach(m => {
-                if (m.id !== matchId) {
-                    updates.push(dataService.updateMatch(id, m.id, {
-                        ...stripMatches([m])[0], // Limpia campos calculados
-                        scheduledTime: m.scheduledTime
-                    }));
-                }
-            });
-            await Promise.all(updates);
             setMatches(finalMatches);
 
-            // AUTO-GENERACIÓN DE CUADRO
-            // Si el partido terminado era de fase de grupos, el torneo es Round Robin,
-            // no existe cuadro generado aún, y TODOS los partidos de grupos han terminado...
-            const hasBracketNow = finalMatches.some(m => m.stage === 'MAIN_DRAW');
-            const groupMatches = finalMatches.filter(m => m.stage === 'GROUP_STAGE');
-            const allGroupsFinished = groupMatches.length > 0 && groupMatches.every(m => m.status === MatchStatus.FINISHED);
-
-            if (isRoundRobin && !hasBracketNow && finishedMatch.stage === 'GROUP_STAGE' && allGroupsFinished && canManageTournament) {
-                console.log("[Dashboard] All group matches finished. Auto-generating Main Draw...");
-                // Pequeño delay para que el usuario procese el fin del partido antes del cambio de pestaña
-                setTimeout(() => {
-                    generateMainDraw(finalMatches);
-                }, 1500);
+            const finishedStage = finishedMatch.stage;
+            if (
+                shouldSuggestAutoMainDraw(
+                    tournament?.type === TournamentType.ROUND_ROBIN,
+                    finalMatches,
+                    finishedStage
+                ) &&
+                canManageTournament
+            ) {
+                console.log('[Dashboard] All group matches finished. Auto-generating Main Draw...');
+                setTimeout(() => generateMainDraw(finalMatches), 1500);
             }
         } catch (error) {
             console.error(error);
