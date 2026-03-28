@@ -7,6 +7,7 @@ import {
     Trophy, Gamepad2, Monitor, Camera, Tv
 } from 'lucide-react';
 import { dataService } from '@/lib/dataService';
+import { getFinishedMatchScoreLines } from '@/lib/matchFinishedScoreDisplay';
 import { useAuth } from '@/lib/AuthContext';
 import { MatchStatus } from '@/types/tournament';
 import {
@@ -395,8 +396,9 @@ export function MatchCard({ match, idx, isNextUp, isEffectivelyLive, matchNumber
     matchNumber?: number;
 }) {
     const isLive = match.status === MatchStatus.LIVE;
-    const isDone = match.status === MatchStatus.FINISHED;
+    const isDone = match.status === MatchStatus.FINISHED || match.status === 'COMPLETED';
     const isPending = match.status === MatchStatus.PENDING;
+    const finishedDetailLines = isDone ? getFinishedMatchScoreLines(match) : [];
     const [t1p1, t1p2] = resolveTeamNames(match.team1, match.team1Name);
     const [t2p1, t2p2] = resolveTeamNames(match.team2, match.team2Name);
     const [ending, setEnding] = useState(false);
@@ -437,7 +439,7 @@ export function MatchCard({ match, idx, isNextUp, isEffectivelyLive, matchNumber
             exit={{ opacity: 0, scale: 0.95 }}
             layout
             className={`rounded-[1.5rem] border overflow-hidden transition-all ${isEffectivelyLive ? STATUS_COLORS[MatchStatus.LIVE]
-                : match.status === MatchStatus.FINISHED ? STATUS_COLORS[MatchStatus.FINISHED]
+                : isDone ? STATUS_COLORS[MatchStatus.FINISHED]
                     : isLive && !isEffectivelyLive ? PENDING_NEXT_COLORS
                         : isNextUp ? PENDING_NEXT_COLORS
                             : PENDING_LATER_COLORS
@@ -495,6 +497,21 @@ export function MatchCard({ match, idx, isNextUp, isEffectivelyLive, matchNumber
                     {t2p2 && <p className="text-[10px] font-bold text-[#ccff00]/80 uppercase tracking-tight">{t2p2}</p>}
                 </div>
             </div>
+
+            {isDone && finishedDetailLines.length > 0 && (
+                <div className="px-4 pb-2 flex flex-col gap-0.5 border-t border-white/[0.06] pt-2">
+                    {finishedDetailLines.map((ln: string, i: number) => (
+                        <p
+                            key={i}
+                            className={`text-[8px] font-black uppercase tracking-tight text-center leading-tight ${
+                                ln.includes('STB') ? 'text-[#ccff00]' : 'text-gray-500'
+                            }`}
+                        >
+                            {ln}
+                        </p>
+                    ))}
+                </div>
+            )}
 
             {(isLive || isPending) && (
                 <div className="h-1 bg-white/5" />

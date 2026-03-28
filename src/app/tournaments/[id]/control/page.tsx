@@ -779,6 +779,7 @@ export default function ControlPanel() {
                 matches: merged,
                 matchId,
                 updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
+                tournament,
             });
         } catch (e) { 
             console.error(e);

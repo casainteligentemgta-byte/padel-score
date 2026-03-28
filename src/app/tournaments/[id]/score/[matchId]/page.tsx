@@ -207,6 +207,7 @@ export default function RefereeScoreboard() {
                 matches: merged,
                 matchId: match.id,
                 updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
+                tournament,
             });
         } catch (e) {
             console.error('[Score] handleFinishMatch:', e);
@@ -270,6 +271,7 @@ export default function RefereeScoreboard() {
                         matches: merged,
                         matchId: match.id,
                         updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
+                        tournament,
                     });
                     const closed = finalMatches.find((m: any) => m.id === match.id);
                     if (closed) {
@@ -829,6 +831,7 @@ export default function RefereeScoreboard() {
                     matches: merged,
                     matchId: match.id,
                     updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
+                    tournament,
                 });
             } catch (e) {
                 console.warn('[Score] auto-cierre por sets en BD:', e);
@@ -1141,6 +1144,7 @@ export default function RefereeScoreboard() {
                     matches: merged,
                     matchId: match.id,
                     updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
+                    tournament,
                 });
                 const closed = finalMatches.find((m: any) => m.id === match.id);
                 if (closed) {

@@ -32,7 +32,13 @@ const AutoShrinkName: React.FC<AutoShrinkNameProps> = ({ name, className = '', s
 
     resizeText();
     window.addEventListener('resize', resizeText);
-    return () => window.removeEventListener('resize', resizeText);
+    const el = containerRef.current;
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => resizeText()) : null;
+    if (el && ro) ro.observe(el);
+    return () => {
+      window.removeEventListener('resize', resizeText);
+      ro?.disconnect();
+    };
   }, [name]);
 
   return (

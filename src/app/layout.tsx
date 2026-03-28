@@ -25,8 +25,8 @@ export const viewport: Viewport = {
     themeColor: "#0a0a0a",
     width: "device-width",
     initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
+    maximumScale: 5,
+    userScalable: true,
 };
 
 export default function RootLayout({
@@ -41,7 +41,7 @@ export default function RootLayout({
                 <RootErrorBoundary>
                     <AuthProvider>
                         <AppSettingsProvider>
-                            <main className="min-h-screen" style={{ minHeight: "100vh" }}>
+                            <main className="min-h-screen w-full flex flex-col" style={{ minHeight: "100vh" }}>
                                 {children}
                             </main>
                             <InstallAppBanner />

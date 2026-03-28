@@ -9,8 +9,33 @@ import { motion } from 'framer-motion';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 import { visibleSetNumbersForScoreboard } from '@/lib/displaySetColumns';
+import { formatPlayerFichaName } from '@/lib/playerFichaName';
+import { inferStbFromSetScoresOnly } from '@/lib/matchFinishedScoreDisplay';
 import { useCourtDisplayHeartbeat } from '@/lib/courtDisplayHeartbeat';
 import { logDisplayVideoError } from '@/lib/logDisplayVideoError';
+
+/** Historial RTDB → forma mínima para inferir STB por setScores (1-1 + desempate). */
+function matchStubFromMarcadorHistorico(marcador: any) {
+    const hist = Array.isArray(marcador?.historico_sets) ? marcador.historico_sets : [];
+    const setScores = hist.map((row: any) => ({
+        t1: Number(row?.local ?? row?.t1 ?? 0),
+        t2: Number(row?.visitante ?? row?.t2 ?? 0),
+    }));
+    return { setScores };
+}
+
+function formatMarcadorTeamNombre(nombre: string): string {
+    const raw = (nombre || '').trim();
+    if (!raw) return nombre;
+    if (raw.includes('/')) {
+        const parts = raw
+            .split(/\s*\/\s*/)
+            .map((p) => formatPlayerFichaName(p.trim()))
+            .filter(Boolean);
+        return parts.length ? parts.join(' / ') : raw;
+    }
+    return formatPlayerFichaName(raw);
+}
 
 function courtSetCell(
     setIdx: number,
@@ -250,7 +275,7 @@ export default function CourtDisplayPage() {
                     <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-6">
                         {/* Equipo 1 */}
                         <TeamPanel
-                            nombre={marcador?.equipo_1?.nombre || 'Equipo 1'}
+                            nombre={formatMarcadorTeamNombre(marcador?.equipo_1?.nombre || 'Equipo 1')}
                             color={marcador?.equipo_1?.color || '#CCFF00'}
                             sets={marcador?.sets?.local ?? 0}
                             games={marcador?.games?.local ?? 0}
@@ -267,7 +292,7 @@ export default function CourtDisplayPage() {
 
                         {/* Equipo 2 */}
                         <TeamPanel
-                            nombre={marcador?.equipo_2?.nombre || 'Equipo 2'}
+                            nombre={formatMarcadorTeamNombre(marcador?.equipo_2?.nombre || 'Equipo 2')}
                             color={marcador?.equipo_2?.color || '#FF5500'}
                             sets={marcador?.sets?.visitante ?? 0}
                             games={marcador?.games?.visitante ?? 0}
@@ -283,14 +308,35 @@ export default function CourtDisplayPage() {
                     const setsV = Number(marcador.sets?.visitante ?? 0) || 0;
                     const currentSet = setsL + setsV + 1;
                     const fmt = String(marcador.match_format || '');
-                    const twoPlusStb = fmt === 'TWO_SHORT_SETS' || fmt === 'TWO_NORMAL_SETS';
-                    const visible = visibleSetNumbersForScoreboard({
+                    const twoPlusStb =
+                        fmt === 'TWO_SHORT_SETS' || fmt === 'TWO_NORMAL_SETS' || fmt === '2SETS_STB';
+                    const visibleBase = visibleSetNumbersForScoreboard({
                         matchFormat: fmt,
                         superTiebreak: marcador.super_tiebreak === true || marcador.modo_puntos === 'super_tiebreak',
                         tiebreak: marcador.modo_puntos === 'tiebreak',
                         setsT1: setsL,
                         setsT2: setsV,
                     });
+                    const shouldForceSecondSetCol =
+                        twoPlusStb &&
+                        setsL + setsV === 0 &&
+                        (Number(marcador.games?.local ?? 0) >= 6 || Number(marcador.games?.visitante ?? 0) >= 6);
+                    const visible = shouldForceSecondSetCol ? [1, 2] : visibleBase;
+                    const scoreboardCol3Tb =
+                        fmt === 'TIEBREAK' || marcador.modo_puntos === 'tiebreak' || marcador.tiebreak === true;
+                    const scoreboardCol3Stb =
+                        !scoreboardCol3Tb &&
+                        (fmt === 'SUPER_TIEBREAK' ||
+                            marcador.super_tiebreak === true ||
+                            marcador.modo_puntos === 'super_tiebreak' ||
+                            fmt === 'SET_3_STB' ||
+                            twoPlusStb ||
+                            inferStbFromSetScoresOnly(matchStubFromMarcadorHistorico(marcador)));
+                    const setColumnLabel = (col: number) => {
+                        if (col === 3 && scoreboardCol3Tb) return 'TB';
+                        if (col === 3 && scoreboardCol3Stb) return 'STB';
+                        return `SET ${col}`;
+                    };
                     const ptsL = marcador.puntos?.local ?? '0';
                     const ptsV = marcador.puntos?.visitante ?? '0';
                     return (
@@ -302,13 +348,8 @@ export default function CourtDisplayPage() {
                                 }}
                             >
                                 {visible.map((s) => {
-                                    const is3rdSTB =
-                                        s === 3 &&
-                                        (marcador.super_tiebreak === true ||
-                                            twoPlusStb ||
-                                            fmt === 'SUPER_TIEBREAK' ||
-                                            fmt === 'SET_3_STB');
-                                    const label = is3rdSTB ? 'STB' : s === 3 && fmt === 'TIEBREAK' ? 'TB' : `SET ${s}`;
+                                    const isStbCol = s === 3 && scoreboardCol3Stb;
+                                    const label = setColumnLabel(s);
                                     const v1 = courtSetCell(s, 'local', marcador, currentSet);
                                     const v2 = courtSetCell(s, 'visitante', marcador, currentSet);
                                     const cellCls = (v: string | number) => {
@@ -318,7 +359,16 @@ export default function CourtDisplayPage() {
                                     };
                                     return (
                                         <div key={s} className="flex flex-col gap-1 border-l border-white/10 first:border-l-0 pl-2 min-w-0">
-                                            <span className="text-[8px] font-black uppercase tracking-widest text-gray-500">{label}</span>
+                                            <span
+                                                className={`text-[8px] font-black uppercase tracking-widest ${isStbCol ? 'text-padel-primary/70' : 'text-gray-500'}`}
+                                            >
+                                                {label}
+                                            </span>
+                                            {isStbCol && (
+                                                <span className="text-[6px] font-black uppercase tracking-tighter text-gray-600 -mt-0.5">
+                                                    (a 10)
+                                                </span>
+                                            )}
                                             <span className={cellCls(v1)} style={{ color: marcador?.equipo_1?.color || '#CCFF00' }}>{v1}</span>
                                             <span className={cellCls(v2)} style={{ color: marcador?.equipo_2?.color || '#FF5500' }}>{v2}</span>
                                         </div>

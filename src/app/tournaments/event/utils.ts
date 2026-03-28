@@ -1,4 +1,5 @@
 import { MatchStatus } from '@/types/tournament';
+import { formatPlayerFichaName } from '@/lib/playerFichaName';
 
 export const toMs = (v: any): number => {
     if (!v) return 0;
@@ -29,21 +30,11 @@ export const isRealName = (name: any): boolean => {
 };
 
 /**
- * Formatea un nombre para mostrar "Nombre Inicial." (e.g. Juan Perez -> Juan P.)
+ * Ficha de jugador: primer nombre completo, segundo nombre inicial, segundo apellido completo.
  */
 export const formatDisplayName = (name: string): string => {
     if (!name) return '';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length < 2) return name;
-
-    // Si la segunda parte es un número (ej. Jugador 13), no abreviar
-    if (/^\d+$/.test(parts[1])) return name;
-
-    // Si es "Jugador X", no abreviar
-    if (parts[0].toLowerCase() === 'jugador') return name;
-
-    // Tomar primer nombre y la inicial del primer apellido/segundo nombre
-    return `${parts[0]} ${parts[1].charAt(0).toUpperCase()}.`;
+    return formatPlayerFichaName(name.trim());
 };
 
 
@@ -136,6 +127,72 @@ export const formatGender = (g?: string): string => {
     return g;
 };
 
+/** Prioridad de fase para la vista TODOS (misma hora: de izquierda a derecha en la grilla). */
+export function getMatchPhaseSortOrder(match: any): number {
+    if (!match) return 99;
+    if (match.stage === 'GROUP_STAGE' || match.groupName != null) return 0;
+    const name = String(match.roundName || '').toUpperCase();
+    const isFinal =
+        match.stage === 'FINAL' ||
+        match.isFinal ||
+        (name.includes('FINAL') &&
+            !name.includes('SEMI') &&
+            !name.includes('SEMIFINAL') &&
+            !name.includes('CUARTOS') &&
+            !name.includes('OCTAVOS') &&
+            !name.includes('8VO'));
+    if (isFinal) return 3;
+    const isSemi =
+        match.stage === 'SEMIFINAL' ||
+        name.includes('SEMIFINAL') ||
+        name.includes('SEMIFINALES');
+    if (isSemi) return 2;
+    if (
+        match.stage === 'MAIN_DRAW' ||
+        match.isKnockout ||
+        name.includes('CUARTOS') ||
+        name.includes('OCTAVOS') ||
+        name.includes('8VO')
+    ) {
+        return 1;
+    }
+    return 4;
+}
+
+function courtNumForSort(m: any): number {
+    const c = m?.court;
+    if (c !== undefined && c !== null && c !== '' && c !== '-') {
+        const n = typeof c === 'number' ? c : Number(String(c).replace(/\D/g, '')) || 0;
+        if (n > 0) return n;
+    }
+    if (m?.courtIndex !== undefined && m?.courtIndex !== null) {
+        const n = Number(m.courtIndex) + 1;
+        return n > 0 ? n : 999;
+    }
+    return 999;
+}
+
+/**
+ * Orden para pestaña TODOS: hora; luego grupos → (elim. previa) → semis → final;
+ * en fase de grupos, pistas pares antes que impares; luego número de pista.
+ */
+export function compareMatchesTodosView(a: any, b: any): number {
+    const td = toMs(a?.scheduledTime ?? a?.time) - toMs(b?.scheduledTime ?? b?.time);
+    if (td !== 0) return td;
+    const pa = getMatchPhaseSortOrder(a);
+    const pb = getMatchPhaseSortOrder(b);
+    if (pa !== pb) return pa - pb;
+    if (pa === 0) {
+        const ca = courtNumForSort(a);
+        const cb = courtNumForSort(b);
+        const aEven = ca < 999 && ca % 2 === 0 ? 0 : 1;
+        const bEven = cb < 999 && cb % 2 === 0 ? 0 : 1;
+        if (aEven !== bEven) return aEven - bEven;
+        if (ca !== cb) return ca - cb;
+    }
+    return courtNumForSort(a) - courtNumForSort(b);
+}
+
 export const STATUS_COLORS: Record<string, string> = {
     [MatchStatus.LIVE]: 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/20',
     [MatchStatus.FINISHED]: 'bg-white/[0.02] border-white/10 text-gray-500 grayscale-[0.5] opacity-80',
@@ -156,6 +213,7 @@ export const TABS = [
     { label: 'EN VIVO', value: MatchStatus.LIVE },
     { label: 'POR COMENZAR', value: MatchStatus.PENDING },
     { label: 'FINALIZADOS', value: MatchStatus.FINISHED },
+    { label: 'RANKING', value: 'ranking' },
     { label: 'GRUPOS', value: 'groups' },
     { label: 'REGLAS', value: 'rules' },
 ];

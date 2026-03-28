@@ -36,7 +36,13 @@ import Link from 'next/link';
 import { MatchStatus, TournamentType, ScheduleConfig } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
-import { persistMatchFinishWithPropagation, shouldSuggestAutoMainDraw } from '@/lib/matchFinishPropagation';
+import { resolveCategoryPodium } from '@/lib/tournamentPodium';
+import {
+    persistMatchFinishWithPropagation,
+    shouldSuggestAutoMainDraw,
+    syncGroupQualifierSlotsToDatabaseIfNeeded,
+} from '@/lib/matchFinishPropagation';
+import { hydrateGroupQualifierSlots } from '@/lib/groupQualifierHydration';
 import { shouldAutoFinishBySetsReferee } from '@/lib/matchFinishGuards';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -51,6 +57,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getAuthHeaders } from '@/lib/apiAuth';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { formatPlayerFichaName } from '@/lib/playerFichaName';
+import { getFinishedMatchScoreLines } from '@/lib/matchFinishedScoreDisplay';
 
 
 
@@ -61,6 +69,8 @@ export default function TournamentDashboard() {
     const searchParams = useSearchParams();
     const { user, profile, isAdmin, markerCanchas, loading: authLoading } = useAuth();
     const [tournament, setTournament] = useState<any>(null);
+    const tournamentRef = useRef<any>(null);
+    tournamentRef.current = tournament;
     const [matches, setMatches] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -116,6 +126,7 @@ export default function TournamentDashboard() {
         if (tab === 'live') setActiveTab('En Vivo');
         else if (tab === 'por-comenzar') setActiveTab('Por Comenzar');
         else if (tab === 'finalizados') setActiveTab('Finalizados');
+        else if (tab === 'ranking') setActiveTab('Ranking');
     }, [searchParams]);
 
     // En Vivo visible para todos
@@ -389,8 +400,22 @@ export default function TournamentDashboard() {
         // 2. Suscripción a Partidos
         const unsubMatches = dataService.subscribeToMatches(String(id), (rawMatches) => {
             try {
-                const teamsRef = tournament?.teams || [];
-                const enriched = rawMatches.map((m: any) => ({
+                const tNow = tournamentRef.current;
+                const teamsRef = tNow?.teams || [];
+                let rowsForEnrich = rawMatches;
+                if (tNow?.groupAssignments && Object.keys(tNow.groupAssignments).length > 0) {
+                    rowsForEnrich = hydrateGroupQualifierSlots(
+                        rawMatches.map((m: any) => ({ ...m })),
+                        tNow,
+                    );
+                    void syncGroupQualifierSlotsToDatabaseIfNeeded({
+                        tournamentId: String(id),
+                        tournament: tNow,
+                        rawMatches,
+                        updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
+                    });
+                }
+                const enriched = rowsForEnrich.map((m: any) => ({
                     ...m,
                     court: m.court ?? (m.courtIndex !== undefined ? m.courtIndex + 1 : undefined),
                     courtName: m.courtName ?? (m.court ? `Pista ${m.court}` : undefined),
@@ -410,6 +435,39 @@ export default function TournamentDashboard() {
             unsubMatches();
         };
     }, [id, authLoading, activeGroup, tournament?.teams, isAdmin, user, isMigrating]);
+
+    const groupAssignmentsKey = tournament?.groupAssignments
+        ? JSON.stringify(tournament.groupAssignments)
+        : '';
+
+    useEffect(() => {
+        if (!id || !groupAssignmentsKey) return;
+        const t = tournamentRef.current;
+        if (!t?.groupAssignments || Object.keys(t.groupAssignments).length === 0) return;
+        let cancelled = false;
+        const timer = window.setTimeout(() => {
+            (async () => {
+                try {
+                    const raw = await dataService.getMatches(String(id));
+                    if (cancelled) return;
+                    const tLatest = tournamentRef.current;
+                    if (!tLatest?.groupAssignments) return;
+                    await syncGroupQualifierSlotsToDatabaseIfNeeded({
+                        tournamentId: String(id),
+                        tournament: tLatest,
+                        rawMatches: raw,
+                        updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
+                    });
+                } catch (e) {
+                    console.warn('[syncGroupQualifier on load]', e);
+                }
+            })();
+        }, 600);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [id, groupAssignmentsKey]);
 
     // Realtime: en INSERT/UPDATE no fusionar fila a mano — chocaba con subscribeToMatches (getMatches)
     // y podía dejar status PENDING encima de un partido ya FINISHED en BD. Solo DELETE optimista + refresh.
@@ -483,6 +541,7 @@ export default function TournamentDashboard() {
                         matches: merged,
                         matchId: mid,
                         updateMatch: (tid, mId, d) => dataService.updateMatch(tid, mId, d),
+                        tournament,
                     });
                 } catch (e) {
                     console.warn('[Hub] auto-cierre por sets:', mid, e);
@@ -568,6 +627,7 @@ export default function TournamentDashboard() {
                 matches: merged,
                 matchId,
                 updateMatch: (tid, mid, d) => dataService.updateMatch(tid, mid, d),
+                tournament,
             });
             setMatches(finalMatches);
 
@@ -965,7 +1025,7 @@ export default function TournamentDashboard() {
     tabs.push('En Vivo');
     tabs.push('Por Comenzar');
     tabs.push('Finalizados');
-    if (!isRoundRobin && !isCruzado) tabs.push('Ranking');
+    tabs.push('Ranking');
     // Reglas solo en evento (event page), no por categoría
     const deduped = [...new Set(tabs)];
     const uniqueTabs = deduped;
@@ -1119,10 +1179,10 @@ export default function TournamentDashboard() {
     /** Scroll vertical: Por comenzar siempre (antes con ≤3 pistas quedaba overflow-hidden). En vivo por pista, !pr-0 como antes. */
     const mainScrollOverflowClass =
         activeTab === 'Por Comenzar'
-            ? 'overflow-y-auto min-h-0'
+            ? 'overflow-y-auto min-h-0 overscroll-y-contain touch-pan-y'
             : isLiveDashboard
-              ? 'overflow-y-auto min-h-0 !pr-0'
-              : '';
+              ? 'overflow-y-auto min-h-0 !pr-0 overscroll-y-contain touch-pan-y'
+              : 'overflow-y-auto min-h-0 overscroll-y-contain touch-pan-y';
 
     const getLiveConfig = (count: number) => {
         // Uniform config for rows of three as requested
@@ -1239,8 +1299,13 @@ export default function TournamentDashboard() {
     const getGroupStandings = (matchesArray?: any[]) => {
         if (!isRoundRobin || !tournament?.groupAssignments) return {};
 
+        const list = matchesArray ?? matches;
+        const fin = list.filter((m: any) => m.status === MatchStatus.FINISHED);
+        const hasStageInfo = fin.some((m: any) => m.stage != null && m.stage !== '');
+        const groupMatches = hasStageInfo ? fin.filter((m: any) => m.stage === 'GROUP_STAGE') : fin;
+
         const groupStandings: { [key: string]: any[] } = {};
-        const allStandings = calculateStandings(matchesArray);
+        const allStandings = calculateStandings(groupMatches);
 
         (Object.entries(tournament.groupAssignments || {}) as [string, any][]).forEach(([groupName, teamIds]) => {
             if (!Array.isArray(teamIds)) return;
@@ -1278,6 +1343,59 @@ export default function TournamentDashboard() {
 
         return groupStandings;
     };
+
+    /** Standings fila por fila para formato cruzado (misma lógica que la pestaña Grupos). */
+    const buildCruzadoGroupStandingRows = (teamIds: string[], groupFinishedMatches: any[]) => {
+        if (!tournament?.teams) return [];
+        return teamIds
+            .map((tid) => {
+                const teamIdx = tournament.teams.findIndex((t: any) => String(t.id) === tid);
+                const team = teamIdx >= 0 ? tournament.teams[teamIdx] : null;
+                const tNum = teamIdx + 1;
+                let mWon = 0,
+                    mPlayed = 0,
+                    sWon = 0,
+                    sLost = 0,
+                    gWon = 0,
+                    gLost = 0;
+                groupFinishedMatches.forEach((m: any) => {
+                    const side = m.team1Index === tNum ? 't1' : m.team2Index === tNum ? 't2' : null;
+                    if (!side) return;
+                    const opp = side === 't1' ? 't2' : 't1';
+                    mPlayed++;
+                    gWon += m.games?.[side] ?? 0;
+                    gLost += m.games?.[opp] ?? 0;
+                    sWon += m.sets?.[side] ?? 0;
+                    sLost += m.sets?.[opp] ?? 0;
+                    if ((m.sets?.[side] ?? 0) > (m.sets?.[opp] ?? 0)) mWon++;
+                    else if ((m.sets?.[side] ?? 0) === (m.sets?.[opp] ?? 0) && (m.games?.[side] ?? 0) > (m.games?.[opp] ?? 0))
+                        mWon++;
+                });
+                const name = team ? `${team.p1?.name ?? 'J1'} / ${team.p2?.name ?? 'J2'}` : `Pareja ${tNum}`;
+                return {
+                    id: tid,
+                    name,
+                    matchesPlayed: mPlayed,
+                    matchesWon: mWon,
+                    setsWon: sWon,
+                    setsLost: sLost,
+                    gamesWon: gWon,
+                    gamesLost: gLost,
+                };
+            })
+            .sort((a: any, b: any) => {
+                if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;
+                const dSA = a.setsWon - a.setsLost;
+                const dSB = b.setsWon - b.setsLost;
+                if (dSB !== dSA) return dSB - dSA;
+                const dGA = a.gamesWon - a.gamesLost;
+                const dGB = b.gamesWon - b.gamesLost;
+                if (dGB !== dGA) return dGB - dGA;
+                return b.gamesWon - a.gamesWon;
+            });
+    };
+
+    const resolveTournamentPodium = () => resolveCategoryPodium(matches, tournament);
 
     const isPlaceholderName = (name?: string) => /^jugador\s+\d+$/i.test((name || '').trim());
 
@@ -1535,29 +1653,26 @@ export default function TournamentDashboard() {
             const groupAIds: string[] = ga['A'] ?? [];
             const groupBIds: string[] = ga['B'] ?? [];
             const crossFinished = matches.filter((m: any) => m.status === MatchStatus.FINISHED && m.stage === 'GROUP_STAGE');
-            const buildGroupStanding = (teamIds: string[]) => {
-                return teamIds.map((tid) => {
-                    const teamIdx = tournament?.teams?.findIndex((t: any) => String(t.id) === tid);
-                    const team = teamIdx !== undefined && teamIdx >= 0 ? tournament?.teams?.[teamIdx] : null;
-                    const tNum = (teamIdx ?? -1) + 1;
-                    let mWon = 0, mPlayed = 0, sWon = 0, sLost = 0, gWon = 0, gLost = 0;
-                    crossFinished.forEach((m: any) => {
-                        const side = m.team1Index === tNum ? 't1' : m.team2Index === tNum ? 't2' : null;
-                        if (!side) return;
-                        const opp = side === 't1' ? 't2' : 't1';
-                        mPlayed++;
-                        gWon += m.games?.[side] ?? 0;
-                        gLost += m.games?.[opp] ?? 0;
-                        sWon += m.sets?.[side] ?? 0;
-                        sLost += m.sets?.[opp] ?? 0;
-                        if ((m.sets?.[side] ?? 0) > (m.sets?.[opp] ?? 0)) mWon++;
-                        else if (m.sets?.[side] === m.sets?.[opp] && (m.games?.[side] ?? 0) > (m.games?.[opp] ?? 0)) mWon++;
-                    });
-                    return { id: tid, tNum, name: team ? `${team.p1?.name ?? 'J1'} / ${team.p2?.name ?? 'J2'}` : `Pareja ${tNum}`, mWon, mPlayed, sWon, sLost, gWon, gLost };
-                }).sort((a, b) => b.mWon - a.mWon || (b.sWon - b.sLost) - (a.sWon - a.sLost) || (b.gWon - b.gLost) - (a.gWon - a.gLost));
-            };
-            const standA = buildGroupStanding(groupAIds);
-            const standB = buildGroupStanding(groupBIds);
+            const standA = buildCruzadoGroupStandingRows(groupAIds, crossFinished).map((r: any) => ({
+                id: r.id,
+                name: r.name,
+                mWon: r.matchesWon,
+                mPlayed: r.matchesPlayed,
+                sWon: r.setsWon,
+                sLost: r.setsLost,
+                gWon: r.gamesWon,
+                gLost: r.gamesLost,
+            }));
+            const standB = buildCruzadoGroupStandingRows(groupBIds, crossFinished).map((r: any) => ({
+                id: r.id,
+                name: r.name,
+                mWon: r.matchesWon,
+                mPlayed: r.matchesPlayed,
+                sWon: r.setsWon,
+                sLost: r.setsLost,
+                gWon: r.gamesWon,
+                gLost: r.gamesLost,
+            }));
             const qfPairings = [
                 { label: 'QF 1', t1: standA[0]?.name ?? 'TBD', t2: standB[1]?.name ?? 'TBD', desc: '1° A vs 2° B' },
                 { label: 'QF 2', t1: standB[0]?.name ?? 'TBD', t2: standA[1]?.name ?? 'TBD', desc: '1° B vs 2° A' },
@@ -1894,6 +2009,15 @@ export default function TournamentDashboard() {
                             </button>
                         )}
 
+                        <Link
+                            href={`/tournaments/${id}/podium`}
+                            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-padel-primary hover:bg-white/10 transition-all"
+                            title="Campeón y subcampeón de esta categoría"
+                        >
+                            <Trophy className="w-3.5 h-3.5" />
+                            Podio
+                        </Link>
+
                         <button
                             type="button"
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsShareModalOpen(true); }}
@@ -1960,56 +2084,271 @@ export default function TournamentDashboard() {
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 className="space-y-8"
                             >
-                                <div className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
-                                    <div className="bg-padel-primary px-10 py-6 flex justify-between items-center">
-                                        <div>
-                                            <h3 className="text-black font-black italic uppercase text-xl tracking-tighter">Ranking General</h3>
-                                            <p className="text-[10px] text-black/60 font-black uppercase tracking-widest">Estadísticas Acumuladas</p>
-                                        </div>
-                                        <Trophy className="w-8 h-8 text-black opacity-20" />
-                                    </div>
-                                    <div className="p-8">
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full">
-                                                <thead>
-                                                    <tr className="text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
-                                                        <th className="text-left py-5 px-4 font-black">Pos</th>
-                                                        <th className="text-left py-5 px-4 font-black">Jugador / Equipo</th>
-                                                        <th className="text-center py-5 px-2 font-black">PJ</th>
-                                                        <th className="text-center py-5 px-2 font-black">PG</th>
-                                                        <th className="text-center py-5 px-2 font-black">Sets</th>
-                                                        <th className="text-center py-5 px-2 font-black">Games</th>
-                                                        <th className="text-right py-5 px-4 font-black">Puntos</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-white/5">
-                                                    {calculateStandings().map((entry: any, idx: number) => (
-                                                        <tr key={entry.id} className="group hover:bg-white/[0.02] transition-all">
-                                                            <td className="py-6 px-4">
-                                                                <span className={`${idx + 1 >= 10 ? 'min-w-8 px-1.5 text-[10px]' : 'w-8 text-xs'} h-8 flex items-center justify-center rounded-xl font-black italic tabular-nums shrink-0 ${idx === 0 ? 'bg-padel-primary text-black' : idx < 3 ? 'bg-white/20 text-white' : 'bg-white/5 text-gray-500'}`}>{idx + 1}</span>
-                                                            </td>
-                                                            <td className="py-6 px-4">
-                                                                <div className="flex items-center gap-4">
-                                                                    <div className="w-10 h-10 rounded-full border border-white/10 overflow-hidden bg-white/5">
-                                                                        {entry.photo ? <img src={entry.photo} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-600 uppercase">{(entry.name || '?')[0]}</div>}
-                                                                    </div>
-                                                                    <span className="text-xs font-black italic uppercase tracking-tighter text-white group-hover:text-padel-primary transition-colors">{entry.name}</span>
+                                {(() => {
+                                    const crossFinishedRank = matches.filter(
+                                        (m: any) => m.status === MatchStatus.FINISHED && m.stage === 'GROUP_STAGE'
+                                    );
+                                    const assignments = (tournament?.groupAssignments ?? {}) as Record<string, string[]>;
+                                    const assignmentKeys = Object.keys(assignments).sort();
+                                    const showGroupTables =
+                                        assignmentKeys.length > 0 && (isRoundRobin || isCruzado);
+                                    const rrByGroup =
+                                        isRoundRobin && showGroupTables ? getGroupStandings(matches) : {};
+                                    const rrSorted = Object.entries(rrByGroup).sort(([a], [b]) => a.localeCompare(b));
+                                    const cruzadoSorted =
+                                        isCruzado && showGroupTables
+                                            ? assignmentKeys.map(
+                                                  (k) =>
+                                                      [
+                                                          k,
+                                                          buildCruzadoGroupStandingRows(assignments[k] || [], crossFinishedRank),
+                                                      ] as const
+                                              )
+                                            : [];
+                                    const groupBlocks: { key: string; title: string; rows: any[] }[] = [];
+                                    if (isRoundRobin) {
+                                        rrSorted.forEach(([gName, rows]) => {
+                                            groupBlocks.push({ key: `rr-${gName}`, title: `Grupo ${gName}`, rows });
+                                        });
+                                    }
+                                    if (isCruzado) {
+                                        cruzadoSorted.forEach(([gName, rows]) => {
+                                            groupBlocks.push({ key: `xz-${gName}`, title: `Grupo ${gName}`, rows });
+                                        });
+                                    }
+                                    const podium = resolveTournamentPodium();
+                                    const standingsFull = calculateStandings();
+                                    const rankPoints = (e: any) => e.matchesWon * 3 + e.setsWon;
+
+                                    return (
+                                        <>
+                                            {showGroupTables && groupBlocks.length > 0 && (
+                                                <div className="space-y-4">
+                                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1">
+                                                        Clasificación por grupos
+                                                    </h3>
+                                                    <div className="space-y-6">
+                                                        {groupBlocks.map(({ key, title, rows }) => (
+                                                            <div
+                                                                key={key}
+                                                                className="bg-[#1a1a1a] border border-white/10 rounded-[2rem] overflow-hidden shadow-xl"
+                                                            >
+                                                                <div className="bg-white/[0.04] px-6 py-4 border-b border-white/10">
+                                                                    <h4 className="text-[11px] font-black uppercase tracking-widest text-padel-primary">
+                                                                        {title}
+                                                                    </h4>
                                                                 </div>
-                                                            </td>
-                                                            <td className="py-6 px-2 text-center text-xs font-bold text-gray-400">{entry.matchesPlayed}</td>
-                                                            <td className="py-6 px-2 text-center text-xs font-bold text-gray-400">{entry.matchesWon}</td>
-                                                            <td className="py-6 px-2 text-center text-xs font-bold text-gray-400">{entry.setsWon}-{entry.setsLost}</td>
-                                                            <td className="py-6 px-2 text-center text-xs font-bold text-gray-400">{entry.gamesWon}-{entry.gamesLost}</td>
-                                                            <td className="py-6 px-4 text-right">
-                                                                <span className="text-lg font-black italic text-padel-primary">{(entry.matchesWon * 3) + (entry.setsWon * 1)}</span>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
+                                                                <div className="p-5 overflow-x-auto">
+                                                                    <table className="w-full">
+                                                                        <thead>
+                                                                            <tr className="text-[9px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
+                                                                                <th className="text-left py-3 px-2 font-black">Pos</th>
+                                                                                <th className="text-left py-3 px-2 font-black">Equipo</th>
+                                                                                <th className="text-center py-3 px-1 font-black">PJ</th>
+                                                                                <th className="text-center py-3 px-1 font-black">PG</th>
+                                                                                <th className="text-center py-3 px-1 font-black">Sets</th>
+                                                                                <th className="text-center py-3 px-1 font-black">Games</th>
+                                                                                <th className="text-right py-3 px-2 font-black">Pts</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody className="divide-y divide-white/5">
+                                                                            {rows.map((entry: any, idx: number) => (
+                                                                                <tr
+                                                                                    key={`${key}-${entry.id}`}
+                                                                                    className="group hover:bg-white/[0.02] transition-all"
+                                                                                >
+                                                                                    <td className="py-4 px-2">
+                                                                                        <span
+                                                                                            className={`${
+                                                                                                idx + 1 >= 10
+                                                                                                    ? 'min-w-7 px-1 text-[9px]'
+                                                                                                    : 'w-7 text-[10px]'
+                                                                                            } h-7 flex items-center justify-center rounded-lg font-black italic tabular-nums shrink-0 ${
+                                                                                                idx === 0
+                                                                                                    ? 'bg-padel-primary text-black'
+                                                                                                    : idx === 1
+                                                                                                      ? 'bg-white/20 text-white'
+                                                                                                      : 'bg-white/5 text-gray-500'
+                                                                                            }`}
+                                                                                        >
+                                                                                            {idx + 1}
+                                                                                        </span>
+                                                                                    </td>
+                                                                                    <td className="py-4 px-2">
+                                                                                        <div className="flex items-center gap-3">
+                                                                                            <div className="w-8 h-8 rounded-full border border-white/10 overflow-hidden bg-white/5 flex items-center justify-center text-[9px] font-bold text-gray-600 uppercase">
+                                                                                                {(entry.name || '?')[0]}
+                                                                                            </div>
+                                                                                            <span className="text-[11px] font-black italic uppercase tracking-tighter text-white">
+                                                                                                {entry.name}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </td>
+                                                                                    <td className="py-4 px-1 text-center text-[11px] font-bold text-gray-400">
+                                                                                        {entry.matchesPlayed}
+                                                                                    </td>
+                                                                                    <td className="py-4 px-1 text-center text-[11px] font-bold text-gray-400">
+                                                                                        {entry.matchesWon}
+                                                                                    </td>
+                                                                                    <td className="py-4 px-1 text-center text-[11px] font-bold text-gray-400">
+                                                                                        {entry.setsWon}-{entry.setsLost}
+                                                                                    </td>
+                                                                                    <td className="py-4 px-1 text-center text-[11px] font-bold text-gray-400">
+                                                                                        {entry.gamesWon}-{entry.gamesLost}
+                                                                                    </td>
+                                                                                    <td className="py-4 px-2 text-right">
+                                                                                        <span className="text-sm font-black italic text-padel-primary">
+                                                                                            {rankPoints(entry)}
+                                                                                        </span>
+                                                                                    </td>
+                                                                                </tr>
+                                                                            ))}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {showGroupTables && podium && (
+                                                <div className="space-y-4">
+                                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1">
+                                                        Podio · categoría
+                                                    </h3>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                        <div className="rounded-[2rem] border border-padel-primary/35 bg-padel-primary/[0.08] p-6 shadow-lg shadow-padel-primary/5">
+                                                            <span className="text-[9px] font-black uppercase tracking-widest text-padel-primary">
+                                                                1.er lugar
+                                                            </span>
+                                                            <p className="text-lg font-black italic text-white mt-2 tracking-tight">
+                                                                {podium.first.name}
+                                                            </p>
+                                                        </div>
+                                                        <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+                                                            <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">
+                                                                2.º lugar
+                                                            </span>
+                                                            <p className="text-lg font-black italic text-white mt-2 tracking-tight">
+                                                                {podium.second?.name ?? '—'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-[9px] text-gray-500 px-1 font-bold uppercase tracking-wider">
+                                                        {podium.source === 'final'
+                                                            ? 'Campeón y subcampeón según la final jugada.'
+                                                            : 'Según la clasificación general hasta ahora (sin final disputada o sin fase eliminatoria).'}
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            {showGroupTables && !podium && (
+                                                <p className="text-[10px] text-gray-500 text-center px-4">
+                                                    Cuando haya resultados o se juegue la final, aquí verás 1.er y 2.º del torneo.
+                                                </p>
+                                            )}
+
+                                            <div className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
+                                                <div className="bg-padel-primary px-10 py-6 flex justify-between items-center">
+                                                    <div>
+                                                        <h3 className="text-black font-black italic uppercase text-xl tracking-tighter">
+                                                            {showGroupTables
+                                                                ? 'Clasificación general de la categoría'
+                                                                : 'Ranking General'}
+                                                        </h3>
+                                                        <p className="text-[10px] text-black/60 font-black uppercase tracking-widest">
+                                                            {showGroupTables
+                                                                ? 'Todos los equipos · estadísticas acumuladas'
+                                                                : 'Estadísticas Acumuladas'}
+                                                        </p>
+                                                    </div>
+                                                    <Trophy className="w-8 h-8 text-black opacity-20" />
+                                                </div>
+                                                <div className="p-8">
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full">
+                                                            <thead>
+                                                                <tr className="text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
+                                                                    <th className="text-left py-5 px-4 font-black">Pos</th>
+                                                                    <th className="text-left py-5 px-4 font-black">Jugador / Equipo</th>
+                                                                    <th className="text-center py-5 px-2 font-black">PJ</th>
+                                                                    <th className="text-center py-5 px-2 font-black">PG</th>
+                                                                    <th className="text-center py-5 px-2 font-black">Sets</th>
+                                                                    <th className="text-center py-5 px-2 font-black">Games</th>
+                                                                    <th className="text-right py-5 px-4 font-black">Puntos</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-white/5">
+                                                                {standingsFull.map((entry: any, idx: number) => (
+                                                                    <tr
+                                                                        key={entry.id}
+                                                                        className="group hover:bg-white/[0.02] transition-all"
+                                                                    >
+                                                                        <td className="py-6 px-4">
+                                                                            <span
+                                                                                className={`${
+                                                                                    idx + 1 >= 10
+                                                                                        ? 'min-w-8 px-1.5 text-[10px]'
+                                                                                        : 'w-8 text-xs'
+                                                                                } h-8 flex items-center justify-center rounded-xl font-black italic tabular-nums shrink-0 ${
+                                                                                    idx === 0
+                                                                                        ? 'bg-padel-primary text-black'
+                                                                                        : idx < 3
+                                                                                          ? 'bg-white/20 text-white'
+                                                                                          : 'bg-white/5 text-gray-500'
+                                                                                }`}
+                                                                            >
+                                                                                {idx + 1}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="py-6 px-4">
+                                                                            <div className="flex items-center gap-4">
+                                                                                <div className="w-10 h-10 rounded-full border border-white/10 overflow-hidden bg-white/5">
+                                                                                    {entry.photo ? (
+                                                                                        <img
+                                                                                            src={entry.photo}
+                                                                                            className="w-full h-full object-cover"
+                                                                                            alt=""
+                                                                                        />
+                                                                                    ) : (
+                                                                                        <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-600 uppercase">
+                                                                                            {(entry.name || '?')[0]}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                                <span className="text-xs font-black italic uppercase tracking-tighter text-white group-hover:text-padel-primary transition-colors">
+                                                                                    {entry.name}
+                                                                                </span>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="py-6 px-2 text-center text-xs font-bold text-gray-400">
+                                                                            {entry.matchesPlayed}
+                                                                        </td>
+                                                                        <td className="py-6 px-2 text-center text-xs font-bold text-gray-400">
+                                                                            {entry.matchesWon}
+                                                                        </td>
+                                                                        <td className="py-6 px-2 text-center text-xs font-bold text-gray-400">
+                                                                            {entry.setsWon}-{entry.setsLost}
+                                                                        </td>
+                                                                        <td className="py-6 px-2 text-center text-xs font-bold text-gray-400">
+                                                                            {entry.gamesWon}-{entry.gamesLost}
+                                                                        </td>
+                                                                        <td className="py-6 px-4 text-right">
+                                                                            <span className="text-lg font-black italic text-padel-primary">
+                                                                                {rankPoints(entry)}
+                                                                            </span>
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
                             </motion.div>
                         ) : (
                             <motion.div
@@ -2205,22 +2544,57 @@ export default function TournamentDashboard() {
                                                                     {(() => {
                                                                         // Partido finalizado: mostrar solo score del Set 1, Set 2 y STB (si hubo)
                                                                         if (isFinishedCard) {
-                                                                            const setScores = match.setScores || [];
-                                                                            const stb = match.superTiebreakScore;
-                                                                            const parts: string[] = [];
-                                                                            if (setScores[0]) parts.push(`S1: ${setScores[0].t1}-${setScores[0].t2}`);
-                                                                            if (setScores[1]) parts.push(`S2: ${setScores[1].t1}-${setScores[1].t2}`);
-                                                                            if (stb && (stb.t1 > 0 || stb.t2 > 0)) parts.push(`STB: ${stb.t1}-${stb.t2}`);
-                                                                            const scoreLine = parts.length > 0 ? parts.join(' · ') : `Sets ${match.sets?.t1 ?? 0}-${match.sets?.t2 ?? 0}${match.games?.t1 != null && match.games?.t2 != null ? ` (${match.games.t1}-${match.games.t2})` : ''}`;
+                                                                            const scoreLines = getFinishedMatchScoreLines(match);
+                                                                            const finishedTeam1 =
+                                                                                [
+                                                                                    formatPlayerFichaName(t1p1),
+                                                                                    t1p2 ? formatPlayerFichaName(t1p2) : '',
+                                                                                ]
+                                                                                    .filter(Boolean)
+                                                                                    .join(' · ') ||
+                                                                                match.team1?.name ||
+                                                                                '–';
+                                                                            const finishedTeam2 =
+                                                                                [
+                                                                                    formatPlayerFichaName(t2p1),
+                                                                                    t2p2 ? formatPlayerFichaName(t2p2) : '',
+                                                                                ]
+                                                                                    .filter(Boolean)
+                                                                                    .join(' · ') ||
+                                                                                match.team2?.name ||
+                                                                                '–';
                                                                             return (
-                                                                                <div className="flex flex-col shrink-0 py-2 px-3">
-                                                                                    <div className="text-[11px] font-black uppercase tracking-wider text-white/70 border-b border-white/10 pb-2 mb-2">
-                                                                                        {scoreLine}
+                                                                                <div className="flex flex-col shrink-0 py-2 px-3 gap-2">
+                                                                                    <div className="flex flex-col gap-1">
+                                                                                        {scoreLines.map((line, li) => (
+                                                                                            <div
+                                                                                                key={li}
+                                                                                                className={`text-[10px] sm:text-[11px] font-black uppercase tracking-wider leading-snug ${
+                                                                                                    line.includes('STB')
+                                                                                                        ? 'text-padel-primary/95'
+                                                                                                        : 'text-white/70'
+                                                                                                }`}
+                                                                                            >
+                                                                                                {line}
+                                                                                            </div>
+                                                                                        ))}
                                                                                     </div>
-                                                                                    <div className="flex justify-between items-center gap-2 text-white/90">
-                                                                                        <span className="text-xs font-bold truncate min-w-0">{match.team1?.name || '–'}</span>
-                                                                                        <span className="text-[10px] text-white/40 flex-shrink-0">vs</span>
-                                                                                        <span className="text-xs font-bold truncate min-w-0 text-right">{match.team2?.name || '–'}</span>
+                                                                                    <div className="flex justify-between items-center gap-2 text-white/90 min-h-[2.25rem] border-t border-white/10 pt-2">
+                                                                                        <div className="min-w-0 flex-1">
+                                                                                            <AutoShrinkName
+                                                                                                name={finishedTeam1}
+                                                                                                style={{ fontSize: '11px' }}
+                                                                                                className="font-black italic uppercase tracking-tight leading-tight text-left"
+                                                                                            />
+                                                                                        </div>
+                                                                                        <span className="text-[10px] text-white/40 flex-shrink-0 px-1">vs</span>
+                                                                                        <div className="min-w-0 flex-1">
+                                                                                            <AutoShrinkName
+                                                                                                name={finishedTeam2}
+                                                                                                style={{ fontSize: '11px' }}
+                                                                                                className="font-black italic uppercase tracking-tight leading-tight text-right"
+                                                                                            />
+                                                                                        </div>
                                                                                     </div>
                                                                                 </div>
                                                                             );
@@ -2246,22 +2620,17 @@ export default function TournamentDashboard() {
                                                                         const isT1Serving = isActive && (liveMarker?.saque?.equipo === 1 || match.server?.team === 1);
                                                                         const isT2Serving = isActive && (liveMarker?.saque?.equipo === 2 || match.server?.team === 2);
 
-                                                                        const fmt = (name: string) => {
-                                                                            if (!name) return '';
-                                                                            const trimmed = name.trim();
-                                                                            const parts = trimmed.split(/\s+/).filter(Boolean);
-                                                                            if (parts.length === 1) return parts[0];
-                                                                            const last = parts[parts.length - 1];
-                                                                            // "Jugador 10", "Pareja 12", etc.: el último token es dorsal/número, no una inicial
-                                                                            if (/^\d+$/.test(last)) return trimmed;
-                                                                            return `${parts[0]} ${last[0]}.`;
-                                                                        };
-
                                                                         const ROW_H = 'h-8';
                                                                         const COL_W_SCORE = 'w-8';
                                                                         const COL_W_POINTS = 'w-9';
-                                                                        const team1Label = [fmt(t1p1), t1p2 ? fmt(t1p2) : ''].filter(Boolean).join(' · ') || 'Equipo 1';
-                                                                        const team2Label = [fmt(t2p1), t2p2 ? fmt(t2p2) : ''].filter(Boolean).join(' · ') || 'Equipo 2';
+                                                                        const team1Label =
+                                                                            [formatPlayerFichaName(t1p1), t1p2 ? formatPlayerFichaName(t1p2) : '']
+                                                                                .filter(Boolean)
+                                                                                .join(' · ') || 'Equipo 1';
+                                                                        const team2Label =
+                                                                            [formatPlayerFichaName(t2p1), t2p2 ? formatPlayerFichaName(t2p2) : '']
+                                                                                .filter(Boolean)
+                                                                                .join(' · ') || 'Equipo 2';
                                                                         const showPgsCols =
                                                                             activeTab === 'En Vivo' ||
                                                                             (activeTab !== 'Por Comenzar' &&
@@ -2315,7 +2684,9 @@ export default function TournamentDashboard() {
                                                                                         <div className={`flex ${ROW_H} items-stretch border-b border-white/[0.12]`}>
                                                                                             {/* Nombres */}
                                                                                             {(() => {
-                                                                                                const t1total = (fmt(t1p1) + (t1p2 ? fmt(t1p2) : '')).length;
+                                                                                                const t1total =
+                                                                                                    (formatPlayerFichaName(t1p1) + (t1p2 ? formatPlayerFichaName(t1p2) : ''))
+                                                                                                        .length;
                                                                                                 const fs1 = t1total <= 8 ? '14px' : t1total <= 13 ? '12px' : t1total <= 18 ? '10px' : t1total <= 24 ? '9px' : '8px';
                                                                                                 return (
                                                                                                     <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
@@ -2324,13 +2695,13 @@ export default function TournamentDashboard() {
                                                                                                         </div>
                                                                                                         <div className="flex items-center gap-1 min-w-0 overflow-hidden">
                                                                                                             <div className="min-w-0 flex-1">
-                                                                                                                <AutoShrinkName name={fmt(t1p1)} style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white' : 'text-white/65'}`} />
+                                                                                                                <AutoShrinkName name={formatPlayerFichaName(t1p1)} style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white' : 'text-white/65'}`} />
                                                                                                             </div>
                                                                                                             {t1p2 && (
                                                                                                                 <>
                                                                                                                     <span className="text-white/20 text-xs flex-shrink-0">·</span>
                                                                                                                     <div className="min-w-0 flex-1">
-                                                                                                                        <AutoShrinkName name={fmt(t1p2)} style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white/70' : 'text-white/40'}`} />
+                                                                                                                        <AutoShrinkName name={formatPlayerFichaName(t1p2)} style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white/70' : 'text-white/40'}`} />
                                                                                                                     </div>
                                                                                                                 </>
                                                                                                             )}
@@ -2373,7 +2744,9 @@ export default function TournamentDashboard() {
                                                                                         <div className={`flex ${ROW_H} items-stretch`}>
                                                                                             {/* Nombres */}
                                                                                             {(() => {
-                                                                                                const t2total = (fmt(t2p1) + (t2p2 ? fmt(t2p2) : '')).length;
+                                                                                                const t2total =
+                                                                                                    (formatPlayerFichaName(t2p1) + (t2p2 ? formatPlayerFichaName(t2p2) : ''))
+                                                                                                        .length;
                                                                                                 const fs2 = t2total <= 8 ? '14px' : t2total <= 13 ? '12px' : t2total <= 18 ? '10px' : t2total <= 24 ? '9px' : '8px';
                                                                                                 return (
                                                                                                     <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
@@ -2382,13 +2755,13 @@ export default function TournamentDashboard() {
                                                                                                         </div>
                                                                                                         <div className="flex items-center gap-1 min-w-0 overflow-hidden">
                                                                                                             <div className="min-w-0 flex-1">
-                                                                                                                <AutoShrinkName name={fmt(t2p1)} style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white' : 'text-white/65'}`} />
+                                                                                                                <AutoShrinkName name={formatPlayerFichaName(t2p1)} style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white' : 'text-white/65'}`} />
                                                                                                             </div>
                                                                                                             {t2p2 && (
                                                                                                                 <>
                                                                                                                     <span className="text-white/20 text-xs flex-shrink-0">·</span>
                                                                                                                     <div className="min-w-0 flex-1">
-                                                                                                                        <AutoShrinkName name={fmt(t2p2)} style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white/70' : 'text-white/40'}`} />
+                                                                                                                        <AutoShrinkName name={formatPlayerFichaName(t2p2)} style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white/70' : 'text-white/40'}`} />
                                                                                                                     </div>
                                                                                                                 </>
                                                                                                             )}
@@ -2625,9 +2998,9 @@ export default function TournamentDashboard() {
                                 initial={{ scale: 0.9, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
                                 exit={{ scale: 0.9, opacity: 0 }}
-                                className="bg-[#0f0f0f] w-full max-w-lg rounded-[32px] border border-white/10 overflow-hidden shadow-2xl max-h-[90vh] flex flex-col"
+                                className="bg-[#0f0f0f] w-full max-w-lg rounded-[32px] border border-white/10 overflow-hidden shadow-2xl max-h-[90vh] flex flex-col min-h-0"
                             >
-                                <div className="p-6 space-y-6 flex-1 overflow-y-auto">
+                                <div className="p-6 space-y-6 flex-1 min-h-0 overflow-y-auto overscroll-y-contain touch-pan-y">
                                     <div className="flex justify-between items-center mb-2">
                                         <div>
                                             <h3 className="text-xl font-black italic uppercase tracking-tighter leading-none">Marcador</h3>

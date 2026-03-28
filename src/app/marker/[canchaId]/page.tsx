@@ -44,6 +44,7 @@ export default function MarkerControlPage() {
     const [cronSeconds, setCronSeconds] = useState(0);
     const [refrescandoPizarra, setRefrescandoPizarra] = useState(false);
     const [refrescoExitoso, setRefrescoExitoso] = useState(false);
+    const [recuperandoMarcador, setRecuperandoMarcador] = useState(false);
     const [jugadoresDraft, setJugadoresDraft] = useState({
         j1: '',
         j2: '',
@@ -727,6 +728,146 @@ export default function MarkerControlPage() {
             return 2;
         }
         return r.setsToWinMatch;
+    };
+
+    /** Reconstruye el objeto `marcador` de la pizarra desde la fila del torneo (volver tras cerrar pestaña / datos incompletos). */
+    const buildMarcadorFromTournamentMatch = (found: any, tourney: any) => {
+        const lines = resolveMatchTeamLines(found, tourney);
+        const mf =
+            found?.rrMatchFormat ??
+            found?.matchFormat ??
+            (tourney as any)?.rrMatchFormat ??
+            tourney?.matchFormat;
+        const tb = found?.tieBreakType || tourney?.tieBreakType;
+        const sets_to_win_match = deriveSetsToWinMatch(mf, tb);
+        const pts = found?.points || { t1: '0', t2: '0' };
+        const hist = (found?.setScores || []).map((s: any) => ({
+            local: Number(s?.t1 ?? s?.local ?? 0) || 0,
+            visitante: Number(s?.t2 ?? s?.visitante ?? 0) || 0,
+        }));
+        let modo_puntos: 'normal' | 'tiebreak' | 'super_tiebreak' = 'normal';
+        if (found?.superTiebreak) modo_puntos = 'super_tiebreak';
+        else if (found?.isTiebreak) modo_puntos = 'tiebreak';
+        return {
+            sets: { local: Number(found?.sets?.t1) || 0, visitante: Number(found?.sets?.t2) || 0 },
+            games: { local: Number(found?.games?.t1) || 0, visitante: Number(found?.games?.t2) || 0 },
+            puntos: { local: String(pts?.t1 ?? '0'), visitante: String(pts?.t2 ?? '0') },
+            historico_sets: hist,
+            modo_puntos,
+            golden_point: tourney?.scoringSystem === 'GOLDEN_POINT',
+            super_tiebreak: !!found?.superTiebreak,
+            match_format: mf,
+            tie_break_type: tb,
+            sets_to_win_match,
+            equipo_1: { nombre: lines.team1 || 'Equipo 1', color: '#CCFF00' },
+            equipo_2: { nombre: lines.team2 || 'Equipo 2', color: '#FF5500' },
+            cronometro: { running: false, startedAt: null, elapsedSec: 0 },
+            saque:
+                found?.server && typeof found.server.team === 'number'
+                    ? { equipo: found.server.team, jugador: found.server.player ?? 1 }
+                    : { equipo: 1, jugador: 1 },
+            ultimo_update: Date.now(),
+        };
+    };
+
+    /**
+     * La pista puede quedar `en_vivo` sin `marcador` (pestaña cerrada, escritura a medias).
+     * Rehidrata desde tournament_matches + reasigna marker_uid al usuario actual.
+     */
+    const handleRecuperarMarcador = async () => {
+        if (!user) {
+            alert('Inicia sesión para recuperar el marcador.');
+            return;
+        }
+        const cur = canchaDataRef.current || {};
+        let tid = String(cur.torneo_id || tParam || '').trim();
+        let pid = String(cur.partido_id || mParam || '').trim();
+        if (!tid) {
+            alert(
+                'No hay torneo vinculado en la pizarra. Abre el marcador desde el hub del torneo (enlace con ?t= y ?m=) o usa la sala de árbitro.',
+            );
+            return;
+        }
+        setRecuperandoMarcador(true);
+        try {
+            const tourney = await dataService.getTournament(tid);
+            const matches = await dataService.getMatches(tid);
+
+            let resolvedPid =
+                String(cur.partido_id || '').trim() || String(mParam || '').trim();
+            if (
+                resolvedPid.startsWith('live_') &&
+                mParam &&
+                !String(mParam).startsWith('live_')
+            ) {
+                resolvedPid = String(mParam).trim();
+            }
+
+            const found =
+                resolvedPid && !resolvedPid.startsWith('live_')
+                    ? matches.find((x: any) => String(x.id) === resolvedPid)
+                    : null;
+
+            let nextMarcador: ReturnType<typeof buildMarcadorFromTournamentMatch>;
+            let finalPid: string;
+
+            if (found) {
+                const st = String(found.status || '').toUpperCase();
+                if (st === 'FINISHED') {
+                    alert('Este partido ya está finalizado. No se puede marcar de nuevo desde aquí.');
+                    return;
+                }
+                finishedLockRef.current = false;
+                nextMarcador = buildMarcadorFromTournamentMatch(found, tourney);
+                finalPid = String(found.id);
+            } else if (resolvedPid && !resolvedPid.startsWith('live_')) {
+                alert(
+                    'No se encontró el partido en el torneo. Vuelve a abrir el marcador desde la grilla del torneo.',
+                );
+                return;
+            } else {
+                const mf =
+                    (tourney as any)?.rrMatchFormat ?? tourney?.matchFormat;
+                const tb = tourney?.tieBreakType;
+                const sets_to_win_match = deriveSetsToWinMatch(mf, tb);
+                nextMarcador = {
+                    sets: { local: 0, visitante: 0 },
+                    games: { local: 0, visitante: 0 },
+                    puntos: { local: '0', visitante: '0' },
+                    historico_sets: [],
+                    modo_puntos: 'normal',
+                    golden_point: tourney?.scoringSystem === 'GOLDEN_POINT',
+                    super_tiebreak: false,
+                    match_format: mf,
+                    tie_break_type: tb,
+                    sets_to_win_match,
+                    equipo_1: { ...equipo1 },
+                    equipo_2: { ...equipo2 },
+                    cronometro: { running: false, startedAt: null, elapsedSec: 0 },
+                    saque: { equipo: 1, jugador: 1 },
+                    ultimo_update: Date.now(),
+                };
+                finalPid = resolvedPid && resolvedPid.startsWith('live_') ? resolvedPid : `live_${Date.now()}`;
+            }
+
+            const nextData = {
+                ...cur,
+                estado: 'en_vivo',
+                torneo_id: tid,
+                partido_id: finalPid,
+                active_match_id: finalPid,
+                marker_uid: user.uid,
+                marker_nombre: profile?.name || user.email || 'Marker',
+                marcador: nextMarcador,
+            };
+            setCanchaData(nextData);
+            await dataService.setPizarraCanchaState(canchaId, nextData);
+        } catch (e) {
+            console.error('[Marker] Recuperar marcador:', e);
+            alert('No se pudo recuperar el marcador. Revisa la conexión o usa la sala de árbitro.');
+        } finally {
+            setRecuperandoMarcador(false);
+        }
     };
 
     // Blindaje de reglas: en formato esperado "2 sets + STB", nunca cerrar partido al primer set
@@ -1559,6 +1700,60 @@ export default function MarkerControlPage() {
                                 {activando ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
                                 INICIAR CALENTAMIENTO
                             </motion.button>
+                    </div>
+                )}
+
+                {/* ── EN VIVO pero sin bloque marcador (p. ej. pestaña cerrada a mitad de sync) ── */}
+                {isEnVivo && !marcador && (
+                    <div className="rounded-3xl border border-amber-500/35 bg-amber-500/[0.08] p-6 space-y-4">
+                        <div className="flex items-start gap-3">
+                            <AlertCircle className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
+                            <div className="space-y-2">
+                                <h2 className="text-sm font-black uppercase tracking-wide text-amber-200">
+                                    Partido en vivo sin controles
+                                </h2>
+                                <p className="text-xs text-gray-400 leading-relaxed">
+                                    La pista sigue en EN VIVO en la pizarra, pero faltan los datos del marcador en pantalla.
+                                    Puedes recuperarlos aquí (desde el torneo) o usar la sala de árbitro, que tiene el mismo
+                                    partido en vivo.
+                                </p>
+                            </div>
+                        </div>
+                        {(() => {
+                            const tr = String(canchaData?.torneo_id || tParam || '').trim();
+                            const pr = String(canchaData?.partido_id || mParam || '').trim();
+                            if (tr && pr && !pr.startsWith('live_')) {
+                                return (
+                                    <Link
+                                        href={`/tournaments/${tr}/score/${pr}`}
+                                        className="flex items-center justify-center w-full py-4 rounded-2xl bg-white/10 border border-white/20 text-white text-xs font-black uppercase tracking-widest hover:bg-white/15 transition-colors"
+                                    >
+                                        Abrir sala de árbitro (mismos botones)
+                                    </Link>
+                                );
+                            }
+                            return (
+                                <p className="text-[10px] text-gray-500 text-center">
+                                    Si tienes el enlace del torneo con <code className="text-gray-400">?t=</code> y{' '}
+                                    <code className="text-gray-400">?m=</code>, vuelve a abrirlo; así podremos enlazar el
+                                    partido.
+                                </p>
+                            );
+                        })()}
+                        <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.98 }}
+                            onClick={handleRecuperarMarcador}
+                            disabled={recuperandoMarcador}
+                            className="w-full bg-padel-primary text-black py-4 rounded-2xl font-black uppercase italic tracking-tight text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                            {recuperandoMarcador ? (
+                                <RefreshCw className="w-5 h-5 animate-spin" />
+                            ) : (
+                                <Play className="w-5 h-5" />
+                            )}
+                            Recuperar marcador en esta pista
+                        </motion.button>
                     </div>
                 )}
 

@@ -1,12 +1,13 @@
 import { MatchStatus } from '@/types/tournament';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { dataService } from '@/lib/dataService';
+import { hydrateGroupQualifierSlots, knockoutHydrationDiffers } from '@/lib/groupQualifierHydration';
 
-/** Quita campos de vista / metadatos de fila antes de persistir en `tournament_matches.data`. */
+/** Quita metadatos de fila antes de persistir en `tournament_matches.data`. Se conservan team1/team2 para no dejar TBD obsoleto al fusionar con `row.data`. */
 export function stripMatchForPersistence(m: any) {
     if (!m || typeof m !== 'object') return m;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { team1, team2, id: _id, tournament_id: _tid, ...rest } = m;
+    const { id: _id, tournament_id: _tid, ...rest } = m;
     return rest;
 }
 
@@ -17,7 +18,8 @@ export function stripMatchForPersistence(m: any) {
 export function computeMatchesAfterMatchFinish(
     matches: any[],
     matchId: string,
-    bufferMinutes: number
+    bufferMinutes: number,
+    tournament?: any,
 ): any[] {
     const finishedMatch = matches.find((m) => m.id === matchId);
     if (!finishedMatch) return matches;
@@ -37,7 +39,7 @@ export function computeMatchesAfterMatchFinish(
     const isFinalMatch = (x: any) =>
         x.roundName === 'FINAL' || roundUpper(x) === 'FINAL' || x.stage === 'FINAL';
 
-    const updatedMatches = matches.map((m) => {
+    let updatedMatches = matches.map((m) => {
         if (m.id === matchId) {
             return { ...m, status: MatchStatus.FINISHED, score: finalScore };
         }
@@ -84,6 +86,10 @@ export function computeMatchesAfterMatchFinish(
         return m;
     });
 
+    if (tournament) {
+        updatedMatches = hydrateGroupQualifierSlots(updatedMatches, tournament);
+    }
+
     const autocorrected = ScheduleEngine.recalculateRemainingMatches(
         updatedMatches,
         bufferMinutes
@@ -101,6 +107,36 @@ export type MatchFinishUpdateFn = (
 ) => Promise<void>;
 
 /**
+ * Si hay grupos cerrados y slots TBD tipo "1° Grupo A", persiste los nombres en BD.
+ * Idempotente: solo escribe partidos que realmente cambian.
+ */
+export async function syncGroupQualifierSlotsToDatabaseIfNeeded(params: {
+    tournamentId: string;
+    tournament: any;
+    rawMatches: any[];
+    updateMatch: MatchFinishUpdateFn;
+}): Promise<void> {
+    const { tournamentId, tournament, rawMatches, updateMatch } = params;
+    if (!tournament?.groupAssignments || Object.keys(tournament.groupAssignments).length === 0) return;
+    if (!Array.isArray(rawMatches) || rawMatches.length === 0) return;
+
+    const hydrated = hydrateGroupQualifierSlots(rawMatches.map((m) => ({ ...m })), tournament);
+
+    for (const after of hydrated) {
+        const before = rawMatches.find((r) => String(r?.id) === String(after?.id));
+        if (!before || !knockoutHydrationDiffers(before, after)) continue;
+        try {
+            await updateMatch(tournamentId, after.id, {
+                ...stripMatchForPersistence(after),
+                scheduledTime: after.scheduledTime,
+            });
+        } catch (e) {
+            console.warn('[syncGroupQualifierSlots]', after?.id, e);
+        }
+    }
+}
+
+/**
  * Persiste el cierre y las actualizaciones derivadas (cuadro + horarios).
  * Caller debe pasar `matches` con el partido `matchId` ya fusionado al estado final deseado.
  */
@@ -110,9 +146,11 @@ export async function persistMatchFinishWithPropagation(params: {
     matches: any[];
     matchId: string;
     updateMatch: MatchFinishUpdateFn;
+    /** Torneo (groupAssignments + teams) para rellenar "1° Grupo A" en semifinales cuando el grupo cerró. */
+    tournament?: any;
 }): Promise<{ finalMatches: any[] }> {
-    const { tournamentId, bufferMinutes, matches, matchId, updateMatch } = params;
-    const finalMatches = computeMatchesAfterMatchFinish(matches, matchId, bufferMinutes);
+    const { tournamentId, bufferMinutes, matches, matchId, updateMatch, tournament } = params;
+    const finalMatches = computeMatchesAfterMatchFinish(matches, matchId, bufferMinutes, tournament);
     const finished = finalMatches.find((m) => m.id === matchId);
     if (!finished) {
         throw new Error(`[persistMatchFinishWithPropagation] Partido no encontrado: ${matchId}`);

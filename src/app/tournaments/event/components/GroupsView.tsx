@@ -13,6 +13,8 @@ import { TeamPairDisplay } from '@/components/TeamPairDisplay';
 
 interface GroupsViewProps {
     tournaments: Record<string, any>;
+    /** Solo tablas de clasificación (sin conmutar a lista de partidos del grupo). */
+    rankingOnly?: boolean;
 }
 
 // ── Sub-component: Standings Table ──────────────────────────────────────────
@@ -278,7 +280,7 @@ const GroupMatches = ({ gName, groupAssignments, activeTournament, allMatches }:
     );
 };
 
-export const GroupsView: React.FC<GroupsViewProps> = ({ tournaments }) => {
+export const GroupsView: React.FC<GroupsViewProps> = ({ tournaments, rankingOnly = false }) => {
     const tourList = Object.values(tournaments) as any[];
     const withGroups = tourList.filter(t => t.groupAssignments && Object.keys(t.groupAssignments).length > 0);
 
@@ -322,7 +324,9 @@ export const GroupsView: React.FC<GroupsViewProps> = ({ tournaments }) => {
                                     {formatCategory(t.category)}
                                 </h2>
                                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                                    {t.gender === 'MALE' ? 'Masculino' : t.gender === 'FEMALE' ? 'Femenino' : 'Mixto'} · {groupNames.length} Grupos
+                                    {rankingOnly
+                                        ? `Ranking · ${t.gender === 'MALE' ? 'Masculino' : t.gender === 'FEMALE' ? 'Femenino' : 'Mixto'} · ${groupNames.length} grupos`
+                                        : `${t.gender === 'MALE' ? 'Masculino' : t.gender === 'FEMALE' ? 'Femenino' : 'Mixto'} · ${groupNames.length} Grupos`}
                                 </p>
                             </div>
                         </div>
@@ -350,25 +354,27 @@ export const GroupsView: React.FC<GroupsViewProps> = ({ tournaments }) => {
                             </div>
                         )}
 
-                        {/* Toggle de Vista */}
-                        <div className="flex justify-center pt-2">
-                            <div className="inline-flex items-center p-1 bg-white/[0.04] border border-white/[0.08] rounded-2xl">
-                                <button
-                                    onClick={() => setActiveViewMap(prev => ({ ...prev, [t.id]: 'standings' }))}
-                                    className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2 ${currentView === 'standings' ? 'bg-[#ccff00] text-black shadow-lg shadow-[#ccff00]/10' : 'text-gray-500 hover:text-white'}`}
-                                >
-                                    <TrendingUp className="w-3 h-3" />
-                                    Tabla
-                                </button>
-                                <button
-                                    onClick={() => setActiveViewMap(prev => ({ ...prev, [t.id]: 'matches' }))}
-                                    className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2 ${currentView === 'matches' ? 'bg-[#ccff00] text-black shadow-lg shadow-[#ccff00]/10' : 'text-gray-500 hover:text-white'}`}
-                                >
-                                    <Calendar className="w-3 h-3" />
-                                    Partidos
-                                </button>
+                        {/* Toggle de Vista (oculto en pestaña Ranking del evento) */}
+                        {!rankingOnly && (
+                            <div className="flex justify-center pt-2">
+                                <div className="inline-flex items-center p-1 bg-white/[0.04] border border-white/[0.08] rounded-2xl">
+                                    <button
+                                        onClick={() => setActiveViewMap(prev => ({ ...prev, [t.id]: 'standings' }))}
+                                        className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2 ${currentView === 'standings' ? 'bg-[#ccff00] text-black shadow-lg shadow-[#ccff00]/10' : 'text-gray-500 hover:text-white'}`}
+                                    >
+                                        <TrendingUp className="w-3 h-3" />
+                                        Tabla
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveViewMap(prev => ({ ...prev, [t.id]: 'matches' }))}
+                                        className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2 ${currentView === 'matches' ? 'bg-[#ccff00] text-black shadow-lg shadow-[#ccff00]/10' : 'text-gray-500 hover:text-white'}`}
+                                    >
+                                        <Calendar className="w-3 h-3" />
+                                        Partidos
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Contenido Dinámico */}
                         <AnimatePresence mode="wait">

@@ -342,7 +342,7 @@ function EventView() {
 
     const filtered = allMatches.filter(m => {
         if (activeTab === 'all') return true;
-        if (activeTab === 'groups' || activeTab === 'rules') return false;
+        if (activeTab === 'groups' || activeTab === 'rules' || activeTab === 'ranking') return false;
         if (activeTab === 'live') return isMatchLive(m.status);
         if (activeTab === MatchStatus.PENDING) return isMatchPending(m.status);
         if (activeTab === MatchStatus.FINISHED) return isMatchFinished(m.status);
@@ -421,7 +421,7 @@ function EventView() {
     const firstT = Object.values(tournaments)[0];
 
     return (
-        <div className="min-h-screen bg-[#0a0a0a] text-white font-outfit flex flex-col">
+        <div className="min-h-[100dvh] min-h-screen max-h-[100dvh] max-h-screen bg-[#0a0a0a] text-white font-outfit flex flex-col overflow-x-hidden overflow-y-hidden">
             <TournamentHeader
                 eventName={(() => {
                     const raw = firstT?.eventName ?? firstT?.name ?? firstT?.complexName ?? 'Evento';
@@ -465,11 +465,22 @@ function EventView() {
                         {tab.label}
                     </button>
                 ))}
+                {idsParam ? (
+                    <Link
+                        href={`/tournaments/event/podium?ids=${encodeURIComponent(idsParam)}`}
+                        className="flex-shrink-0 px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 border border-[#ccff00]/25 flex items-center gap-1.5"
+                    >
+                        <Trophy className="w-3.5 h-3.5 flex-shrink-0" />
+                        Campeones
+                    </Link>
+                ) : null}
             </div>
 
-            <div className="flex-1 overflow-y-auto px-2 sm:px-3 py-4 pb-24 relative w-full">
+            <div className="app-flex-scroll-main px-2 sm:px-3 py-4 pb-24 relative w-full">
                 {activeTab === 'groups' ? (
                     <GroupsView tournaments={tournaments} />
+                ) : activeTab === 'ranking' ? (
+                    <GroupsView tournaments={tournaments} rankingOnly />
                 ) : activeTab === 'rules' ? (
                     <RulesView tournaments={tournaments} canManage={!!canManageTournament} />
                 ) : (

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, FileText, Plus } from 'lucide-react';
 import { MatchStatus } from '@/types/tournament';
 import { NextMatchCard, PlaceholderMatchCard, MatchCard } from './MatchCards';
-import { formatHHMM, toMinute } from '../utils';
+import { formatHHMM, toMinute, compareMatchesTodosView } from '../utils';
 
 function getDatePart(m: any): string {
     const raw = m.scheduledTime || m.time || '';
@@ -66,6 +66,19 @@ export const MatchList: React.FC<MatchListProps> = ({
     const dateFilteredFinished = (activeTab === 'all' && selectedDate && availableDates.length > 0)
         ? allMatches.filter((m) => (m.status === 'FINISHED' || m.status === 'COMPLETED') && getDatePart(m) === selectedDate)
         : allMatches.filter((m) => m.status === 'FINISHED' || m.status === 'COMPLETED');
+
+    const isTodosTabLayout =
+        activeTab !== MatchStatus.PENDING &&
+        activeTab !== MatchStatus.LIVE &&
+        activeTab !== MatchStatus.FINISHED;
+    const todosLive = isTodosTabLayout ? [...dateFilteredLive].sort(compareMatchesTodosView) : dateFilteredLive;
+    const todosNextUp = isTodosTabLayout ? [...dateFilteredNextUp].sort(compareMatchesTodosView) : dateFilteredNextUp;
+    const todosQueuePending = isTodosTabLayout
+        ? dateFilteredMatches
+              .filter((m) => m.status === MatchStatus.PENDING && !nextUpIds.has(m.id))
+              .sort(compareMatchesTodosView)
+        : [];
+
     return (
         <AnimatePresence mode="wait">
             {activeTab === MatchStatus.PENDING ? (
@@ -233,7 +246,7 @@ export const MatchList: React.FC<MatchListProps> = ({
                             </div>
                             <div className="flex-1 h-px bg-emerald-500/10" />
                             <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
-                                {dateFilteredLive.length} en acción
+                                {todosLive.length} en acción
                             </span>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -262,10 +275,10 @@ export const MatchList: React.FC<MatchListProps> = ({
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {dateFilteredNextUp.map((m, idx) => (
+                            {todosNextUp.map((m, idx) => (
                                 <NextMatchCard key={m.id} match={m} rank={idx} compact gameNumber={idx + 1} matchNumber={allMatches.indexOf(m) + 1} />
                             ))}
-                            {dateFilteredNextUp.length === 0 && (
+                            {todosNextUp.length === 0 && (
                                 <div className="py-10 text-center border border-dashed border-white/5 rounded-[2rem] opacity-20">
                                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">No hay partidos por comenzar</p>
                                 </div>
@@ -274,7 +287,7 @@ export const MatchList: React.FC<MatchListProps> = ({
                     </div>
 
                     {/* 3. SECCIÓN EN COLA (El resto de pendientes) */}
-                    {dateFilteredMatches.filter(m => m.status === MatchStatus.PENDING && !nextUpIds.has(m.id)).length > 0 && (
+                    {todosQueuePending.length > 0 && (
                         <div className="space-y-4">
                             <div className="flex items-center gap-3 px-1">
                                 <div className="flex items-center gap-2">
@@ -283,23 +296,21 @@ export const MatchList: React.FC<MatchListProps> = ({
                                 </div>
                                 <div className="flex-1 h-px bg-red-400/10" />
                                 <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">
-                                    {dateFilteredMatches.filter(m => m.status === MatchStatus.PENDING && !nextUpIds.has(m.id)).length} en espera
+                                    {todosQueuePending.length} en espera
                                 </span>
                             </div>
 
                             <div className="space-y-3">
-                                {dateFilteredMatches
-                                    .filter(m => m.status === MatchStatus.PENDING && !nextUpIds.has(m.id))
-                                    .map((m, idx) => (
-                                        <MatchCard
-                                            key={m.id}
-                                            match={m}
-                                            idx={idx}
-                                            matchNumber={allMatches.indexOf(m) + 1}
-                                            isEffectivelyLive={false}
-                                            isNextUp={false}
-                                        />
-                                    ))}
+                                {todosQueuePending.map((m, idx) => (
+                                    <MatchCard
+                                        key={m.id}
+                                        match={m}
+                                        idx={idx}
+                                        matchNumber={allMatches.indexOf(m) + 1}
+                                        isEffectivelyLive={false}
+                                        isNextUp={false}
+                                    />
+                                ))}
                             </div>
                         </div>
                     )}

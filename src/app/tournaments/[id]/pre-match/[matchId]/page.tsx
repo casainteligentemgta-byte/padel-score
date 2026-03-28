@@ -201,7 +201,7 @@ export default function PreMatchControl() {
     const countdownLabel = countdown > 0 ? 'Faltan' : 'Lleva';
 
     return (
-        <div className="min-h-screen bg-[#0a0a0a] text-white font-outfit flex flex-col">
+        <div className="min-h-[100dvh] min-h-screen max-h-[100dvh] max-h-screen bg-[#0a0a0a] text-white font-outfit flex flex-col overflow-x-hidden overflow-y-hidden">
             {/* ── Header ──────────────────────────────────────────────── */}
             <header className="flex-shrink-0 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/[0.07] px-4 py-3 flex items-center gap-3">
                 <BackButton className="w-9 h-9" />
@@ -227,7 +227,7 @@ export default function PreMatchControl() {
             </header>
 
             {/* ── Main scrollable area ──────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 pb-28 space-y-3">
+            <div className="app-flex-scroll-main px-4 py-4 pb-28 space-y-3">
 
                 {/* ── Status banner ──────────────────────────────────── */}
                 <AnimatePresence>

@@ -60,9 +60,16 @@ body {
   background: #0a0a0a !important;
   min-height: 100vh;
   min-height: 100dvh;
-  /* Prevent horizontal scroll and improve touch experience */
+  /* Prevent horizontal scroll; permitir scroll vertical (Silk/Fire TV, navegadores TV) */
   overflow-x: hidden;
+  overflow-y: auto;
   -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  overflow-x: hidden;
+  overflow-y: auto;
+  height: 100%;
 }
 
 /* iPad Landscape Specific Optimizations */
@@ -90,14 +97,30 @@ body {
     min-height: 52px;
   }
 
+  /* min-h-0 en el hijo scrollable es crítico para flex + overflow en Silk, iOS y TV */
   .ipad-screen-container {
-    @apply max-w-[1280px] mx-auto h-[100dvh] flex flex-col p-4 lg:p-6 overflow-hidden;
+    @apply max-w-[1280px] mx-auto flex flex-col p-4 lg:p-6 overflow-x-hidden overflow-y-hidden;
+    min-height: 100vh;
+    min-height: 100dvh;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
   }
 
   .ipad-scroll-area {
-    @apply flex-1 overflow-y-auto pr-2;
+    @apply flex-1 min-h-0 overflow-y-auto overscroll-y-contain pr-2;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
     scrollbar-width: thin;
     scrollbar-color: #ccff00 transparent;
+  }
+
+  /* Hub evento / layouts flex columna: región scroll con compat TV */
+  .app-flex-scroll-main {
+    @apply flex-1 min-h-0 overflow-y-auto overscroll-y-contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 
   .ipad-scroll-area::-webkit-scrollbar {

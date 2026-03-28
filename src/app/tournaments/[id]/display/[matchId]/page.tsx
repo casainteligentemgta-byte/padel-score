@@ -14,6 +14,8 @@ import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, Layer
 import { BouncingBall } from '@/components/BouncingBall';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 import { visibleSetNumbersForScoreboard, scoreboardGridClassForSetCount } from '@/lib/displaySetColumns';
+import { formatPlayerFichaName } from '@/lib/playerFichaName';
+import { inferStbFromSetScoresOnly } from '@/lib/matchFinishedScoreDisplay';
 import { resolveMatchTeamLines } from '@/lib/resolveMatchTeamLines';
 
 // Lottie player para animaciones JSON (biblioteca de animaciones)
@@ -212,20 +214,7 @@ export default function FullScreenDisplay() {
             (lower.startsWith('jugador') && /^jugador\s*\d+\s*$/i.test(trimmed))
         ) return null;
 
-        const parts = trimmed.split(/\s+/).filter(Boolean);
-        if (parts.length <= 1) return trimmed;
-
-        const firstName = parts[0];
-        // Si viene "NOMBRE APELLIDO" (2 partes), mostramos solo primer nombre + primer apellido
-        if (parts.length === 2) {
-            return `${firstName} ${parts[1]}`;
-        }
-
-        // Caso típico: "NOMBRE SEGUNDONOMBRE APELLIDO ..."
-        const secondNameInitial = parts[1]?.[0] ? `${parts[1][0]}.` : '';
-        const firstLastName = parts[2] ?? '';
-        const formatted = [firstName, secondNameInitial, firstLastName].filter(Boolean).join(' ');
-        return formatted || trimmed;
+        return formatPlayerFichaName(trimmed);
     };
 
     // ── Marcador en vivo del RTDB (escrito por el marker en tiempo real) ─────
@@ -1080,6 +1069,26 @@ export default function FullScreenDisplay() {
     const visibleSetColsFinal = shouldForceSecondSetCol ? [1, 2] : visibleSetCols;
     const scoreboardGridClass = scoreboardGridClassForSetCount(visibleSetColsFinal.length);
 
+    /** Tercera columna: TB tiene prioridad; si no, STB (incl. inferencia por setScores 1-1 + desempate). */
+    const scoreboardCol3Tb =
+        match?.matchFormat === 'TIEBREAK' ||
+        match?.tiebreak === true ||
+        lm?.modo_puntos === 'tiebreak';
+    const scoreboardCol3Stb =
+        !scoreboardCol3Tb &&
+        (match?.matchFormat === 'SUPER_TIEBREAK' ||
+            match?.superTiebreak === true ||
+            match?.matchFormat === 'SET_3_STB' ||
+            twoSetsPlusStbFmt ||
+            lm?.super_tiebreak === true ||
+            inferStbFromSetScoresOnly(match));
+
+    const setColumnLabel = (setNum: number) => {
+        if (setNum === 3 && scoreboardCol3Tb) return 'TB';
+        if (setNum === 3 && scoreboardCol3Stb) return 'STB';
+        return `SET ${setNum}`;
+    };
+
     // Set boxes helper (alineado con columnas visibles de la pizarra principal)
     const SetBoxes = ({ team }: { team: 1 | 2 }) => (
         <div className="flex items-center gap-[1vw]">
@@ -1087,8 +1096,13 @@ export default function FullScreenDisplay() {
                 const isPast = setNum < currentSet;
                 const isCurrent = setNum === currentSet;
                 const pastVal = match.games_sets?.[setNum - 1]?.[`t${team}`] ?? match.setScores?.[setNum - 1]?.[`t${team}`];
+                const stbFallback =
+                    setNum === 3 && scoreboardCol3Stb && pastVal == null && match.superTiebreakScore
+                        ? match.superTiebreakScore[`t${team}` as 't1' | 't2']
+                        : undefined;
+                const pastValResolved = stbFallback != null ? stbFallback : pastVal;
                 const currentVal = match.games?.[`t${team}`] ?? '';
-                const val = isPast ? (pastVal ?? 0) : isCurrent ? currentVal : '-';
+                const val = isPast ? (pastValResolved ?? 0) : isCurrent ? currentVal : '-';
                 return (
                     <div
                         key={setNum}
@@ -1105,9 +1119,16 @@ export default function FullScreenDisplay() {
                         }}
                     >
                         {isCurrent && <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />}
-                        <span className="font-black uppercase text-gray-500 tracking-widest" style={{ fontSize: 'clamp(10px,0.9vw,16px)', marginBottom: '2px' }}>{`SET ${setNum}`}</span>
+                        <span className="font-black uppercase text-gray-500 tracking-widest leading-tight text-center px-0.5" style={{ fontSize: 'clamp(8px,0.85vw,14px)', marginBottom: '2px' }}>
+                            {setColumnLabel(setNum)}
+                        </span>
+                        {setNum === 3 && scoreboardCol3Stb && (
+                            <span className="font-black uppercase text-gray-600 tracking-tighter" style={{ fontSize: 'clamp(6px,0.65vw,10px)', marginBottom: '1px' }}>
+                                (a 10)
+                            </span>
+                        )}
                         <motion.span
-                            key={isCurrent ? match.games?.[`t${team}`] : (pastVal ?? setNum)}
+                            key={isCurrent ? match.games?.[`t${team}`] : (pastValResolved ?? setNum)}
                             initial={isCurrent ? { scale: 1.5, opacity: 0 } : {}}
                             animate={{ scale: 1, opacity: 1 }}
                             className={`font-black italic ${isCurrent ? 'text-white' : 'text-white/40'}`}
@@ -1369,8 +1390,6 @@ export default function FullScreenDisplay() {
 
                             {/* Columnas de set: solo la del set en curso hasta que el anterior cierre */}
                             {(() => {
-                                const fmt = fmtForSets;
-                                const twoSetsPlusStb = twoSetsPlusStbFmt;
                                 const setCols = visibleSetColsFinal;
                                 const grid = scoreboardGridClass;
                                 return (
@@ -1378,23 +1397,21 @@ export default function FullScreenDisplay() {
                                         <div className={`grid ${grid} items-center border-b border-white/[0.1] bg-black/40 px-6`} style={{ height: '14%' }}>
                                             <div />
                                             {setCols.map(s => {
-                                                // Para el tercer set: detectar si es STB o TB
-                                                const is3rdSTB = s === 3 && (
-                                                    match?.matchFormat === 'SUPER_TIEBREAK' ||
-                                                    match?.superTiebreak === true ||
-                                                    match?.matchFormat === 'SET_3_STB' ||
-                                                    twoSetsPlusStb
-                                                );
-                                                const is3rdTB = s === 3 && !is3rdSTB && (
-                                                    match?.matchFormat === 'TIEBREAK' ||
-                                                    match?.tiebreak === true
-                                                );
-                                                const setLabel = is3rdSTB ? 'STB' : is3rdTB ? 'TB' : `SET ${s}`;
+                                                const isStbCol = s === 3 && scoreboardCol3Stb;
+                                                const isTbCol = s === 3 && scoreboardCol3Tb;
+                                                const setLabel = setColumnLabel(s);
 
-                                                // Resultado del set — para STB usar superTiebreakScore
                                                 let sc: any = match.setScores?.[s - 1] ?? match.games_sets?.[s - 1] ?? null;
-                                                if (is3rdSTB && !sc && match.superTiebreakScore) {
+                                                if (isStbCol && !sc && match.superTiebreakScore) {
                                                     sc = match.superTiebreakScore;
+                                                }
+                                                if (isStbCol && !sc && match.setScores?.[2]) {
+                                                    const third = match.setScores[2];
+                                                    const t1 = Number(third?.t1 ?? third?.local);
+                                                    const t2 = Number(third?.t2 ?? third?.visitante);
+                                                    if (Number.isFinite(t1) && Number.isFinite(t2) && (t1 > 0 || t2 > 0)) {
+                                                        sc = third;
+                                                    }
                                                 }
                                                 const setDone = sc != null && s < currentSet;
                                                 const scT1 = sc?.t1 ?? sc?.local ?? null;
@@ -1406,11 +1423,19 @@ export default function FullScreenDisplay() {
                                                             className="font-black uppercase tracking-widest leading-none text-center w-full"
                                                             style={{
                                                                 fontSize: 'clamp(9px,0.9vw,17px)',
-                                                                color: (is3rdSTB || is3rdTB) ? 'rgba(204,255,0,0.55)' : 'rgba(255,255,255,0.4)'
+                                                                color: (isStbCol || isTbCol) ? 'rgba(204,255,0,0.55)' : 'rgba(255,255,255,0.4)'
                                                             }}
                                                         >
                                                             {setLabel}
                                                         </span>
+                                                        {isStbCol && (
+                                                            <span
+                                                                className="font-black uppercase tracking-widest text-center w-full opacity-70"
+                                                                style={{ fontSize: 'clamp(7px,0.75vw,12px)', color: 'rgba(204,255,0,0.45)' }}
+                                                            >
+                                                                (a 10)
+                                                            </span>
+                                                        )}
                                                         {setDone && scT1 != null && scT2 != null && (
                                                             <span
                                                                 className="font-black italic tabular-nums leading-none text-center w-full"
@@ -1464,8 +1489,20 @@ export default function FullScreenDisplay() {
                                             {setCols.map((s: number) => {
                                                 let val: string | number = '';
                                                 if (s < currentSet) {
-                                                    const stbFallback = (s === 3 && !match.setScores?.[2]) ? match.superTiebreakScore?.t1 : undefined;
-                                                    val = lm?.historico_sets?.[s - 1]?.local ?? match.games_sets?.[s - 1]?.t1 ?? match.setScores?.[s - 1]?.t1 ?? stbFallback ?? 0;
+                                                    const hist = lm?.historico_sets?.[s - 1];
+                                                    const gs = match.games_sets?.[s - 1];
+                                                    const ss = match.setScores?.[s - 1];
+                                                    const stbSc = match.superTiebreakScore;
+                                                    if (s === 3 && scoreboardCol3Stb) {
+                                                        val =
+                                                            hist?.local ??
+                                                            gs?.t1 ??
+                                                            ss?.t1 ??
+                                                            (stbSc?.t1 != null ? stbSc.t1 : undefined) ??
+                                                            0;
+                                                    } else {
+                                                        val = hist?.local ?? gs?.t1 ?? ss?.t1 ?? 0;
+                                                    }
                                                 } else if (s === currentSet) {
                                                     val = gamesT1;
                                                 }
@@ -1517,8 +1554,20 @@ export default function FullScreenDisplay() {
                                             {setCols.map((s: number) => {
                                                 let val: string | number = '';
                                                 if (s < currentSet) {
-                                                    const stbFallback = (s === 3 && !match.setScores?.[2]) ? match.superTiebreakScore?.t2 : undefined;
-                                                    val = lm?.historico_sets?.[s - 1]?.visitante ?? match.games_sets?.[s - 1]?.t2 ?? match.setScores?.[s - 1]?.t2 ?? stbFallback ?? 0;
+                                                    const hist = lm?.historico_sets?.[s - 1];
+                                                    const gs = match.games_sets?.[s - 1];
+                                                    const ss = match.setScores?.[s - 1];
+                                                    const stbSc = match.superTiebreakScore;
+                                                    if (s === 3 && scoreboardCol3Stb) {
+                                                        val =
+                                                            hist?.visitante ??
+                                                            gs?.t2 ??
+                                                            ss?.t2 ??
+                                                            (stbSc?.t2 != null ? stbSc.t2 : undefined) ??
+                                                            0;
+                                                    } else {
+                                                        val = hist?.visitante ?? gs?.t2 ?? ss?.t2 ?? 0;
+                                                    }
                                                 } else if (s === currentSet) {
                                                     val = gamesT2;
                                                 }
