@@ -102,7 +102,8 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
     const isSimple = activeTournament?.type === 'AMERICANO_INDIVIDUAL';
     const qualifyingSpots = Math.min(2, rows.length);
     const groupLetter = gName.length === 1 ? gName : gName.replace('Grupo', '').trim();
-    const rankCol = rows.length >= 10 ? 'minmax(28px,auto)' : '24px';
+    const rankCol = rows.length >= 10 ? 'minmax(30px,auto)' : '26px';
+    const colStat = (isSimple ? 36 : 34) + 'px';
 
     return (
         <motion.div
@@ -137,17 +138,17 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
                 <div className="h-full bg-[#ccff00] transition-all duration-700" style={{ width: `${pct}%` }} />
             </div>
 
-            <div className="grid px-4 py-2 bg-white/[0.03] border-b border-white/[0.05]" style={{ gridTemplateColumns: isSimple ? `${rankCol} 1fr 34px 34px 34px 34px 34px 42px 42px` : `${rankCol} 1fr 32px 32px 32px 32px 32px 38px 38px 42px` }}>
-                <span className="text-[8px] font-black text-gray-700 uppercase tracking-wider text-center">#</span>
-                <span className="text-[8px] font-black text-gray-700 uppercase tracking-wider pl-1">{isSimple ? 'Jugador' : 'Pareja'}</span>
-                <span className="text-[8px] font-black text-gray-700 uppercase tracking-wider text-center">PJ</span>
-                <span className="text-[8px] font-black text-gray-700 uppercase tracking-wider text-center">PG</span>
-                <span className="text-[8px] font-black text-gray-700 uppercase tracking-wider text-center">PP</span>
-                {!isSimple && <span className="text-[8px] font-black text-gray-700 uppercase tracking-wider text-center">JF</span>}
-                <span className="text-[8px] font-black text-gray-700 uppercase tracking-wider text-center">JC</span>
-                <span className="text-[8px] font-black text-gray-700 uppercase tracking-wider text-center">±J</span>
-                <span className="text-[8px] font-black text-cyan-400 uppercase tracking-wider text-center">%W</span>
-                <span className="text-[8px] font-black text-[#ccff00]/70 uppercase tracking-wider text-center">Pts</span>
+            <div className="grid px-4 py-2.5 bg-white/[0.03] border-b border-white/[0.05] gap-x-0.5 items-end" style={{ gridTemplateColumns: isSimple ? `${rankCol} 1fr ${colStat} ${colStat} ${colStat} ${colStat} ${colStat} 44px 44px` : `${rankCol} 1fr ${colStat} ${colStat} ${colStat} ${colStat} ${colStat} 40px 40px 44px` }}>
+                <span className="text-[10px] font-black text-white/80 uppercase tracking-tighter text-center pb-1">#</span>
+                <span className="text-[10px] font-black text-white/80 uppercase tracking-tighter pl-1 pb-1">{isSimple ? 'Jugador' : 'Pareja'}</span>
+                <span className="text-[11px] font-black uppercase tracking-wider text-center rounded-lg border border-amber-400/45 bg-amber-500/35 text-amber-50 py-1.5 px-0.5 shadow-sm">PJ</span>
+                <span className="text-[11px] font-black uppercase tracking-wider text-center rounded-lg border border-emerald-400/45 bg-emerald-500/35 text-emerald-50 py-1.5 px-0.5 shadow-sm">PG</span>
+                <span className="text-[11px] font-black uppercase tracking-wider text-center rounded-lg border border-rose-400/45 bg-rose-500/35 text-rose-50 py-1.5 px-0.5 shadow-sm">PP</span>
+                {!isSimple && <span className="text-[11px] font-black uppercase tracking-wider text-center rounded-lg border border-sky-400/45 bg-sky-500/35 text-sky-50 py-1.5 px-0.5 shadow-sm">JF</span>}
+                <span className="text-[11px] font-black uppercase tracking-wider text-center rounded-lg border border-violet-400/45 bg-violet-500/35 text-violet-50 py-1.5 px-0.5 shadow-sm">JC</span>
+                <span className="text-[11px] font-black uppercase tracking-wider text-center rounded-lg border border-white/25 bg-white/15 text-white py-1.5 px-0.5 shadow-sm">±J</span>
+                <span className="text-[11px] font-black uppercase tracking-wider text-center rounded-lg border border-cyan-400/45 bg-cyan-500/35 text-cyan-50 py-1.5 px-0.5 shadow-sm">%W</span>
+                <span className="text-[11px] font-black uppercase tracking-wider text-center rounded-lg border border-[#ccff00]/50 bg-[#ccff00]/30 text-black py-1.5 px-0.5 shadow-sm">Pts</span>
             </div>
 
             <div className="divide-y divide-white/[0.04]">
@@ -156,8 +157,8 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
                     const isLeader = idx === 0;
                     const diff = row.JF - row.JC;
                     return (
-                        <div key={row.id} className={`grid px-4 py-3 items-center transition-colors hover:bg-white/[0.03] ${isLeader ? 'bg-[#ccff00]/[0.04]' : ''}`}
-                            style={{ gridTemplateColumns: isSimple ? `${rankCol} 1fr 34px 34px 34px 34px 34px 42px 42px` : `${rankCol} 1fr 32px 32px 32px 32px 32px 38px 38px 42px` }}>
+                        <div key={row.id} className={`grid px-4 py-3 items-center transition-colors hover:bg-white/[0.03] gap-x-0.5 ${isLeader ? 'bg-[#ccff00]/[0.04]' : ''}`}
+                            style={{ gridTemplateColumns: isSimple ? `${rankCol} 1fr ${colStat} ${colStat} ${colStat} ${colStat} ${colStat} 44px 44px` : `${rankCol} 1fr ${colStat} ${colStat} ${colStat} ${colStat} ${colStat} 40px 40px 44px` }}>
                             <div className="flex justify-center">
                                 {idx === 0 ? (
                                     <div className="w-5 h-5 rounded-md bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center shrink-0">
@@ -185,11 +186,11 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
                                     )}
                                 </div>
                             </div>
-                            <span className="text-[10px] font-bold text-white text-center">{row.PJ}</span>
-                            <span className="text-[10px] font-bold text-white text-center">{row.PG}</span>
-                            <span className="text-[10px] font-bold text-white text-center">{row.PP}</span>
-                            {!isSimple && <span className="text-[10px] font-bold text-gray-500 text-center">{row.JF}</span>}
-                            <span className="text-[10px] font-bold text-gray-500 text-center">{row.JC}</span>
+                            <span className="text-[11px] font-black text-amber-100 text-center tabular-nums">{row.PJ}</span>
+                            <span className="text-[11px] font-black text-emerald-200 text-center tabular-nums">{row.PG}</span>
+                            <span className="text-[11px] font-black text-rose-200 text-center tabular-nums">{row.PP}</span>
+                            {!isSimple && <span className="text-[11px] font-black text-sky-100 text-center tabular-nums">{row.JF}</span>}
+                            <span className="text-[11px] font-black text-violet-100 text-center tabular-nums">{row.JC}</span>
                             <span className={`text-[10px] font-black text-center ${diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-gray-500'}`}>
                                 {diff > 0 ? `+${diff}` : diff}
                             </span>
@@ -208,6 +209,22 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
         </motion.div>
     );
 };
+
+const RANKING_STATS_LEGEND = (
+    <div className="rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-3.5 space-y-2.5">
+        <p className="text-[11px] font-black uppercase tracking-widest text-gray-200">Leyenda de columnas</p>
+        <div className="flex flex-wrap gap-x-5 gap-y-2.5 text-[11px] leading-snug text-gray-200">
+            <span><span className="font-black text-amber-200">PJ</span> — Partidos jugados</span>
+            <span><span className="font-black text-emerald-300">PG</span> — Partidos ganados</span>
+            <span><span className="font-black text-rose-300">PP</span> — Partidos perdidos</span>
+            <span><span className="font-black text-sky-200">JF</span> — Juegos a favor (totales en el grupo)</span>
+            <span><span className="font-black text-violet-200">JC</span> — Juegos en contra (totales en el grupo)</span>
+            <span><span className="font-black text-white">±J</span> — Diferencia de juegos (JF − JC)</span>
+            <span><span className="font-black text-cyan-300">%W</span> — Porcentaje de partidos ganados</span>
+            <span><span className="font-black text-[#ccff00]">Pts</span> — Puntos de la fase de grupos</span>
+        </div>
+    </div>
+);
 
 // ── Sub-component: Group Matches ──────────────────────────────────────────
 const GroupMatches = ({ gName, groupAssignments, activeTournament, allMatches }: {
@@ -387,6 +404,7 @@ export const GroupsView: React.FC<GroupsViewProps> = ({ tournaments, rankingOnly
                     </motion.div>
                 );
             })}
+            {RANKING_STATS_LEGEND}
         </div>
     );
 };

@@ -34,6 +34,7 @@ import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournam
 import { MasterScheduleEngine, MasterScheduleConfig, CategoryConfig } from '@/services/MasterScheduleEngine';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
+import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 import { useRouter } from 'next/navigation';
 
 // Colores fijos por formato (icono siempre a color)
@@ -138,7 +139,7 @@ const INITIAL_EVENT_DATA: MasterScheduleConfig = {
     matchDurationMinutes: 60,
     bufferMinutes: 10,
     categories: [],
-    sponsorLogoUrl: '',
+    sponsorLogoUrl: DEFAULT_EVENT_SPONSOR_LOGO_URL,
     sponsorName: ''
 };
 

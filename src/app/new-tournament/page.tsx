@@ -26,6 +26,7 @@ import {
 import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
+import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { TournamentStepper } from '@/components/TournamentStepper';
 import { useEffect } from 'react';
@@ -537,6 +538,7 @@ export default function NewTournamentPage() {
                 status: 'En Curso',
                 inscriptionCategories: defaultInscriptionCategories,
                 registrationStatus: 'open',
+                sponsorLogoUrl: DEFAULT_EVENT_SPONSOR_LOGO_URL,
             };
 
             console.log('[NewTournament] Saving to Firestore...');
@@ -1804,6 +1806,22 @@ export default function NewTournamentPage() {
                                             Paso 7: <span className="text-padel-primary">Parejas</span>
                                         </h2>
                                     </motion.div>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-2xl bg-white/[0.04] border border-white/10">
+                                    <div className="flex-shrink-0 w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
+                                        <img
+                                            src={DEFAULT_EVENT_SPONSOR_LOGO_URL}
+                                            alt="Logo del evento"
+                                            className="w-[72px] h-[72px] object-contain"
+                                        />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-padel-primary">Logo del evento</p>
+                                        <p className="text-[11px] text-gray-400 mt-1.5 leading-snug">
+                                            Por defecto se usa el logo de Smart Padel. Tras crear el torneo puedes cambiarlo desde el hub del evento con el botón «Logo evento».
+                                        </p>
+                                    </div>
                                 </div>
 
                                 {/* ── Selector de Grupos para Round Robin / Cruzado ─────────── */}

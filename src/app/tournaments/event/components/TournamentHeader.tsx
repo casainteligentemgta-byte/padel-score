@@ -6,6 +6,7 @@ import {
     Tv, FileText, Share2, Calendar, Clock
 } from 'lucide-react';
 import { BackButton } from '@/components/BackButton';
+import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 import { formatCategory, formatGender } from '../utils';
 
 interface TournamentHeaderProps {
@@ -60,7 +61,7 @@ export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
                             className="w-20 h-20 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden hover:bg-white/10 transition-colors"
                         >
                             <img
-                                src={sponsorLogoUrl || '/sponsor-example.png'}
+                                src={sponsorLogoUrl || DEFAULT_EVENT_SPONSOR_LOGO_URL}
                                 alt={sponsorName || 'Patrocinador'}
                                 className="w-16 h-16 object-contain"
                             />
@@ -68,7 +69,7 @@ export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
                     ) : (
                         <div className="w-20 h-20 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
                             <img
-                                src={sponsorLogoUrl || '/sponsor-example.png'}
+                                src={sponsorLogoUrl || DEFAULT_EVENT_SPONSOR_LOGO_URL}
                                 alt={sponsorName || 'Patrocinador'}
                                 className="w-16 h-16 object-contain"
                             />

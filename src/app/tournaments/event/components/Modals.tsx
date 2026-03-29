@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Share2, Mail, Download, X, Save, RefreshCw, Upload, Loader2
 } from 'lucide-react';
+import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 
 interface ShareModalProps {
     isOpen: boolean;
@@ -215,20 +216,18 @@ export const SponsorModal: React.FC<SponsorModalProps> = ({
                                     </div>
                                 </div>
 
-                                {logoDraft && (
-                                    <div className="mt-3">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">
-                                            Vista previa
-                                        </p>
-                                        <div className="w-48 h-24 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
-                                            <img
-                                                src={logoDraft}
-                                                alt={nameDraft || 'Patrocinante'}
-                                                className="w-full h-full object-contain p-2"
-                                            />
-                                        </div>
+                                <div className="mt-3">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">
+                                        Vista previa
+                                    </p>
+                                    <div className="w-48 h-24 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
+                                        <img
+                                            src={logoDraft?.trim() || DEFAULT_EVENT_SPONSOR_LOGO_URL}
+                                            alt={nameDraft || 'Patrocinante'}
+                                            className="w-full h-full object-contain p-2"
+                                        />
                                     </div>
-                                )}
+                                </div>
                             </div>
 
                             <div className="flex gap-3 mt-4">

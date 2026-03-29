@@ -144,13 +144,44 @@ export function calculateStandingsFromMatches(matches: any[], tournament: any): 
     });
 }
 
+export type PodiumSide = { name: string; players?: string[] };
+
 export type CategoryPodium = {
-    first: { name: string };
-    second?: { name: string };
+    first: PodiumSide;
+    second?: PodiumSide;
     source: 'final' | 'standings';
 };
 
-function pickWinnerFromFinal(finalMatch: any): CategoryPodium {
+/** Nombres de jugadores de la pareja (índice 1-based, alineado con partidos). */
+function resolveTeamPlayerNames(tournament: any, teamIndex: number | undefined): string[] | undefined {
+    if (teamIndex == null || teamIndex < 1 || !Array.isArray(tournament?.teams)) return undefined;
+    const team = tournament.teams[teamIndex - 1];
+    if (!team || typeof team !== 'object') return undefined;
+    const out = [team.p1?.name, team.p2?.name].filter((n): n is string => Boolean(n && String(n).trim()));
+    return out.length ? out : undefined;
+}
+
+function standingEntryPlayers(entry: any, tournament: any): string[] | undefined {
+    if (!tournament || !entry) return undefined;
+    if (tournament.type === TournamentType.AMERICANO_INDIVIDUAL) {
+        return entry.name ? [String(entry.name)] : undefined;
+    }
+    const id = String(entry.id ?? '');
+    const m = id.match(/^team-(\d+)$/);
+    if (m) return resolveTeamPlayerNames(tournament, Number(m[1]));
+    return undefined;
+}
+
+/** Líneas para mostrar en podio: jugadores explícitos o nombre partido por separadores típicos de pareja. */
+export function getPodiumDisplayLines(side: PodiumSide): string[] {
+    if (side.players?.length) return side.players;
+    const raw = String(side.name ?? '').trim();
+    if (!raw) return ['—'];
+    const parts = raw.split(/\s*\/\s*|\s*&\s*|\s*\|\s*/).map((s) => s.trim()).filter(Boolean);
+    return parts.length > 1 ? parts : [raw];
+}
+
+function pickWinnerFromFinal(finalMatch: any, tournament: any): CategoryPodium {
     const s1 = finalMatch.sets?.t1 ?? 0;
     const s2 = finalMatch.sets?.t2 ?? 0;
     const g1 = finalMatch.games?.t1 ?? 0;
@@ -167,8 +198,8 @@ function pickWinnerFromFinal(finalMatch: any): CategoryPodium {
         (winnerSide === 't1' ? finalMatch.team2?.name : finalMatch.team1?.name) || `Pareja ${loseIdx ?? '?'}`;
 
     return {
-        first: { name: winName },
-        second: { name: loseName },
+        first: { name: winName, players: resolveTeamPlayerNames(tournament, winIdx) },
+        second: { name: loseName, players: resolveTeamPlayerNames(tournament, loseIdx) },
         source: 'final',
     };
 }
@@ -193,7 +224,7 @@ export function resolveCategoryPodium(matches: any[], tournament: any): Category
     }
 
     if (finalMatch) {
-        return pickWinnerFromFinal(finalMatch);
+        return pickWinnerFromFinal(finalMatch, tournament);
     }
 
     if (!tournament) return null;
@@ -202,8 +233,11 @@ export function resolveCategoryPodium(matches: any[], tournament: any): Category
     if (standings.length === 0) return null;
 
     return {
-        first: { name: standings[0].name },
-        second: standings.length > 1 ? { name: standings[1].name } : undefined,
+        first: { name: standings[0].name, players: standingEntryPlayers(standings[0], tournament) },
+        second:
+            standings.length > 1
+                ? { name: standings[1].name, players: standingEntryPlayers(standings[1], tournament) }
+                : undefined,
         source: 'standings',
     };
 }

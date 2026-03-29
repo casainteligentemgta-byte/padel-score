@@ -36,7 +36,7 @@ import Link from 'next/link';
 import { MatchStatus, TournamentType, ScheduleConfig } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
-import { resolveCategoryPodium } from '@/lib/tournamentPodium';
+import { resolveCategoryPodium, getPodiumDisplayLines } from '@/lib/tournamentPodium';
 import {
     persistMatchFinishWithPropagation,
     shouldSuggestAutoMainDraw,
@@ -1888,15 +1888,15 @@ export default function TournamentDashboard() {
                         <div className="overflow-x-auto">
                             <table className="w-full">
                                 <thead>
-                                    <tr className="text-[9px] font-black uppercase tracking-widest text-gray-500 border-b border-white/[0.06]">
-                                        <th className="text-left py-3 px-2 w-8">#</th>
-                                        <th className="text-left py-3 px-2">{entityLabel}</th>
-                                        <th className="text-center py-3 px-1.5 whitespace-nowrap">PJ</th>
-                                        <th className="text-center py-3 px-1.5 whitespace-nowrap text-green-500">PG</th>
-                                        <th className="text-center py-3 px-1.5 whitespace-nowrap text-red-500">PP</th>
-                                        <th className="text-center py-3 px-1.5 whitespace-nowrap">Sets</th>
-                                        <th className="text-center py-3 px-1.5 whitespace-nowrap">Games</th>
-                                        <th className="text-right py-3 px-3 whitespace-nowrap">Pts</th>
+                                    <tr className="border-b border-white/[0.1]">
+                                        <th className="text-left py-3 px-2 w-8 text-[10px] font-black uppercase tracking-widest text-gray-400">#</th>
+                                        <th className="text-left py-3 px-2 text-[10px] font-black uppercase tracking-widest text-gray-400">{entityLabel}</th>
+                                        <th className="text-center py-2.5 px-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-amber-500/35 text-amber-50 border border-amber-400/45 rounded-lg shadow-sm">PJ</th>
+                                        <th className="text-center py-2.5 px-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-emerald-500/35 text-emerald-50 border border-emerald-400/45 rounded-lg shadow-sm">PG</th>
+                                        <th className="text-center py-2.5 px-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-rose-500/35 text-rose-50 border border-rose-400/45 rounded-lg shadow-sm">PP</th>
+                                        <th className="text-center py-2.5 px-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-sky-500/35 text-sky-50 border border-sky-400/45 rounded-lg shadow-sm">Sets</th>
+                                        <th className="text-center py-2.5 px-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-violet-500/35 text-violet-50 border border-violet-400/45 rounded-lg shadow-sm">Games</th>
+                                        <th className="text-right py-2.5 px-3 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-padel-primary/30 text-padel-primary border border-padel-primary/45 rounded-lg shadow-sm">Pts</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/[0.04]">
@@ -1916,11 +1916,11 @@ export default function TournamentDashboard() {
                                                         <span className="text-[10px] font-black italic uppercase tracking-tighter group-hover:text-padel-primary transition-colors leading-tight">{entry.name}</span>
                                                     </div>
                                                 </td>
-                                                <td className="py-3 px-1.5 text-center text-[10px] font-bold text-gray-400">{entry.matchesPlayed}</td>
-                                                <td className="py-3 px-1.5 text-center text-[10px] font-bold text-green-400">{entry.matchesWon}</td>
-                                                <td className="py-3 px-1.5 text-center text-[10px] font-bold text-red-400">{pp}</td>
-                                                <td className="py-3 px-1.5 text-center"><span className="text-[9px] font-bold text-gray-400 tabular-nums">{entry.setsWon}<span className="text-gray-600">-</span>{entry.setsLost}</span></td>
-                                                <td className="py-3 px-1.5 text-center"><span className="text-[9px] font-bold text-gray-400 tabular-nums">{entry.gamesWon}<span className="text-gray-600">-</span>{entry.gamesLost}</span></td>
+                                                <td className="py-3 px-1.5 text-center text-[11px] font-black text-amber-100 tabular-nums">{entry.matchesPlayed}</td>
+                                                <td className="py-3 px-1.5 text-center text-[11px] font-black text-emerald-200 tabular-nums">{entry.matchesWon}</td>
+                                                <td className="py-3 px-1.5 text-center text-[11px] font-black text-rose-200 tabular-nums">{pp}</td>
+                                                <td className="py-3 px-1.5 text-center"><span className="text-[11px] font-black text-sky-100 tabular-nums">{entry.setsWon}<span className="text-sky-400/70">-</span>{entry.setsLost}</span></td>
+                                                <td className="py-3 px-1.5 text-center"><span className="text-[11px] font-black text-violet-100 tabular-nums">{entry.gamesWon}<span className="text-violet-400/70">-</span>{entry.gamesLost}</span></td>
                                                 <td className="py-3 px-3 text-right"><span className={`text-sm font-black italic tabular-nums ${pts > 0 ? 'text-padel-primary' : 'text-gray-600'}`}>{pts}</span></td>
                                             </tr>
                                         );
@@ -1930,12 +1930,16 @@ export default function TournamentDashboard() {
                         </div>
                     </div>
                 </div>
-                <div className="flex flex-wrap gap-3 px-2">
-                    {[['PJ', 'Partidos Jugados'], ['PG', 'Partidos Ganados'], ['PP', 'Partidos Perdidos'], ['Sets', 'Sets G–P'], ['Games', 'Juegos G–P'], ['Pts', 'Puntos (PG×3 + Sets×1)']].map(([k, v]) => (
-                        <span key={k} className="text-[8px] font-bold uppercase tracking-widest text-gray-700">
-                            <span className="text-gray-500">{k}</span> {v}
-                        </span>
-                    ))}
+                <div className="rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-3.5 mt-2 space-y-2.5">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-gray-200">Leyenda de columnas</p>
+                    <div className="flex flex-wrap gap-x-5 gap-y-2.5 text-[11px] leading-snug text-gray-200">
+                        <span><span className="font-black text-amber-200">PJ</span> — Partidos jugados</span>
+                        <span><span className="font-black text-emerald-300">PG</span> — Partidos ganados</span>
+                        <span><span className="font-black text-rose-300">PP</span> — Partidos perdidos</span>
+                        <span><span className="font-black text-sky-200">Sets</span> — Sets a favor / en contra (formato SF–SC)</span>
+                        <span><span className="font-black text-violet-200">Games</span> — <span className="text-violet-300 font-black">JF</span> juegos a favor, <span className="text-violet-300 font-black">JC</span> juegos en contra</span>
+                        <span><span className="font-black text-padel-primary">Pts</span> — Puntos (PG×3 + sets ganados)</span>
+                    </div>
                 </div>
             </div>
         );
@@ -2122,32 +2126,33 @@ export default function TournamentDashboard() {
                                     return (
                                         <>
                                             {showGroupTables && groupBlocks.length > 0 && (
-                                                <div className="space-y-4">
+                                                <div className="space-y-2">
                                                     <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1">
                                                         Clasificación por grupos
                                                     </h3>
-                                                    <div className="space-y-6">
+                                                    <div className="space-y-2.5">
                                                         {groupBlocks.map(({ key, title, rows }) => (
                                                             <div
                                                                 key={key}
-                                                                className="bg-[#1a1a1a] border border-white/10 rounded-[2rem] overflow-hidden shadow-xl"
+                                                                className="bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden shadow-lg"
                                                             >
-                                                                <div className="bg-white/[0.04] px-6 py-4 border-b border-white/10">
-                                                                    <h4 className="text-[11px] font-black uppercase tracking-widest text-padel-primary">
+                                                                <div className="bg-white/[0.04] px-3 py-2 border-b border-white/10">
+                                                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-padel-primary">
                                                                         {title}
                                                                     </h4>
                                                                 </div>
-                                                                <div className="p-5 overflow-x-auto">
+                                                                <div className="px-2 py-2 overflow-x-auto">
                                                                     <table className="w-full">
                                                                         <thead>
-                                                                            <tr className="text-[9px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
-                                                                                <th className="text-left py-3 px-2 font-black">Pos</th>
-                                                                                <th className="text-left py-3 px-2 font-black">Equipo</th>
-                                                                                <th className="text-center py-3 px-1 font-black">PJ</th>
-                                                                                <th className="text-center py-3 px-1 font-black">PG</th>
-                                                                                <th className="text-center py-3 px-1 font-black">Sets</th>
-                                                                                <th className="text-center py-3 px-1 font-black">Games</th>
-                                                                                <th className="text-right py-3 px-2 font-black">Pts</th>
+                                                                            <tr className="border-b border-white/10">
+                                                                                <th className="text-left py-2.5 px-1.5 text-[10px] font-black uppercase tracking-tighter text-white/90">Pos</th>
+                                                                                <th className="text-left py-2.5 px-1.5 text-[10px] font-black uppercase tracking-tighter text-white/90">Equipo</th>
+                                                                                <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-amber-500/35 text-amber-50 border border-amber-400/40 rounded-lg shadow-sm">PJ</th>
+                                                                                <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-emerald-500/35 text-emerald-50 border border-emerald-400/40 rounded-lg shadow-sm">PG</th>
+                                                                                <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-rose-500/35 text-rose-50 border border-rose-400/40 rounded-lg shadow-sm">PP</th>
+                                                                                <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-sky-500/35 text-sky-50 border border-sky-400/40 rounded-lg shadow-sm">Sets</th>
+                                                                                <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-violet-500/35 text-violet-50 border border-violet-400/40 rounded-lg shadow-sm">Games</th>
+                                                                                <th className="text-right py-2.5 px-1.5 text-[11px] font-black uppercase tracking-wider bg-padel-primary/35 text-padel-primary border border-padel-primary/45 rounded-lg shadow-sm">Pts</th>
                                                                             </tr>
                                                                         </thead>
                                                                         <tbody className="divide-y divide-white/5">
@@ -2156,13 +2161,13 @@ export default function TournamentDashboard() {
                                                                                     key={`${key}-${entry.id}`}
                                                                                     className="group hover:bg-white/[0.02] transition-all"
                                                                                 >
-                                                                                    <td className="py-4 px-2">
+                                                                                    <td className="py-1.5 px-1.5">
                                                                                         <span
                                                                                             className={`${
                                                                                                 idx + 1 >= 10
-                                                                                                    ? 'min-w-7 px-1 text-[9px]'
-                                                                                                    : 'w-7 text-[10px]'
-                                                                                            } h-7 flex items-center justify-center rounded-lg font-black italic tabular-nums shrink-0 ${
+                                                                                                    ? 'min-w-6 px-0.5 text-[8px]'
+                                                                                                    : 'w-6 text-[9px]'
+                                                                                            } h-6 flex items-center justify-center rounded-md font-black italic tabular-nums shrink-0 ${
                                                                                                 idx === 0
                                                                                                     ? 'bg-padel-primary text-black'
                                                                                                     : idx === 1
@@ -2173,30 +2178,33 @@ export default function TournamentDashboard() {
                                                                                             {idx + 1}
                                                                                         </span>
                                                                                     </td>
-                                                                                    <td className="py-4 px-2">
-                                                                                        <div className="flex items-center gap-3">
-                                                                                            <div className="w-8 h-8 rounded-full border border-white/10 overflow-hidden bg-white/5 flex items-center justify-center text-[9px] font-bold text-gray-600 uppercase">
+                                                                                    <td className="py-1.5 px-1.5">
+                                                                                        <div className="flex items-center gap-2 min-w-0">
+                                                                                            <div className="w-6 h-6 rounded-full border border-white/10 overflow-hidden bg-white/5 flex items-center justify-center text-[8px] font-bold text-gray-600 uppercase shrink-0">
                                                                                                 {(entry.name || '?')[0]}
                                                                                             </div>
-                                                                                            <span className="text-[11px] font-black italic uppercase tracking-tighter text-white">
+                                                                                            <span className="text-[10px] font-black italic uppercase tracking-tighter text-white truncate">
                                                                                                 {entry.name}
                                                                                             </span>
                                                                                         </div>
                                                                                     </td>
-                                                                                    <td className="py-4 px-1 text-center text-[11px] font-bold text-gray-400">
+                                                                                    <td className="py-2 px-0.5 text-center text-[11px] font-black text-amber-100 tabular-nums">
                                                                                         {entry.matchesPlayed}
                                                                                     </td>
-                                                                                    <td className="py-4 px-1 text-center text-[11px] font-bold text-gray-400">
+                                                                                    <td className="py-2 px-0.5 text-center text-[11px] font-black text-emerald-200 tabular-nums">
                                                                                         {entry.matchesWon}
                                                                                     </td>
-                                                                                    <td className="py-4 px-1 text-center text-[11px] font-bold text-gray-400">
+                                                                                    <td className="py-2 px-0.5 text-center text-[11px] font-black text-rose-200 tabular-nums">
+                                                                                        {Math.max(0, entry.matchesPlayed - entry.matchesWon)}
+                                                                                    </td>
+                                                                                    <td className="py-2 px-0.5 text-center text-[11px] font-black text-sky-100 tabular-nums">
                                                                                         {entry.setsWon}-{entry.setsLost}
                                                                                     </td>
-                                                                                    <td className="py-4 px-1 text-center text-[11px] font-bold text-gray-400">
+                                                                                    <td className="py-2 px-0.5 text-center text-[11px] font-black text-violet-100 tabular-nums">
                                                                                         {entry.gamesWon}-{entry.gamesLost}
                                                                                     </td>
-                                                                                    <td className="py-4 px-2 text-right">
-                                                                                        <span className="text-sm font-black italic text-padel-primary">
+                                                                                    <td className="py-1.5 px-1.5 text-right">
+                                                                                        <span className="text-xs font-black italic text-padel-primary tabular-nums">
                                                                                             {rankPoints(entry)}
                                                                                         </span>
                                                                                     </td>
@@ -2221,17 +2229,35 @@ export default function TournamentDashboard() {
                                                             <span className="text-[9px] font-black uppercase tracking-widest text-padel-primary">
                                                                 1.er lugar
                                                             </span>
-                                                            <p className="text-lg font-black italic text-white mt-2 tracking-tight">
-                                                                {podium.first.name}
-                                                            </p>
+                                                            <div className="mt-2 space-y-0.5">
+                                                                {getPodiumDisplayLines(podium.first).map((line, i) => (
+                                                                    <p
+                                                                        key={i}
+                                                                        className="text-lg font-black italic text-white tracking-tight leading-snug break-words"
+                                                                    >
+                                                                        {line}
+                                                                    </p>
+                                                                ))}
+                                                            </div>
                                                         </div>
                                                         <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
                                                             <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">
                                                                 2.º lugar
                                                             </span>
-                                                            <p className="text-lg font-black italic text-white mt-2 tracking-tight">
-                                                                {podium.second?.name ?? '—'}
-                                                            </p>
+                                                            <div className="mt-2 space-y-0.5">
+                                                                {podium.second ? (
+                                                                    getPodiumDisplayLines(podium.second).map((line, i) => (
+                                                                        <p
+                                                                            key={i}
+                                                                            className="text-lg font-black italic text-white tracking-tight leading-snug break-words"
+                                                                        >
+                                                                            {line}
+                                                                        </p>
+                                                                    ))
+                                                                ) : (
+                                                                    <p className="text-lg font-black italic text-white tracking-tight">—</p>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <p className="text-[9px] text-gray-500 px-1 font-bold uppercase tracking-wider">
@@ -2248,34 +2274,35 @@ export default function TournamentDashboard() {
                                                 </p>
                                             )}
 
-                                            <div className="bg-[#1a1a1a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
-                                                <div className="bg-padel-primary px-10 py-6 flex justify-between items-center">
-                                                    <div>
-                                                        <h3 className="text-black font-black italic uppercase text-xl tracking-tighter">
+                                            <div className="bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden shadow-lg">
+                                                <div className="bg-padel-primary px-4 py-3 flex justify-between items-center gap-3">
+                                                    <div className="min-w-0">
+                                                        <h3 className="text-black font-black italic uppercase text-sm sm:text-base tracking-tighter leading-tight">
                                                             {showGroupTables
                                                                 ? 'Clasificación general de la categoría'
                                                                 : 'Ranking General'}
                                                         </h3>
-                                                        <p className="text-[10px] text-black/60 font-black uppercase tracking-widest">
+                                                        <p className="text-[9px] text-black/60 font-black uppercase tracking-widest mt-0.5">
                                                             {showGroupTables
                                                                 ? 'Todos los equipos · estadísticas acumuladas'
                                                                 : 'Estadísticas Acumuladas'}
                                                         </p>
                                                     </div>
-                                                    <Trophy className="w-8 h-8 text-black opacity-20" />
+                                                    <Trophy className="w-6 h-6 text-black opacity-20 shrink-0" />
                                                 </div>
-                                                <div className="p-8">
+                                                <div className="px-2 py-2">
                                                     <div className="overflow-x-auto">
                                                         <table className="w-full">
                                                             <thead>
-                                                                <tr className="text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
-                                                                    <th className="text-left py-5 px-4 font-black">Pos</th>
-                                                                    <th className="text-left py-5 px-4 font-black">Jugador / Equipo</th>
-                                                                    <th className="text-center py-5 px-2 font-black">PJ</th>
-                                                                    <th className="text-center py-5 px-2 font-black">PG</th>
-                                                                    <th className="text-center py-5 px-2 font-black">Sets</th>
-                                                                    <th className="text-center py-5 px-2 font-black">Games</th>
-                                                                    <th className="text-right py-5 px-4 font-black">Puntos</th>
+                                                                <tr className="border-b border-white/10">
+                                                                    <th className="text-left py-2.5 px-1.5 text-[10px] font-black uppercase tracking-tighter text-white/90">Pos</th>
+                                                                    <th className="text-left py-2.5 px-1.5 text-[10px] font-black uppercase tracking-tighter text-white/90">Jugador / Equipo</th>
+                                                                    <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-amber-500/35 text-amber-50 border border-amber-400/40 rounded-lg shadow-sm">PJ</th>
+                                                                    <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-emerald-500/35 text-emerald-50 border border-emerald-400/40 rounded-lg shadow-sm">PG</th>
+                                                                    <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-rose-500/35 text-rose-50 border border-rose-400/40 rounded-lg shadow-sm">PP</th>
+                                                                    <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-sky-500/35 text-sky-50 border border-sky-400/40 rounded-lg shadow-sm">Sets</th>
+                                                                    <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-violet-500/35 text-violet-50 border border-violet-400/40 rounded-lg shadow-sm">Games</th>
+                                                                    <th className="text-right py-2.5 px-1.5 text-[11px] font-black uppercase tracking-wider bg-padel-primary/35 text-padel-primary border border-padel-primary/45 rounded-lg shadow-sm">Pts</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody className="divide-y divide-white/5">
@@ -2284,13 +2311,13 @@ export default function TournamentDashboard() {
                                                                         key={entry.id}
                                                                         className="group hover:bg-white/[0.02] transition-all"
                                                                     >
-                                                                        <td className="py-6 px-4">
+                                                                        <td className="py-1.5 px-1.5">
                                                                             <span
                                                                                 className={`${
                                                                                     idx + 1 >= 10
-                                                                                        ? 'min-w-8 px-1.5 text-[10px]'
-                                                                                        : 'w-8 text-xs'
-                                                                                } h-8 flex items-center justify-center rounded-xl font-black italic tabular-nums shrink-0 ${
+                                                                                        ? 'min-w-6 px-0.5 text-[8px]'
+                                                                                        : 'w-6 text-[9px]'
+                                                                                } h-6 flex items-center justify-center rounded-md font-black italic tabular-nums shrink-0 ${
                                                                                     idx === 0
                                                                                         ? 'bg-padel-primary text-black'
                                                                                         : idx < 3
@@ -2301,9 +2328,9 @@ export default function TournamentDashboard() {
                                                                                 {idx + 1}
                                                                             </span>
                                                                         </td>
-                                                                        <td className="py-6 px-4">
-                                                                            <div className="flex items-center gap-4">
-                                                                                <div className="w-10 h-10 rounded-full border border-white/10 overflow-hidden bg-white/5">
+                                                                        <td className="py-1.5 px-1.5">
+                                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                                <div className="w-6 h-6 rounded-full border border-white/10 overflow-hidden bg-white/5 shrink-0">
                                                                                     {entry.photo ? (
                                                                                         <img
                                                                                             src={entry.photo}
@@ -2311,30 +2338,33 @@ export default function TournamentDashboard() {
                                                                                             alt=""
                                                                                         />
                                                                                     ) : (
-                                                                                        <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-gray-600 uppercase">
+                                                                                        <div className="w-full h-full flex items-center justify-center text-[8px] font-bold text-gray-600 uppercase">
                                                                                             {(entry.name || '?')[0]}
                                                                                         </div>
                                                                                     )}
                                                                                 </div>
-                                                                                <span className="text-xs font-black italic uppercase tracking-tighter text-white group-hover:text-padel-primary transition-colors">
+                                                                                <span className="text-[10px] font-black italic uppercase tracking-tighter text-white group-hover:text-padel-primary transition-colors truncate">
                                                                                     {entry.name}
                                                                                 </span>
                                                                             </div>
                                                                         </td>
-                                                                        <td className="py-6 px-2 text-center text-xs font-bold text-gray-400">
+                                                                        <td className="py-2 px-0.5 text-center text-[11px] font-black text-amber-100 tabular-nums">
                                                                             {entry.matchesPlayed}
                                                                         </td>
-                                                                        <td className="py-6 px-2 text-center text-xs font-bold text-gray-400">
+                                                                        <td className="py-2 px-0.5 text-center text-[11px] font-black text-emerald-200 tabular-nums">
                                                                             {entry.matchesWon}
                                                                         </td>
-                                                                        <td className="py-6 px-2 text-center text-xs font-bold text-gray-400">
+                                                                        <td className="py-2 px-0.5 text-center text-[11px] font-black text-rose-200 tabular-nums">
+                                                                            {Math.max(0, entry.matchesPlayed - entry.matchesWon)}
+                                                                        </td>
+                                                                        <td className="py-2 px-0.5 text-center text-[11px] font-black text-sky-100 tabular-nums">
                                                                             {entry.setsWon}-{entry.setsLost}
                                                                         </td>
-                                                                        <td className="py-6 px-2 text-center text-xs font-bold text-gray-400">
+                                                                        <td className="py-2 px-0.5 text-center text-[11px] font-black text-violet-100 tabular-nums">
                                                                             {entry.gamesWon}-{entry.gamesLost}
                                                                         </td>
-                                                                        <td className="py-6 px-4 text-right">
-                                                                            <span className="text-lg font-black italic text-padel-primary">
+                                                                        <td className="py-2 px-1.5 text-right">
+                                                                            <span className="text-sm font-black italic text-padel-primary tabular-nums">
                                                                                 {rankPoints(entry)}
                                                                             </span>
                                                                         </td>
@@ -2343,6 +2373,18 @@ export default function TournamentDashboard() {
                                                             </tbody>
                                                         </table>
                                                     </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-3 rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-3.5 space-y-2.5">
+                                                <p className="text-[11px] font-black uppercase tracking-widest text-gray-200">Leyenda de columnas</p>
+                                                <div className="flex flex-wrap gap-x-5 gap-y-2.5 text-[11px] leading-snug text-gray-200">
+                                                    <span><span className="font-black text-amber-200">PJ</span> — Partidos jugados</span>
+                                                    <span><span className="font-black text-emerald-300">PG</span> — Partidos ganados</span>
+                                                    <span><span className="font-black text-rose-300">PP</span> — Partidos perdidos</span>
+                                                    <span><span className="font-black text-sky-200">Sets</span> — Sets a favor / en contra (formato SF–SC)</span>
+                                                    <span><span className="font-black text-violet-200">Games</span> — <span className="text-violet-300 font-black">JF</span> juegos a favor, <span className="text-violet-300 font-black">JC</span> juegos en contra</span>
+                                                    <span><span className="font-black text-padel-primary">Pts</span> — Puntos (PG×3 + sets ganados)</span>
                                                 </div>
                                             </div>
                                         </>

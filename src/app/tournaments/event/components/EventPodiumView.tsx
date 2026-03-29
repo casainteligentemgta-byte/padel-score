@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Trophy, Medal } from 'lucide-react';
-import { resolveCategoryPodium } from '@/lib/tournamentPodium';
+import { resolveCategoryPodium, getPodiumDisplayLines } from '@/lib/tournamentPodium';
 import { formatCategory, formatGender } from '../utils';
 import Link from 'next/link';
 
@@ -79,9 +79,16 @@ export const EventPodiumView: React.FC<EventPodiumViewProps> = ({ tournaments })
                                                 <span className="text-[9px] font-black uppercase tracking-widest text-[#ccff00]">
                                                     Campeón
                                                 </span>
-                                                <p className="text-sm font-black text-white mt-1 leading-snug break-words">
-                                                    {podium.first.name}
-                                                </p>
+                                                <div className="mt-1 space-y-0.5">
+                                                    {getPodiumDisplayLines(podium.first).map((line, i) => (
+                                                        <p
+                                                            key={i}
+                                                            className="text-sm font-black text-white leading-snug break-words"
+                                                        >
+                                                            {line}
+                                                        </p>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 flex gap-3 items-start">
@@ -92,9 +99,20 @@ export const EventPodiumView: React.FC<EventPodiumViewProps> = ({ tournaments })
                                                 <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">
                                                     Subcampeón
                                                 </span>
-                                                <p className="text-sm font-black text-white mt-1 leading-snug break-words">
-                                                    {podium.second?.name ?? '—'}
-                                                </p>
+                                                <div className="mt-1 space-y-0.5">
+                                                    {podium.second ? (
+                                                        getPodiumDisplayLines(podium.second).map((line, i) => (
+                                                            <p
+                                                                key={i}
+                                                                className="text-sm font-black text-white leading-snug break-words"
+                                                            >
+                                                                {line}
+                                                            </p>
+                                                        ))
+                                                    ) : (
+                                                        <p className="text-sm font-black text-white">—</p>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

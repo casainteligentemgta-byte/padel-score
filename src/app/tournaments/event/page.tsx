@@ -8,6 +8,7 @@ import {
     RefreshCw, Trophy, ArrowLeft, Tv, FileText, Share2, Calendar, Clock
 } from 'lucide-react';
 import { dataService } from '@/lib/dataService';
+import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 import { useAuth } from '@/lib/AuthContext';
 import { MatchStatus } from '@/types/tournament';
 import jsPDF from 'jspdf';
@@ -356,7 +357,7 @@ function EventView() {
                 const existing = tournaments[tid] || {};
                 return dataService.updateTournament(tid, {
                     ...existing,
-                    sponsorLogoUrl: sponsorLogoDraft || null,
+                    sponsorLogoUrl: sponsorLogoDraft?.trim() || DEFAULT_EVENT_SPONSOR_LOGO_URL,
                     sponsorName: sponsorNameDraft || null,
                     sponsorLink: sponsorLinkDraft || null,
                 });
@@ -440,7 +441,7 @@ function EventView() {
                 sponsorLink={firstT?.sponsorLink}
                 canManageTournament={!!canManageTournament}
                 onEditSponsor={() => {
-                    setSponsorLogoDraft(firstT?.sponsorLogoUrl ?? '');
+                    setSponsorLogoDraft(firstT?.sponsorLogoUrl || DEFAULT_EVENT_SPONSOR_LOGO_URL);
                     setSponsorNameDraft(firstT?.sponsorName ?? '');
                     setSponsorLinkDraft(firstT?.sponsorLink ?? '');
                     setIsSponsorEditOpen(true);
