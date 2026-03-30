@@ -1352,10 +1352,10 @@ export default function MasterGeneratorPage() {
             </div>
 
             {/* Main Container — fills remaining vertical space */}
-            <div className="relative flex flex-col flex-1 min-h-0 max-w-7xl w-full mx-auto px-5 sm:px-8 md:px-12 pb-6 pt-4">
+            <div className="relative flex flex-col flex-1 min-h-0 max-w-7xl w-full mx-auto px-5 sm:px-8 md:px-12 pb-2 pt-4 landscape:pb-1 landscape:pt-2">
 
                 {/* Header — compact: etapas centradas */}
-                <header className="flex items-center gap-4 mb-3 shrink-0">
+                <header className="flex items-center gap-4 mb-3 landscape:mb-2 shrink-0">
                     <button
                         type="button"
                         onClick={() => {
@@ -1403,11 +1403,10 @@ export default function MasterGeneratorPage() {
                 </header>
 
 
-                {/* content area — fills remaining height, scrolls inside */}
-                <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-4">
+                {/* content area: scroll del formulario + barra de acción fija abajo (iPad horizontal sin scroll para Continuar) */}
+                <div className="flex-1 min-h-0 flex flex-col min-w-0">
 
-                    {/* Main Form — scrollable */}
-                    <main className="lg:col-span-12 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent pb-8">
+                    <main className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain pr-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent pb-2 landscape:pb-1 min-h-0">
                         <AnimatePresence mode="wait">
                             {step === 1 && (
                                 <motion.section
@@ -1417,8 +1416,8 @@ export default function MasterGeneratorPage() {
                                     exit={{ opacity: 0, x: -20 }}
                                     className="space-y-4"
                                 >
-                                    <div className="max-w-3xl mx-auto w-full bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-2xl p-6 md:p-10 space-y-8 md:space-y-10">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 items-end">
+                                    <div className="max-w-3xl landscape:max-w-full landscape:lg:max-w-[min(100%,72rem)] mx-auto w-full bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-2xl p-6 md:p-10 landscape:p-4 landscape:md:p-5 space-y-8 md:space-y-10 landscape:space-y-4 landscape:md:space-y-5">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 landscape:md:grid-cols-2 gap-x-8 gap-y-6 landscape:gap-x-6 landscape:gap-y-4 items-end">
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] font-bold uppercase tracking-widest text-padel-primary block min-h-[1.25rem]">Nombre del Evento</label>
                                                 <input
@@ -1452,7 +1451,7 @@ export default function MasterGeneratorPage() {
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 gap-y-8">
+                                        <div className="grid grid-cols-1 gap-y-8 landscape:gap-y-4">
                                             <div className="space-y-1.5 min-w-0">
                                                 <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
                                                     <UserPlus className="w-3.5 h-3.5 text-padel-primary shrink-0" />
@@ -1547,7 +1546,7 @@ export default function MasterGeneratorPage() {
                                                 })()}
                                             </div>
 
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 items-stretch">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 landscape:md:grid-cols-2 gap-x-8 gap-y-6 landscape:gap-y-4 items-stretch">
                                                 <div className="space-y-1.5 min-w-0">
                                                     <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
                                                         <Calendar className="w-3.5 h-3.5 text-padel-primary shrink-0" />
@@ -1580,7 +1579,7 @@ export default function MasterGeneratorPage() {
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-6 pt-2">
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-6 landscape:gap-x-4 landscape:gap-y-3 pt-2 landscape:pt-1">
                                                 <div className="space-y-1.5 min-w-0">
                                                     <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
                                                         <Clock className="w-3.5 h-3.5 text-padel-primary shrink-0" />
@@ -1669,7 +1668,7 @@ export default function MasterGeneratorPage() {
                                                 </div>
                                             </div>
                                             {/* Resumen horario */}
-                                            <div className="bg-black/30 rounded-xl p-4 flex flex-wrap gap-3 text-[10px] font-bold mt-2">
+                                            <div className="bg-black/30 rounded-xl p-4 landscape:p-2.5 landscape:py-2 flex flex-wrap gap-3 landscape:gap-2 text-[10px] landscape:text-[9px] font-bold mt-2 landscape:mt-1">
                                                 <span className="text-zinc-500 uppercase">Franja por partido:</span>
                                                 <span className="text-padel-primary">{eventData.matchDurationMinutes + eventData.bufferMinutes} min totales</span>
                                                 <span className="text-zinc-600">·</span>
@@ -2170,60 +2169,62 @@ export default function MasterGeneratorPage() {
                                 </motion.section>
                             )}
                         </AnimatePresence>
+                    </main>
 
-                        {/* Navigation Buttons */}
-                        <div className="max-w-md mx-auto mt-12 mb-16 space-y-6">
-                            <div className="space-y-4">
+                    {/* Acciones siempre visibles abajo (evita scroll en iPad horizontal / viewport bajo) */}
+                    <div className="shrink-0 border-t border-zinc-800/80 bg-[#0a0a0b]/95 backdrop-blur-md pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] px-2 landscape:pt-2 landscape:pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
+                        <div className="w-full max-w-md landscape:max-w-3xl mx-auto space-y-4 landscape:space-y-2">
+                            <div className="space-y-4 landscape:space-y-2">
                                 {step < 3 ? (
                                     <button
                                         type="button"
                                         onClick={nextStep}
-                                        className="w-full min-h-[64px] bg-padel-primary hover:bg-white text-black font-black py-4 rounded-[1.5rem] flex items-center justify-center gap-2 transition-all shadow-[0_10px_30px_rgba(204,255,0,0.25)] hover:shadow-[0_15px_40px_rgba(255,255,255,0.2)] text-lg uppercase tracking-tighter italic active:scale-[0.98]"
+                                        className="w-full min-h-[64px] landscape:min-h-[48px] bg-padel-primary hover:bg-white text-black font-black py-4 landscape:py-2.5 rounded-[1.5rem] landscape:rounded-xl flex items-center justify-center gap-2 transition-all shadow-[0_10px_30px_rgba(204,255,0,0.25)] hover:shadow-[0_15px_40px_rgba(255,255,255,0.2)] text-lg landscape:text-base uppercase tracking-tighter italic active:scale-[0.98]"
                                     >
-                                        Continuar <ChevronRight className="w-6 h-6" />
+                                        Continuar <ChevronRight className="w-6 h-6 landscape:w-5 landscape:h-5" />
                                     </button>
                                 ) : step === 3 ? (
-                                    <div className="space-y-4">
-                                        <label className="flex items-center gap-3 cursor-pointer text-sm text-zinc-300">
+                                    <div className="space-y-4 landscape:space-y-2">
+                                        <label className="flex items-center gap-3 cursor-pointer text-sm landscape:text-xs text-zinc-300 min-w-0">
                                             <input
                                                 type="checkbox"
                                                 checked={sorteoAleatorio}
                                                 onChange={(e) => setSorteoAleatorio(e.target.checked)}
-                                                className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-padel-primary focus:ring-padel-primary"
+                                                className="w-4 h-4 shrink-0 rounded border-zinc-600 bg-zinc-800 text-padel-primary focus:ring-padel-primary"
                                             />
-                                            <span>Sorteo aleatorio (repartir equipos al azar en grupos)</span>
+                                            <span className="leading-tight">Sorteo aleatorio (repartir equipos al azar en grupos)</span>
                                         </label>
                                         <button
                                             type="button"
                                             onClick={handleGenerate}
                                             disabled={isGenerating || eventData.numCourts === 0 || eventData.categories.length === 0}
-                                            className="w-full min-h-[64px] bg-padel-primary hover:bg-white text-black font-black py-4 rounded-[1.5rem] flex items-center justify-center gap-2 transition-all shadow-[0_10px_30px_rgba(204,255,0,0.25)] text-lg uppercase tracking-tighter italic active:scale-[0.98] disabled:opacity-50 group"
+                                            className="w-full min-h-[64px] landscape:min-h-[48px] bg-padel-primary hover:bg-white text-black font-black py-4 landscape:py-2.5 rounded-[1.5rem] landscape:rounded-xl flex items-center justify-center gap-2 transition-all shadow-[0_10px_30px_rgba(204,255,0,0.25)] text-lg landscape:text-base uppercase tracking-tighter italic active:scale-[0.98] disabled:opacity-50 group"
                                         >
                                             {isGenerating ? (
                                                 <>GENERANDO...</>
                                             ) : (
-                                                <>GENERAR FIXTURE <Trophy className="w-6 h-6 group-hover:scale-125 transition-transform" /></>
+                                                <>GENERAR FIXTURE <Trophy className="w-6 h-6 landscape:w-5 landscape:h-5 group-hover:scale-125 transition-transform" /></>
                                             )}
                                         </button>
                                     </div>
                                 ) : step === 4 ? (
-                                    <div className="space-y-3">
+                                    <div className="space-y-3 landscape:space-y-2">
                                         <button
                                             type="button"
                                             onClick={handleFinalSave}
                                             disabled={isSaving}
-                                            className="w-full min-h-[64px] bg-padel-primary hover:bg-white text-black font-black py-4 rounded-[1.5rem] flex items-center justify-center gap-2 transition-all shadow-[0_10px_30px_rgba(204,255,0,0.25)] text-lg uppercase tracking-tighter italic active:scale-[0.98] group"
+                                            className="w-full min-h-[64px] landscape:min-h-[48px] bg-padel-primary hover:bg-white text-black font-black py-4 landscape:py-2.5 rounded-[1.5rem] landscape:rounded-xl flex items-center justify-center gap-2 transition-all shadow-[0_10px_30px_rgba(204,255,0,0.25)] text-lg landscape:text-base uppercase tracking-tighter italic active:scale-[0.98] group"
                                         >
                                             {isSaving ? (
                                                 <>CREANDO...</>
                                             ) : (
-                                                <>CREAR EVENTO <Database className="w-6 h-6 group-hover:rotate-12 transition-transform" /></>
+                                                <>CREAR EVENTO <Database className="w-6 h-6 landscape:w-5 landscape:h-5 group-hover:rotate-12 transition-transform" /></>
                                             )}
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => router.back()}
-                                            className="w-full py-4 text-zinc-500 font-bold hover:text-white transition-colors uppercase tracking-widest text-[10px]"
+                                            className="w-full py-4 landscape:py-2 text-zinc-500 font-bold hover:text-white transition-colors uppercase tracking-widest text-[10px]"
                                         >
                                             Cancelar y Salir
                                         </button>
@@ -2232,7 +2233,7 @@ export default function MasterGeneratorPage() {
 
                             </div>
                         </div>
-                    </main>
+                    </div>
                 </div>
             </div>
         </div>
