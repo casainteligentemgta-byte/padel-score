@@ -150,10 +150,12 @@ export default function AdminPublicidadPage() {
     let error = r1.error;
 
     if (error) {
+      // BD sin migración 020: la columna playlist_slot no existe; no incluirla aquí.
       const r2 = await supabase
         .from('cancha_publicidad')
-        .select('id, cancha_id, media_id, orden, duracion_segundos, playlist_slot, media_content(*)')
+        .select('id, cancha_id, media_id, orden, duracion_segundos, venue_name, media_content(*)')
         .in('cancha_id', keys)
+        .eq('venue_name', selectedVenue)
         .order('orden', { ascending: true });
       data = r2.data as CourtPlaylistRow[] | null;
       error = r2.error;
