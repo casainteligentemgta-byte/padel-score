@@ -166,34 +166,45 @@ export default function AdminHubPage() {
                 {/* Dashboard Grid */}
                 <div className="px-4 sm:px-6 py-2 sm:py-4 max-w-7xl mx-auto">
 
-                    {/* Welcome Card & Overview */}
-                    <div className="mb-2 sm:mb-4">
+                    {/* Hero: ancho como la rejilla de abajo; texto sobre la imagen */}
+                    <div className="mb-2 sm:mb-4 w-full">
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="relative h-28 sm:h-36 lg:h-44 rounded-2xl sm:rounded-3xl overflow-hidden group shadow-2xl"
+                            className="relative w-full min-h-[12rem] sm:min-h-[15rem] lg:min-h-[17rem] rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl bg-[#0a0a0a] group"
                         >
-                            <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/30 via-padel-primary/5 to-transparent z-10" />
                             <img
                                 src="/images/padel_hero.png"
-                                className="absolute inset-0 w-full h-full object-cover opacity-70 mix-blend-overlay group-hover:scale-105 transition-transform duration-[2s]"
+                                className="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-[2.2s] group-hover:scale-[1.03]"
                                 alt="Padel court"
                             />
-                            <div className="absolute inset-0 bg-black/40 z-0" />
-                            <div className="relative z-20 p-6 sm:p-10 h-full flex flex-col justify-end">
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/25 pointer-events-none" />
+                            <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-transparent to-transparent pointer-events-none sm:from-black/40" />
+                            <div className="absolute inset-0 bg-padel-primary/[0.05] pointer-events-none" />
+
+                            <div className="absolute inset-0 z-10 flex flex-col justify-end p-5 sm:p-7 lg:p-10">
                                 <motion.div
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: 0.3 }}
+                                    initial={{ opacity: 0, y: 12 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.15 }}
+                                    className="w-full flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between lg:gap-10"
                                 >
-                                    <h2 className="text-sm sm:text-lg lg:text-3xl font-black italic uppercase tracking-tighter text-white leading-tight mb-0.5">
-                                        DOMINA TU <br /><span className="text-padel-primary">TORNEO</span>
-                                    </h2>
-                                    <p className="text-[8px] sm:text-[9px] lg:text-xs font-bold uppercase tracking-widest text-padel-primary/80 mb-2 sm:mb-4 max-w-md">
-                                        Gestión profesional de marcadores, categorías e inscripciones en tiempo real.
-                                    </p>
-                                    <button onClick={() => router.push('/admin/master-generator')} className="inline-flex items-center gap-2 bg-white text-black px-4 py-2 rounded-lg font-black uppercase italic text-[8px] sm:text-[10px] shadow-xl hover:bg-padel-primary transition-colors">
-                                        Generar Torneos <Activity className="w-3 h-3 animate-pulse" />
+                                    <div className="max-w-xl">
+                                        <h2 className="text-lg sm:text-2xl lg:text-3xl xl:text-4xl font-black italic uppercase tracking-tighter text-white leading-[1.05] mb-1.5 drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]">
+                                            DOMINA TU <br />
+                                            <span className="text-padel-primary">TORNEO</span>
+                                        </h2>
+                                        <p className="text-[9px] sm:text-[10px] lg:text-xs font-bold uppercase tracking-widest text-white/90 max-w-md drop-shadow-[0_1px_8px_rgba(0,0,0,0.9)]">
+                                            Gestión profesional de marcadores, categorías e inscripciones en tiempo real.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => router.push('/admin/master-generator')}
+                                        className="w-full lg:w-auto shrink-0 inline-flex items-center justify-center gap-2.5 rounded-2xl border-2 border-white/20 bg-padel-primary px-6 py-3.5 sm:px-8 sm:py-4 text-black font-black uppercase italic tracking-wider text-[10px] sm:text-xs shadow-[0_8px_32px_rgba(204,255,0,0.35)] hover:brightness-110 hover:shadow-[0_12px_40px_rgba(204,255,0,0.45)] active:scale-[0.98] transition-all"
+                                    >
+                                        Generar Torneos
+                                        <Activity className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse" />
                                     </button>
                                 </motion.div>
                             </div>

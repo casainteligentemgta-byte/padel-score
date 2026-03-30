@@ -13,6 +13,7 @@ import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { inferStbFromSetScoresOnly } from '@/lib/matchFinishedScoreDisplay';
 import { useCourtDisplayHeartbeat } from '@/lib/courtDisplayHeartbeat';
 import { logDisplayVideoError } from '@/lib/logDisplayVideoError';
+import { PizarraWarmupOverlay, parseCalentamientoEndsAt } from '@/components/PizarraWarmupOverlay';
 
 /** Historial RTDB → forma mínima para inferir STB por setScores (1-1 + desempate). */
 function matchStubFromMarcadorHistorico(marcador: any) {
@@ -175,6 +176,7 @@ export default function CourtDisplayPage() {
     const effectiveCancha = pizarraData;
     const isEnVivo = effectiveCancha?.estado === 'en_vivo';
     const marcador = effectiveCancha?.marcador;
+    const warmupEndsAt = parseCalentamientoEndsAt(effectiveCancha?.calentamiento);
 
     // ── Loading ────────────────────────────────────────────────────────────
     if (loading) return (
@@ -250,6 +252,7 @@ export default function CourtDisplayPage() {
     // ── Estado EN VIVO — Marcador completo ─────────────────────────────────
     return (
         <div className="h-screen w-screen bg-[#050505] text-white font-outfit flex flex-col overflow-hidden select-none">
+            <PizarraWarmupOverlay endsAt={warmupEndsAt} layout="fullscreen" />
             {/* Banda superior */}
             <div className="bg-black/60 backdrop-blur-xl border-b border-white/10 px-8 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">

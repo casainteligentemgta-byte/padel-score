@@ -3,7 +3,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Share2, Mail, Download, X, Save, RefreshCw, Upload, Loader2
+    Share2, Mail, Download, X, Save, RefreshCw, Upload, Loader2, ImageOff
 } from 'lucide-react';
 import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 
@@ -107,6 +107,16 @@ export const SponsorModal: React.FC<SponsorModalProps> = ({
 }) => {
     const [uploading, setUploading] = React.useState(false);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const defLogo = DEFAULT_EVENT_SPONSOR_LOGO_URL;
+    const [previewSrc, setPreviewSrc] = React.useState(
+        () => (logoDraft?.trim() ? logoDraft.trim() : defLogo)
+    );
+    const [previewHideImg, setPreviewHideImg] = React.useState(false);
+
+    React.useEffect(() => {
+        setPreviewSrc(logoDraft?.trim() ? logoDraft.trim() : defLogo);
+        setPreviewHideImg(false);
+    }, [logoDraft]);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -221,11 +231,19 @@ export const SponsorModal: React.FC<SponsorModalProps> = ({
                                         Vista previa
                                     </p>
                                     <div className="w-48 h-24 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
-                                        <img
-                                            src={logoDraft?.trim() || DEFAULT_EVENT_SPONSOR_LOGO_URL}
-                                            alt={nameDraft || 'Patrocinante'}
-                                            className="w-full h-full object-contain p-2"
-                                        />
+                                        {previewHideImg ? (
+                                            <ImageOff className="w-10 h-10 text-gray-600" aria-hidden />
+                                        ) : (
+                                            <img
+                                                src={previewSrc}
+                                                alt={nameDraft || 'Patrocinante'}
+                                                className="w-full h-full object-contain p-2"
+                                                onError={() => {
+                                                    if (previewSrc !== defLogo) setPreviewSrc(defLogo);
+                                                    else setPreviewHideImg(true);
+                                                }}
+                                            />
+                                        )}
                                     </div>
                                 </div>
                             </div>

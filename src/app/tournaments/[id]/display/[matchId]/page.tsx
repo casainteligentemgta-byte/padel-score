@@ -17,6 +17,7 @@ import { visibleSetNumbersForScoreboard, scoreboardGridClassForSetCount } from '
 import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { inferStbFromSetScoresOnly } from '@/lib/matchFinishedScoreDisplay';
 import { resolveMatchTeamLines } from '@/lib/resolveMatchTeamLines';
+import { PizarraWarmupOverlay, parseCalentamientoEndsAt } from '@/components/PizarraWarmupOverlay';
 
 // Lottie player para animaciones JSON (biblioteca de animaciones)
 function LottieAnimationOverlay({ url }: { url: string }) {
@@ -219,6 +220,7 @@ export default function FullScreenDisplay() {
 
     // ── Marcador en vivo del RTDB (escrito por el marker en tiempo real) ─────
     const [liveMarcador, setLiveMarcador] = useState<any>(null);
+    const [liveCalentamientoEndsAt, setLiveCalentamientoEndsAt] = useState<number | null>(null);
     const [courtTransferBanner, setCourtTransferBanner] = useState<{ title: string; subtitle: string } | null>(null);
     const courtTransferShownTsRef = useRef(0);
     const pizarraRefreshNonceBaselineRef = useRef<number | null>(null);
@@ -324,6 +326,7 @@ export default function FullScreenDisplay() {
             applyPizarraRefreshNonce(data);
             const marcador = data?.marcador ?? null;
             setLiveMarcador(marcador);
+            setLiveCalentamientoEndsAt(parseCalentamientoEndsAt(data?.calentamiento));
         });
 
         // Polling de respaldo en caso de que Supabase Realtime no esté habilitado en el Dashboard
@@ -332,6 +335,7 @@ export default function FullScreenDisplay() {
                 const data = state?.data;
                 applyPizarraRefreshNonce(data);
                 const marcador = data?.marcador ?? null;
+                setLiveCalentamientoEndsAt(parseCalentamientoEndsAt(data?.calentamiento));
                 setLiveMarcador((prev: any) => {
                     if (marcador?.ultimo_update !== prev?.ultimo_update || JSON.stringify(marcador) !== JSON.stringify(prev)) {
                         return marcador;
@@ -1272,8 +1276,9 @@ export default function FullScreenDisplay() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="flex flex-col h-full w-full relative z-10"
+                        className="relative z-10 flex h-full w-full flex-col"
                     >
+                        <PizarraWarmupOverlay endsAt={liveCalentamientoEndsAt} layout="fullscreen" />
                         {/* ══════════════ HEADER BAR (10%) ══════════════ */}
                         <div
                             className="flex items-center justify-between flex-shrink-0 border border-white/8 bg-white/[0.03] backdrop-blur-sm px-6"

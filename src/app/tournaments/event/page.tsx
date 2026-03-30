@@ -45,7 +45,10 @@ function getFaseLabel(match: any): string {
 function EventView() {
     const searchParams = useSearchParams();
     const idsParam = searchParams.get('ids') ?? '';
-    const tournamentIds = idsParam ? idsParam.split(',').filter(Boolean) : [];
+    const tournamentIds = useMemo(
+        () => (idsParam ? idsParam.split(',').filter(Boolean) : []),
+        [idsParam]
+    );
 
     // Persistir ids del evento para que el botón Atrás en marcador/torneo vuelva aquí
     useEffect(() => {
@@ -56,9 +59,11 @@ function EventView() {
         }
     }, [idsParam]);
 
-    const { user, isAdmin } = useAuth();
+    const { user, isAdmin, isMarker } = useAuth();
     const [tournaments, setTournaments] = useState<Record<string, any>>({});
     const canManageTournament = isAdmin || (user && Object.values(tournaments).some((t: any) => t.owners?.includes(user.email)));
+    /** Hub: marcadores ven el dock Control (enlace a `/tournaments/.../score/...`), no solo jugadores con Pizarra. */
+    const canUseMatchControl = canManageTournament || !!isMarker;
 
     const [allMatches, setAllMatches] = useState<any[]>([]);
     const [activeTab, setActiveTab] = useState<string>('all');
@@ -497,6 +502,7 @@ function EventView() {
                         numSlotsPorComenzar={numSlotsPorComenzar}
                         tournaments={tournaments}
                         canManageTournament={!!canManageTournament}
+                        canUseMatchControl={!!canUseMatchControl}
                         availableDates={availableDates}
                         selectedDate={selectedDate}
                         onSelectDate={setSelectedDate}

@@ -105,7 +105,10 @@ export default function RefereeScoreboard() {
         return list;
     }, [tournament?.matches, match?.id, matchCourt, impliedCourtCount]);
 
-    const canControl = isAdmin || (profile?.role === 'marker' && canMarkInCancha(`cancha_${matchCourt}`)) || tournament?.ownerId === user?.uid;
+    /** Misma puerta que `/marker/[canchaId]`: admin, dueño del torneo, o `canMarkInCancha` (en Auth incluye usuario autenticado). */
+    const canControl =
+        !!user &&
+        (isAdmin || tournament?.ownerId === user?.uid || canMarkInCancha(`cancha_${matchCourt}`));
 
     const primaryColor = tournament?.broadcastingSettings?.primaryColor || '#ccff00';
     const [history, setHistory] = useState<any[]>([]);
@@ -1370,7 +1373,9 @@ export default function RefereeScoreboard() {
                         <Monitor className="w-10 h-10 text-red-500" />
                     </div>
                     <h2 className="text-2xl font-black italic uppercase tracking-tighter mb-4 text-white">Acceso Restringido</h2>
-                    <p className="text-gray-400 text-sm font-medium mb-8">Solo el personal autorizado (ADMIN o MARKER) puede controlar el marcador de este partido.</p>
+                    <p className="text-gray-400 text-sm font-medium mb-8">
+                        Debes iniciar sesión para controlar el marcador. Si crees que es un error, comprueba tu cuenta o los permisos de pista con el club.
+                    </p>
                     <button
                         onClick={() => {
                             const tab =

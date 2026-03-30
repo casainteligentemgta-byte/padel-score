@@ -1449,18 +1449,30 @@ export default function MasterGeneratorPage() {
                                                     <ImageIcon className="w-3.5 h-3.5 text-padel-primary shrink-0" />
                                                     Logo del patrocinante
                                                 </label>
-                                                <div className="flex items-center gap-3 flex-wrap">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    {eventData.sponsorLogoUrl && (
+                                                        <div className="h-10 w-10 shrink-0 rounded-xl bg-zinc-900 border border-zinc-800 overflow-hidden flex items-center justify-center p-1 group relative">
+                                                            <img src={eventData.sponsorLogoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setEventData(prev => ({ ...prev, sponsorLogoUrl: '' }))}
+                                                                className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                                                            >
+                                                                <X className="w-4 h-4 text-white" />
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                     <button
                                                         type="button"
                                                         onClick={() => document.getElementById('logo-upload')?.click()}
                                                         disabled={isUploadingLogo}
-                                                        className="shrink-0 flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-xl transition-all disabled:opacity-50 text-sm font-bold border border-zinc-700/50"
+                                                        className="shrink-0 h-10 inline-flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white px-4 rounded-xl transition-all disabled:opacity-50 text-sm font-bold border border-zinc-700/50"
                                                     >
                                                         <Upload className="w-4 h-4" />
                                                         {isUploadingLogo ? 'Subiendo...' : 'SUBIR LOGO'}
                                                     </button>
 
-                                                    <div className="flex-1 relative group">
+                                                    <div className="flex-1 min-w-[min(100%,12rem)] relative group basis-full sm:basis-0">
                                                         <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-zinc-500">
                                                             <LinkIcon className="w-4 h-4" />
                                                         </div>
@@ -1469,7 +1481,7 @@ export default function MasterGeneratorPage() {
                                                             value={eventData.sponsorLogoUrl || ''}
                                                             onChange={e => setEventData(prev => ({ ...prev, sponsorLogoUrl: e.target.value }))}
                                                             placeholder="O pega una URL..."
-                                                            className="w-full bg-black/40 border border-zinc-800 rounded-xl py-2.5 pl-9 pr-16 text-xs text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
+                                                            className="w-full bg-black/40 border border-zinc-800 rounded-xl h-10 pl-9 pr-16 text-xs text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
                                                         />
                                                         {eventData.sponsorLogoUrl && eventData.sponsorLogoUrl.startsWith('http') && !eventData.sponsorLogoUrl.includes('supabase.co/storage') && (
                                                             <button
@@ -1482,19 +1494,6 @@ export default function MasterGeneratorPage() {
                                                             </button>
                                                         )}
                                                     </div>
-
-                                                    {eventData.sponsorLogoUrl && (
-                                                        <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 overflow-hidden flex items-center justify-center p-1 group relative">
-                                                            <img src={eventData.sponsorLogoUrl} alt="Logo" className="w-full h-full object-contain" />
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setEventData(prev => ({ ...prev, sponsorLogoUrl: '' }))}
-                                                                className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
-                                                            >
-                                                                <X className="w-4 h-4 text-white" />
-                                                            </button>
-                                                        </div>
-                                                    )}
 
                                                     <input
                                                         id="logo-upload"

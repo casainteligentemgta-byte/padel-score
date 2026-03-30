@@ -1,20 +1,25 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useState, Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { RefreshCw, Trophy } from 'lucide-react';
+import { RefreshCw, Trophy, Share2 } from 'lucide-react';
 import { dataService } from '@/lib/dataService';
 import { BackButton } from '@/components/BackButton';
 import { EventPodiumView } from '../components/EventPodiumView';
+import { exportEventPodiumPdf } from '@/lib/eventPodiumPdf';
 
 function EventPodiumContent() {
     const searchParams = useSearchParams();
     const idsParam = searchParams.get('ids') ?? '';
-    const tournamentIds = idsParam ? idsParam.split(',').filter(Boolean) : [];
+    const tournamentIds = useMemo(
+        () => (idsParam ? idsParam.split(',').filter(Boolean) : []),
+        [idsParam]
+    );
 
     const [tournaments, setTournaments] = useState<Record<string, any>>({});
     const [loading, setLoading] = useState(true);
+    const [pdfBusy, setPdfBusy] = useState(false);
 
     useEffect(() => {
         if (tournamentIds.length === 0) {
@@ -99,6 +104,29 @@ function EventPodiumContent() {
                         {eventTitle}
                     </h1>
                 </div>
+                <button
+                    type="button"
+                    disabled={pdfBusy}
+                    aria-label="Compartir podio en PDF"
+                    onClick={async () => {
+                        setPdfBusy(true);
+                        try {
+                            await exportEventPodiumPdf(tournaments, eventTitle);
+                        } catch (e) {
+                            console.error('[exportEventPodiumPdf]', e);
+                        } finally {
+                            setPdfBusy(false);
+                        }
+                    }}
+                    className="flex-shrink-0 flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-[#ccff00] text-black text-[9px] font-black uppercase tracking-widest hover:bg-[#b8e600] transition-colors disabled:opacity-50 active:scale-[0.98]"
+                >
+                    {pdfBusy ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                        <Share2 className="w-4 h-4" />
+                    )}
+                    <span className="max-[340px]:sr-only">Compartir PDF</span>
+                </button>
             </header>
             <div className="flex-1 overflow-y-auto py-6">
                 <EventPodiumView tournaments={tournaments} />

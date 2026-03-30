@@ -8,7 +8,6 @@ import {
 } from 'lucide-react';
 import { dataService } from '@/lib/dataService';
 import { getFinishedMatchScoreLines } from '@/lib/matchFinishedScoreDisplay';
-import { useAuth } from '@/lib/AuthContext';
 import { MatchStatus } from '@/types/tournament';
 import {
     resolveTeamNames, formatHHMM, formatCategory, formatGender,
@@ -60,11 +59,25 @@ export function PlaceholderMatchCard({ rank, mode = 'pending' }: { rank: number;
 }
 
 // ── "Por Comenzar" action card (top 3 only) ────────────────────────────────
-export function NextMatchCard({ match, rank, compact = false, gameNumber, matchNumber }: { match: any; rank: number; compact?: boolean; gameNumber?: number; matchNumber?: number }) {
+export function NextMatchCard({
+    match,
+    rank,
+    compact = false,
+    gameNumber,
+    matchNumber,
+    showControlDock = false,
+}: {
+    match: any;
+    rank: number;
+    compact?: boolean;
+    gameNumber?: number;
+    matchNumber?: number;
+    /** Admin / dueño de evento / marcador: dock con enlace a control del partido (`/tournaments/.../score/...` o `/marker/...` si falta id). */
+    showControlDock?: boolean;
+}) {
     const [t1p1, t1p2] = resolveTeamNames(match.team1, match.team1Name);
     const [t2p1, t2p2] = resolveTeamNames(match.team2, match.team2Name);
     const isLive = match.status === MatchStatus.LIVE;
-    const { isAdmin } = useAuth();
 
     const rankColors = isLive
         ? ['text-emerald-400', 'text-emerald-400', 'text-emerald-400', 'text-emerald-400', 'text-emerald-400', 'text-emerald-400']
@@ -117,11 +130,15 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
         if (t1Display) controlParams.set('team1', t1Display);
         if (t2Display) controlParams.set('team2', t2Display);
     }
-    // Torneo + partido: hidratación en marker/pizarra aunque falten nombres en query (punto 1).
+    // Fallback /marker: query t, m, jugadores (solo si falta torneo o id de partido).
     if (match._tournamentId) controlParams.set('t', String(match._tournamentId));
     if (match.id) controlParams.set('m', String(match.id));
 
-    const controlHref = `/marker/${encodeURIComponent(canchaId)}?${controlParams.toString()}`;
+    /** Con torneo + partido → sala de árbitro del torneo; si no, marker con query `t`/`m`/jugadores. */
+    const controlHref =
+        match._tournamentId && match.id
+            ? `/tournaments/${match._tournamentId}/score/${encodeURIComponent(String(match.id))}`
+            : `/marker/${encodeURIComponent(canchaId)}?${controlParams.toString()}`;
     const pizarraHref = `/tournaments/${match._tournamentId}/display/${encodeURIComponent(match.id || matchKey)}`;
     const camasHref = `/tournaments/${match._tournamentId}/control/broadcasting`;
     const adsHref = `/admin/publicidad`;
@@ -206,7 +223,7 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
 
 
                 {/* Dock para PLAYERS: solo botón Pizarra + dirección corta */}
-                {!isAdmin && match._tournamentId && (
+                {!showControlDock && match._tournamentId && (
                     <div className="border-t-2 border-[#ccff00]/30">
                         <Link
                             href={pizarraHref}
@@ -223,26 +240,10 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
                 )}
 
                 {/* Action Dock — solo visible para admin/marker */}
-                {isAdmin && (
-                    <div className={`grid ${(!isLive && match._tournamentId) ? 'grid-cols-3 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4'} gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40 overflow-hidden`}>
-                        {!isLive && match._tournamentId && (
-                            <button
-                                onClick={async () => {
-                                    if (!confirm('¿Comenzar este partido ahora?')) return;
-                                    try {
-                                        await dataService.updateMatch(match._tournamentId, match.id, { status: MatchStatus.LIVE });
-                                    } catch (err) { console.error(err); }
-                                }}
-                                className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00] text-black hover:bg-white transition-all active:scale-95"
-                            >
-                                <Gamepad2 className="w-3.5 h-3.5" />
-                                <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Comenzar</span>
-                            </button>
-                        )}
+                {showControlDock && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40 overflow-hidden">
                         <Link
                             href={controlHref}
-                            target="_blank"
-                            rel="noopener noreferrer"
                             className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                         >
                             <Gamepad2 className="w-3.5 h-3.5" />
@@ -329,7 +330,7 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
             </div>
 
             {/* Dock para PLAYERS: solo botón Pizarra + dirección corta */}
-            {!isAdmin && match._tournamentId && (
+            {!showControlDock && match._tournamentId && (
                 <div className="border-t-2 border-[#ccff00]/30">
                     <Link
                         href={pizarraHref}
@@ -346,12 +347,10 @@ export function NextMatchCard({ match, rank, compact = false, gameNumber, matchN
             )}
 
             {/* Action Dock full — solo visible para admin/marker */}
-            {isAdmin && (
+            {showControlDock && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40">
                     <Link
                         href={controlHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
                         className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                     >
                         <Gamepad2 className="w-4 h-4" />

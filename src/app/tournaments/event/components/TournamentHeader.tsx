@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import {
     Tv, FileText, Share2, Calendar, Clock
 } from 'lucide-react';
@@ -28,6 +27,38 @@ interface TournamentHeaderProps {
     onShare: () => void;
 }
 
+function SponsorLogoImage({ url, name }: { url?: string; name?: string }) {
+    const def = DEFAULT_EVENT_SPONSOR_LOGO_URL;
+    const [src, setSrc] = React.useState(() => (url?.trim() ? url.trim() : def));
+    const [hideImg, setHideImg] = React.useState(false);
+
+    React.useEffect(() => {
+        setSrc(url?.trim() ? url.trim() : def);
+        setHideImg(false);
+    }, [url]);
+
+    const onError = () => {
+        if (src !== def) {
+            setSrc(def);
+            return;
+        }
+        setHideImg(true);
+    };
+
+    if (hideImg) {
+        return <Tv className="w-8 h-8 text-gray-500" aria-hidden />;
+    }
+
+    return (
+        <img
+            src={src}
+            alt={name || 'Patrocinador'}
+            className="w-16 h-16 object-contain"
+            onError={onError}
+        />
+    );
+}
+
 export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
     eventName,
     complexName,
@@ -49,10 +80,13 @@ export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
     return (
         <div className="flex-shrink-0 bg-[#0a0a0a] border-b border-white/[0.08] px-3 sm:px-4 pt-5 pb-4 w-full">
             <div className="flex items-center gap-3 mb-4">
-                <BackButton href="/tournaments" className="flex-shrink-0" />
+                <BackButton className="flex-shrink-0" />
 
                 {/* ── Patrocinador configurable ── */}
-                <div className="flex-shrink-0 flex flex-col items-center" title="Patrocinador del evento">
+                <div className="flex flex-shrink-0 flex-col items-center gap-1" title="Patrocinador del evento">
+                    <span className="max-w-[5.5rem] text-center text-[8px] font-black uppercase tracking-widest text-gray-500 leading-tight">
+                        Logo del patrocinante
+                    </span>
                     {sponsorLink ? (
                         <a
                             href={sponsorLink}
@@ -60,19 +94,11 @@ export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
                             rel="noopener noreferrer"
                             className="w-20 h-20 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden hover:bg-white/10 transition-colors"
                         >
-                            <img
-                                src={sponsorLogoUrl || DEFAULT_EVENT_SPONSOR_LOGO_URL}
-                                alt={sponsorName || 'Patrocinador'}
-                                className="w-16 h-16 object-contain"
-                            />
+                            <SponsorLogoImage url={sponsorLogoUrl} name={sponsorName} />
                         </a>
                     ) : (
                         <div className="w-20 h-20 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
-                            <img
-                                src={sponsorLogoUrl || DEFAULT_EVENT_SPONSOR_LOGO_URL}
-                                alt={sponsorName || 'Patrocinador'}
-                                className="w-16 h-16 object-contain"
-                            />
+                            <SponsorLogoImage url={sponsorLogoUrl} name={sponsorName} />
                         </div>
                     )}
                 </div>

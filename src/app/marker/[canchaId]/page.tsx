@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
     Crosshair, Wifi, WifiOff, ChevronUp, ChevronDown,
-    Play, Square, RefreshCw, Shield, Trophy, Zap, Star, AlertCircle
+    Play, Square, RefreshCw, Shield, Trophy, Zap, Star, AlertCircle, Timer
 } from 'lucide-react';
 import { getCanchaLabel } from '@/lib/markerCanchas';
 import { isGenericEquipoNombre, resolveMatchTeamLines } from '@/lib/resolveMatchTeamLines';
@@ -18,6 +18,11 @@ import {
     winsTiebreakPoints,
 } from '@/lib/matchScoringRules';
 import Link from 'next/link';
+import {
+    PIZARRA_CALENTAMIENTO_MS,
+    parseCalentamientoEndsAt,
+    useWarmupRemainingSec,
+} from '@/components/PizarraWarmupOverlay';
 
 const PUNTOS_NORMAL = ['0', '15', '30', '40', 'AD'];
 const PUNTOS_TB = Array.from({ length: 21 }, (_, i) => String(i)); // 0..20 (más que suficiente)
@@ -96,6 +101,8 @@ export default function MarkerControlPage() {
     const canchaNum = canchaId.split('_')[1];
     const isEnVivo = canchaData?.estado === 'en_vivo';
     const marcador = canchaData?.marcador;
+    const warmupEndsAt = parseCalentamientoEndsAt(canchaData?.calentamiento);
+    const warmupRemainingSec = useWarmupRemainingSec(warmupEndsAt);
 
     // Migrar nombres desde el torneo (vienen por querystring al abrir el marker)
     useEffect(() => {
@@ -189,7 +196,12 @@ export default function MarkerControlPage() {
             setLoadingCancha(false);
             const stable = val == null ? null : (() => {
                 const m = val.marcador;
-                return { estado: val.estado, marcador: m ? { ...m, ultimo_update: undefined } : m };
+                const warmEnd = (val as { calentamiento?: { endsAt?: unknown } }).calentamiento?.endsAt ?? null;
+                return {
+                    estado: val.estado,
+                    marcador: m ? { ...m, ultimo_update: undefined } : m,
+                    warmupEndsAt: warmEnd,
+                };
             })();
             const nextJson = stable == null ? '' : JSON.stringify(stable);
             if (nextJson !== prevStableJson) {
@@ -367,6 +379,7 @@ export default function MarkerControlPage() {
                 },
                 publicidad: { override_local: false, imagen_url_local: null },
                 pizarra_refresh_nonce: 0,
+                calentamiento: null,
             });
 
             // Transición estricta al iniciar desde Marker:
@@ -460,6 +473,7 @@ export default function MarkerControlPage() {
                 torneo_id: null,
                 partido_id: null,
                 marcador: null,
+                calentamiento: null,
                 publicidad: { override_local: false, imagen_url_local: null },
             });
             const m = String(canchaId || '').match(/(\d+)/);
@@ -552,6 +566,50 @@ export default function MarkerControlPage() {
             console.error('[Marker] Error actualizando marcador en Supabase:', err);
         }
     };
+
+    const mergePizarraRootLocal = useCallback(
+        async (rootPatch: Record<string, unknown>) => {
+            if (finishedLockRef.current) return;
+            const cur = canchaDataRef.current || {};
+            const next: Record<string, unknown> = { ...cur, ...rootPatch };
+            if (Object.prototype.hasOwnProperty.call(rootPatch, 'calentamiento') && rootPatch.calentamiento == null) {
+                delete next.calentamiento;
+            }
+            setCanchaData(next);
+            try {
+                await dataService.setPizarraCanchaState(canchaId, next as Record<string, unknown>);
+            } catch (err) {
+                console.error('[Marker] mergePizarraRootLocal:', err);
+            }
+        },
+        [canchaId]
+    );
+
+    const toggleCalentamiento = useCallback(async () => {
+        if (!isEnVivo || !marcador || finishedLockRef.current) return;
+        const cur = canchaDataRef.current || {};
+        const existing = parseCalentamientoEndsAt(cur.calentamiento);
+        const now = dataService.getSyncedNow();
+        if (existing && existing > now) {
+            await mergePizarraRootLocal({ calentamiento: null });
+            return;
+        }
+        await mergePizarraRootLocal({
+            calentamiento: { endsAt: now + PIZARRA_CALENTAMIENTO_MS },
+        });
+    }, [isEnVivo, marcador, mergePizarraRootLocal]);
+
+    useEffect(() => {
+        if (!warmupEndsAt || !isEnVivo) return;
+        const tick = () => {
+            if (dataService.getSyncedNow() >= warmupEndsAt) {
+                mergePizarraRootLocal({ calentamiento: null });
+            }
+        };
+        tick();
+        const id = setInterval(tick, 1000);
+        return () => clearInterval(id);
+    }, [warmupEndsAt, isEnVivo, mergePizarraRootLocal]);
 
     const splitTeamTokens = (line?: string | null) => {
         const t = (line || '').trim();
@@ -2060,6 +2118,34 @@ export default function MarkerControlPage() {
                             }`}
                         >
                             CAMBIO
+                        </button>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 border-t border-white/10 pt-2">
+                        <div className="flex min-w-0 flex-col">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-white/50 leading-none">
+                                CALENTAMIENTO
+                            </span>
+                            <span className="text-[16px] font-black tabular-nums leading-none text-orange-300">
+                                {warmupEndsAt && warmupRemainingSec > 0
+                                    ? `${String(Math.floor(warmupRemainingSec / 60)).padStart(2, '0')}:${String(warmupRemainingSec % 60).padStart(2, '0')}`
+                                    : '—'}
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => void toggleCalentamiento()}
+                            disabled={!isEnVivo || !marcador}
+                            className={`flex shrink-0 items-center gap-2 rounded-2xl border px-3 py-2 font-black uppercase italic tracking-widest transition-all text-[9px] ${
+                                !isEnVivo || !marcador
+                                    ? 'border-white/10 bg-white/5 text-gray-600'
+                                    : warmupEndsAt && warmupRemainingSec > 0
+                                      ? 'border-orange-400/40 bg-orange-500/15 text-orange-200 hover:bg-orange-500/25'
+                                      : 'border-white/15 bg-white/10 text-white hover:bg-white/15'
+                            }`}
+                        >
+                            <Timer className="h-3.5 w-3.5 shrink-0" />
+                            {warmupEndsAt && warmupRemainingSec > 0 ? 'Cancelar' : '3 min'}
                         </button>
                     </div>
 

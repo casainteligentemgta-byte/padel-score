@@ -2,8 +2,8 @@
 
 import React, { useMemo } from 'react';
 import { Trophy, Medal } from 'lucide-react';
-import { resolveCategoryPodium, getPodiumDisplayLines } from '@/lib/tournamentPodium';
-import { formatCategory, formatGender } from '../utils';
+import { getPodiumDisplayLines } from '@/lib/tournamentPodium';
+import { buildEventPodiumRows } from '@/lib/buildEventPodiumRows';
 import Link from 'next/link';
 
 interface EventPodiumViewProps {
@@ -11,19 +11,7 @@ interface EventPodiumViewProps {
 }
 
 export const EventPodiumView: React.FC<EventPodiumViewProps> = ({ tournaments }) => {
-    const rows = useMemo(() => {
-        return Object.values(tournaments)
-            .filter((t: any) => t?.id)
-            .map((t: any) => {
-                const matches = Array.isArray(t.matches) ? t.matches : [];
-                const podium = resolveCategoryPodium(matches, t);
-                const cat = formatCategory(t.category);
-                const gen = formatGender(t.gender);
-                const title = [cat, gen].filter(Boolean).join(' · ') || 'Categoría';
-                return { id: String(t.id), title, podium, tournament: t };
-            })
-            .sort((a, b) => a.title.localeCompare(b.title, 'es', { sensitivity: 'base' }));
-    }, [tournaments]);
+    const rows = useMemo(() => buildEventPodiumRows(tournaments), [tournaments]);
 
     if (rows.length === 0) {
         return (
