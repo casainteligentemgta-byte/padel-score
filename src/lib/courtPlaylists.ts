@@ -34,19 +34,11 @@ export async function fetchCanchaPlaylistRows(
   const vn = venueName?.trim() || null;
   let q = supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, media_content(*)')
+    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, media_content(*)')
     .eq('cancha_id', canchaId)
     .order('orden', { ascending: true });
   if (vn) q = q.eq('venue_name', vn);
-  const r = await q;
-  if (!r.error) return r;
-  let q2 = supabase
-    .from('cancha_publicidad')
-    .select('id, cancha_id, media_id, orden, duracion_segundos, media_content(*)')
-    .eq('cancha_id', canchaId)
-    .order('orden', { ascending: true });
-  if (vn) q2 = q2.eq('venue_name', vn);
-  return q2;
+  return await q;
 }
 
 export async function fetchCanchaPlaylistConfig(

@@ -138,28 +138,12 @@ export default function AdminPublicidadPage() {
     }
     const keys = selectedVenueCourts.map((c) => c.key);
 
-    const q = supabase
+    const { data, error } = await supabase
       .from('cancha_publicidad')
-      .select('id, cancha_id, media_id, orden, duracion_segundos, venue_name, playlist_slot, media_content(*)')
+      .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, media_content(*)')
       .in('cancha_id', keys)
       .eq('venue_name', selectedVenue)
       .order('orden', { ascending: true });
-
-    const r1 = await q;
-    let data = r1.data as CourtPlaylistRow[] | null;
-    let error = r1.error;
-
-    if (error) {
-      // BD sin migración 020: la columna playlist_slot no existe; no incluirla aquí.
-      const r2 = await supabase
-        .from('cancha_publicidad')
-        .select('id, cancha_id, media_id, orden, duracion_segundos, venue_name, media_content(*)')
-        .in('cancha_id', keys)
-        .eq('venue_name', selectedVenue)
-        .order('orden', { ascending: true });
-      data = r2.data as CourtPlaylistRow[] | null;
-      error = r2.error;
-    }
 
     if (error) throw error;
     const rows = data || [];
@@ -363,12 +347,12 @@ export default function AdminPublicidadPage() {
 
   const saveAssignment = async () => {
     if (!selectedVenue || !assignCourtId || !assignMediaId) return;
+    // Sin playlist_slot: muchas BD no tienen migración 020; vídeo/imagen se infiere de media_content.tipo.
     const row: Record<string, unknown> = {
       cancha_id: assignCourtId,
       media_id: assignMediaId,
       orden: Number(assignOrden) || 1,
       duracion_segundos: Number(assignDuracion) || 10,
-      playlist_slot: assignSlot,
     };
     row.venue_name = selectedVenue;
 
@@ -376,11 +360,6 @@ export default function AdminPublicidadPage() {
     if (error && error.message?.toLowerCase().includes('venue')) {
       delete row.venue_name;
       ({ error } = await supabase.from('cancha_publicidad').insert(row));
-    }
-    if (error && (error.message?.includes('playlist_slot') || error.message?.includes('schema cache'))) {
-      const row2 = { ...row };
-      delete row2.playlist_slot;
-      ({ error } = await supabase.from('cancha_publicidad').insert(row2));
     }
     if (error) return setError(error.message);
     setAssignModalOpen(false);
