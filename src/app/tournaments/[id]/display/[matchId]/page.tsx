@@ -244,6 +244,7 @@ export default function FullScreenDisplay() {
 
     // ── Controles de selección (vídeos / imágenes / tiras) ─────────────────
     const [mediaConfigOpen, setMediaConfigOpen] = useState(false);
+    const [mediaConfigActiveTab, setMediaConfigActiveTab] = useState<'video' | 'image' | 'text'>('video');
     const [mediaSelectionMode, setMediaSelectionMode] = useState<'auto' | 'manual'>('auto');
 
     // Activo (lo que realmente se visualiza en modo manual)

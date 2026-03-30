@@ -146,8 +146,21 @@ export default function AdminPublicidadPage() {
       .order('orden', { ascending: true });
 
     if (error) throw error;
-    const rows = data || [];
-    const filtered = rows.filter((r) => courtKeySet.has(r.cancha_id));
+    const raw = data || [];
+    const filtered: CourtPlaylistRow[] = raw
+      .filter((r) => courtKeySet.has(r.cancha_id))
+      .map((r) => {
+        const mc = (r as { media_content?: MediaContent | MediaContent[] | null }).media_content;
+        const media_content = Array.isArray(mc) ? mc[0] ?? null : mc ?? null;
+        return {
+          id: String((r as { id: string }).id),
+          cancha_id: String((r as { cancha_id: string }).cancha_id),
+          orden: Number((r as { orden: number }).orden),
+          duracion_segundos: Number((r as { duracion_segundos: number }).duracion_segundos),
+          playlist_slot: (r as { playlist_slot?: string | null }).playlist_slot ?? undefined,
+          media_content,
+        };
+      });
     setAssignments(filtered);
 
     const tmap: Record<string, string[]> = {};
