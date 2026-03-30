@@ -194,6 +194,14 @@ export default function MasterGeneratorPage() {
     const [hasGenerated, setHasGenerated] = useState(false);
     const [activeGender, setActiveGender] = useState<'MALE' | 'FEMALE' | 'MIXED' | null>(null);
     const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+    /** Vista previa local mientras sube el archivo (blob); luego se usa sponsorLogoUrl. */
+    const [logoLocalPreview, setLogoLocalPreview] = useState<string | null>(null);
+
+    /** Cadenas editables para duración/buffer: permiten vaciar y pegar sin forzar 60/10 al instante. */
+    const [matchDurationInput, setMatchDurationInput] = useState(String(INITIAL_EVENT_DATA.matchDurationMinutes));
+    const [bufferInput, setBufferInput] = useState(String(INITIAL_EVENT_DATA.bufferMinutes));
+
+    const digitsOnlyMin = (s: string) => s.replace(/[^\d]/g, '');
 
     // Modal de configuración de categoría
     const [pendingCat, setPendingCat] = useState<{
@@ -248,6 +256,9 @@ export default function MasterGeneratorPage() {
         setPendingRRFormat('TWO_NORMAL_SETS');
         setPendingPrice(0);
         setPendingTieBreakRule('GAMES_DIFF');
+        setLogoLocalPreview(null);
+        setMatchDurationInput(String(INITIAL_EVENT_DATA.matchDurationMinutes));
+        setBufferInput(String(INITIAL_EVENT_DATA.bufferMinutes));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -258,23 +269,28 @@ export default function MasterGeneratorPage() {
         const maxSize = 5 * 1024 * 1024; // 5 MB
         if (file.size > maxSize) {
             alert('El archivo es demasiado grande. Usa una imagen de menos de 5 MB.');
+            e.target.value = '';
             return;
         }
         const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
         if (!allowed.includes(file.type)) {
             alert('Formato no válido. Usa JPG, PNG, GIF o WebP.');
+            e.target.value = '';
             return;
         }
 
-        setIsUploadingLogo(true);
+        let blobUrl: string | null = null;
         try {
+            blobUrl = URL.createObjectURL(file);
+            setLogoLocalPreview(blobUrl);
+            setIsUploadingLogo(true);
             const path = `sponsors/${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
             const publicUrl = await dataService.uploadFile(file, path, 'patrocinantes');
             setEventData(prev => ({ ...prev, sponsorLogoUrl: publicUrl }));
         } catch (error: any) {
             console.error('Error uploading logo:', error);
             const msg = (error?.message || String(error)).toLowerCase();
-            
+
             if (msg.includes('row-level security') || msg.includes('rls') || msg.includes('policy') || msg.includes('new row violates row-level security policy')) {
                 alert('Storage bloqueado por políticas RLS. En Supabase: Storage → bucket "patrocinantes" → Policies → New policy: permite INSERT y SELECT para el bucket "patrocinantes". Mientras tanto puedes pegar la URL del logo en el campo de texto.');
             } else if (msg.includes('bucket') || msg.includes('not found') || msg.includes('storage')) {
@@ -287,6 +303,9 @@ export default function MasterGeneratorPage() {
             }
         } finally {
             setIsUploadingLogo(false);
+            setLogoLocalPreview(null);
+            if (blobUrl) URL.revokeObjectURL(blobUrl);
+            e.target.value = '';
         }
     };
 
@@ -1333,7 +1352,7 @@ export default function MasterGeneratorPage() {
             </div>
 
             {/* Main Container — fills remaining vertical space */}
-            <div className="relative flex flex-col flex-1 min-h-0 max-w-7xl w-full mx-auto px-4 md:px-6 pb-4 pt-3">
+            <div className="relative flex flex-col flex-1 min-h-0 max-w-7xl w-full mx-auto px-5 sm:px-8 md:px-12 pb-6 pt-4">
 
                 {/* Header — compact: etapas centradas */}
                 <header className="flex items-center gap-4 mb-3 shrink-0">
@@ -1396,10 +1415,10 @@ export default function MasterGeneratorPage() {
                                     initial={{ opacity: 0, x: 20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     exit={{ opacity: 0, x: -20 }}
-                                    className="space-y-3"
+                                    className="space-y-4"
                                 >
-                                    <div className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-2xl p-4 space-y-4">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+                                    <div className="max-w-3xl mx-auto w-full bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-2xl p-6 md:p-10 space-y-8 md:space-y-10">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 items-end">
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] font-bold uppercase tracking-widest text-padel-primary block min-h-[1.25rem]">Nombre del Evento</label>
                                                 <input
@@ -1433,7 +1452,7 @@ export default function MasterGeneratorPage() {
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                                        <div className="grid grid-cols-1 gap-y-8">
                                             <div className="space-y-1.5 min-w-0">
                                                 <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
                                                     <UserPlus className="w-3.5 h-3.5 text-padel-primary shrink-0" />
@@ -1448,68 +1467,87 @@ export default function MasterGeneratorPage() {
                                                 />
                                             </div>
 
-                                            <div className="space-y-1.5 min-w-0">
-                                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
+                                            <div className="space-y-2 min-w-0">
+                                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 min-h-[1.25rem]">
                                                     <ImageIcon className="w-3.5 h-3.5 text-padel-primary shrink-0" />
                                                     Logo del patrocinante
                                                 </label>
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    {eventData.sponsorLogoUrl && (
-                                                        <div className="h-12 w-12 shrink-0 rounded-xl bg-zinc-900 border border-zinc-800 overflow-hidden flex items-center justify-center p-1 group relative">
-                                                            <img src={eventData.sponsorLogoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setEventData(prev => ({ ...prev, sponsorLogoUrl: '' }))}
-                                                                className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
-                                                            >
-                                                                <X className="w-4 h-4 text-white" />
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => document.getElementById('logo-upload')?.click()}
-                                                        disabled={isUploadingLogo}
-                                                        className="shrink-0 h-12 inline-flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white px-4 rounded-xl transition-all disabled:opacity-50 text-sm font-bold border border-zinc-700/50"
-                                                    >
-                                                        <Upload className="w-4 h-4" />
-                                                        {isUploadingLogo ? 'Subiendo...' : 'SUBIR LOGO'}
-                                                    </button>
+                                                {(() => {
+                                                    const displayLogoSrc =
+                                                        (logoLocalPreview || eventData.sponsorLogoUrl || '').trim();
+                                                    const showLogoThumb = Boolean(displayLogoSrc);
+                                                    return (
+                                                        <div className="flex flex-col gap-5 w-full min-w-0">
+                                                            <div className="flex flex-wrap items-center gap-4">
+                                                                {showLogoThumb ? (
+                                                                    <div className="w-[5.5rem] h-[5.5rem] sm:w-24 sm:h-24 shrink-0 rounded-xl bg-zinc-900 border border-zinc-700 overflow-hidden flex items-center justify-center p-2 group relative shadow-inner">
+                                                                        <img
+                                                                            key={displayLogoSrc}
+                                                                            src={displayLogoSrc}
+                                                                            alt="Vista previa del logo"
+                                                                            className="max-w-full max-h-full w-auto h-auto object-contain"
+                                                                            referrerPolicy="no-referrer"
+                                                                        />
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setLogoLocalPreview(null);
+                                                                                setEventData(prev => ({ ...prev, sponsorLogoUrl: '' }));
+                                                                            }}
+                                                                            className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                                                                            title="Quitar logo"
+                                                                        >
+                                                                            <X className="w-5 h-5 text-white" />
+                                                                        </button>
+                                                                    </div>
+                                                                ) : null}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => document.getElementById('logo-upload')?.click()}
+                                                                    disabled={isUploadingLogo}
+                                                                    className="shrink-0 h-9 inline-flex items-center justify-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-white px-3 rounded-lg transition-all disabled:opacity-50 text-[10px] font-black uppercase tracking-wide border border-zinc-700/50"
+                                                                >
+                                                                    <Upload className="w-3.5 h-3.5 shrink-0" />
+                                                                    {isUploadingLogo ? 'Subiendo…' : 'Subir archivo'}
+                                                                </button>
+                                                            </div>
 
-                                                    <div className="flex-1 min-w-[min(100%,12rem)] relative group basis-full sm:basis-0">
-                                                        <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-zinc-500">
-                                                            <LinkIcon className="w-4 h-4" />
-                                                        </div>
-                                                        <input
-                                                            type="text"
-                                                            value={eventData.sponsorLogoUrl || ''}
-                                                            onChange={e => setEventData(prev => ({ ...prev, sponsorLogoUrl: e.target.value }))}
-                                                            placeholder="O pega una URL..."
-                                                            className="w-full bg-black/40 border border-zinc-800 rounded-xl h-12 min-h-[3rem] pl-9 pr-16 text-xs text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700 box-border"
-                                                        />
-                                                        {eventData.sponsorLogoUrl && eventData.sponsorLogoUrl.startsWith('http') && !eventData.sponsorLogoUrl.includes('supabase.co/storage') && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={handleSubirDesdeUrl}
-                                                                disabled={isUploadingLogo}
-                                                                className="absolute right-1.5 top-1/2 -translate-y-1/2 h-9 px-3 bg-padel-primary/20 hover:bg-padel-primary text-padel-primary hover:text-white rounded-lg transition-all text-[10px] font-bold disabled:opacity-50 inline-flex items-center"
-                                                            >
-                                                                {isUploadingLogo ? '...' : 'SUBIR'}
-                                                            </button>
-                                                        )}
-                                                    </div>
+                                                            <div className="w-full min-w-0 relative">
+                                                                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-zinc-500 z-10">
+                                                                    <LinkIcon className="w-4 h-4" />
+                                                                </div>
+                                                                <input
+                                                                    type="text"
+                                                                    value={eventData.sponsorLogoUrl || ''}
+                                                                    onChange={e => setEventData(prev => ({ ...prev, sponsorLogoUrl: e.target.value }))}
+                                                                    placeholder="O pega una URL de imagen (https://…)"
+                                                                    className="w-full bg-black/40 border border-zinc-800 rounded-xl h-12 min-h-[3rem] pl-9 pr-[4.5rem] sm:pr-36 text-xs sm:text-sm text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-600 box-border"
+                                                                />
+                                                                {eventData.sponsorLogoUrl && eventData.sponsorLogoUrl.startsWith('http') && !eventData.sponsorLogoUrl.includes('supabase.co/storage') && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={handleSubirDesdeUrl}
+                                                                        disabled={isUploadingLogo}
+                                                                        className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 px-2 sm:px-2.5 bg-padel-primary/20 hover:bg-padel-primary text-padel-primary hover:text-white rounded-md transition-all text-[9px] font-black uppercase tracking-tight disabled:opacity-50 inline-flex items-center"
+                                                                    >
+                                                                        {isUploadingLogo ? '…' : 'Subir'}
+                                                                    </button>
+                                                                )}
+                                                            </div>
 
-                                                    <input
-                                                        id="logo-upload"
-                                                        type="file"
-                                                        onChange={handleLogoUpload}
-                                                        className="hidden"
-                                                        accept="image/*"
-                                                    />
-                                                </div>
+                                                            <input
+                                                                id="logo-upload"
+                                                                type="file"
+                                                                onChange={handleLogoUpload}
+                                                                className="hidden"
+                                                                accept="image/*"
+                                                            />
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
 
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch col-span-2">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 items-stretch">
                                                 <div className="space-y-1.5 min-w-0">
                                                     <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
                                                         <Calendar className="w-3.5 h-3.5 text-padel-primary shrink-0" />
@@ -1542,7 +1580,7 @@ export default function MasterGeneratorPage() {
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 col-span-2 pt-2">
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-6 pt-2">
                                                 <div className="space-y-1.5 min-w-0">
                                                     <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2 h-5">
                                                         <Clock className="w-3.5 h-3.5 text-padel-primary shrink-0" />
@@ -1576,26 +1614,62 @@ export default function MasterGeneratorPage() {
                                                 <div className="space-y-1.5">
                                                     <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Duración (min)</label>
                                                     <input
-                                                        type="number"
-                                                        min={30} max={180} step={5}
-                                                        value={eventData.matchDurationMinutes}
-                                                        onChange={(e) => setEventData({ ...eventData, matchDurationMinutes: parseInt(e.target.value) || 60 })}
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        autoComplete="off"
+                                                        title="30–180 minutos (se ajusta al salir del campo)"
+                                                        value={matchDurationInput}
+                                                        onChange={(e) => {
+                                                            const v = digitsOnlyMin(e.target.value);
+                                                            setMatchDurationInput(v);
+                                                            if (v !== '') {
+                                                                const n = parseInt(v, 10);
+                                                                if (!Number.isNaN(n)) {
+                                                                    setEventData(prev => ({ ...prev, matchDurationMinutes: n }));
+                                                                }
+                                                            }
+                                                        }}
+                                                        onBlur={() => {
+                                                            let n = parseInt(matchDurationInput, 10);
+                                                            if (matchDurationInput.trim() === '' || Number.isNaN(n)) n = 60;
+                                                            n = Math.min(180, Math.max(30, n));
+                                                            setMatchDurationInput(String(n));
+                                                            setEventData(prev => ({ ...prev, matchDurationMinutes: n }));
+                                                        }}
                                                         className={`${STEP1_CONTROL_H} text-center tabular-nums`}
                                                     />
                                                 </div>
                                                 <div className="space-y-1.5">
                                                     <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Buffer (min)</label>
                                                     <input
-                                                        type="number"
-                                                        min={0} max={60} step={5}
-                                                        value={eventData.bufferMinutes}
-                                                        onChange={(e) => setEventData({ ...eventData, bufferMinutes: parseInt(e.target.value) || 10 })}
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        autoComplete="off"
+                                                        title="0–60 minutos (se ajusta al salir del campo)"
+                                                        value={bufferInput}
+                                                        onChange={(e) => {
+                                                            const v = digitsOnlyMin(e.target.value);
+                                                            setBufferInput(v);
+                                                            if (v !== '') {
+                                                                const n = parseInt(v, 10);
+                                                                if (!Number.isNaN(n)) {
+                                                                    setEventData(prev => ({ ...prev, bufferMinutes: n }));
+                                                                }
+                                                            }
+                                                        }}
+                                                        onBlur={() => {
+                                                            let n = parseInt(bufferInput, 10);
+                                                            if (bufferInput.trim() === '' || Number.isNaN(n)) n = 10;
+                                                            n = Math.min(60, Math.max(0, n));
+                                                            setBufferInput(String(n));
+                                                            setEventData(prev => ({ ...prev, bufferMinutes: n }));
+                                                        }}
                                                         className={`${STEP1_CONTROL_H} text-center tabular-nums`}
                                                     />
                                                 </div>
                                             </div>
                                             {/* Resumen horario */}
-                                            <div className="bg-black/30 rounded-xl p-3 flex flex-wrap gap-3 text-[10px] font-bold col-span-2">
+                                            <div className="bg-black/30 rounded-xl p-4 flex flex-wrap gap-3 text-[10px] font-bold mt-2">
                                                 <span className="text-zinc-500 uppercase">Franja por partido:</span>
                                                 <span className="text-padel-primary">{eventData.matchDurationMinutes + eventData.bufferMinutes} min totales</span>
                                                 <span className="text-zinc-600">·</span>
@@ -1845,40 +1919,6 @@ export default function MasterGeneratorPage() {
                                     className="space-y-3"
                                 >
                                     <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 space-y-4">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-b border-zinc-800 pb-4">
-                                            <div className="space-y-4">
-                                                <div className="flex items-center gap-3 text-padel-primary mb-2">
-                                                    <Clock className="w-5 h-5" />
-                                                    <label className="text-xs font-bold uppercase tracking-widest">Ritmo de Juego</label>
-                                                </div>
-                                                <select
-                                                    value={eventData.matchDurationMinutes}
-                                                    onChange={(e) => setEventData({ ...eventData, matchDurationMinutes: Number(e.target.value) || 60 })}
-                                                    className="w-full bg-black/50 border border-zinc-800 rounded-2xl p-4 outline-none focus:border-padel-primary transition-all font-bold text-white"
-                                                >
-                                                    <option value={60}>60 Minutos / Partido</option>
-                                                    <option value={75}>75 Minutos / Partido</option>
-                                                    <option value={90}>90 Minutos / Partido</option>
-                                                    <option value={120}>120 Minutos / Partido</option>
-                                                </select>
-                                            </div>
-
-                                            <div className="space-y-4">
-                                                <div className="flex items-center gap-3 text-blue-400 mb-2">
-                                                    <Settings className="w-5 h-5" />
-                                                    <label className="text-xs font-bold uppercase tracking-widest">Margen de Descanso</label>
-                                                </div>
-                                                <select
-                                                    value={eventData.bufferMinutes}
-                                                    onChange={(e) => setEventData({ ...eventData, bufferMinutes: Number(e.target.value) })}
-                                                    className="w-full bg-black/50 border border-zinc-800 rounded-2xl p-4 outline-none focus:border-blue-400 transition-all font-bold text-white"
-                                                >
-                                                    <option value={5}>5 Minutos entre juegos</option>
-                                                    <option value={10}>10 Minutos entre juegos</option>
-                                                    <option value={15}>15 Minutos entre juegos</option>
-                                                </select>
-                                            </div>
-                                        </div>
                                         <div className="space-y-6">
                                             <div className="flex items-center justify-between">
                                                 <label className="text-xs font-bold uppercase tracking-widest text-zinc-500">Configuración de Pistas</label>
