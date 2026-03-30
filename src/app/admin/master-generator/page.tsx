@@ -102,6 +102,10 @@ const FormatIcons = {
     ),
 };
 
+/** Paso 1: mismo alto en todos los campos de datos (alineado con select «Sede»). */
+const STEP1_CONTROL_H =
+    'h-12 min-h-[3rem] w-full box-border rounded-xl border border-zinc-700 bg-black/50 px-3 text-sm font-bold text-white outline-none transition-all focus:border-padel-primary';
+
 // Luxury Theme Colors
 const COLORS = [
     '#ccff00', // Padel Primary
@@ -1395,19 +1399,19 @@ export default function MasterGeneratorPage() {
                                     className="space-y-3"
                                 >
                                     <div className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-2xl p-4 space-y-4">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
                                             <div className="space-y-1.5">
-                                                <label className="text-[10px] font-bold uppercase tracking-widest text-padel-primary">Nombre del Evento</label>
+                                                <label className="text-[10px] font-bold uppercase tracking-widest text-padel-primary block min-h-[1.25rem]">Nombre del Evento</label>
                                                 <input
                                                     type="text"
                                                     value={eventData.tournamentName}
                                                     onChange={(e) => setEventData({ ...eventData, tournamentName: e.target.value })}
-                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-base font-bold text-white focus:border-padel-primary outline-none transition-all"
+                                                    className={STEP1_CONTROL_H}
                                                     placeholder="Ej: Virgen del Valle Open..."
                                                 />
                                             </div>
                                             <div className="space-y-1.5">
-                                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Sede / Localidad</label>
+                                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block min-h-[1.25rem]">Sede / Localidad</label>
                                                 <select
                                                     value={eventData.complexName}
                                                     onChange={(e) => {
@@ -1419,7 +1423,7 @@ export default function MasterGeneratorPage() {
                                                             courtNames: Array.from({ length: complex?.courts || eventData.numCourts }, (_, i) => `Pista ${i + 1}`)
                                                         });
                                                     }}
-                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary transition-all font-bold text-white"
+                                                    className={`${STEP1_CONTROL_H} appearance-none cursor-pointer py-0`}
                                                 >
                                                     <option value="" disabled>— Selecciona una sede —</option>
                                                     {COMPLEXES.map(c => (
@@ -1440,7 +1444,7 @@ export default function MasterGeneratorPage() {
                                                     value={eventData.sponsorName ?? ''}
                                                     onChange={(e) => setEventData({ ...eventData, sponsorName: e.target.value })}
                                                     placeholder="Ej: Banco Mercantil"
-                                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-sm font-medium text-white focus:border-padel-primary outline-none transition-all"
+                                                    className={`${STEP1_CONTROL_H} font-medium`}
                                                 />
                                             </div>
 
@@ -1451,7 +1455,7 @@ export default function MasterGeneratorPage() {
                                                 </label>
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     {eventData.sponsorLogoUrl && (
-                                                        <div className="h-10 w-10 shrink-0 rounded-xl bg-zinc-900 border border-zinc-800 overflow-hidden flex items-center justify-center p-1 group relative">
+                                                        <div className="h-12 w-12 shrink-0 rounded-xl bg-zinc-900 border border-zinc-800 overflow-hidden flex items-center justify-center p-1 group relative">
                                                             <img src={eventData.sponsorLogoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
                                                             <button
                                                                 type="button"
@@ -1466,7 +1470,7 @@ export default function MasterGeneratorPage() {
                                                         type="button"
                                                         onClick={() => document.getElementById('logo-upload')?.click()}
                                                         disabled={isUploadingLogo}
-                                                        className="shrink-0 h-10 inline-flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white px-4 rounded-xl transition-all disabled:opacity-50 text-sm font-bold border border-zinc-700/50"
+                                                        className="shrink-0 h-12 inline-flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white px-4 rounded-xl transition-all disabled:opacity-50 text-sm font-bold border border-zinc-700/50"
                                                     >
                                                         <Upload className="w-4 h-4" />
                                                         {isUploadingLogo ? 'Subiendo...' : 'SUBIR LOGO'}
@@ -1481,14 +1485,14 @@ export default function MasterGeneratorPage() {
                                                             value={eventData.sponsorLogoUrl || ''}
                                                             onChange={e => setEventData(prev => ({ ...prev, sponsorLogoUrl: e.target.value }))}
                                                             placeholder="O pega una URL..."
-                                                            className="w-full bg-black/40 border border-zinc-800 rounded-xl h-10 pl-9 pr-16 text-xs text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
+                                                            className="w-full bg-black/40 border border-zinc-800 rounded-xl h-12 min-h-[3rem] pl-9 pr-16 text-xs text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700 box-border"
                                                         />
                                                         {eventData.sponsorLogoUrl && eventData.sponsorLogoUrl.startsWith('http') && !eventData.sponsorLogoUrl.includes('supabase.co/storage') && (
                                                             <button
                                                                 type="button"
                                                                 onClick={handleSubirDesdeUrl}
                                                                 disabled={isUploadingLogo}
-                                                                className="absolute right-1 top-1 bottom-1 px-3 bg-padel-primary/20 hover:bg-padel-primary text-padel-primary hover:text-white rounded-lg transition-all text-[10px] font-bold disabled:opacity-50"
+                                                                className="absolute right-1.5 top-1/2 -translate-y-1/2 h-9 px-3 bg-padel-primary/20 hover:bg-padel-primary text-padel-primary hover:text-white rounded-lg transition-all text-[10px] font-bold disabled:opacity-50 inline-flex items-center"
                                                             >
                                                                 {isUploadingLogo ? '...' : 'SUBIR'}
                                                             </button>
@@ -1522,7 +1526,7 @@ export default function MasterGeneratorPage() {
                                                                 if (newStart && eventData.endDate && eventData.endDate < newStart) next.endDate = newStart;
                                                                 setEventData(next);
                                                             }}
-                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-9 outline-none focus:border-padel-primary text-white"
+                                                            className={`${STEP1_CONTROL_H} pl-9`}
                                                         />
                                                     </div>
                                                 </div>
@@ -1531,9 +1535,9 @@ export default function MasterGeneratorPage() {
                                                         <Trophy className="w-3.5 h-3.5 text-padel-primary shrink-0" />
                                                         Duración
                                                     </label>
-                                                    <div className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 flex items-center gap-2">
+                                                    <div className={`${STEP1_CONTROL_H} flex items-center gap-2`}>
                                                         <Trophy className="w-4 h-4 text-padel-primary shrink-0" />
-                                                        <p className="text-sm font-bold text-white uppercase italic leading-tight">Calculada por IA</p>
+                                                        <p className="text-sm font-bold text-white uppercase italic leading-tight truncate">Calculada por IA</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1550,7 +1554,7 @@ export default function MasterGeneratorPage() {
                                                             type="time"
                                                             value={eventData.dailyStartTime}
                                                             onChange={(e) => setEventData({ ...eventData, dailyStartTime: e.target.value })}
-                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-8 outline-none focus:border-padel-primary text-sm text-white"
+                                                            className={`${STEP1_CONTROL_H} pl-8`}
                                                         />
                                                     </div>
                                                 </div>
@@ -1565,7 +1569,7 @@ export default function MasterGeneratorPage() {
                                                             type="time"
                                                             value={eventData.dailyEndTime}
                                                             onChange={(e) => setEventData({ ...eventData, dailyEndTime: e.target.value })}
-                                                            className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-8 outline-none focus:border-padel-primary text-sm text-white"
+                                                            className={`${STEP1_CONTROL_H} pl-8`}
                                                         />
                                                     </div>
                                                 </div>
@@ -1576,7 +1580,7 @@ export default function MasterGeneratorPage() {
                                                         min={30} max={180} step={5}
                                                         value={eventData.matchDurationMinutes}
                                                         onChange={(e) => setEventData({ ...eventData, matchDurationMinutes: parseInt(e.target.value) || 60 })}
-                                                        className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary font-bold text-center text-base text-white"
+                                                        className={`${STEP1_CONTROL_H} text-center tabular-nums`}
                                                     />
                                                 </div>
                                                 <div className="space-y-1.5">
@@ -1586,7 +1590,7 @@ export default function MasterGeneratorPage() {
                                                         min={0} max={60} step={5}
                                                         value={eventData.bufferMinutes}
                                                         onChange={(e) => setEventData({ ...eventData, bufferMinutes: parseInt(e.target.value) || 10 })}
-                                                        className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 outline-none focus:border-padel-primary font-bold text-center text-base text-white"
+                                                        className={`${STEP1_CONTROL_H} text-center tabular-nums`}
                                                     />
                                                 </div>
                                             </div>
