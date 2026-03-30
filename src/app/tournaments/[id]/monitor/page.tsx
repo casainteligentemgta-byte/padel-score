@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { dataService } from '@/lib/dataService';
 import { MatchStatus } from '@/types/tournament';
-import { Monitor, Wifi, WifiOff, Maximize2, Brush } from 'lucide-react';
+import { Monitor, Wifi, WifiOff, Maximize2, Brush, EyeOff } from 'lucide-react';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { getSupabaseClient } from '@/lib/supabase/client';
 
@@ -72,6 +72,7 @@ export default function MonitorCanchas() {
     const [highlightedCourts, setHighlightedCourts] = useState<Record<string, number>>({});
     const [focusedIdx, setFocusedIdx] = useState<number | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [minimalScreensMode, setMinimalScreensMode] = useState(false);
     const [toastMsg, setToastMsg] = useState<string | null>(null);
 
     const refreshMonitorData = useCallback(async () => {
@@ -339,6 +340,15 @@ export default function MonitorCanchas() {
                             >
                                 <Maximize2 className="w-3.5 h-3.5 text-gray-400" />
                             </button>
+
+                            {/* Minimal (solo 6 pantallas) */}
+                            <button
+                                onClick={() => setMinimalScreensMode((v) => !v)}
+                                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-all border border-white/5"
+                                title={minimalScreensMode ? 'Mostrar publicidad/tiras' : 'Solo pantallas (sin vídeo/tiras)'}
+                            >
+                                <EyeOff className={`w-3.5 h-3.5 ${minimalScreensMode ? 'text-padel-primary' : 'text-gray-400'}`} />
+                            </button>
                         </div>
                     </motion.header>
                 )}
@@ -365,6 +375,7 @@ export default function MonitorCanchas() {
                             match={activeMatches[focusedIdx]}
                             tournamentId={id}
                             isFocused={true}
+                            minimalScreensMode={minimalScreensMode}
                             onClick={() => setFocusedIdx(null)}
                             isHighlighted={false}
                         />
@@ -384,6 +395,7 @@ export default function MonitorCanchas() {
                                 match={match}
                                 tournamentId={id}
                                 isFocused={false}
+                                minimalScreensMode={minimalScreensMode}
                                 onClick={() => setFocusedIdx(idx)}
                                 isHighlighted={Boolean(highlightedCourts[String(match.court)])}
                                 onEmergencyResetSuccess={handleEmergencyResetSuccess}
@@ -411,6 +423,7 @@ function CourtCell({
     match,
     tournamentId,
     isFocused,
+    minimalScreensMode,
     onClick,
     isHighlighted,
     onEmergencyResetSuccess,
@@ -418,11 +431,14 @@ function CourtCell({
     match: ActiveMatch;
     tournamentId: string;
     isFocused: boolean;
+    minimalScreensMode: boolean;
     onClick: () => void;
     isHighlighted: boolean;
     onEmergencyResetSuccess?: () => void;
 }) {
-    const displayUrl = `/tournaments/${tournamentId}/display/${match.id}`;
+    const displayUrl = minimalScreensMode
+        ? `/tournaments/${tournamentId}/display/${match.id}?minimal=1`
+        : `/tournaments/${tournamentId}/display/${match.id}`;
     const [assigning, setAssigning] = useState<number | null>(null);
     const [resetting, setResetting] = useState(false);
 

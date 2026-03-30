@@ -10,7 +10,7 @@ import Sidebar from '@/components/Sidebar';
 import CourtCard from '@/components/publicidad/CourtCard';
 import type { CourtPlaylistRow } from '@/components/publicidad/CourtCard';
 import { partitionPlaylistRows, upsertCanchaPlaylistConfig, type CourtPlaylistRowDb } from '@/lib/courtPlaylists';
-import { AlertCircle, Download, Eye, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
+import { AlertCircle, ChevronLeft, Download, Eye, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import type { MediaContent, TiraInformativa } from '@/lib/supabase/publicidad';
 
 type VenueWithCourts = {
@@ -22,7 +22,7 @@ function buildVenuesAndCourtsFromTournaments(tournaments: any[]): VenueWithCourt
   const map = new Map<string, { maxN: number; bestNames: string[] }>();
 
   for (const t of tournaments || []) {
-    const name = String(t?.complexName || '').trim();
+    const name = String(t?.complexName || (t as any)?.complex || (t as any)?._complexName || '').trim();
     if (!name) continue;
     const courtNames = Array.isArray(t.courtNames) ? t.courtNames.map((x: any) => String(x).trim()) : [];
     const totalFromNum = Number(t.totalCourts) || 0;
@@ -471,6 +471,19 @@ export default function AdminPublicidadPage() {
       <Sidebar />
       <main className="flex-1 overflow-y-auto px-4 py-8">
         <div className="max-w-7xl mx-auto space-y-8">
+          <div className="flex items-start">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-white/70 hover:text-white transition-colors"
+              aria-label="Atrás"
+              title="Volver"
+            >
+              <ChevronLeft className="w-4 h-4 text-padel-primary" />
+              Atrás
+            </button>
+          </div>
+
           <header>
             <h1 className="text-3xl font-black uppercase italic">Admin Publicidad</h1>
             <p className="text-xs text-white/60 uppercase tracking-wider">Playlist independiente por sede y cancha</p>

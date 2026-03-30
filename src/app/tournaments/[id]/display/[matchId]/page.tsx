@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import lottie from 'lottie-web';
 import { dataService } from '@/lib/dataService';
@@ -10,7 +10,7 @@ import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
 import { rtdb } from '@/lib/rtdb';
 import { ref, onValue, off } from 'firebase/database';
-import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, Layers, ImageIcon, Play, Eye, Users } from 'lucide-react';
+import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, Layers, ImageIcon, Play, Eye, Users, EyeOff, X } from 'lucide-react';
 import { BouncingBall } from '@/components/BouncingBall';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 import { visibleSetNumbersForScoreboard, scoreboardGridClassForSetCount } from '@/lib/displaySetColumns';
@@ -180,6 +180,13 @@ export default function FullScreenDisplay() {
     const routeParams = useParams<{ id: string; matchId: string }>();
     const id = String(routeParams?.id ?? '');
     const matchId = String(routeParams?.matchId ?? '');
+    const searchParams = useSearchParams();
+    const minimalParam = searchParams.get('minimal');
+    const [minimalScreensMode, setMinimalScreensMode] = useState(minimalParam === '1' || minimalParam === 'true');
+    useEffect(() => {
+        // Si el monitor cambia el modo vía query param, lo sincronizamos.
+        setMinimalScreensMode(minimalParam === '1' || minimalParam === 'true');
+    }, [minimalParam]);
     /** Tres dedos + arrastre vertical: salir al torneo (móvil / iPad, sin botón visible). */
     useThreeFingerDragExit(id ? `/tournaments/${id}` : null);
     const [tournament, setTournament] = useState<any>(null);
@@ -235,6 +242,141 @@ export default function FullScreenDisplay() {
     const [hubLibraryVidIdx, setHubLibraryVidIdx] = useState(0);
     const [hubLibraryImgIdx, setHubLibraryImgIdx] = useState(0);
 
+    // ── Controles de selección (vídeos / imágenes / tiras) ─────────────────
+    const [mediaConfigOpen, setMediaConfigOpen] = useState(false);
+    const [mediaSelectionMode, setMediaSelectionMode] = useState<'auto' | 'manual'>('auto');
+
+    // Activo (lo que realmente se visualiza en modo manual)
+    const [activeVideoSelectedUrls, setActiveVideoSelectedUrls] = useState<string[]>([]);
+    const [activeImageSelectedUrls, setActiveImageSelectedUrls] = useState<string[]>([]);
+    const [activeTickerKeys, setActiveTickerKeys] = useState<string[]>([]);
+
+    // Draft (lo que el usuario marca en el modal antes de aplicar)
+    const [draftVideoSelectedUrls, setDraftVideoSelectedUrls] = useState<string[]>([]);
+    const [draftImageSelectedUrls, setDraftImageSelectedUrls] = useState<string[]>([]);
+    const [draftTickerKeys, setDraftTickerKeys] = useState<string[]>([]);
+    const [draftTouched, setDraftTouched] = useState(false);
+
+    // Búsquedas mini para el modal
+    const [videoSearch, setVideoSearch] = useState('');
+    const [imageSearch, setImageSearch] = useState('');
+    const [tickerSearch, setTickerSearch] = useState('');
+
+    // Ticker desde RTDB
+    const [tickerTexto, setTickerTexto] = useState('');
+    const [tickerActivo, setTickerActivo] = useState(false);
+    const [tickerVelocidad, setTickerVelocidad] = useState(30);
+
+    // Ticker desde Supabase (Tira Informativa TV)
+    const [supabaseTickerMessages, setSupabaseTickerMessages] = useState<any[]>([]);
+
+    const isVideoSlotCandidate = (m: any) => {
+        if (!m?.url) return false;
+        const tipo = String(m?.tipo || '').toLowerCase();
+        if (tipo === 'url_web') return true;
+        return isVideoMedia(m);
+    };
+
+    const isImageSlotCandidate = (m: any) => {
+        if (!m?.url) return false;
+        const tipo = String(m?.tipo || '').toLowerCase();
+        if (tipo === 'url_web') return false;
+        return !isVideoMedia(m);
+    };
+
+    const videoOptionItems = useMemo(() => {
+        const items: any[] = [];
+        const seen = new Set<string>();
+        const push = (m: any) => {
+            const u = String(m?.url || '').trim();
+            if (!u || seen.has(u)) return;
+            if (!isVideoSlotCandidate(m)) return;
+            seen.add(u);
+            items.push(m);
+        };
+        if (hubMedia) push(hubMedia);
+        for (const v of hubLibraryVids || []) push(v);
+        return items;
+    }, [hubMedia, hubLibraryVids]);
+
+    const imageOptionItems = useMemo(() => {
+        const items: any[] = [];
+        const seen = new Set<string>();
+        const push = (m: any) => {
+            const u = String(m?.url || '').trim();
+            if (!u || seen.has(u)) return;
+            if (!isImageSlotCandidate(m)) return;
+            seen.add(u);
+            items.push(m);
+        };
+        if (hubCarousel) push(hubCarousel);
+        for (const img of hubLibraryImgs || []) push(img);
+        return items;
+    }, [hubCarousel, hubLibraryImgs]);
+
+    const tickerOptionItems = useMemo(() => {
+        return (supabaseTickerMessages || []).map((m: any, idx: number) => {
+            const id = String(m?.id ?? `idx_${idx}`);
+            const text = String(m?.mensaje ?? m?.texto ?? '').trim();
+            return { id, text, raw: m };
+        }).filter((x) => x.text);
+    }, [supabaseTickerMessages]);
+
+    const videoUrlToItem = useMemo(() => {
+        const map = new Map<string, any>();
+        for (const it of videoOptionItems) {
+            const u = String(it?.url || '').trim();
+            if (u) map.set(u, it);
+        }
+        return map;
+    }, [videoOptionItems]);
+
+    const imageUrlToItem = useMemo(() => {
+        const map = new Map<string, any>();
+        for (const it of imageOptionItems) {
+            const u = String(it?.url || '').trim();
+            if (u) map.set(u, it);
+        }
+        return map;
+    }, [imageOptionItems]);
+
+    const manualVideoItems = useMemo(() => {
+        return activeVideoSelectedUrls.map((u) => videoUrlToItem.get(u)).filter(Boolean) as any[];
+    }, [activeVideoSelectedUrls, videoUrlToItem]);
+
+    const manualImageItems = useMemo(() => {
+        return activeImageSelectedUrls.map((u) => imageUrlToItem.get(u)).filter(Boolean) as any[];
+    }, [activeImageSelectedUrls, imageUrlToItem]);
+
+    const rotationVideoItems = mediaSelectionMode === 'manual' ? manualVideoItems : hubLibraryVids;
+    const rotationImageItems = mediaSelectionMode === 'manual' ? manualImageItems : hubLibraryImgs;
+
+    const tickerMessagesToRender = useMemo(() => {
+        if (minimalScreensMode) return [];
+        if (mediaSelectionMode !== 'manual') return supabaseTickerMessages || [];
+        if (!activeTickerKeys.length) return [];
+        const set = new Set(activeTickerKeys);
+        return (supabaseTickerMessages || []).filter((m: any, idx: number) => {
+            const id = String(m?.id ?? `idx_${idx}`);
+            return set.has(id);
+        });
+    }, [minimalScreensMode, mediaSelectionMode, activeTickerKeys, supabaseTickerMessages]);
+
+    useEffect(() => {
+        if (draftTouched) return;
+        const vids = videoOptionItems.map((m: any) => String(m?.url || '').trim()).filter(Boolean);
+        const imgs = imageOptionItems.map((m: any) => String(m?.url || '').trim()).filter(Boolean);
+        const tks = tickerOptionItems.map((t) => t.id);
+
+        setDraftVideoSelectedUrls(vids);
+        setDraftImageSelectedUrls(imgs);
+        setDraftTickerKeys(tks);
+
+        setActiveVideoSelectedUrls(vids);
+        setActiveImageSelectedUrls(imgs);
+        setActiveTickerKeys(tks);
+    }, [draftTouched, videoOptionItems, imageOptionItems, tickerOptionItems]);
+
     // Sync system clock offsets with Supabase server time
     useEffect(() => {
         dataService.syncSystemClock();
@@ -267,14 +409,6 @@ export default function FullScreenDisplay() {
         }, currentDuration);
         return () => clearTimeout(timeout);
     }, [sponsorCarousel, sponsorCarouselIdx]);
-
-    // Ticker desde RTDB
-    const [tickerTexto, setTickerTexto] = useState('');
-    const [tickerActivo, setTickerActivo] = useState(false);
-    const [tickerVelocidad, setTickerVelocidad] = useState(30);
-
-    // Ticker desde Supabase (Tira Informativa TV)
-    const [supabaseTickerMessages, setSupabaseTickerMessages] = useState<any[]>([]);
 
     // Estilo del reloj y del cronómetro
     const [relojOcasion, setRelojOcasion] = useState<string>('default');
@@ -525,31 +659,39 @@ export default function FullScreenDisplay() {
         };
     }, [match?.court]); // Depend on match.court to re-run when court changes
 
-    // Rotación del carrusel automático de la biblioteca (VIDEOS - Izquierda)
+    // Rotación del carrusel (VIDEOS - Izquierda)
     useEffect(() => {
-        if (hubLibraryVids.length <= 1) return;
-        const currentItem = hubLibraryVids[hubLibraryVidIdx % hubLibraryVids.length];
+        setHubLibraryVidIdx(0);
+    }, [mediaSelectionMode, rotationVideoItems.map((x: any) => String(x?.url || '')).join('|')]);
+
+    useEffect(() => {
+        if (rotationVideoItems.length <= 1) return;
+        const currentItem = rotationVideoItems[hubLibraryVidIdx % rotationVideoItems.length];
         const duration = (currentItem?.duracion_segundos || 8) * 1000;
 
         const timeout = setTimeout(() => {
-            setHubLibraryVidIdx(prev => (prev + 1) % hubLibraryVids.length);
+            setHubLibraryVidIdx(prev => (prev + 1) % rotationVideoItems.length);
         }, duration);
 
         return () => clearTimeout(timeout);
-    }, [hubLibraryVids, hubLibraryVidIdx]);
+    }, [rotationVideoItems, hubLibraryVidIdx]);
 
-    // Rotación del carrusel automático de la biblioteca (IMÁGENES - Derecha)
+    // Rotación del carrusel (IMÁGENES - Derecha)
     useEffect(() => {
-        if (hubLibraryImgs.length <= 1) return;
-        const currentItem = hubLibraryImgs[hubLibraryImgIdx % hubLibraryImgs.length];
+        setHubLibraryImgIdx(0);
+    }, [mediaSelectionMode, rotationImageItems.map((x: any) => String(x?.url || '')).join('|')]);
+
+    useEffect(() => {
+        if (rotationImageItems.length <= 1) return;
+        const currentItem = rotationImageItems[hubLibraryImgIdx % rotationImageItems.length];
         const duration = (currentItem?.duracion_segundos || 10) * 1000;
 
         const timeout = setTimeout(() => {
-            setHubLibraryImgIdx(prev => (prev + 1) % hubLibraryImgs.length);
+            setHubLibraryImgIdx(prev => (prev + 1) % rotationImageItems.length);
         }, duration);
 
         return () => clearTimeout(timeout);
-    }, [hubLibraryImgs, hubLibraryImgIdx]);
+    }, [rotationImageItems, hubLibraryImgIdx]);
 
     // Settings
     const isFinal = match?.roundName?.toLowerCase().includes('final') || match?.roundName?.toLowerCase().includes('definición');
@@ -560,6 +702,49 @@ export default function FullScreenDisplay() {
     const funEnabled = tournament?.broadcastingSettings?.funAnimationsEnabled !== false;
     const showLive = tournament?.broadcastingSettings?.showLiveIndicator !== false;
     const venueName = tournament?.broadcastingSettings?.venueName || '';
+
+    const renderHubMediaMotion = (m: any) => {
+        if (!m?.url) return null;
+        if (m.tipo === 'url_web') {
+            return (
+                <motion.iframe
+                    key={m.url}
+                    src={m.url}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="w-full h-full border-none pointer-events-none"
+                    loading="lazy"
+                />
+            );
+        }
+        if (isVideoMedia(m)) {
+            return (
+                <motion.video
+                    key={m.url}
+                    src={m.url}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="w-full h-full object-cover"
+                />
+            );
+        }
+        return (
+            <motion.img
+                key={m.url}
+                src={m.url}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="w-full h-full object-contain p-4"
+            />
+        );
+    };
 
     // ── Carrusel de imágenes (panel publicidad → imagenes) ─────────────────
     useEffect(() => {
@@ -1290,6 +1475,36 @@ export default function FullScreenDisplay() {
                         >
                             {/* Left: Tournament & Match Info */}
                             <div className="flex items-center gap-4 h-full py-2">
+                                <div className="flex flex-col items-stretch gap-2 pr-2 border-r border-white/10">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setDraftVideoSelectedUrls(activeVideoSelectedUrls);
+                                            setDraftImageSelectedUrls(activeImageSelectedUrls);
+                                            setDraftTickerKeys(activeTickerKeys);
+                                            setDraftTouched(true);
+                                            setMediaConfigOpen(true);
+                                        }}
+                                        className="px-3 py-2 rounded-xl bg-black/40 border border-white/10 hover:bg-white/5 transition-colors"
+                                        title="Seleccionar vídeos / imágenes / tiras"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <Layers className="w-4 h-4 text-padel-primary" />
+                                            <span className="text-[9px] font-black uppercase tracking-widest text-white/70">Media</span>
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setMinimalScreensMode((v) => !v)}
+                                        className={`px-3 py-2 rounded-xl border transition-colors ${minimalScreensMode ? 'bg-padel-primary/15 border-padel-primary/40' : 'bg-black/40 border-white/10 hover:bg-white/5'}`}
+                                        title={minimalScreensMode ? 'Mostrar publicidad/tiras' : 'Solo pantalla (sin publicidad/tiras)'}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <EyeOff className={`w-4 h-4 ${minimalScreensMode ? 'text-padel-primary' : 'text-white/50'}`} />
+                                            <span className="text-[9px] font-black uppercase tracking-widest text-white/70">Solo</span>
+                                        </div>
+                                    </button>
+                                </div>
                                 {tournament?.logo && (
                                     <div className="h-full aspect-square bg-white/5 rounded-xl p-1.5 border border-white/10 flex items-center justify-center">
                                         <img src={tournament.logo} className="w-full h-full object-contain" />
@@ -1594,14 +1809,20 @@ export default function FullScreenDisplay() {
                         </div>
 
                         {/* ══════════════ PUBLICIDAD (50%) ══════════════ */}
-                        <div
-                            className="flex-shrink-0 flex flex-row gap-2 mb-[1vh] px-6"
-                            style={{ height: '49vh' }}
-                        >
+                        {!minimalScreensMode && (
+                            <div
+                                className="flex-shrink-0 flex flex-row gap-2 mb-[1vh] px-6"
+                                style={{ height: '49vh' }}
+                            >
                             {/* Video Ad / Hub Media (takes the left half) */}
                             <div className="w-1/2 border border-white/8 bg-white/[0.02] relative overflow-hidden rounded-3xl">
                                 <AnimatePresence mode="wait">
-                                    {hubMedia ? (
+                                    {mediaSelectionMode === 'manual' && rotationVideoItems.length > 0 ? (
+                                        (() => {
+                                            const currentVid = rotationVideoItems[hubLibraryVidIdx % rotationVideoItems.length];
+                                            return renderHubMediaMotion(currentVid);
+                                        })()
+                                    ) : hubMedia ? (
                                         hubMedia.tipo === 'url_web' ? (
                                             <motion.iframe
                                                 key={hubMedia.url}
@@ -1671,7 +1892,12 @@ export default function FullScreenDisplay() {
                             {/* Carousel Ad / Sponsors (takes the right half) */}
                             <div className="w-1/2 border border-white/10 bg-white/[0.03] relative overflow-hidden rounded-2xl">
                                 <AnimatePresence mode="wait">
-                                    {hubCarousel ? (
+                                    {mediaSelectionMode === 'manual' && rotationImageItems.length > 0 ? (
+                                        (() => {
+                                            const currentImg = rotationImageItems[hubLibraryImgIdx % rotationImageItems.length];
+                                            return renderHubMediaMotion(currentImg);
+                                        })()
+                                    ) : hubCarousel ? (
                                         hubCarousel.tipo === 'url_web' ? (
                                             <motion.iframe
                                                 key={hubCarousel.url}
@@ -1729,39 +1955,43 @@ export default function FullScreenDisplay() {
 
                                 </AnimatePresence>
                             </div>
-                        </div>
+                            </div>
+                        )}
 
                         {/* ══════════════ FOOTER BAR (10%) ══════════════ */}
-                        <div
-                            className="flex-shrink-0 overflow-hidden border-t border-white/10 bg-black/40 backdrop-blur-md relative flex items-center mb-[0.8vh]"
-                            style={{
-                                height: '9.5vh',
-                                borderRadius: 'clamp(10px,1.2vw,18px) clamp(10px,1.2vw,18px) 0 0',
-                            }}>
-                            <div className="w-full overflow-hidden relative py-2">
-                                <div className="flex whitespace-nowrap animate-marquee">
-                                    {(supabaseTickerMessages.length > 0 ? supabaseTickerMessages : [{ mensaje: 'tira informativa TV a la espera de contenido.' }]).map((msg: any, idx: number) => (
-                                        <div key={idx} className="flex items-center px-12">
-                                            <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
-                                            <span className="text-3xl font-black italic uppercase tracking-widest text-white">
-                                                {msg.mensaje || msg.texto}
-                                            </span>
-                                            <Star className="w-5 h-5 text-padel-primary ml-16 fill-padel-primary/20" />
-                                        </div>
-                                    ))}
-                                    {/* Duplicate for infinite scroll */}
-                                    {(supabaseTickerMessages.length > 0 ? supabaseTickerMessages : [{ mensaje: 'tira informativa TV a la espera de contenido.' }]).map((msg: any, idx: number) => (
-                                        <div key={`dup-${idx}`} className="flex items-center px-12">
-                                            <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
-                                            <span className="text-3xl font-black italic uppercase tracking-widest text-white">
-                                                {msg.mensaje || msg.texto}
-                                            </span>
-                                            <Star className="w-5 h-5 text-padel-primary ml-16 fill-padel-primary/20" />
-                                        </div>
-                                    ))}
+                        {tickerMessagesToRender.length > 0 && (
+                            <div
+                                className="flex-shrink-0 overflow-hidden border-t border-white/10 bg-black/40 backdrop-blur-md relative flex items-center mb-[0.8vh]"
+                                style={{
+                                    height: '9.5vh',
+                                    borderRadius: 'clamp(10px,1.2vw,18px) clamp(10px,1.2vw,18px) 0 0',
+                                }}
+                            >
+                                <div className="w-full overflow-hidden relative py-2">
+                                    <div className="flex whitespace-nowrap animate-marquee">
+                                        {tickerMessagesToRender.map((msg: any, idx: number) => (
+                                            <div key={idx} className="flex items-center px-12">
+                                                <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
+                                                <span className="text-3xl font-black italic uppercase tracking-widest text-white">
+                                                    {msg.mensaje || msg.texto}
+                                                </span>
+                                                <Star className="w-5 h-5 text-padel-primary ml-16 fill-padel-primary/20" />
+                                            </div>
+                                        ))}
+                                        {/* Duplicate for infinite scroll */}
+                                        {tickerMessagesToRender.map((msg: any, idx: number) => (
+                                            <div key={`dup-${idx}`} className="flex items-center px-12">
+                                                <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
+                                                <span className="text-3xl font-black italic uppercase tracking-widest text-white">
+                                                    {msg.mensaje || msg.texto}
+                                                </span>
+                                                <Star className="w-5 h-5 text-padel-primary ml-16 fill-padel-primary/20" />
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Overlay animación disparada por el marker (debajo de los puntos) */}
                         <AnimatePresence>
@@ -1841,6 +2071,279 @@ export default function FullScreenDisplay() {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {mediaConfigOpen && (
+                <div className="fixed inset-0 z-[6000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+                    <div className="w-full max-w-5xl max-h-[85vh] overflow-hidden rounded-3xl border border-white/10 bg-[#0a0a0a] shadow-2xl flex flex-col">
+                        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/10">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.35em] text-white/40">Publicidad en pizarra</p>
+                                <p className="text-sm font-black uppercase italic tracking-tight text-white">Selecciona qué se reproduce</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setMediaConfigOpen(false)}
+                                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10"
+                                title="Cerrar"
+                            >
+                                <X className="w-4 h-4 text-white/70" />
+                            </button>
+                        </div>
+
+                        <div className="px-5 py-3 border-b border-white/10 flex flex-wrap items-center gap-3">
+                            <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/70">
+                                <input
+                                    type="checkbox"
+                                    checked={mediaSelectionMode === 'manual'}
+                                    onChange={(e) => setMediaSelectionMode(e.target.checked ? 'manual' : 'auto')}
+                                />
+                                Modo selección manual
+                            </label>
+                            <span className="text-[10px] text-white/35">
+                                (En automático se usa la configuración del hub / pantallas).
+                            </span>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto px-5 py-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/50">Videos</p>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            className="text-[9px] font-black uppercase text-white/40 hover:text-white"
+                                            onClick={() => setDraftVideoSelectedUrls(videoOptionItems.map((m: any) => String(m.url)))}
+                                        >
+                                            Todos
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="text-[9px] font-black uppercase text-white/40 hover:text-white"
+                                            onClick={() => setDraftVideoSelectedUrls([])}
+                                        >
+                                            Ninguno
+                                        </button>
+                                    </div>
+                                </div>
+                                <input
+                                    value={videoSearch}
+                                    onChange={(e) => setVideoSearch(e.target.value)}
+                                    placeholder="Buscar…"
+                                    className="w-full mb-2 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white/90 outline-none focus:border-white/25"
+                                />
+                                <div className="max-h-[42vh] overflow-y-auto space-y-2 pr-1">
+                                    {videoOptionItems
+                                        .filter((m: any) => {
+                                            const q = videoSearch.trim().toLowerCase();
+                                            if (!q) return true;
+                                            const label = String(m?.nombre_sponsor || m?.nombre || m?.url || '').toLowerCase();
+                                            return label.includes(q);
+                                        })
+                                        .map((m: any) => {
+                                            const u = String(m.url);
+                                            const checked = draftVideoSelectedUrls.includes(u);
+                                            return (
+                                                <label key={u} className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 hover:bg-white/5 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={checked}
+                                                        onChange={(e) => {
+                                                            setDraftTouched(true);
+                                                            setDraftVideoSelectedUrls((prev) => {
+                                                                const next = new Set(prev);
+                                                                if (e.target.checked) next.add(u);
+                                                                else next.delete(u);
+                                                                return Array.from(next);
+                                                            });
+                                                        }}
+                                                        className="mt-1"
+                                                    />
+                                                    <span className="text-[11px] font-bold text-white/85 leading-snug">
+                                                        {m.nombre_sponsor || m.nombre || 'Video'}
+                                                        <span className="block text-[9px] font-mono text-white/35 break-all">{u}</span>
+                                                    </span>
+                                                </label>
+                                            );
+                                        })}
+                                    {videoOptionItems.length === 0 && (
+                                        <p className="text-[10px] text-white/35">No hay videos disponibles en la biblioteca.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/50">Imágenes</p>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            className="text-[9px] font-black uppercase text-white/40 hover:text-white"
+                                            onClick={() => setDraftImageSelectedUrls(imageOptionItems.map((m: any) => String(m.url)))}
+                                        >
+                                            Todas
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="text-[9px] font-black uppercase text-white/40 hover:text-white"
+                                            onClick={() => setDraftImageSelectedUrls([])}
+                                        >
+                                            Ninguna
+                                        </button>
+                                    </div>
+                                </div>
+                                <input
+                                    value={imageSearch}
+                                    onChange={(e) => setImageSearch(e.target.value)}
+                                    placeholder="Buscar…"
+                                    className="w-full mb-2 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white/90 outline-none focus:border-white/25"
+                                />
+                                <div className="max-h-[42vh] overflow-y-auto space-y-2 pr-1">
+                                    {imageOptionItems
+                                        .filter((m: any) => {
+                                            const q = imageSearch.trim().toLowerCase();
+                                            if (!q) return true;
+                                            const label = String(m?.nombre_sponsor || m?.nombre || m?.url || '').toLowerCase();
+                                            return label.includes(q);
+                                        })
+                                        .map((m: any) => {
+                                            const u = String(m.url);
+                                            const checked = draftImageSelectedUrls.includes(u);
+                                            return (
+                                                <label key={u} className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 hover:bg-white/5 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={checked}
+                                                        onChange={(e) => {
+                                                            setDraftTouched(true);
+                                                            setDraftImageSelectedUrls((prev) => {
+                                                                const next = new Set(prev);
+                                                                if (e.target.checked) next.add(u);
+                                                                else next.delete(u);
+                                                                return Array.from(next);
+                                                            });
+                                                        }}
+                                                        className="mt-1"
+                                                    />
+                                                    <span className="text-[11px] font-bold text-white/85 leading-snug">
+                                                        {m.nombre_sponsor || m.nombre || 'Imagen'}
+                                                        <span className="block text-[9px] font-mono text-white/35 break-all">{u}</span>
+                                                    </span>
+                                                </label>
+                                            );
+                                        })}
+                                    {imageOptionItems.length === 0 && (
+                                        <p className="text-[10px] text-white/35">No hay imágenes disponibles en la biblioteca.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/50">Tiras</p>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            className="text-[9px] font-black uppercase text-white/40 hover:text-white"
+                                            onClick={() => setDraftTickerKeys(tickerOptionItems.map((t) => t.id))}
+                                        >
+                                            Todas
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="text-[9px] font-black uppercase text-white/40 hover:text-white"
+                                            onClick={() => setDraftTickerKeys([])}
+                                        >
+                                            Ninguna
+                                        </button>
+                                    </div>
+                                </div>
+                                <input
+                                    value={tickerSearch}
+                                    onChange={(e) => setTickerSearch(e.target.value)}
+                                    placeholder="Buscar…"
+                                    className="w-full mb-2 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white/90 outline-none focus:border-white/25"
+                                />
+                                <div className="max-h-[42vh] overflow-y-auto space-y-2 pr-1">
+                                    {tickerOptionItems
+                                        .filter((t) => {
+                                            const q = tickerSearch.trim().toLowerCase();
+                                            if (!q) return true;
+                                            return t.text.toLowerCase().includes(q);
+                                        })
+                                        .map((t) => {
+                                            const checked = draftTickerKeys.includes(t.id);
+                                            return (
+                                                <label key={t.id} className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 hover:bg-white/5 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={checked}
+                                                        onChange={(e) => {
+                                                            setDraftTouched(true);
+                                                            setDraftTickerKeys((prev) => {
+                                                                const next = new Set(prev);
+                                                                if (e.target.checked) next.add(t.id);
+                                                                else next.delete(t.id);
+                                                                return Array.from(next);
+                                                            });
+                                                        }}
+                                                        className="mt-1"
+                                                    />
+                                                    <span className="text-[11px] font-bold text-white/85 leading-snug">
+                                                        {t.text}
+                                                    </span>
+                                                </label>
+                                            );
+                                        })}
+                                    {tickerOptionItems.length === 0 && (
+                                        <p className="text-[10px] text-white/35">No hay mensajes de tira disponibles.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="px-5 py-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setMinimalScreensMode(true);
+                                    setMediaConfigOpen(false);
+                                }}
+                                className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-[10px] font-black uppercase tracking-widest hover:bg-red-500/15"
+                            >
+                                Apagar todo (solo marcador)
+                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setDraftVideoSelectedUrls(activeVideoSelectedUrls);
+                                        setDraftImageSelectedUrls(activeImageSelectedUrls);
+                                        setDraftTickerKeys(activeTickerKeys);
+                                        setMediaConfigOpen(false);
+                                    }}
+                                    className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/70 text-[10px] font-black uppercase tracking-widest hover:bg-white/10"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setActiveVideoSelectedUrls(draftVideoSelectedUrls);
+                                        setActiveImageSelectedUrls(draftImageSelectedUrls);
+                                        setActiveTickerKeys(draftTickerKeys);
+                                        setMediaSelectionMode('manual');
+                                        setDraftTouched(true);
+                                        setMediaConfigOpen(false);
+                                    }}
+                                    className="px-4 py-2 rounded-xl bg-padel-primary text-black text-[10px] font-black uppercase tracking-widest hover:brightness-110"
+                                >
+                                    Aplicar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Botón Fullscreen forzado para Firestick (y trigger para autoplay de video) */}
             <button 

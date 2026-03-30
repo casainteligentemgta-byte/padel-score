@@ -6,6 +6,29 @@ import { healthBadgeLabel, healthStatusFromLastSeen, type CourtHealthStatus } fr
 import { Plus, Wifi } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+// Sedes ordenadas alfabéticamente (igual que en el generador) y mapeadas a su índice S1..S8.
+// Esto permite construir la URL corta tipo: smartpadel58.com/s1/c1
+const SEDE_INDEX: Record<string, number> = {
+    'El Bodeguero': 1,
+    'Elite': 2,
+    'Food Kart': 3,
+    'Margarita Padel': 4,
+    'Playa el Agua': 5,
+    'Sun Sol Costa Azul': 6,
+    'Sun Sol Pedro Gonzalez': 7,
+    'Tibisay': 8,
+};
+
+function sedeIndexFromVenueName(venueName: string): number | null {
+    const v = venueName.trim().toLowerCase();
+    const matchKey = Object.keys(SEDE_INDEX).find((k) => k.toLowerCase() === v);
+    return matchKey ? SEDE_INDEX[matchKey] : null;
+}
+
+function buildPizarraShortPath(sedeIndex: number, courtNum: number): string {
+    return `s${sedeIndex}/c${courtNum}`;
+}
+
 export type CourtPlaylistRow = {
   id: string;
   cancha_id: string;
@@ -73,10 +96,21 @@ export default function CourtCard({
     setLocalPausa(imagenPausaSeg);
   }, [imagenLoop, imagenPausaSeg, courtKey]);
 
-  const previewSrc =
-    venueName.trim().length > 0
-      ? `/display/court/${displayCourtNum}?complex=${encodeURIComponent(venueName)}`
-      : `/display/court/${displayCourtNum}`;
+  const sedeIndex = sedeIndexFromVenueName(venueName);
+  const pizarraShortPath =
+    sedeIndex
+      ? buildPizarraShortPath(sedeIndex, displayCourtNum)
+      : null;
+
+  // Preferimos la URL corta (/sX/cY) porque permite previsualizar la pizarra sin conocer IDs de torneo/partido.
+  // Fallback: preview embebido por cancha (+ filtro complex).
+  const previewSrc = pizarraShortPath
+    ? `/${pizarraShortPath}`
+    : (venueName.trim().length > 0
+        ? `/display/court/${displayCourtNum}?complex=${encodeURIComponent(venueName)}`
+        : `/display/court/${displayCourtNum}`);
+
+  const previewHref = pizarraShortPath ? `/${pizarraShortPath}` : null;
 
   const linked = new Set(linkedTiraIds);
 
@@ -99,6 +133,17 @@ export default function CourtCard({
       </div>
 
       <div className="relative h-40 overflow-hidden rounded-xl border border-white/10 bg-black shrink-0">
+        {previewHref && (
+          <a
+            href={previewHref}
+            target="_blank"
+            rel="noreferrer"
+            className="absolute top-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 border border-white/10 text-[8px] font-black uppercase tracking-widest text-white/70 hover:text-white hover:bg-black/70"
+            title="Abrir pizarra en nueva pestaña"
+          >
+            Abrir smartpadel58.com/{pizarraShortPath}
+          </a>
+        )}
         <iframe
           src={previewSrc}
           className="absolute top-0 left-0 border-0 pointer-events-none"

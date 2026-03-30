@@ -5,7 +5,6 @@ import {
     Users,
     Trophy,
     Settings,
-    Layout,
     MessageSquare,
     ShieldCheck,
     BarChart3,
@@ -64,15 +63,6 @@ export default function AdminHubPage() {
             color: "from-blue-500/20 to-blue-500/5",
             borderColor: "border-blue-500/30",
             iconColor: "text-blue-400"
-        },
-        {
-            title: "Boards & Marcadores",
-            desc: "Visualización en pantallas del club",
-            icon: Layout,
-            href: "/admin/boards",
-            color: "from-rose-500/20 to-rose-500/5",
-            borderColor: "border-rose-500/30",
-            iconColor: "text-rose-400"
         },
         {
             title: "Publicidad y ADS",
