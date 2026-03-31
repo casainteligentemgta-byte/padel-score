@@ -1,7 +1,7 @@
 'use client';
 
 import type { MediaContent } from '@/lib/supabase/publicidad';
-import { healthBadgeLabel, healthStatusFromLastSeen, type CourtHealthStatus } from '@/lib/courtHealth';
+import { healthStatusFromLastSeen, type CourtHealthStatus } from '@/lib/courtHealth';
 import {
   ChevronDown,
   ChevronUp,
@@ -74,16 +74,16 @@ type CourtCardProps = {
   isSaving?: boolean;
 };
 
-function statusStyle(status: CourtHealthStatus): { wifi: string; badge: string } {
+function statusStyle(status: CourtHealthStatus): { wifi: string } {
   switch (status) {
     case 'online':
-      return { wifi: 'text-emerald-400', badge: 'text-emerald-300 border-emerald-500/50 bg-emerald-500/15' };
+      return { wifi: 'text-emerald-400' };
     case 'warning':
-      return { wifi: 'text-orange-400', badge: 'text-orange-300 border-orange-500/50 bg-orange-500/15' };
+      return { wifi: 'text-orange-400' };
     case 'offline':
-      return { wifi: 'text-red-500', badge: 'text-red-300 border-red-500/50 bg-red-500/15' };
+      return { wifi: 'text-red-500' };
     default:
-      return { wifi: 'text-white/30', badge: 'text-white/30 border-white/20 bg-white/5' };
+      return { wifi: 'text-white/30' };
   }
 }
 
@@ -117,7 +117,7 @@ export default function CourtCard({
   isSaving,
 }: CourtCardProps) {
   const status = healthStatusFromLastSeen(lastSeenIso ?? null);
-  const { wifi, badge } = statusStyle(status);
+  const { wifi } = statusStyle(status);
 
   const [openPanel, setOpenPanel] = useState<'video' | 'imagen' | 'texto' | null>(null);
 
@@ -204,19 +204,13 @@ export default function CourtCard({
   });
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/30 p-3 flex flex-col min-h-0">
+    <div className="rounded-2xl border border-white/20 bg-gradient-to-b from-white/[0.06] to-black/35 p-3 flex flex-col min-h-0 shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/5">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <Wifi className={`w-4 h-4 shrink-0 ${wifi}`} aria-hidden />
           <h3 className="text-sm font-black uppercase leading-tight text-white/95 truncate">{title}</h3>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
-          <span
-            className={`text-[9px] font-black uppercase tracking-tight px-2 py-0.5 rounded-full border ${badge}`}
-            title={lastSeenIso ? `Última señal: ${lastSeenIso}` : 'Sin señal'}
-          >
-            {healthBadgeLabel(status)}
-          </span>
           <span className="text-[10px] text-white/40 font-mono">{courtKey}</span>
         </div>
       </div>

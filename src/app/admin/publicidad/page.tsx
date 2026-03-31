@@ -646,7 +646,7 @@ export default function AdminPublicidadPage() {
           </section>
 
           {renderMediaTable('Biblioteca de Videos', videos, true)}
-          {renderMediaTable('Biblioteca de Carrusel', carrusel)}
+          {renderMediaTable('Biblioteca de Carrusel', carrusel, true)}
 
           <section className="bg-white/[0.02] border border-white/10 rounded-2xl p-4 md:p-5">
             <h2 className="text-lg md:text-xl font-black uppercase tracking-wider mb-4">Ticker</h2>
