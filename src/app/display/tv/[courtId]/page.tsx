@@ -23,6 +23,7 @@ export default function TVCourtDisplayPage() {
     const searchParams = useSearchParams();
     const complexFilter = searchParams.get('complex');
     const nativeMode = searchParams.get('native') === '1';
+    const premiumMode = searchParams.get('premium') === '1';
     const supabase = getSupabaseClient();
 
     const [loading, setLoading] = useState(true);
@@ -36,7 +37,9 @@ export default function TVCourtDisplayPage() {
     } | null>(null);
 
     useEffect(() => {
-        if (nativeMode) return;
+        // En TV de cancha, mantener comportamiento local por defecto.
+        // Solo saltar a vista premium si se solicita explícitamente con ?premium=1.
+        if (nativeMode || !premiumMode) return;
         const torneoId = String(activeMatch?.tournamentId || '').trim();
         const partidoId = String(activeMatch?.id || '').trim();
         const status = String(activeMatch?.status || '').trim();
@@ -44,7 +47,7 @@ export default function TVCourtDisplayPage() {
         const isActive = status === MatchStatus.LIVE || status === 'LIVE';
         if (!isActive) return;
         router.replace(`/tournaments/${encodeURIComponent(torneoId)}/display/${encodeURIComponent(partidoId)}`);
-    }, [nativeMode, activeMatch?.id, activeMatch?.status, activeMatch?.tournamentId, router]);
+    }, [nativeMode, premiumMode, activeMatch?.id, activeMatch?.status, activeMatch?.tournamentId, router]);
 
     useEffect(() => {
         const unsubscribeMatches = dataService.subscribeToLiveMatches((allMatches) => {

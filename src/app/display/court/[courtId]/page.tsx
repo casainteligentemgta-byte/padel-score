@@ -159,6 +159,7 @@ export default function CourtDisplayPage() {
     const searchParams = useSearchParams();
     const venueFilter = searchParams.get('complex') || searchParams.get('venue') || null;
     const nativeMode = searchParams.get('native') === '1';
+    const premiumMode = searchParams.get('premium') === '1';
     useThreeFingerDragExit('/');
 
     const [pizarraData, setPizarraData] = useState<any>(null);
@@ -193,7 +194,9 @@ export default function CourtDisplayPage() {
 
     // Si hay partido real activo en esta cancha, usar la vista premium del partido.
     useEffect(() => {
-        if (nativeMode) return;
+        // Modo normal de cancha: SIEMPRE respeta video/imagen/tira por pizarrón.
+        // Solo redirigir a la vista premium cuando se pida explícitamente (?premium=1).
+        if (nativeMode || !premiumMode) return;
         if (redirectedRef.current) return;
         const torneoId = String(pizarraData?.torneo_id || '').trim();
         const partidoId = String(pizarraData?.partido_id || '').trim();
@@ -202,7 +205,7 @@ export default function CourtDisplayPage() {
         if (estado !== 'en_vivo') return;
         redirectedRef.current = true;
         router.replace(`/tournaments/${encodeURIComponent(torneoId)}/display/${encodeURIComponent(partidoId)}`);
-    }, [nativeMode, pizarraData?.estado, pizarraData?.torneo_id, pizarraData?.partido_id, router]);
+    }, [nativeMode, premiumMode, pizarraData?.estado, pizarraData?.torneo_id, pizarraData?.partido_id, router]);
 
     const effectiveCancha = pizarraData;
     const isEnVivo = effectiveCancha?.estado === 'en_vivo';
