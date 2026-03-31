@@ -114,7 +114,6 @@ function DualPlaylistStrip({
 }) {
     const hasVideo = Boolean(currentVideoUrl);
     const hasImage = Boolean(currentImageUrl);
-    if (!hasVideo && !hasImage) return null;
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-white/10 min-h-[7rem]">
             <div className="relative bg-black/80 overflow-hidden flex items-center justify-center">
