@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { MatchStatus } from '@/types/tournament';
 import TVScoreboardDisplay from '@/components/TVScoreboardDisplay';
 import { RefreshCw } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { dataService } from '@/lib/dataService';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { useRouteSegment } from '@/lib/useRouteSegment';
@@ -19,8 +19,10 @@ import {
 
 export default function TVCourtDisplayPage() {
     const courtId = useRouteSegment('courtId');
+    const router = useRouter();
     const searchParams = useSearchParams();
     const complexFilter = searchParams.get('complex');
+    const nativeMode = searchParams.get('native') === '1';
     const supabase = getSupabaseClient();
 
     const [loading, setLoading] = useState(true);
@@ -32,6 +34,17 @@ export default function TVCourtDisplayPage() {
         imagen_loop: boolean;
         imagen_pausa_entre_segundos: number;
     } | null>(null);
+
+    useEffect(() => {
+        if (nativeMode) return;
+        const torneoId = String(activeMatch?.tournamentId || '').trim();
+        const partidoId = String(activeMatch?.id || '').trim();
+        const status = String(activeMatch?.status || '').trim();
+        if (!torneoId || !partidoId || partidoId.startsWith('live_')) return;
+        const isActive = status === MatchStatus.LIVE || status === 'LIVE';
+        if (!isActive) return;
+        router.replace(`/tournaments/${encodeURIComponent(torneoId)}/display/${encodeURIComponent(partidoId)}`);
+    }, [nativeMode, activeMatch?.id, activeMatch?.status, activeMatch?.tournamentId, router]);
 
     useEffect(() => {
         const unsubscribeMatches = dataService.subscribeToLiveMatches((allMatches) => {

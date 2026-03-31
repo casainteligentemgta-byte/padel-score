@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { dataService } from '@/lib/dataService';
 import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
 import { MonitorOff, Megaphone, Wifi, Zap } from 'lucide-react';
@@ -155,14 +155,17 @@ function DualPlaylistStrip({
 export default function CourtDisplayPage() {
     const courtId = useRouteSegment('courtId');
     const canchaId = `cancha_${courtId}`;
+    const router = useRouter();
     const searchParams = useSearchParams();
     const venueFilter = searchParams.get('complex') || searchParams.get('venue') || null;
+    const nativeMode = searchParams.get('native') === '1';
     useThreeFingerDragExit('/');
 
     const [pizarraData, setPizarraData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const playlists = useCourtPlaylists(canchaId, venueFilter);
     useCourtDisplayHeartbeat(canchaId);
+    const redirectedRef = useRef(false);
 
     // ── Fuente única: Supabase pizarra (misma fuente que marker / árbitro) ─
     useEffect(() => {
@@ -187,6 +190,19 @@ export default function CourtDisplayPage() {
             lastNonceRef.current = currentNonce;
         }
     }, [currentNonce]);
+
+    // Si hay partido real activo en esta cancha, usar la vista premium del partido.
+    useEffect(() => {
+        if (nativeMode) return;
+        if (redirectedRef.current) return;
+        const torneoId = String(pizarraData?.torneo_id || '').trim();
+        const partidoId = String(pizarraData?.partido_id || '').trim();
+        const estado = String(pizarraData?.estado || '').trim().toLowerCase();
+        if (!torneoId || !partidoId || partidoId.startsWith('live_')) return;
+        if (estado !== 'en_vivo') return;
+        redirectedRef.current = true;
+        router.replace(`/tournaments/${encodeURIComponent(torneoId)}/display/${encodeURIComponent(partidoId)}`);
+    }, [nativeMode, pizarraData?.estado, pizarraData?.torneo_id, pizarraData?.partido_id, router]);
 
     const effectiveCancha = pizarraData;
     const isEnVivo = effectiveCancha?.estado === 'en_vivo';
