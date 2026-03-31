@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Monitor, MapPin, Loader2, AlertCircle } from 'lucide-react';
 
 /** Mapa sede → nombre (orden alfabético = mismo que en el generador) */
@@ -21,6 +21,7 @@ type State = 'loading' | 'redirecting' | 'not_found' | 'invalid';
 export default function ShortUrlPage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const sedeRaw = (params?.sede as string ?? '').toUpperCase();
     const canchaRaw = (params?.cancha as string ?? '').toUpperCase();
 
@@ -39,8 +40,10 @@ export default function ShortUrlPage() {
     useEffect(() => {
         if (!complexName || !courtNumber) { setState('invalid'); return; }
         setState('redirecting');
-        router.replace(`/display/court/${courtNumber}?complex=${encodeURIComponent(complexName)}`);
-    }, [complexName, courtNumber, router]);
+        const qp = new URLSearchParams(searchParams?.toString() || '');
+        qp.set('complex', complexName);
+        router.replace(`/display/court/${courtNumber}?${qp.toString()}`);
+    }, [complexName, courtNumber, router, searchParams]);
 
     /* ─── UI ─────────────────────────────────────────── */
     return (

@@ -175,13 +175,12 @@ export default function CourtCard({
   const sedeIndex = sedeIndexFromVenueName(venueName);
   const pizarraShortPath = sedeIndex ? buildPizarraShortPath(sedeIndex, displayCourtNum) : null;
 
-  const previewSrc = pizarraShortPath
-    ? `/${pizarraShortPath}${minimalMode ? '?minimal=1' : ''}`
-    : venueName.trim().length > 0
-      ? `/display/court/${displayCourtNum}?complex=${encodeURIComponent(venueName)}${minimalMode ? '&minimal=1' : ''}`
-      : `/display/court/${displayCourtNum}${minimalMode ? '?minimal=1' : ''}`;
-
-  const previewHref = pizarraShortPath ? `/${pizarraShortPath}${minimalMode ? '?minimal=1' : ''}` : null;
+  const directDisplayUrl = venueName.trim().length > 0
+    ? `/display/court/${displayCourtNum}?complex=${encodeURIComponent(venueName)}${minimalMode ? '&minimal=1' : ''}`
+    : `/display/court/${displayCourtNum}${minimalMode ? '?minimal=1' : ''}`;
+  const previewSrc = directDisplayUrl;
+  const previewHref = directDisplayUrl;
+  const shortHref = pizarraShortPath ? `/${pizarraShortPath}${minimalMode ? '?minimal=1' : ''}` : null;
 
   const videoById = (id: string) => libraryVideos.find((m) => m.id === id);
   const imageById = (id: string) => libraryImages.find((m) => m.id === id);
@@ -231,15 +230,26 @@ export default function CourtCard({
           title={`preview-${courtKey}`}
         />
       </div>
-      {previewHref && pizarraShortPath && (
+      {previewHref && (
         <a
           href={previewHref}
           target="_blank"
           rel="noreferrer"
           className="mt-2 block text-center text-[9px] font-black uppercase tracking-widest text-padel-primary/90 hover:text-padel-primary underline-offset-2 hover:underline truncate px-1"
-          title="Abrir pizarra en nueva pestaña"
+          title="Abrir display en nueva pestaña"
         >
-          Abrir smartpadel58.com/{pizarraShortPath}
+          Abrir display/court
+        </a>
+      )}
+      {shortHref && (
+        <a
+          href={shortHref}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1 block text-center text-[9px] font-black uppercase tracking-widest text-white/45 hover:text-white/70 underline-offset-2 hover:underline truncate px-1"
+          title="Abrir URL corta de pizarra"
+        >
+          smartpadel58.com/{pizarraShortPath}
         </a>
       )}
 
