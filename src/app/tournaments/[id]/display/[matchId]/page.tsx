@@ -1816,11 +1816,11 @@ export default function FullScreenDisplay() {
                         {/* ══════════════ PUBLICIDAD MINI (VIDEO + IMAGEN) ══════════════ */}
                         {!minimalScreensMode && (
                             <div
-                                className="flex-shrink-0 flex flex-row gap-2 mb-[1vh] px-6"
+                                className="flex-shrink-0 flex flex-row items-stretch justify-between gap-2 mb-[1vh] px-6"
                                 style={{ height: '18.5vh' }}
                             >
                             {/* Video Ad / Hub Media (takes the left half) */}
-                            <div className="w-1/2 border border-white/8 bg-white/[0.02] relative overflow-hidden rounded-3xl">
+                            <div className="w-[24.5%] border border-white/8 bg-white/[0.02] relative overflow-hidden rounded-3xl">
                                 <span className="absolute top-2 left-3 z-10 text-[8px] font-black uppercase tracking-widest text-white/50">Video</span>
                                 <AnimatePresence mode="wait">
                                     {courtPlaylists.currentVideoUrl ? (
@@ -1910,7 +1910,7 @@ export default function FullScreenDisplay() {
                                 </AnimatePresence>
                             </div>
                             {/* Carousel Ad / Sponsors (takes the right half) */}
-                            <div className="w-1/2 min-w-0 border border-white/10 bg-white/[0.03] relative overflow-hidden rounded-2xl">
+                            <div className="w-[24.5%] min-w-0 border border-white/10 bg-white/[0.03] relative overflow-hidden rounded-2xl">
                                 <span className="absolute top-2 left-3 z-10 text-[8px] font-black uppercase tracking-widest text-white/50">Imagen</span>
                                 <AnimatePresence mode="wait">
                                     {courtPlaylists.currentImageUrl ? (
