@@ -17,6 +17,13 @@ export type CourtPlaylistRowDb = {
     nombre_sponsor?: string | null;
     nombre?: string | null;
   } | null;
+  publicidad?: {
+    id: string;
+    tipo: string;
+    url: string;
+    nombre_sponsor?: string | null;
+    nombre?: string | null;
+  } | null;
 };
 
 function normalizeMediaContent(raw: unknown): CourtPlaylistRowDb['media_content'] {
@@ -53,7 +60,7 @@ export function normalizeCourtPlaylistRows(rows: unknown[]): CourtPlaylistRowDb[
       orden: Number(row.orden || 0),
       duracion_segundos: Number(row.duracion_segundos || 0),
       playlist_slot: (row.playlist_slot as PlaylistSlot | undefined) ?? undefined,
-      media_content: normalizeMediaContent(row.media_content),
+      media_content: normalizeMediaContent(row.media_content ?? row.publicidad),
     };
   });
 }
@@ -95,7 +102,19 @@ export async function fetchCanchaPlaylistRows(
     .order('orden', { ascending: true });
   if (vn) q = q.eq('venue_name', vn);
   const r = await q;
-  if (!r.error) return r;
+  if (!r.error) return { ...r, data: normalizeCourtPlaylistRows((r.data as unknown[]) || []) };
+
+  // Algunas BD exponen la relación como `publicidad` en lugar de `media_content`.
+  let qRelFallback = supabase
+    .from('cancha_publicidad')
+    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, publicidad(*)')
+    .eq('cancha_id', canchaId)
+    .order('orden', { ascending: true });
+  if (vn) qRelFallback = qRelFallback.eq('venue_name', vn);
+  const rRelFallback = await qRelFallback;
+  if (!rRelFallback.error) {
+    return { ...rRelFallback, data: normalizeCourtPlaylistRows((rRelFallback.data as unknown[]) || []) };
+  }
 
   // BD antigua sin columna venue_name: no filtrar por sede.
   let q2 = supabase
@@ -103,7 +122,17 @@ export async function fetchCanchaPlaylistRows(
     .select('id, cancha_id, media_id, orden, duracion_segundos, media_content(*)')
     .eq('cancha_id', canchaId)
     .order('orden', { ascending: true });
-  return await q2;
+  const r2 = await q2;
+  if (!r2.error) return { ...r2, data: normalizeCourtPlaylistRows((r2.data as unknown[]) || []) };
+
+  let q3 = supabase
+    .from('cancha_publicidad')
+    .select('id, cancha_id, media_id, orden, duracion_segundos, publicidad(*)')
+    .eq('cancha_id', canchaId)
+    .order('orden', { ascending: true });
+  const r3 = await q3;
+  if (!r3.error) return { ...r3, data: normalizeCourtPlaylistRows((r3.data as unknown[]) || []) };
+  return r3;
 }
 
 export async function fetchCanchaPlaylistConfig(

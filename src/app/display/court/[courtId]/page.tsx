@@ -38,6 +38,21 @@ function formatMarcadorTeamNombre(nombre: string): string {
     return formatPlayerFichaName(raw);
 }
 
+function teamDisplayFromRaw(rawName: string, fallbackId: string): string {
+    const raw = (rawName || '').trim();
+    const isGeneric =
+        !raw ||
+        /^equipo\s*\d*$/i.test(raw) ||
+        /^team\s*\d*$/i.test(raw) ||
+        raw === '---';
+    if (isGeneric) {
+        return fallbackId;
+    }
+
+    const normalized = formatMarcadorTeamNombre(raw);
+    return normalized || fallbackId;
+}
+
 function courtSetCell(
     setIdx: number,
     team: 'local' | 'visitante',
@@ -278,7 +293,7 @@ export default function CourtDisplayPage() {
                     <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-6">
                         {/* Equipo 1 */}
                         <TeamPanel
-                            nombre={formatMarcadorTeamNombre(marcador?.equipo_1?.nombre || 'Equipo 1')}
+                            nombre={teamDisplayFromRaw(marcador?.equipo_1?.nombre || '', 'EQUIPO 1')}
                             color={marcador?.equipo_1?.color || '#CCFF00'}
                             sets={marcador?.sets?.local ?? 0}
                             games={marcador?.games?.local ?? 0}
@@ -295,7 +310,7 @@ export default function CourtDisplayPage() {
 
                         {/* Equipo 2 */}
                         <TeamPanel
-                            nombre={formatMarcadorTeamNombre(marcador?.equipo_2?.nombre || 'Equipo 2')}
+                            nombre={teamDisplayFromRaw(marcador?.equipo_2?.nombre || '', 'EQUIPO 2')}
                             color={marcador?.equipo_2?.color || '#FF5500'}
                             sets={marcador?.sets?.visitante ?? 0}
                             games={marcador?.games?.visitante ?? 0}
@@ -424,7 +439,7 @@ function TeamPanel({ nombre, color, sets, games, puntos, side }: {
         <div className={`flex flex-col items-center gap-4 ${side === 'right' ? 'text-right items-end' : 'text-left items-start'}`}>
             {/* Nombre */}
             <div
-                className="font-black italic uppercase tracking-tighter text-2xl md:text-3xl truncate max-w-full"
+                className="font-black italic uppercase tracking-tighter text-2xl md:text-3xl max-w-full break-words whitespace-normal leading-tight"
                 style={{ color }}
             >
                 {nombre}
