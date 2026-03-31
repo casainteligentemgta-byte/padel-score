@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
-import Sidebar from '@/components/Sidebar';
 import CourtCard from '@/components/publicidad/CourtCard';
 import type { CourtPlaylistRow } from '@/components/publicidad/CourtCard';
 import {
@@ -15,7 +14,7 @@ import {
   upsertCanchaPlaylistConfig,
   type CourtPlaylistRowDb,
 } from '@/lib/courtPlaylists';
-import { AlertCircle, ChevronLeft, Download, Eye, Loader2, Trash2, Upload, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronLeft, Download, Edit3, Eye, Loader2, Trash2, Upload, X } from 'lucide-react';
 import type { MediaContent, TiraInformativa } from '@/lib/supabase/publicidad';
 
 type VenueWithCourts = {
@@ -80,6 +79,8 @@ export default function AdminPublicidadPage() {
   const [mediaList, setMediaList] = useState<MediaContent[]>([]);
   const [tiraList, setTiraList] = useState<TiraInformativa[]>([]);
   const [nuevoTicker, setNuevoTicker] = useState('');
+  const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
+  const [editingMediaName, setEditingMediaName] = useState('');
 
   const [venues, setVenues] = useState<VenueWithCourts[]>([]);
   const [selectedVenue, setSelectedVenue] = useState<string>('');
@@ -404,16 +405,30 @@ export default function AdminPublicidadPage() {
     setUploading(true);
     setError(null);
     try {
+      const tryUploadToBuckets = async (path: string, file: File) => {
+        const buckets = ['publicidad', 'ads', 'media'];
+        let lastErr: any = null;
+        for (const bucket of buckets) {
+          const up = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
+          if (!up.error) {
+            const pub = supabase.storage.from(bucket).getPublicUrl(path);
+            return { bucket, publicUrl: pub.data.publicUrl };
+          }
+          lastErr = up.error;
+          const msg = String(up.error?.message || '').toLowerCase();
+          if (!msg.includes('bucket') || !msg.includes('not found')) break;
+        }
+        throw lastErr;
+      };
+
       for (const file of files) {
         const fileExt = file.name.split('.').pop() || 'bin';
         const path = `ads/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
-        const up = await supabase.storage.from('publicidad').upload(path, file, { upsert: false });
-        if (up.error) throw up.error;
-        const pub = supabase.storage.from('publicidad').getPublicUrl(path);
+        const pub = await tryUploadToBuckets(path, file);
         const tipo = isVideoFile(file) ? 'video_file' : isImageFile(file) ? 'imagen' : 'video_file';
         const ins = await supabase.from('media_content').insert({
           tipo,
-          url: pub.data.publicUrl,
+          url: pub.publicUrl,
           nombre: file.name,
           nombre_sponsor: file.name.replace(/\.[^/.]+$/, ''),
           file_size_bytes: file.size,
@@ -424,7 +439,12 @@ export default function AdminPublicidadPage() {
       }
       await fetchMedia();
     } catch (e: any) {
-      setError(e?.message || 'No se pudo subir el archivo.');
+      const msg = String(e?.message || '');
+      if (msg.toLowerCase().includes('bucket') && msg.toLowerCase().includes('not found')) {
+        setError('Bucket not found. Crea un bucket público llamado "publicidad" (o "ads") en Supabase Storage.');
+      } else {
+        setError(msg || 'No se pudo subir el archivo.');
+      }
     } finally {
       setUploading(false);
     }
@@ -445,6 +465,23 @@ export default function AdminPublicidadPage() {
     if (error) return setError(error.message);
     await fetchMedia();
     await fetchAssignments();
+  };
+
+  const renameMedia = async (id: string, nextNameRaw: string) => {
+    const nextName = nextNameRaw.trim();
+    if (!nextName) return;
+    setError(null);
+    const { error } = await supabase
+      .from('media_content')
+      .update({
+        nombre: nextName,
+        nombre_sponsor: nextName.replace(/\.[^/.]+$/, ''),
+      })
+      .eq('id', id);
+    if (error) return setError(error.message);
+    setEditingMediaId(null);
+    setEditingMediaName('');
+    await fetchMedia();
   };
 
   const download = async (url: string, name: string) => {
@@ -484,7 +521,7 @@ export default function AdminPublicidadPage() {
     await fetchTicker();
   };
 
-  const renderMediaTable = (title: string, items: MediaContent[]) => (
+  const renderMediaTable = (title: string, items: MediaContent[], allowRename = false) => (
     <section className="bg-white/[0.02] border border-white/10 rounded-3xl p-6">
       <h2 className="text-lg md:text-xl font-black uppercase tracking-wider mb-4">{title}</h2>
       <div className="overflow-auto rounded-2xl border border-white/10">
@@ -499,13 +536,57 @@ export default function AdminPublicidadPage() {
           <tbody>
             {items.map((m) => (
               <tr key={m.id} className="border-t border-white/10">
-                <td className="px-3 py-2 text-sm font-bold text-white/90">{m.nombre_sponsor || m.nombre || 'Sin nombre'}</td>
+                <td className="px-3 py-2 text-sm font-bold text-white/90">
+                  {allowRename && editingMediaId === m.id ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        value={editingMediaName}
+                        onChange={(e) => setEditingMediaName(e.target.value)}
+                        className="min-w-0 flex-1 bg-black/60 border border-white/20 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-padel-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => renameMedia(m.id, editingMediaName)}
+                        className="p-1.5 rounded-lg bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/35"
+                        title="Guardar nombre"
+                      >
+                        <Check size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingMediaId(null);
+                          setEditingMediaName('');
+                        }}
+                        className="p-1.5 rounded-lg bg-white/20 text-white border border-white/30 hover:bg-white/30"
+                        title="Cancelar"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    m.nombre_sponsor || m.nombre || 'Sin nombre'
+                  )}
+                </td>
                 <td className="px-3 py-2 text-xs text-white/70">{mb((m as any).file_size_bytes)}</td>
                 <td className="px-3 py-2">
                   <div className="flex items-center justify-end gap-2">
-                    <button type="button" onClick={() => setPreviewUrl(m.url)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10" title="Preview"><Eye size={14} /></button>
-                    <button type="button" onClick={() => download(m.url, m.nombre || m.nombre_sponsor || 'media')} className="p-2 rounded-lg bg-white/5 hover:bg-white/10" title="Download"><Download size={14} /></button>
-                    <button type="button" onClick={() => deleteMedia(m.id)} className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20" title="Delete"><Trash2 size={14} /></button>
+                    {allowRename && editingMediaId !== m.id && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingMediaId(m.id);
+                          setEditingMediaName(m.nombre_sponsor || m.nombre || '');
+                        }}
+                        className="p-2 rounded-lg bg-sky-500/25 text-sky-100 border border-sky-400/40 hover:bg-sky-500/35"
+                        title="Renombrar"
+                      >
+                        <Edit3 size={14} />
+                      </button>
+                    )}
+                    <button type="button" onClick={() => setPreviewUrl(m.url)} className="p-2 rounded-lg bg-white/20 text-white border border-white/30 hover:bg-white/30" title="Preview"><Eye size={14} /></button>
+                    <button type="button" onClick={() => download(m.url, m.nombre || m.nombre_sponsor || 'media')} className="p-2 rounded-lg bg-indigo-500/25 text-indigo-100 border border-indigo-400/40 hover:bg-indigo-500/35" title="Download"><Download size={14} /></button>
+                    <button type="button" onClick={() => deleteMedia(m.id)} className="p-2 rounded-lg bg-red-500/25 text-red-100 border border-red-400/40 hover:bg-red-500/35" title="Delete"><Trash2 size={14} /></button>
                   </div>
                 </td>
               </tr>
@@ -525,10 +606,9 @@ export default function AdminPublicidadPage() {
   if (!isAdmin) return null;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white flex">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto px-4 py-8">
-        <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-[#050505] text-white">
+      <main className="overflow-y-auto px-3 py-4 md:px-4 md:py-5">
+        <div className="max-w-7xl mx-auto space-y-4">
           <div className="flex items-start">
             <button
               type="button"
@@ -542,9 +622,9 @@ export default function AdminPublicidadPage() {
             </button>
           </div>
 
-          <header>
-            <h1 className="text-3xl font-black uppercase italic">Admin Publicidad</h1>
-            <p className="text-xs text-white/60 uppercase tracking-wider">Playlist independiente por sede y cancha</p>
+          <header className="space-y-1">
+            <h1 className="text-2xl md:text-3xl font-black uppercase italic leading-none">Admin Publicidad</h1>
+            <p className="text-[11px] text-white/60 uppercase tracking-wider leading-tight">Playlist independiente por sede y cancha</p>
           </header>
 
           {error && (
@@ -553,7 +633,7 @@ export default function AdminPublicidadPage() {
             </div>
           )}
 
-          <section className="bg-white/[0.02] border border-white/10 rounded-3xl p-6">
+          <section className="bg-white/[0.02] border border-white/10 rounded-2xl p-4 md:p-5">
             <div className="flex flex-wrap items-center gap-3">
               <div {...drop.getRootProps()} className="cursor-pointer">
                 <input {...drop.getInputProps()} />
@@ -565,12 +645,12 @@ export default function AdminPublicidadPage() {
             </div>
           </section>
 
-          {renderMediaTable('Biblioteca de Videos', videos)}
+          {renderMediaTable('Biblioteca de Videos', videos, true)}
           {renderMediaTable('Biblioteca de Carrusel', carrusel)}
 
-          <section className="bg-white/[0.02] border border-white/10 rounded-3xl p-6">
+          <section className="bg-white/[0.02] border border-white/10 rounded-2xl p-4 md:p-5">
             <h2 className="text-lg md:text-xl font-black uppercase tracking-wider mb-4">Ticker</h2>
-            <div className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-3">
               <input
                 value={nuevoTicker}
                 onChange={(e) => setNuevoTicker(e.target.value)}
@@ -606,7 +686,7 @@ export default function AdminPublicidadPage() {
             </div>
           </section>
 
-          <section className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 space-y-4">
+          <section className="bg-white/[0.02] border border-white/10 rounded-2xl p-4 md:p-5 space-y-3">
             <h2 className="text-lg md:text-xl font-black uppercase tracking-wider">Playlists por sede</h2>
             <p className="text-xs text-white/50">
               Sedes y nombres de pista se obtienen de los torneos. Al elegir una sede solo ves las canchas de ese club.
@@ -630,7 +710,7 @@ export default function AdminPublicidadPage() {
               </select>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {selectedVenueCourts.map((court) => {
                 const rows = assignments.filter((a) => a.cancha_id === court.key);
                 const { video, imagen } = partitionPlaylistRows(rows as CourtPlaylistRowDb[]);
