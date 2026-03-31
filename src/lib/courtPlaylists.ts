@@ -213,6 +213,32 @@ export async function fetchCanchaPlaylistRows(
     const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r3.data as unknown[]) || []));
     return { ...r3, data: norm };
   }
+
+  // Fallback final: sin relaciones embebidas (evita fallos de schema cache/FK en PostgREST).
+  // Luego resolvemos media por `media_id` con query independiente.
+  let q4 = supabase
+    .from('cancha_publicidad')
+    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot')
+    .in('cancha_id', canchaIds)
+    .order('orden', { ascending: true });
+  if (vn) {
+    q4 = q4.ilike('venue_name', vn);
+  }
+  const r4 = await q4;
+  if (!r4.error) {
+    const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r4.data as unknown[]) || []));
+    if (hasPlayableRows(norm) || norm.length > 0) return { ...r4, data: norm };
+  }
+
+  const r5 = await supabase
+    .from('cancha_publicidad')
+    .select('id, cancha_id, media_id, orden, duracion_segundos, playlist_slot')
+    .in('cancha_id', canchaIds)
+    .order('orden', { ascending: true });
+  if (!r5.error) {
+    const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r5.data as unknown[]) || []));
+    return { ...r5, data: norm };
+  }
   return r3;
 }
 
