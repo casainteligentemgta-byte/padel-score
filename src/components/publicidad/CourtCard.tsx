@@ -5,6 +5,8 @@ import { healthStatusFromLastSeen, type CourtHealthStatus } from '@/lib/courtHea
 import {
   ChevronDown,
   ChevronUp,
+  Eye,
+  EyeOff,
   ImageIcon,
   Loader2,
   MessageSquare,
@@ -120,6 +122,7 @@ export default function CourtCard({
   const { wifi } = statusStyle(status);
 
   const [openPanel, setOpenPanel] = useState<'video' | 'imagen' | 'texto' | null>(null);
+  const [minimalMode, setMinimalMode] = useState(false);
 
   const [videoSearch, setVideoSearch] = useState('');
   const [imageSearch, setImageSearch] = useState('');
@@ -173,12 +176,12 @@ export default function CourtCard({
   const pizarraShortPath = sedeIndex ? buildPizarraShortPath(sedeIndex, displayCourtNum) : null;
 
   const previewSrc = pizarraShortPath
-    ? `/${pizarraShortPath}`
+    ? `/${pizarraShortPath}${minimalMode ? '?minimal=1' : ''}`
     : venueName.trim().length > 0
-      ? `/display/court/${displayCourtNum}?complex=${encodeURIComponent(venueName)}`
-      : `/display/court/${displayCourtNum}`;
+      ? `/display/court/${displayCourtNum}?complex=${encodeURIComponent(venueName)}${minimalMode ? '&minimal=1' : ''}`
+      : `/display/court/${displayCourtNum}${minimalMode ? '?minimal=1' : ''}`;
 
-  const previewHref = pizarraShortPath ? `/${pizarraShortPath}` : null;
+  const previewHref = pizarraShortPath ? `/${pizarraShortPath}${minimalMode ? '?minimal=1' : ''}` : null;
 
   const videoById = (id: string) => libraryVideos.find((m) => m.id === id);
   const imageById = (id: string) => libraryImages.find((m) => m.id === id);
@@ -280,6 +283,19 @@ export default function CourtCard({
             Texto
           </button>
         </div>
+        <button
+          type="button"
+          onClick={() => setMinimalMode((v) => !v)}
+          className={`w-full mb-2 rounded-lg border px-2 py-2 text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${
+            minimalMode
+              ? 'bg-padel-primary/15 border-padel-primary/40 text-padel-primary'
+              : 'bg-black/40 border-white/10 text-white/70 hover:bg-white/5'
+          }`}
+          title={minimalMode ? 'Mostrar publicidad/tiras' : 'Solo pizarra (sin video/imagen/tira)'}
+        >
+          {minimalMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+          {minimalMode ? 'Solo pizarra' : 'Con publicidad'}
+        </button>
 
         {openPanel && (
           <div className="overflow-y-auto max-h-[520px] rounded-xl border border-white/10 bg-black/25 p-2 space-y-2">

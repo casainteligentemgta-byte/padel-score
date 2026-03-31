@@ -158,6 +158,7 @@ export default function CourtDisplayPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const venueFilter = searchParams.get('complex') || searchParams.get('venue') || null;
+    const minimalMode = searchParams.get('minimal') === '1' || searchParams.get('minimal') === 'true';
     const nativeMode = searchParams.get('native') === '1';
     const premiumMode = searchParams.get('premium') === '1';
     useThreeFingerDragExit('/');
@@ -255,16 +256,20 @@ export default function CourtDisplayPage() {
                 </div>
 
                 <div className="absolute bottom-0 left-0 right-0 z-10">
-                    <TickerMarquee messages={playlists.tickerMessages} />
-                    <DualPlaylistStrip
-                        canchaId={canchaId}
-                        currentVideoUrl={playlists.currentVideoUrl}
-                        currentImageUrl={playlists.currentImageUrl}
-                        videoKey={playlists.videoKey}
-                        imageKey={playlists.imageKey}
-                        onVideoEnded={playlists.videoAdvanceByTimer ? () => {} : playlists.onVideoEnded}
-                        singleVideoLoop={playlists.videoUrls.length <= 1 || playlists.videoAdvanceByTimer}
-                    />
+                    {!minimalMode && (
+                        <>
+                            <TickerMarquee messages={playlists.tickerMessages} />
+                            <DualPlaylistStrip
+                                canchaId={canchaId}
+                                currentVideoUrl={playlists.currentVideoUrl}
+                                currentImageUrl={playlists.currentImageUrl}
+                                videoKey={playlists.videoKey}
+                                imageKey={playlists.imageKey}
+                                onVideoEnded={playlists.videoAdvanceByTimer ? () => {} : playlists.onVideoEnded}
+                                singleVideoLoop={playlists.videoUrls.length <= 1 || playlists.videoAdvanceByTimer}
+                            />
+                        </>
+                    )}
                     <div className="h-8 bg-gradient-to-t from-black to-transparent pointer-events-none" />
                 </div>
 
@@ -420,18 +425,22 @@ export default function CourtDisplayPage() {
                 })()}
             </div>
 
-            <div className="relative border-t border-white/10 flex-shrink-0 overflow-hidden">
-                <DualPlaylistStrip
-                    canchaId={canchaId}
-                    currentVideoUrl={playlists.currentVideoUrl}
-                    currentImageUrl={playlists.currentImageUrl}
-                    videoKey={playlists.videoKey}
-                    imageKey={playlists.imageKey}
-                    onVideoEnded={playlists.videoAdvanceByTimer ? () => {} : playlists.onVideoEnded}
-                    singleVideoLoop={playlists.videoUrls.length <= 1 || playlists.videoAdvanceByTimer}
-                />
-            </div>
-            <TickerMarquee messages={playlists.tickerMessages} />
+            {!minimalMode && (
+                <>
+                    <div className="relative border-t border-white/10 flex-shrink-0 overflow-hidden">
+                        <DualPlaylistStrip
+                            canchaId={canchaId}
+                            currentVideoUrl={playlists.currentVideoUrl}
+                            currentImageUrl={playlists.currentImageUrl}
+                            videoKey={playlists.videoKey}
+                            imageKey={playlists.imageKey}
+                            onVideoEnded={playlists.videoAdvanceByTimer ? () => {} : playlists.onVideoEnded}
+                            singleVideoLoop={playlists.videoUrls.length <= 1 || playlists.videoAdvanceByTimer}
+                        />
+                    </div>
+                    <TickerMarquee messages={playlists.tickerMessages} />
+                </>
+            )}
 
             <style jsx global>{`
                 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
