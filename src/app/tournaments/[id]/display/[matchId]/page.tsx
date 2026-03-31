@@ -10,7 +10,7 @@ import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
 import { rtdb } from '@/lib/rtdb';
 import { ref, onValue, off } from 'firebase/database';
-import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, ImageIcon, Play, Eye, Users, EyeOff, X, MessageSquare } from 'lucide-react';
+import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, ImageIcon, Play, Eye, Users, EyeOff, X, MessageSquare, ChevronUp, ChevronDown, Plus } from 'lucide-react';
 import { BouncingBall } from '@/components/BouncingBall';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 import { visibleSetNumbersForScoreboard, scoreboardGridClassForSetCount } from '@/lib/displaySetColumns';
@@ -665,17 +665,22 @@ export default function FullScreenDisplay() {
         setHubLibraryVidIdx(0);
     }, [mediaSelectionMode, rotationVideoItems.map((x: any) => String(x?.url || '')).join('|')]);
 
+    /** En modo manual no se configuran segundos en pantalla: avance por tiempo fijo solo como respaldo. */
+    const MANUAL_VIDEO_ROTATION_FALLBACK_SEC = 45;
+
     useEffect(() => {
         if (rotationVideoItems.length <= 1) return;
-        const currentItem = rotationVideoItems[hubLibraryVidIdx % rotationVideoItems.length];
-        const duration = (currentItem?.duracion_segundos || 8) * 1000;
+        const durationMs =
+            mediaSelectionMode === 'manual'
+                ? MANUAL_VIDEO_ROTATION_FALLBACK_SEC * 1000
+                : (rotationVideoItems[hubLibraryVidIdx % rotationVideoItems.length]?.duracion_segundos || 8) * 1000;
 
         const timeout = setTimeout(() => {
-            setHubLibraryVidIdx(prev => (prev + 1) % rotationVideoItems.length);
-        }, duration);
+            setHubLibraryVidIdx((prev) => (prev + 1) % rotationVideoItems.length);
+        }, durationMs);
 
         return () => clearTimeout(timeout);
-    }, [rotationVideoItems, hubLibraryVidIdx]);
+    }, [rotationVideoItems, hubLibraryVidIdx, mediaSelectionMode]);
 
     // Rotación del carrusel (IMÁGENES - Derecha)
     useEffect(() => {
@@ -2111,7 +2116,7 @@ export default function FullScreenDisplay() {
 
             {mediaConfigOpen && (
                 <div className="fixed inset-0 z-[6000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-                    <div className="w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-3xl border border-white/10 bg-[#0a0a0a] shadow-2xl flex flex-col">
+                    <div className="w-full max-w-4xl max-h-[85vh] overflow-hidden rounded-3xl border border-white/10 bg-[#0a0a0a] shadow-2xl flex flex-col">
                         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/10">
                             <div>
                                 <p className="text-[10px] font-black uppercase tracking-[0.35em] text-white/40">Publicidad en pizarra</p>
@@ -2170,69 +2175,173 @@ export default function FullScreenDisplay() {
 
                         <div className="flex-1 overflow-y-auto px-5 py-4">
                             {mediaConfigActiveTab === 'video' && (
-                            <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
-                                <div className="flex items-center justify-between gap-2 mb-2">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/50">Videos</p>
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            type="button"
-                                            className="text-[9px] font-black uppercase text-white/40 hover:text-white"
-                                            onClick={() => setDraftVideoSelectedUrls(videoOptionItems.map((m: any) => String(m.url)))}
-                                        >
-                                            Todos
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="text-[9px] font-black uppercase text-white/40 hover:text-white"
-                                            onClick={() => setDraftVideoSelectedUrls([])}
-                                        >
-                                            Ninguno
-                                        </button>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 min-h-0">
+                                {/* Izquierda: biblioteca */}
+                                <div className="rounded-2xl border border-white/10 bg-black/30 p-3 flex flex-col min-h-0">
+                                    <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-white/50">Biblioteca</p>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                className="text-[9px] font-black uppercase text-white/40 hover:text-white"
+                                                onClick={() => {
+                                                    setDraftTouched(true);
+                                                    setDraftVideoSelectedUrls(videoOptionItems.map((m: any) => String(m.url)));
+                                                }}
+                                            >
+                                                Todos
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="text-[9px] font-black uppercase text-white/40 hover:text-white"
+                                                onClick={() => {
+                                                    setDraftTouched(true);
+                                                    setDraftVideoSelectedUrls([]);
+                                                }}
+                                            >
+                                                Ninguno
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <input
+                                        value={videoSearch}
+                                        onChange={(e) => setVideoSearch(e.target.value)}
+                                        placeholder="Buscar en biblioteca…"
+                                        className="w-full mb-2 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white/90 outline-none focus:border-white/25 shrink-0"
+                                    />
+                                    <div className="max-h-[42vh] overflow-y-auto space-y-2 pr-1 flex-1">
+                                        {videoOptionItems
+                                            .filter((m: any) => {
+                                                const q = videoSearch.trim().toLowerCase();
+                                                if (!q) return true;
+                                                const label = String(m?.nombre_sponsor || m?.nombre || m?.url || '').toLowerCase();
+                                                return label.includes(q);
+                                            })
+                                            .map((m: any) => {
+                                                const u = String(m.url);
+                                                const inList = draftVideoSelectedUrls.includes(u);
+                                                return (
+                                                    <div
+                                                        key={u}
+                                                        className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2"
+                                                    >
+                                                        <span className="text-[11px] font-bold text-white/85 leading-snug min-w-0">
+                                                            {m.nombre_sponsor || m.nombre || 'Video'}
+                                                            <span className="block text-[9px] font-mono text-white/35 break-all">{u}</span>
+                                                        </span>
+                                                        {inList ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setDraftTouched(true);
+                                                                    setDraftVideoSelectedUrls((prev) => prev.filter((x) => x !== u));
+                                                                }}
+                                                                className="shrink-0 text-[9px] font-black uppercase text-red-300/90 hover:text-red-200 px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/20"
+                                                            >
+                                                                Quitar
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setDraftTouched(true);
+                                                                    setDraftVideoSelectedUrls((prev) =>
+                                                                        prev.includes(u) ? prev : [...prev, u],
+                                                                    );
+                                                                }}
+                                                                className="shrink-0 flex items-center gap-1 text-[9px] font-black uppercase text-padel-primary px-2 py-1 rounded-lg bg-padel-primary/10 border border-padel-primary/30 hover:bg-padel-primary/20"
+                                                            >
+                                                                <Plus className="w-3 h-3" /> Añadir
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        {videoOptionItems.length === 0 && (
+                                            <p className="text-[10px] text-white/35">No hay videos en la biblioteca.</p>
+                                        )}
                                     </div>
                                 </div>
-                                <input
-                                    value={videoSearch}
-                                    onChange={(e) => setVideoSearch(e.target.value)}
-                                    placeholder="Buscar…"
-                                    className="w-full mb-2 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white/90 outline-none focus:border-white/25"
-                                />
-                                <div className="max-h-[42vh] overflow-y-auto space-y-2 pr-1">
-                                    {videoOptionItems
-                                        .filter((m: any) => {
-                                            const q = videoSearch.trim().toLowerCase();
-                                            if (!q) return true;
-                                            const label = String(m?.nombre_sponsor || m?.nombre || m?.url || '').toLowerCase();
-                                            return label.includes(q);
-                                        })
-                                        .map((m: any) => {
-                                            const u = String(m.url);
-                                            const checked = draftVideoSelectedUrls.includes(u);
-                                            return (
-                                                <label key={u} className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 hover:bg-white/5 cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={checked}
-                                                        onChange={(e) => {
-                                                            setDraftTouched(true);
-                                                            setDraftVideoSelectedUrls((prev) => {
-                                                                const next = new Set(prev);
-                                                                if (e.target.checked) next.add(u);
-                                                                else next.delete(u);
-                                                                return Array.from(next);
-                                                            });
-                                                        }}
-                                                        className="mt-1"
-                                                    />
-                                                    <span className="text-[11px] font-bold text-white/85 leading-snug">
-                                                        {m.nombre_sponsor || m.nombre || 'Video'}
-                                                        <span className="block text-[9px] font-mono text-white/35 break-all">{u}</span>
-                                                    </span>
-                                                </label>
-                                            );
-                                        })}
-                                    {videoOptionItems.length === 0 && (
-                                        <p className="text-[10px] text-white/35">No hay videos disponibles en la biblioteca.</p>
-                                    )}
+                                {/* Derecha: orden en pizarra */}
+                                <div className="rounded-2xl border border-padel-primary/20 bg-black/35 p-3 flex flex-col min-h-0">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-padel-primary/90 mb-1 shrink-0">
+                                        Orden en la pizarra
+                                    </p>
+                                    <p className="text-[9px] text-white/40 mb-2 leading-snug shrink-0">
+                                        Usa las flechas para el orden de reproducción. El avance entre clips es automático; si uno no termina solo, la pizarra pasa al siguiente tras un tiempo interno de seguridad.
+                                    </p>
+                                    <div className="max-h-[42vh] overflow-y-auto space-y-2 pr-1 flex-1">
+                                        {draftVideoSelectedUrls.length === 0 ? (
+                                            <p className="text-[10px] text-white/35 py-4 text-center">
+                                                Añade videos desde la biblioteca.
+                                            </p>
+                                        ) : (
+                                            draftVideoSelectedUrls.map((u, idx) => {
+                                                const m = videoUrlToItem.get(u);
+                                                const label = m?.nombre_sponsor || m?.nombre || 'Video';
+                                                return (
+                                                    <div
+                                                        key={u}
+                                                        className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-2 py-2"
+                                                    >
+                                                        <span className="text-[10px] font-black text-white/50 w-5 shrink-0 tabular-nums">
+                                                            {idx + 1}
+                                                        </span>
+                                                        <span className="text-[11px] font-bold text-white/90 leading-snug flex-1 min-w-0 truncate">
+                                                            {label}
+                                                        </span>
+                                                        <div className="flex flex-col gap-0.5 shrink-0">
+                                                            <button
+                                                                type="button"
+                                                                disabled={idx === 0}
+                                                                onClick={() => {
+                                                                    if (idx === 0) return;
+                                                                    setDraftTouched(true);
+                                                                    setDraftVideoSelectedUrls((prev) => {
+                                                                        const next = [...prev];
+                                                                        [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                                                                        return next;
+                                                                    });
+                                                                }}
+                                                                className="p-1 rounded-md border border-white/10 bg-black/40 text-white/70 hover:bg-white/10 disabled:opacity-25 disabled:pointer-events-none"
+                                                                title="Subir"
+                                                            >
+                                                                <ChevronUp className="w-3.5 h-3.5" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                disabled={idx >= draftVideoSelectedUrls.length - 1}
+                                                                onClick={() => {
+                                                                    if (idx >= draftVideoSelectedUrls.length - 1) return;
+                                                                    setDraftTouched(true);
+                                                                    setDraftVideoSelectedUrls((prev) => {
+                                                                        const next = [...prev];
+                                                                        [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                                                                        return next;
+                                                                    });
+                                                                }}
+                                                                className="p-1 rounded-md border border-white/10 bg-black/40 text-white/70 hover:bg-white/10 disabled:opacity-25 disabled:pointer-events-none"
+                                                                title="Bajar"
+                                                            >
+                                                                <ChevronDown className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setDraftTouched(true);
+                                                                setDraftVideoSelectedUrls((prev) => prev.filter((x) => x !== u));
+                                                            }}
+                                                            className="shrink-0 p-1.5 rounded-lg text-white/50 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
+                                                            title="Quitar de la lista"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             )}
