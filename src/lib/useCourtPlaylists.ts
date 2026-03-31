@@ -6,6 +6,7 @@ import {
   fetchCanchaPlaylistConfig,
   fetchCanchaPlaylistRows,
   fetchCanchaTiraMessages,
+  normalizeCourtPlaylistRows,
   partitionPlaylistRows,
   type CourtPlaylistRowDb,
 } from '@/lib/courtPlaylists';
@@ -55,7 +56,7 @@ export function useCourtPlaylists(canchaId: string, venueName: string | null | u
     if (error) {
       setRows([]);
     } else {
-      setRows((data as unknown as CourtPlaylistRowDb[]) || []);
+      setRows(normalizeCourtPlaylistRows((data as unknown[]) || []));
     }
 
     if (venueName?.trim()) {

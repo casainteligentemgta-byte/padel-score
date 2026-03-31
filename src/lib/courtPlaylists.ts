@@ -19,6 +19,45 @@ export type CourtPlaylistRowDb = {
   } | null;
 };
 
+function normalizeMediaContent(raw: unknown): CourtPlaylistRowDb['media_content'] {
+  if (!raw) return null;
+  if (Array.isArray(raw)) {
+    const first = raw[0] as Record<string, unknown> | undefined;
+    if (!first) return null;
+    return {
+      id: String(first.id || ''),
+      tipo: String(first.tipo || ''),
+      url: String(first.url || ''),
+      nombre_sponsor: (first.nombre_sponsor as string | null | undefined) ?? null,
+      nombre: (first.nombre as string | null | undefined) ?? null,
+    };
+  }
+  const m = raw as Record<string, unknown>;
+  return {
+    id: String(m.id || ''),
+    tipo: String(m.tipo || ''),
+    url: String(m.url || ''),
+    nombre_sponsor: (m.nombre_sponsor as string | null | undefined) ?? null,
+    nombre: (m.nombre as string | null | undefined) ?? null,
+  };
+}
+
+export function normalizeCourtPlaylistRows(rows: unknown[]): CourtPlaylistRowDb[] {
+  return (rows || []).map((r) => {
+    const row = (r || {}) as Record<string, unknown>;
+    return {
+      id: String(row.id || ''),
+      cancha_id: String(row.cancha_id || ''),
+      venue_name: row.venue_name ? String(row.venue_name) : undefined,
+      media_id: String(row.media_id || ''),
+      orden: Number(row.orden || 0),
+      duracion_segundos: Number(row.duracion_segundos || 0),
+      playlist_slot: (row.playlist_slot as PlaylistSlot | undefined) ?? undefined,
+      media_content: normalizeMediaContent(row.media_content),
+    };
+  });
+}
+
 export type CanchaPlaylistConfig = {
   venue_name: string;
   cancha_id: string;
@@ -33,12 +72,13 @@ export type CanchaPlaylistConfig = {
 /** Clasifica fila de cancha_publicidad en vídeo o imagen (slot + tipo). */
 export function playlistRowKind(a: {
   playlist_slot?: string | null;
-  media_content?: { tipo?: string | null } | null;
+  media_content?: { tipo?: string | null } | { tipo?: string | null }[] | null;
 }): 'video' | 'imagen' {
   const ps = a.playlist_slot || 'legacy';
   if (ps === 'imagen') return 'imagen';
   if (ps === 'video') return 'video';
-  const tipo = String(a.media_content?.tipo || '');
+  const mc = normalizeMediaContent(a.media_content as unknown);
+  const tipo = String(mc?.tipo || '');
   return tipo === 'imagen' ? 'imagen' : 'video';
 }
 
@@ -169,18 +209,20 @@ export function partitionPlaylistRows(rows: CourtPlaylistRowDb[]) {
   const video: CourtPlaylistRowDb[] = [];
   const imagen: CourtPlaylistRowDb[] = [];
   for (const r of rows) {
-    const tipo = String(r.media_content?.tipo || '');
+    const mc = normalizeMediaContent((r as unknown as { media_content?: unknown }).media_content);
+    const row = { ...r, media_content: mc } as CourtPlaylistRowDb;
+    const tipo = String(row.media_content?.tipo || '');
     const isImg = tipo === 'imagen';
     const isVid = tipo.includes('video') || tipo === 'video_url' || tipo === 'video_file';
-    const slot = r.playlist_slot || 'legacy';
+    const slot = row.playlist_slot || 'legacy';
     if (slot === 'legacy') {
-      if (isImg) imagen.push(r);
-      else if (isVid) video.push(r);
-      else video.push(r);
+      if (isImg) imagen.push(row);
+      else if (isVid) video.push(row);
+      else video.push(row);
       continue;
     }
-    if (slot === 'imagen') imagen.push(r);
-    else video.push(r);
+    if (slot === 'imagen') imagen.push(row);
+    else video.push(row);
   }
   video.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
   imagen.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));

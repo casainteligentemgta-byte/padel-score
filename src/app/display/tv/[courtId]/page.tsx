@@ -13,6 +13,7 @@ import {
     fetchCanchaPlaylistConfig,
     fetchCanchaPlaylistRows,
     fetchCanchaTiraMessages,
+    normalizeCourtPlaylistRows,
     type CourtPlaylistRowDb,
 } from '@/lib/courtPlaylists';
 
@@ -109,7 +110,7 @@ export default function TVCourtDisplayPage() {
                 setCourtRows([]);
                 return;
             }
-            setCourtRows((res.data as unknown as CourtPlaylistRowDb[]) || []);
+            setCourtRows(normalizeCourtPlaylistRows((res.data as unknown[]) || []));
 
             if (complexFilter) {
                 const cfg = await fetchCanchaPlaylistConfig(supabase, `cancha_${courtId}`, complexFilter);
