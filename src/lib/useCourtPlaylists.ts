@@ -19,6 +19,10 @@ export type CourtPlaylistsState = {
   currentImageUrl: string | null;
   imagenLoop: boolean;
   imagenPausaEntreSeg: number;
+  /** >0: avanzar vídeo cada N minutos (timer); 0: avanzar al terminar el clip */
+  videoCambioCadaMinutos: number;
+  /** true si hay que usar loop en el <video> y no confiar solo en onEnded */
+  videoAdvanceByTimer: boolean;
   tickerMessages: { id: string; mensaje: string }[];
   onVideoEnded: () => void;
   /** Para forzar reinicio si cambia la lista */
@@ -35,6 +39,8 @@ export function useCourtPlaylists(canchaId: string, venueName: string | null | u
   const [rows, setRows] = useState<CourtPlaylistRowDb[]>([]);
   const [imagenLoop, setImagenLoop] = useState(true);
   const [imagenPausa, setImagenPausa] = useState(0);
+  const [videoCambioMinutos, setVideoCambioMinutos] = useState(0);
+  const [imagenCambioMinutos, setImagenCambioMinutos] = useState(0);
   const [tickerMessages, setTickerMessages] = useState<{ id: string; mensaje: string }[]>([]);
   const [videoIndex, setVideoIndex] = useState(0);
   const [imageIndex, setImageIndex] = useState(0);
@@ -57,13 +63,19 @@ export function useCourtPlaylists(canchaId: string, venueName: string | null | u
       if (cfg) {
         setImagenLoop(cfg.imagen_loop !== false);
         setImagenPausa(Math.max(0, Number(cfg.imagen_pausa_entre_segundos) || 0));
+        setVideoCambioMinutos(Math.max(0, Math.floor(Number(cfg.video_cambio_cada_minutos) || 0)));
+        setImagenCambioMinutos(Math.max(0, Math.floor(Number(cfg.imagen_cambio_cada_minutos) || 0)));
       } else {
         setImagenLoop(true);
         setImagenPausa(0);
+        setVideoCambioMinutos(0);
+        setImagenCambioMinutos(0);
       }
     } else {
       setImagenLoop(true);
       setImagenPausa(0);
+      setVideoCambioMinutos(0);
+      setImagenCambioMinutos(0);
     }
 
     const msgs = await fetchCanchaTiraMessages(supabase, canchaId, venueName);
@@ -101,17 +113,17 @@ export function useCourtPlaylists(canchaId: string, venueName: string | null | u
     [video],
   );
 
-  const imageItems = useMemo(
-    () =>
-      imagen
-        .map((r) => {
-          const u = r.media_content?.url;
-          if (!u) return null;
-          return { url: u, duracionSeg: Math.max(1, Number(r.duracion_segundos ?? 10)) };
-        })
-        .filter(Boolean) as { url: string; duracionSeg: number }[],
-    [imagen],
-  );
+  const imageItems = useMemo(() => {
+    const secEach = imagenCambioMinutos > 0 ? imagenCambioMinutos * 60 : null;
+    return imagen
+      .map((r) => {
+        const u = r.media_content?.url;
+        if (!u) return null;
+        const dur = secEach ?? Math.max(1, Number(r.duracion_segundos ?? 10));
+        return { url: u, duracionSeg: dur };
+      })
+      .filter(Boolean) as { url: string; duracionSeg: number }[];
+  }, [imagen, imagenCambioMinutos]);
 
   useEffect(() => {
     setVideoIndex(0);
@@ -143,6 +155,17 @@ export function useCourtPlaylists(canchaId: string, venueName: string | null | u
     return () => window.clearTimeout(t);
   }, [imageItems, imageIndex, imagenLoop, imagenPausa]);
 
+  const videoAdvanceByTimer = videoCambioMinutos > 0 && videoUrls.length > 0;
+
+  useEffect(() => {
+    if (!videoUrls.length || videoCambioMinutos <= 0) return;
+    const ms = videoCambioMinutos * 60 * 1000;
+    const id = window.setInterval(() => {
+      setVideoIndex((i) => (i + 1) % videoUrls.length);
+    }, ms);
+    return () => window.clearInterval(id);
+  }, [videoUrls.join('|'), videoCambioMinutos, videoUrls.length]);
+
   const onVideoEnded = useCallback(() => {
     if (videoUrls.length <= 1) return;
     setVideoIndex((i) => (i + 1) % videoUrls.length);
@@ -163,6 +186,8 @@ export function useCourtPlaylists(canchaId: string, venueName: string | null | u
     currentImageUrl,
     imagenLoop,
     imagenPausaEntreSeg: imagenPausa,
+    videoCambioCadaMinutos: videoCambioMinutos,
+    videoAdvanceByTimer,
     tickerMessages,
     onVideoEnded,
     videoKey: `${vi}-${videoUrls[vi] || ''}`,

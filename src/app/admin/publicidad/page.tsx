@@ -9,8 +9,13 @@ import { dataService } from '@/lib/dataService';
 import Sidebar from '@/components/Sidebar';
 import CourtCard from '@/components/publicidad/CourtCard';
 import type { CourtPlaylistRow } from '@/components/publicidad/CourtCard';
-import { partitionPlaylistRows, upsertCanchaPlaylistConfig, type CourtPlaylistRowDb } from '@/lib/courtPlaylists';
-import { AlertCircle, ChevronLeft, Download, Eye, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
+import {
+  partitionPlaylistRows,
+  playlistRowKind,
+  upsertCanchaPlaylistConfig,
+  type CourtPlaylistRowDb,
+} from '@/lib/courtPlaylists';
+import { AlertCircle, ChevronLeft, Download, Eye, Loader2, Trash2, Upload, X } from 'lucide-react';
 import type { MediaContent, TiraInformativa } from '@/lib/supabase/publicidad';
 
 type VenueWithCourts = {
@@ -62,14 +67,6 @@ const mb = (bytes?: number | null) => {
 const isVideoFile = (f: File) => f.type.startsWith('video/');
 const isImageFile = (f: File) => f.type.startsWith('image/');
 
-function rowPlaylistKind(a: CourtPlaylistRow): 'video' | 'imagen' {
-  const ps = a.playlist_slot || 'legacy';
-  if (ps === 'imagen') return 'imagen';
-  if (ps === 'video') return 'video';
-  const tipo = String(a.media_content?.tipo || '');
-  return tipo === 'imagen' ? 'imagen' : 'video';
-}
-
 export default function AdminPublicidadPage() {
   const { isAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -88,18 +85,21 @@ export default function AdminPublicidadPage() {
   const [selectedVenue, setSelectedVenue] = useState<string>('');
   const [assignments, setAssignments] = useState<CourtPlaylistRow[]>([]);
 
-  const [assignModalOpen, setAssignModalOpen] = useState(false);
-  const [assignCourtId, setAssignCourtId] = useState<string>('');
-  const [assignMediaId, setAssignMediaId] = useState<string>('');
-  const [assignOrden, setAssignOrden] = useState<number>(1);
-  const [assignDuracion, setAssignDuracion] = useState<number>(10);
-  const [assignSlot, setAssignSlot] = useState<'video' | 'imagen'>('video');
-  const [librarySearch, setLibrarySearch] = useState('');
+  const [savingCourtKey, setSavingCourtKey] = useState<string | null>(null);
   /** last_seen ISO por cancha_id (heartbeat desde pizarra) */
   const [canchasHealth, setCanchasHealth] = useState<Record<string, string | null>>({});
   const [tiraLinksByCourt, setTiraLinksByCourt] = useState<Record<string, string[]>>({});
   const [playlistConfigByCourt, setPlaylistConfigByCourt] = useState<
-    Record<string, { imagen_loop: boolean; imagen_pausa_entre_segundos: number }>
+    Record<
+      string,
+      {
+        imagen_loop: boolean;
+        imagen_pausa_entre_segundos: number;
+        video_cambio_cada_minutos: number;
+        imagen_cambio_cada_minutos: number;
+        tira_cambio_cada_minutos: number;
+      }
+    >
   >({});
 
   useEffect(() => {
@@ -138,15 +138,25 @@ export default function AdminPublicidadPage() {
     }
     const keys = selectedVenueCourts.map((c) => c.key);
 
-    const { data, error } = await supabase
+    const r1 = await supabase
       .from('cancha_publicidad')
       .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, media_content(*)')
       .in('cancha_id', keys)
       .eq('venue_name', selectedVenue)
       .order('orden', { ascending: true });
 
-    if (error) throw error;
-    const raw = data || [];
+    let raw: unknown[] = [];
+    if (!r1.error && r1.data) {
+      raw = r1.data as unknown[];
+    } else {
+      const r2 = await supabase
+        .from('cancha_publicidad')
+        .select('id, cancha_id, media_id, orden, duracion_segundos, media_content(*)')
+        .in('cancha_id', keys)
+        .order('orden', { ascending: true });
+      if (r2.error) throw r2.error;
+      raw = (r2.data as unknown[]) || [];
+    }
     const filtered: CourtPlaylistRow[] = raw
       .filter((r) => courtKeySet.has(r.cancha_id))
       .map((r) => {
@@ -187,6 +197,9 @@ export default function AdminPublicidadPage() {
         cmap[r.cancha_id] = {
           imagen_loop: r.imagen_loop !== false,
           imagen_pausa_entre_segundos: Math.max(0, Number(r.imagen_pausa_entre_segundos) || 0),
+          video_cambio_cada_minutos: Math.max(0, Math.floor(Number(r.video_cambio_cada_minutos) || 0)),
+          imagen_cambio_cada_minutos: Math.max(0, Math.floor(Number(r.imagen_cambio_cada_minutos) || 0)),
+          tira_cambio_cada_minutos: Math.max(0, Math.floor(Number(r.tira_cambio_cada_minutos) || 0)),
         };
       });
     }
@@ -238,21 +251,136 @@ export default function AdminPublicidadPage() {
 
   const videos = useMemo(() => mediaList.filter((m) => String(m.tipo).includes('video')), [mediaList]);
   const carrusel = useMemo(() => mediaList.filter((m) => m.tipo === 'imagen'), [mediaList]);
-  const assignableMedia = useMemo(() => [...videos, ...carrusel], [videos, carrusel]);
-  const slotMedia = useMemo(
-    () => (assignSlot === 'video' ? videos : carrusel),
-    [assignSlot, videos, carrusel],
-  );
 
-  const filteredLibrary = useMemo(() => {
-    const s = librarySearch.trim().toLowerCase();
-    const pool = slotMedia;
-    if (!s) return pool;
-    return pool.filter((m) => {
-      const n = (m.nombre_sponsor || m.nombre || '').toLowerCase();
-      return n.includes(s);
-    });
-  }, [slotMedia, librarySearch]);
+  const insertCanchaPublicidadRow = async (base: Record<string, unknown>): Promise<string | null> => {
+    const row: Record<string, unknown> = { ...base };
+    if (selectedVenue) row.venue_name = selectedVenue;
+    let { error } = await supabase.from('cancha_publicidad').insert(row);
+    if (error && error.message?.toLowerCase().includes('venue')) {
+      delete row.venue_name;
+      ({ error } = await supabase.from('cancha_publicidad').insert(row));
+    }
+    if (error && (error.message?.includes('playlist_slot') || error.message?.includes('schema cache'))) {
+      const row2 = { ...row };
+      delete row2.playlist_slot;
+      ({ error } = await supabase.from('cancha_publicidad').insert(row2));
+    }
+    return error?.message ?? null;
+  };
+
+  const saveVideoPlaylistForCourt = async (courtKey: string, orderedMediaIds: string[], cambioMin: number) => {
+    if (!selectedVenue) return;
+    setSavingCourtKey(courtKey);
+    setError(null);
+    try {
+      const toRemove = assignments.filter((a) => a.cancha_id === courtKey && playlistRowKind(a) === 'video');
+      for (const a of toRemove) {
+        const { error } = await supabase.from('cancha_publicidad').delete().eq('id', a.id);
+        if (error) throw new Error(error.message);
+      }
+      const durSec = cambioMin > 0 ? cambioMin * 60 : 30;
+      for (let i = 0; i < orderedMediaIds.length; i++) {
+        const err = await insertCanchaPublicidadRow({
+          cancha_id: courtKey,
+          media_id: orderedMediaIds[i],
+          orden: i + 1,
+          duracion_segundos: durSec,
+          playlist_slot: 'video',
+        });
+        if (err) throw new Error(err);
+      }
+      const { error: cfgErr } = await upsertCanchaPlaylistConfig(supabase, selectedVenue, courtKey, {
+        video_cambio_cada_minutos: cambioMin,
+      });
+      if (cfgErr) throw new Error(cfgErr.message);
+      await fetchAssignments();
+    } catch (e: any) {
+      setError(e?.message || 'No se pudo guardar videos.');
+    } finally {
+      setSavingCourtKey(null);
+    }
+  };
+
+  const saveImagePlaylistForCourt = async (
+    courtKey: string,
+    orderedMediaIds: string[],
+    cambioMin: number,
+    loop: boolean,
+    pausaSeg: number,
+  ) => {
+    if (!selectedVenue) return;
+    setSavingCourtKey(courtKey);
+    setError(null);
+    try {
+      const toRemove = assignments.filter((a) => a.cancha_id === courtKey && playlistRowKind(a) === 'imagen');
+      for (const a of toRemove) {
+        const { error } = await supabase.from('cancha_publicidad').delete().eq('id', a.id);
+        if (error) throw new Error(error.message);
+      }
+      const durSec = cambioMin > 0 ? cambioMin * 60 : 10;
+      for (let i = 0; i < orderedMediaIds.length; i++) {
+        const err = await insertCanchaPublicidadRow({
+          cancha_id: courtKey,
+          media_id: orderedMediaIds[i],
+          orden: i + 1,
+          duracion_segundos: durSec,
+          playlist_slot: 'imagen',
+        });
+        if (err) throw new Error(err);
+      }
+      const { error: cfgErr } = await upsertCanchaPlaylistConfig(supabase, selectedVenue, courtKey, {
+        imagen_cambio_cada_minutos: cambioMin,
+        imagen_loop: loop,
+        imagen_pausa_entre_segundos: pausaSeg,
+      });
+      if (cfgErr) throw new Error(cfgErr.message);
+      await fetchAssignments();
+    } catch (e: any) {
+      setError(e?.message || 'No se pudo guardar imágenes.');
+    } finally {
+      setSavingCourtKey(null);
+    }
+  };
+
+  const saveTiraPlaylistForCourt = async (courtKey: string, orderedTiraIds: string[], cambioMin: number) => {
+    if (!selectedVenue) return;
+    setSavingCourtKey(courtKey);
+    setError(null);
+    try {
+      let del = await supabase
+        .from('cancha_tira')
+        .delete()
+        .eq('cancha_id', courtKey)
+        .eq('venue_name', selectedVenue);
+      if (del.error) {
+        del = await supabase.from('cancha_tira').delete().eq('cancha_id', courtKey);
+        if (del.error) throw new Error(del.error.message);
+      }
+      for (let i = 0; i < orderedTiraIds.length; i++) {
+        const row: Record<string, unknown> = {
+          cancha_id: courtKey,
+          tira_informativa_id: orderedTiraIds[i],
+          orden: i + 1,
+        };
+        if (selectedVenue) row.venue_name = selectedVenue;
+        let ins = await supabase.from('cancha_tira').insert(row);
+        if (ins.error && ins.error.message?.toLowerCase().includes('venue')) {
+          delete row.venue_name;
+          ins = await supabase.from('cancha_tira').insert(row);
+        }
+        if (ins.error) throw new Error(ins.error.message);
+      }
+      const { error: cfgErr } = await upsertCanchaPlaylistConfig(supabase, selectedVenue, courtKey, {
+        tira_cambio_cada_minutos: cambioMin,
+      });
+      if (cfgErr) throw new Error(cfgErr.message);
+      await fetchAssignments();
+    } catch (e: any) {
+      setError(e?.message || 'No se pudo guardar la tira.');
+    } finally {
+      setSavingCourtKey(null);
+    }
+  };
 
   const uploadFiles = async (files: File[]) => {
     if (!files.length) return;
@@ -337,87 +465,6 @@ export default function AdminPublicidadPage() {
     const { error } = await supabase.from('tira_informativa').delete().eq('id', id);
     if (error) return setError(error.message);
     await fetchTicker();
-  };
-
-  const openAssignModal = (canchaId: string, slot: 'video' | 'imagen') => {
-    setAssignSlot(slot);
-    const pool = slot === 'video' ? videos : carrusel;
-    const same = assignments.filter((a) => {
-      if (a.cancha_id !== canchaId) return false;
-      const ps = (a as CourtPlaylistRow).playlist_slot || 'legacy';
-      const tipo = String(a.media_content?.tipo || '');
-      if (slot === 'imagen') return ps === 'imagen' || (ps === 'legacy' && tipo === 'imagen');
-      return ps === 'video' || ps === 'legacy' || (ps !== 'imagen' && tipo !== 'imagen');
-    });
-    const maxO = same.reduce((m, r) => Math.max(m, r.orden || 0), 0);
-    setAssignCourtId(canchaId);
-    setAssignMediaId(pool[0]?.id || '');
-    setAssignOrden(maxO + 1);
-    setAssignDuracion(slot === 'imagen' ? 10 : 30);
-    setLibrarySearch('');
-    setAssignModalOpen(true);
-  };
-
-  const saveAssignment = async () => {
-    if (!selectedVenue || !assignCourtId || !assignMediaId) return;
-    // Sin playlist_slot: muchas BD no tienen migración 020; vídeo/imagen se infiere de media_content.tipo.
-    const row: Record<string, unknown> = {
-      cancha_id: assignCourtId,
-      media_id: assignMediaId,
-      orden: Number(assignOrden) || 1,
-      duracion_segundos: Number(assignDuracion) || 10,
-    };
-    row.venue_name = selectedVenue;
-
-    let { error } = await supabase.from('cancha_publicidad').insert(row);
-    if (error && error.message?.toLowerCase().includes('venue')) {
-      delete row.venue_name;
-      ({ error } = await supabase.from('cancha_publicidad').insert(row));
-    }
-    if (error) return setError(error.message);
-    setAssignModalOpen(false);
-    await fetchAssignments();
-  };
-
-  const removeAssignment = async (id: string) => {
-    const { error } = await supabase.from('cancha_publicidad').delete().eq('id', id);
-    if (error) return setError(error.message);
-    await fetchAssignments();
-  };
-
-  const saveImagenConfigForCourt = async (courtKey: string, loop: boolean, pausaSeg: number) => {
-    if (!selectedVenue) return;
-    setError(null);
-    const { error } = await upsertCanchaPlaylistConfig(supabase, selectedVenue, courtKey, {
-      imagen_loop: loop,
-      imagen_pausa_entre_segundos: pausaSeg,
-    });
-    if (error) return setError(error.message);
-    await fetchAssignments();
-  };
-
-  const toggleCanchaTira = async (courtKey: string, tiraId: string, selected: boolean) => {
-    if (!selectedVenue) return;
-    setError(null);
-    if (selected) {
-      const orden = (tiraLinksByCourt[courtKey]?.length || 0) + 1;
-      const { error } = await supabase.from('cancha_tira').insert({
-        venue_name: selectedVenue,
-        cancha_id: courtKey,
-        tira_informativa_id: tiraId,
-        orden,
-      });
-      if (error) return setError(error.message);
-    } else {
-      const { error } = await supabase
-        .from('cancha_tira')
-        .delete()
-        .eq('venue_name', selectedVenue)
-        .eq('cancha_id', courtKey)
-        .eq('tira_informativa_id', tiraId);
-      if (error) return setError(error.message);
-    }
-    await fetchAssignments();
   };
 
   const renderMediaTable = (title: string, items: MediaContent[]) => (
@@ -578,17 +625,24 @@ export default function AdminPublicidadPage() {
                     courtKey={court.key}
                     displayCourtNum={court.displayNum}
                     title={court.label}
+                    libraryVideos={videos}
+                    libraryImages={carrusel}
                     videoRows={video as CourtPlaylistRow[]}
                     imageRows={imagen as CourtPlaylistRow[]}
                     tiraList={tiraList.map((t) => ({ id: t.id, mensaje: t.mensaje }))}
                     linkedTiraIds={tiraLinksByCourt[court.key] || []}
+                    videoCambioMinutos={cfg?.video_cambio_cada_minutos ?? 0}
+                    imagenCambioMinutos={cfg?.imagen_cambio_cada_minutos ?? 0}
+                    tiraCambioMinutos={cfg?.tira_cambio_cada_minutos ?? 0}
                     imagenLoop={cfg?.imagen_loop ?? true}
                     imagenPausaSeg={cfg?.imagen_pausa_entre_segundos ?? 0}
                     lastSeenIso={canchasHealth[court.key] ?? null}
-                    onAddClip={(slot) => openAssignModal(court.key, slot)}
-                    onRemoveRow={removeAssignment}
-                    onToggleTira={(tiraId, sel) => toggleCanchaTira(court.key, tiraId, sel)}
-                    onSaveImagenConfig={(loop, pausa) => saveImagenConfigForCourt(court.key, loop, pausa)}
+                    isSaving={savingCourtKey === court.key}
+                    onSaveVideoPlaylist={(ids, min) => saveVideoPlaylistForCourt(court.key, ids, min)}
+                    onSaveImagePlaylist={(ids, min, loop, pausa) =>
+                      saveImagePlaylistForCourt(court.key, ids, min, loop, pausa)
+                    }
+                    onSaveTiraPlaylist={(ids, min) => saveTiraPlaylistForCourt(court.key, ids, min)}
                   />
                 );
               })}
@@ -596,66 +650,6 @@ export default function AdminPublicidadPage() {
           </section>
         </div>
       </main>
-
-      {assignModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#111] border border-white/10 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-black uppercase">
-                Añadir {assignSlot === 'video' ? 'video' : 'imagen'} — {assignCourtId}
-              </h3>
-              <button type="button" onClick={() => setAssignModalOpen(false)} className="p-2 rounded-lg bg-white/5 shrink-0"><X size={14} /></button>
-            </div>
-
-            <div>
-              <label className="text-[10px] uppercase text-white/60">Biblioteca de medios</label>
-              <div className="relative mt-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                <input
-                  value={librarySearch}
-                  onChange={(e) => setLibrarySearch(e.target.value)}
-                  placeholder="Buscar por nombre..."
-                  className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-3 py-2 text-sm text-white placeholder:text-white/45 outline-none focus:border-white/25"
-                />
-              </div>
-            </div>
-
-            <div className="max-h-48 overflow-y-auto rounded-xl border border-white/10 divide-y divide-white/10">
-              {filteredLibrary.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setAssignMediaId(m.id)}
-                  className={`w-full text-left px-3 py-2 text-xs font-bold transition-colors ${assignMediaId === m.id ? 'bg-padel-primary/20 text-padel-primary' : 'hover:bg-white/5 text-white/90'}`}
-                >
-                  {m.nombre_sponsor || m.nombre || m.id}
-                  <span className="block text-[10px] font-normal text-white/40">{String(m.tipo)}</span>
-                </button>
-              ))}
-              {filteredLibrary.length === 0 && (
-                <p className="px-3 py-6 text-center text-white/40 text-xs">No hay medios que coincidan</p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] uppercase text-white/60">Orden</label>
-                <input type="number" min={1} value={assignOrden} onChange={(e) => setAssignOrden(Number(e.target.value))} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-white/25 [color-scheme:dark]" />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase text-white/60">
-                  {assignSlot === 'imagen' ? 'Segundos por imagen' : 'Segundos (respaldo si el vídeo no avanza)'}
-                </label>
-                <input type="number" min={1} value={assignDuracion} onChange={(e) => setAssignDuracion(Number(e.target.value))} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-white/25 [color-scheme:dark]" />
-              </div>
-            </div>
-
-            <button type="button" onClick={saveAssignment} className="w-full rounded-xl bg-padel-primary text-black py-2.5 text-xs font-black uppercase flex items-center justify-center gap-2">
-              <Plus size={14} /> Guardar en playlist
-            </button>
-          </div>
-        </div>
-      )}
 
       {previewUrl && (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">

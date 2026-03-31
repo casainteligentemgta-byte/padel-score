@@ -230,8 +230,8 @@ export default function CourtDisplayPage() {
                         currentImageUrl={playlists.currentImageUrl}
                         videoKey={playlists.videoKey}
                         imageKey={playlists.imageKey}
-                        onVideoEnded={playlists.onVideoEnded}
-                        singleVideoLoop={playlists.videoUrls.length <= 1}
+                        onVideoEnded={playlists.videoAdvanceByTimer ? () => {} : playlists.onVideoEnded}
+                        singleVideoLoop={playlists.videoUrls.length <= 1 || playlists.videoAdvanceByTimer}
                     />
                     <div className="h-8 bg-gradient-to-t from-black to-transparent pointer-events-none" />
                 </div>
@@ -397,8 +397,8 @@ export default function CourtDisplayPage() {
                     currentImageUrl={playlists.currentImageUrl}
                     videoKey={playlists.videoKey}
                     imageKey={playlists.imageKey}
-                    onVideoEnded={playlists.onVideoEnded}
-                    singleVideoLoop={playlists.videoUrls.length <= 1}
+                    onVideoEnded={playlists.videoAdvanceByTimer ? () => {} : playlists.onVideoEnded}
+                    singleVideoLoop={playlists.videoUrls.length <= 1 || playlists.videoAdvanceByTimer}
                 />
             </div>
 

@@ -24,7 +24,23 @@ export type CanchaPlaylistConfig = {
   cancha_id: string;
   imagen_loop: boolean;
   imagen_pausa_entre_segundos: number;
+  /** 0 = loop continuo (avance natural); >0 = minutos entre cambios forzados */
+  video_cambio_cada_minutos?: number;
+  imagen_cambio_cada_minutos?: number;
+  tira_cambio_cada_minutos?: number;
 };
+
+/** Clasifica fila de cancha_publicidad en vídeo o imagen (slot + tipo). */
+export function playlistRowKind(a: {
+  playlist_slot?: string | null;
+  media_content?: { tipo?: string | null } | null;
+}): 'video' | 'imagen' {
+  const ps = a.playlist_slot || 'legacy';
+  if (ps === 'imagen') return 'imagen';
+  if (ps === 'video') return 'video';
+  const tipo = String(a.media_content?.tipo || '');
+  return tipo === 'imagen' ? 'imagen' : 'video';
+}
 
 export async function fetchCanchaPlaylistRows(
   supabase: SupabaseClient,
@@ -38,7 +54,16 @@ export async function fetchCanchaPlaylistRows(
     .eq('cancha_id', canchaId)
     .order('orden', { ascending: true });
   if (vn) q = q.eq('venue_name', vn);
-  return await q;
+  const r = await q;
+  if (!r.error) return r;
+
+  // BD antigua sin columna venue_name: no filtrar por sede.
+  let q2 = supabase
+    .from('cancha_publicidad')
+    .select('id, cancha_id, media_id, orden, duracion_segundos, media_content(*)')
+    .eq('cancha_id', canchaId)
+    .order('orden', { ascending: true });
+  return await q2;
 }
 
 export async function fetchCanchaPlaylistConfig(
@@ -61,15 +86,46 @@ export async function upsertCanchaPlaylistConfig(
   supabase: SupabaseClient,
   venueName: string,
   canchaId: string,
-  patch: { imagen_loop?: boolean; imagen_pausa_entre_segundos?: number },
+  patch: {
+    imagen_loop?: boolean;
+    imagen_pausa_entre_segundos?: number;
+    video_cambio_cada_minutos?: number;
+    imagen_cambio_cada_minutos?: number;
+    tira_cambio_cada_minutos?: number;
+  },
 ) {
-  const row = {
-    venue_name: venueName.trim(),
+  const vn = venueName.trim();
+  const { data: existing } = await supabase
+    .from('cancha_playlist_config')
+    .select('*')
+    .eq('cancha_id', canchaId)
+    .eq('venue_name', vn)
+    .maybeSingle();
+
+  const ex = (existing || {}) as Record<string, unknown>;
+  const row: Record<string, unknown> = {
+    venue_name: vn,
     cancha_id: canchaId,
-    imagen_loop: patch.imagen_loop ?? true,
-    imagen_pausa_entre_segundos: Math.max(0, Number(patch.imagen_pausa_entre_segundos) || 0),
+    imagen_loop: patch.imagen_loop ?? (ex.imagen_loop as boolean) ?? true,
+    imagen_pausa_entre_segundos:
+      patch.imagen_pausa_entre_segundos !== undefined
+        ? Math.max(0, Number(patch.imagen_pausa_entre_segundos) || 0)
+        : Math.max(0, Number(ex.imagen_pausa_entre_segundos) || 0),
+    video_cambio_cada_minutos:
+      patch.video_cambio_cada_minutos !== undefined
+        ? Math.max(0, Math.floor(Number(patch.video_cambio_cada_minutos) || 0))
+        : Math.max(0, Math.floor(Number(ex.video_cambio_cada_minutos) || 0)),
+    imagen_cambio_cada_minutos:
+      patch.imagen_cambio_cada_minutos !== undefined
+        ? Math.max(0, Math.floor(Number(patch.imagen_cambio_cada_minutos) || 0))
+        : Math.max(0, Math.floor(Number(ex.imagen_cambio_cada_minutos) || 0)),
+    tira_cambio_cada_minutos:
+      patch.tira_cambio_cada_minutos !== undefined
+        ? Math.max(0, Math.floor(Number(patch.tira_cambio_cada_minutos) || 0))
+        : Math.max(0, Math.floor(Number(ex.tira_cambio_cada_minutos) || 0)),
     updated_at: new Date().toISOString(),
   };
+
   return supabase.from('cancha_playlist_config').upsert(row, { onConflict: 'venue_name,cancha_id' });
 }
 

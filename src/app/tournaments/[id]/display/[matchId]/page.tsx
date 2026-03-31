@@ -1142,6 +1142,15 @@ export default function FullScreenDisplay() {
         return () => clearInterval(interval);
     }, [adFreq, adDur, adMedia.length]);
 
+    const openMediaConfigTab = (tab: 'video' | 'image' | 'text') => {
+        setDraftVideoSelectedUrls(activeVideoSelectedUrls);
+        setDraftImageSelectedUrls(activeImageSelectedUrls);
+        setDraftTickerKeys(activeTickerKeys);
+        setDraftTouched(true);
+        setMediaConfigActiveTab(tab);
+        setMediaConfigOpen(true);
+    };
+
     if (loading) return (
         <div className="h-screen bg-black flex items-center justify-center">
             <div className="w-12 h-12 border-4 border-padel-primary border-t-transparent rounded-full animate-spin" />
@@ -1482,59 +1491,7 @@ export default function FullScreenDisplay() {
                             {/* Left: Tournament & Match Info */}
                             <div className="flex items-center gap-4 h-full py-2">
                                 <div className="flex flex-col items-stretch gap-2 pr-2 border-r border-white/10">
-                                    <div className="flex flex-col gap-1.5">
-                                        <span className="text-[7px] font-black uppercase tracking-widest text-white/35 px-0.5">Publicidad</span>
-                                        <div className="flex flex-col gap-1">
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setDraftVideoSelectedUrls(activeVideoSelectedUrls);
-                                                    setDraftImageSelectedUrls(activeImageSelectedUrls);
-                                                    setDraftTickerKeys(activeTickerKeys);
-                                                    setDraftTouched(true);
-                                                    setMediaConfigActiveTab('video');
-                                                    setMediaConfigOpen(true);
-                                                }}
-                                                className={`px-2.5 py-1.5 rounded-lg border text-left transition-colors flex items-center gap-2 ${mediaConfigOpen && mediaConfigActiveTab === 'video' ? 'bg-padel-primary/15 border-padel-primary/50 text-padel-primary' : 'bg-black/40 border-white/10 hover:bg-white/5 text-white/80'}`}
-                                                title="Playlist de videos"
-                                            >
-                                                <Video className="w-3.5 h-3.5 shrink-0" />
-                                                <span className="text-[9px] font-black uppercase tracking-widest">Video</span>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setDraftVideoSelectedUrls(activeVideoSelectedUrls);
-                                                    setDraftImageSelectedUrls(activeImageSelectedUrls);
-                                                    setDraftTickerKeys(activeTickerKeys);
-                                                    setDraftTouched(true);
-                                                    setMediaConfigActiveTab('image');
-                                                    setMediaConfigOpen(true);
-                                                }}
-                                                className={`px-2.5 py-1.5 rounded-lg border text-left transition-colors flex items-center gap-2 ${mediaConfigOpen && mediaConfigActiveTab === 'image' ? 'bg-padel-primary/15 border-padel-primary/50 text-padel-primary' : 'bg-black/40 border-white/10 hover:bg-white/5 text-white/80'}`}
-                                                title="Playlist de imágenes"
-                                            >
-                                                <ImageIcon className="w-3.5 h-3.5 shrink-0" />
-                                                <span className="text-[9px] font-black uppercase tracking-widest">Imagen</span>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setDraftVideoSelectedUrls(activeVideoSelectedUrls);
-                                                    setDraftImageSelectedUrls(activeImageSelectedUrls);
-                                                    setDraftTickerKeys(activeTickerKeys);
-                                                    setDraftTouched(true);
-                                                    setMediaConfigActiveTab('text');
-                                                    setMediaConfigOpen(true);
-                                                }}
-                                                className={`px-2.5 py-1.5 rounded-lg border text-left transition-colors flex items-center gap-2 ${mediaConfigOpen && mediaConfigActiveTab === 'text' ? 'bg-padel-primary/15 border-padel-primary/50 text-padel-primary' : 'bg-black/40 border-white/10 hover:bg-white/5 text-white/80'}`}
-                                                title="Tira informativa"
-                                            >
-                                                <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-                                                <span className="text-[9px] font-black uppercase tracking-widest">Texto</span>
-                                            </button>
-                                        </div>
-                                    </div>
+                                    <span className="text-[7px] font-black uppercase tracking-widest text-white/35 px-0.5">Publicidad</span>
                                     <button
                                         type="button"
                                         onClick={() => setMinimalScreensMode((v) => !v)}
@@ -1932,7 +1889,7 @@ export default function FullScreenDisplay() {
                                 </AnimatePresence>
                             </div>
                             {/* Carousel Ad / Sponsors (takes the right half) */}
-                            <div className="w-1/2 border border-white/10 bg-white/[0.03] relative overflow-hidden rounded-2xl">
+                            <div className="w-1/2 min-w-0 border border-white/10 bg-white/[0.03] relative overflow-hidden rounded-2xl">
                                 <AnimatePresence mode="wait">
                                     {mediaSelectionMode === 'manual' && rotationImageItems.length > 0 ? (
                                         (() => {
