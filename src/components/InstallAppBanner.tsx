@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, Smartphone } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 
 const STORAGE_KEY = 'padel-score-install-banner-dismissed';
 const HIDE_DAYS = 7;
@@ -37,12 +38,30 @@ function dismiss(): void {
 
 export function InstallAppBanner() {
   const [visible, setVisible] = useState(false);
+  const pathname = usePathname();
+
+  const shouldHideOnPath =
+    !!pathname &&
+    (
+      pathname.startsWith('/display') ||
+      pathname.includes('/display/') ||
+      pathname.startsWith('/marker') ||
+      pathname.startsWith('/p/') ||
+      pathname.includes('/score/')
+    );
 
   useEffect(() => {
+    // Ocultar totalmente en pizarras/marcadores y pantallas de emisión
+    if (shouldHideOnPath) {
+      setVisible(false);
+      return;
+    }
     if (isStandalone()) return;
     if (wasDismissed()) return;
     setVisible(true);
-  }, []);
+  }, [shouldHideOnPath]);
+
+  if (shouldHideOnPath) return null;
 
   const handleClose = () => {
     dismiss();

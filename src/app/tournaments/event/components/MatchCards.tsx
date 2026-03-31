@@ -146,6 +146,7 @@ export function NextMatchCard({
     // URL corta para la pizarra: www.smartpadel58.com/S1/C1
     const courtNum = match.court ?? (match.courtIndex != null ? match.courtIndex + 1 : rank + 1);
     const shortPath = buildShortPath(match._complexName, courtNum);
+    const courtLabel = match.courtName ?? (courtNum != null ? `Pista ${courtNum}` : 'Pista –');
     const shortUrl = shortPath ? `smartpadel58.com/pizarra/${shortPath}` : '';
 
 
@@ -298,7 +299,11 @@ export function NextMatchCard({
                     <span className="text-[9px] font-bold text-[#ccff00]/90 italic">{formatHHMM(match.scheduledTime)}</span>
                     <span className="text-[#ccff00]/50">·</span>
                     <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#ccff00]">
-                        {rankLabelFull[safeRank] ?? (match.courtName ?? (match.court != null ? `Pista ${match.court}` : 'Pista –'))}
+                        {rankLabelFull[safeRank] ?? 'Cancha'}
+                    </span>
+                    <span className="text-[#ccff00]/50">·</span>
+                    <span className="text-[9px] font-black uppercase tracking-[0.15em] text-[#ccff00]">
+                        {courtLabel}
                     </span>
                     <span className="text-[#ccff00]/50">·</span>
                     <span className="text-[9px] font-bold text-[#ccff00]/90 uppercase tracking-tight">

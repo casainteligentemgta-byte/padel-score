@@ -102,7 +102,9 @@ export async function fetchCanchaPlaylistRows(
     .order('orden', { ascending: true });
   if (vn) q = q.eq('venue_name', vn);
   const r = await q;
-  if (!r.error) return { ...r, data: normalizeCourtPlaylistRows((r.data as unknown[]) || []) };
+  if (!r.error && ((r.data as unknown[]) || []).length > 0) {
+    return { ...r, data: normalizeCourtPlaylistRows((r.data as unknown[]) || []) };
+  }
 
   // Algunas BD exponen la relación como `publicidad` en lugar de `media_content`.
   let qRelFallback = supabase
@@ -112,7 +114,7 @@ export async function fetchCanchaPlaylistRows(
     .order('orden', { ascending: true });
   if (vn) qRelFallback = qRelFallback.eq('venue_name', vn);
   const rRelFallback = await qRelFallback;
-  if (!rRelFallback.error) {
+  if (!rRelFallback.error && ((rRelFallback.data as unknown[]) || []).length > 0) {
     return { ...rRelFallback, data: normalizeCourtPlaylistRows((rRelFallback.data as unknown[]) || []) };
   }
 
@@ -147,8 +149,17 @@ export async function fetchCanchaPlaylistConfig(
     .eq('cancha_id', canchaId)
     .eq('venue_name', venueName.trim())
     .maybeSingle();
-  if (error || !data) return null;
-  return data as CanchaPlaylistConfig;
+  if (!error && data) return data as CanchaPlaylistConfig;
+
+  // Fallback: algunas instalaciones no guardan/filtran por venue_name.
+  const { data: data2, error: error2 } = await supabase
+    .from('cancha_playlist_config')
+    .select('*')
+    .eq('cancha_id', canchaId)
+    .limit(1)
+    .maybeSingle();
+  if (error2 || !data2) return null;
+  return data2 as CanchaPlaylistConfig;
 }
 
 export async function upsertCanchaPlaylistConfig(
@@ -224,7 +235,29 @@ export async function fetchCanchaTiraMessages(
         .filter((m) => order.has(m.id))
         .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
     }
+
+    // Fallback 1: cancha_tira sin filtrar por sede.
+    const { data: links2, error: e1b } = await supabase
+      .from('cancha_tira')
+      .select('tira_informativa_id, orden')
+      .eq('cancha_id', canchaId)
+      .order('orden', { ascending: true });
+    if (!e1b && links2?.length) {
+      const ids = links2.map((l: { tira_informativa_id: string }) => l.tira_informativa_id);
+      const { data: msgs, error: e2 } = await supabase
+        .from('tira_informativa')
+        .select('id, mensaje, activo')
+        .in('id', ids)
+        .eq('activo', true);
+      if (!e2 && msgs?.length) {
+        const order = new Map(ids.map((id, i) => [id, i]));
+        return (msgs as { id: string; mensaje: string }[])
+          .filter((m) => order.has(m.id))
+          .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+      }
+    }
   }
+  // Fallback 2: mensajes globales.
   const { data: all, error } = await supabase
     .from('tira_informativa')
     .select('id, mensaje')
