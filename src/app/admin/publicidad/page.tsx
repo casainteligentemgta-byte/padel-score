@@ -157,17 +157,25 @@ export default function AdminPublicidadPage() {
       if (r2.error) throw r2.error;
       raw = (r2.data as unknown[]) || [];
     }
-    const filtered: CourtPlaylistRow[] = raw
+    type RowIn = {
+      id: string;
+      cancha_id: string;
+      orden: number;
+      duracion_segundos: number;
+      playlist_slot?: string | null;
+      media_content?: MediaContent | MediaContent[] | null;
+    };
+    const filtered: CourtPlaylistRow[] = (raw as RowIn[])
       .filter((r) => courtKeySet.has(r.cancha_id))
       .map((r) => {
-        const mc = (r as { media_content?: MediaContent | MediaContent[] | null }).media_content;
+        const mc = r.media_content;
         const media_content = Array.isArray(mc) ? mc[0] ?? null : mc ?? null;
         return {
-          id: String((r as { id: string }).id),
-          cancha_id: String((r as { cancha_id: string }).cancha_id),
-          orden: Number((r as { orden: number }).orden),
-          duracion_segundos: Number((r as { duracion_segundos: number }).duracion_segundos),
-          playlist_slot: (r as { playlist_slot?: string | null }).playlist_slot ?? undefined,
+          id: String(r.id),
+          cancha_id: String(r.cancha_id),
+          orden: Number(r.orden),
+          duracion_segundos: Number(r.duracion_segundos),
+          playlist_slot: r.playlist_slot ?? undefined,
           media_content,
         };
       });
@@ -190,7 +198,16 @@ export default function AdminPublicidadPage() {
     }
     setTiraLinksByCourt(tmap);
 
-    const cmap: Record<string, { imagen_loop: boolean; imagen_pausa_entre_segundos: number }> = {};
+    const cmap: Record<
+      string,
+      {
+        imagen_loop: boolean;
+        imagen_pausa_entre_segundos: number;
+        video_cambio_cada_minutos: number;
+        imagen_cambio_cada_minutos: number;
+        tira_cambio_cada_minutos: number;
+      }
+    > = {};
     const cr = await supabase.from('cancha_playlist_config').select('*').eq('venue_name', selectedVenue);
     if (!cr.error && cr.data) {
       (cr.data as any[]).forEach((r) => {
