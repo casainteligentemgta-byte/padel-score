@@ -235,11 +235,8 @@ export default function CourtDisplayPage() {
                     </div>
                 </div>
 
-                <div className="absolute top-0 left-0 right-0 z-20">
-                    <TickerMarquee messages={playlists.tickerMessages} />
-                </div>
-
                 <div className="absolute bottom-0 left-0 right-0 z-10">
+                    <TickerMarquee messages={playlists.tickerMessages} />
                     <DualPlaylistStrip
                         canchaId={canchaId}
                         currentVideoUrl={playlists.currentVideoUrl}
@@ -404,8 +401,6 @@ export default function CourtDisplayPage() {
                 })()}
             </div>
 
-            <TickerMarquee messages={playlists.tickerMessages} />
-
             <div className="relative border-t border-white/10 flex-shrink-0 overflow-hidden">
                 <DualPlaylistStrip
                     canchaId={canchaId}
@@ -417,6 +412,7 @@ export default function CourtDisplayPage() {
                     singleVideoLoop={playlists.videoUrls.length <= 1 || playlists.videoAdvanceByTimer}
                 />
             </div>
+            <TickerMarquee messages={playlists.tickerMessages} />
 
             <style jsx global>{`
                 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');

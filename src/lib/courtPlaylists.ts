@@ -2,6 +2,49 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type PlaylistSlot = 'video' | 'imagen' | 'legacy';
 
+function canchaIdCandidates(canchaId: string): string[] {
+  const id = String(canchaId || '').trim();
+  if (!id) return [];
+  const m = id.match(/^cancha_(\d+)$/i);
+  if (m) return [id, m[1]];
+  if (/^\d+$/.test(id)) return [id, `cancha_${id}`];
+  return [id];
+}
+
+async function enrichRowsWithMediaById(
+  supabase: SupabaseClient,
+  rows: CourtPlaylistRowDb[],
+): Promise<CourtPlaylistRowDb[]> {
+  const missing = rows.filter((r) => !r.media_content?.url && r.media_id).map((r) => r.media_id);
+  if (!missing.length) return rows;
+  const ids = Array.from(new Set(missing));
+  const { data } = await supabase
+    .from('media_content')
+    .select('id, tipo, url, nombre_sponsor, nombre')
+    .in('id', ids);
+  const byId = new Map(
+    ((data || []) as Array<{ id: string; tipo: string; url: string; nombre_sponsor?: string | null; nombre?: string | null }>).map((m) => [
+      String(m.id),
+      m,
+    ]),
+  );
+  return rows.map((r) => {
+    if (r.media_content?.url) return r;
+    const m = byId.get(String(r.media_id));
+    if (!m) return r;
+    return {
+      ...r,
+      media_content: {
+        id: String(m.id || ''),
+        tipo: String(m.tipo || ''),
+        url: String(m.url || ''),
+        nombre_sponsor: m.nombre_sponsor ?? null,
+        nombre: m.nombre ?? null,
+      },
+    };
+  });
+}
+
 export type CourtPlaylistRowDb = {
   id: string;
   cancha_id: string;
@@ -94,46 +137,82 @@ export async function fetchCanchaPlaylistRows(
   canchaId: string,
   venueName?: string | null,
 ) {
+  const canchaIds = canchaIdCandidates(canchaId);
+  const hasPlayableRows = (rows: CourtPlaylistRowDb[]) =>
+    rows.some((x) => Boolean(x.media_content?.url));
+
   const vn = venueName?.trim() || null;
   let q = supabase
     .from('cancha_publicidad')
     .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, media_content(*)')
-    .eq('cancha_id', canchaId)
+    .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   if (vn) q = q.eq('venue_name', vn);
   const r = await q;
   if (!r.error && ((r.data as unknown[]) || []).length > 0) {
-    return { ...r, data: normalizeCourtPlaylistRows((r.data as unknown[]) || []) };
+    const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r.data as unknown[]) || []));
+    if (hasPlayableRows(norm)) return { ...r, data: norm };
+  }
+  if (vn) {
+    const rLike = await supabase
+      .from('cancha_publicidad')
+      .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, media_content(*)')
+      .in('cancha_id', canchaIds)
+      .ilike('venue_name', vn)
+      .order('orden', { ascending: true });
+    if (!rLike.error && ((rLike.data as unknown[]) || []).length > 0) {
+      const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((rLike.data as unknown[]) || []));
+      if (hasPlayableRows(norm)) return { ...rLike, data: norm };
+    }
   }
 
   // Algunas BD exponen la relación como `publicidad` en lugar de `media_content`.
   let qRelFallback = supabase
     .from('cancha_publicidad')
     .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, publicidad(*)')
-    .eq('cancha_id', canchaId)
+    .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   if (vn) qRelFallback = qRelFallback.eq('venue_name', vn);
   const rRelFallback = await qRelFallback;
   if (!rRelFallback.error && ((rRelFallback.data as unknown[]) || []).length > 0) {
-    return { ...rRelFallback, data: normalizeCourtPlaylistRows((rRelFallback.data as unknown[]) || []) };
+    const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((rRelFallback.data as unknown[]) || []));
+    if (hasPlayableRows(norm)) return { ...rRelFallback, data: norm };
+  }
+  if (vn) {
+    const rRelLike = await supabase
+      .from('cancha_publicidad')
+      .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, publicidad(*)')
+      .in('cancha_id', canchaIds)
+      .ilike('venue_name', vn)
+      .order('orden', { ascending: true });
+    if (!rRelLike.error && ((rRelLike.data as unknown[]) || []).length > 0) {
+      const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((rRelLike.data as unknown[]) || []));
+      if (hasPlayableRows(norm)) return { ...rRelLike, data: norm };
+    }
   }
 
-  // BD antigua sin columna venue_name: no filtrar por sede.
+  // Fallback: sin sede (cuando no coincide venue_name en la data).
   let q2 = supabase
     .from('cancha_publicidad')
     .select('id, cancha_id, media_id, orden, duracion_segundos, media_content(*)')
-    .eq('cancha_id', canchaId)
+    .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   const r2 = await q2;
-  if (!r2.error) return { ...r2, data: normalizeCourtPlaylistRows((r2.data as unknown[]) || []) };
+  if (!r2.error) {
+    const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r2.data as unknown[]) || []));
+    if (hasPlayableRows(norm) || norm.length > 0) return { ...r2, data: norm };
+  }
 
   let q3 = supabase
     .from('cancha_publicidad')
     .select('id, cancha_id, media_id, orden, duracion_segundos, publicidad(*)')
-    .eq('cancha_id', canchaId)
+    .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   const r3 = await q3;
-  if (!r3.error) return { ...r3, data: normalizeCourtPlaylistRows((r3.data as unknown[]) || []) };
+  if (!r3.error) {
+    const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r3.data as unknown[]) || []));
+    return { ...r3, data: norm };
+  }
   return r3;
 }
 
@@ -143,10 +222,11 @@ export async function fetchCanchaPlaylistConfig(
   venueName: string,
 ): Promise<CanchaPlaylistConfig | null> {
   if (!venueName.trim()) return null;
+  const canchaIds = canchaIdCandidates(canchaId);
   const { data, error } = await supabase
     .from('cancha_playlist_config')
     .select('*')
-    .eq('cancha_id', canchaId)
+    .in('cancha_id', canchaIds)
     .eq('venue_name', venueName.trim())
     .maybeSingle();
   if (!error && data) return data as CanchaPlaylistConfig;
@@ -155,7 +235,7 @@ export async function fetchCanchaPlaylistConfig(
   const { data: data2, error: error2 } = await supabase
     .from('cancha_playlist_config')
     .select('*')
-    .eq('cancha_id', canchaId)
+    .in('cancha_id', canchaIds)
     .limit(1)
     .maybeSingle();
   if (error2 || !data2) return null;
@@ -214,12 +294,13 @@ export async function fetchCanchaTiraMessages(
   canchaId: string,
   venueName: string | null | undefined,
 ): Promise<{ id: string; mensaje: string }[]> {
+  const canchaIds = canchaIdCandidates(canchaId);
   const vn = venueName?.trim();
   if (vn) {
     const { data: links, error: e1 } = await supabase
       .from('cancha_tira')
       .select('tira_informativa_id, orden')
-      .eq('cancha_id', canchaId)
+      .in('cancha_id', canchaIds)
       .eq('venue_name', vn)
       .order('orden', { ascending: true });
     if (!e1 && links?.length) {
@@ -240,7 +321,7 @@ export async function fetchCanchaTiraMessages(
     const { data: links2, error: e1b } = await supabase
       .from('cancha_tira')
       .select('tira_informativa_id, orden')
-      .eq('cancha_id', canchaId)
+      .in('cancha_id', canchaIds)
       .order('orden', { ascending: true });
     if (!e1b && links2?.length) {
       const ids = links2.map((l: { tira_informativa_id: string }) => l.tira_informativa_id);
