@@ -179,7 +179,6 @@ export default function CourtCard({
     ? `/display/court/${displayCourtNum}?complex=${encodeURIComponent(venueName)}${minimalMode ? '&minimal=1' : ''}`
     : `/display/court/${displayCourtNum}${minimalMode ? '?minimal=1' : ''}`;
   const previewSrc = directDisplayUrl;
-  const previewHref = directDisplayUrl;
   const shortHref = pizarraShortPath ? `/${pizarraShortPath}${minimalMode ? '?minimal=1' : ''}` : null;
 
   const videoById = (id: string) => libraryVideos.find((m) => m.id === id);
@@ -230,23 +229,12 @@ export default function CourtCard({
           title={`preview-${courtKey}`}
         />
       </div>
-      {previewHref && (
-        <a
-          href={previewHref}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-2 block text-center text-[9px] font-black uppercase tracking-widest text-padel-primary/90 hover:text-padel-primary underline-offset-2 hover:underline truncate px-1"
-          title="Abrir display en nueva pestaña"
-        >
-          Abrir display/court
-        </a>
-      )}
       {shortHref && (
         <a
           href={shortHref}
           target="_blank"
           rel="noreferrer"
-          className="mt-1 block text-center text-[9px] font-black uppercase tracking-widest text-white/45 hover:text-white/70 underline-offset-2 hover:underline truncate px-1"
+          className="mt-2 block text-center text-[9px] font-black uppercase tracking-widest text-white/45 hover:text-white/70 underline-offset-2 hover:underline truncate px-1"
           title="Abrir URL corta de pizarra"
         >
           smartpadel58.com/{pizarraShortPath}

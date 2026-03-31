@@ -1597,10 +1597,10 @@ export default function FullScreenDisplay() {
                             </div>
                         </div>
 
-                        {/* ══════════════ MARCADOR / PIZARRA (30%) ══════════════ */}
+                        {/* ══════════════ MARCADOR / PIZARRA (GRANDE) ══════════════ */}
                         <div
                             className="flex-shrink-0 border border-white/10 bg-black/60 overflow-hidden flex flex-col mb-[0.8vh] relative shadow-2xl"
-                            style={{ height: '30.5vh', borderRadius: 'clamp(12px,1.6vw,26px)' }}
+                            style={{ height: '50vh', borderRadius: 'clamp(12px,1.6vw,26px)' }}
                         >
                             {/* Match Title Bar (FINAL - TOURNAMENT NAME) */}
                             <div className="h-[20%] flex items-center justify-center bg-black relative border-b border-white/[0.05]">
@@ -1813,14 +1813,15 @@ export default function FullScreenDisplay() {
                             })()}
                         </div>
 
-                        {/* ══════════════ PUBLICIDAD (50%) ══════════════ */}
+                        {/* ══════════════ PUBLICIDAD MINI (VIDEO + IMAGEN) ══════════════ */}
                         {!minimalScreensMode && (
                             <div
                                 className="flex-shrink-0 flex flex-row gap-2 mb-[1vh] px-6"
-                                style={{ height: '49vh' }}
+                                style={{ height: '18.5vh' }}
                             >
                             {/* Video Ad / Hub Media (takes the left half) */}
                             <div className="w-1/2 border border-white/8 bg-white/[0.02] relative overflow-hidden rounded-3xl">
+                                <span className="absolute top-2 left-3 z-10 text-[8px] font-black uppercase tracking-widest text-white/50">Video</span>
                                 <AnimatePresence mode="wait">
                                     {courtPlaylists.currentVideoUrl ? (
                                         <motion.video
@@ -1910,31 +1911,17 @@ export default function FullScreenDisplay() {
                             </div>
                             {/* Carousel Ad / Sponsors (takes the right half) */}
                             <div className="w-1/2 min-w-0 border border-white/10 bg-white/[0.03] relative overflow-hidden rounded-2xl">
+                                <span className="absolute top-2 left-3 z-10 text-[8px] font-black uppercase tracking-widest text-white/50">Imagen</span>
                                 <AnimatePresence mode="wait">
                                     {courtPlaylists.currentImageUrl ? (
-                                        isVideoMedia(courtPlaylists.currentImageUrl) ? (
-                                            <motion.video
-                                                key={courtPlaylists.imageKey}
-                                                src={courtPlaylists.currentImageUrl}
-                                                autoPlay
-                                                muted
-                                                loop
-                                                playsInline
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                exit={{ opacity: 0 }}
-                                                className="w-full h-full object-cover"
-                                            />
-                                        ) : (
-                                            <motion.img
-                                                key={courtPlaylists.imageKey}
-                                                src={courtPlaylists.currentImageUrl}
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                exit={{ opacity: 0 }}
-                                                className="w-full h-full object-contain p-4"
-                                            />
-                                        )
+                                        <motion.img
+                                            key={courtPlaylists.imageKey}
+                                            src={courtPlaylists.currentImageUrl}
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            className="w-full h-full object-contain p-4"
+                                        />
                                     ) : mediaSelectionMode === 'manual' && rotationImageItems.length > 0 ? (
                                         (() => {
                                             const currentImg = rotationImageItems[hubLibraryImgIdx % rotationImageItems.length];
