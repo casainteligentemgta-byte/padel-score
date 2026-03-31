@@ -192,6 +192,7 @@ export default function CourtDisplayPage() {
     const isEnVivo = effectiveCancha?.estado === 'en_vivo';
     const marcador = effectiveCancha?.marcador;
     const warmupEndsAt = parseCalentamientoEndsAt(effectiveCancha?.calentamiento);
+    const SHOW_LEGACY_SET_PANEL = false;
 
     // ── Loading ────────────────────────────────────────────────────────────
     if (loading) return (
@@ -321,7 +322,7 @@ export default function CourtDisplayPage() {
                 </div>
 
                 {/* Sets por columnas: solo el 1.º en juego; al cerrarlo aparece el 2.º (y STB/TB si aplica) */}
-                {marcador && (() => {
+                {SHOW_LEGACY_SET_PANEL && marcador && (() => {
                     const setsL = Number(marcador.sets?.local ?? 0) || 0;
                     const setsV = Number(marcador.sets?.visitante ?? 0) || 0;
                     const currentSet = setsL + setsV + 1;
