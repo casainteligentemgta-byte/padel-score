@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { dataService } from '@/lib/dataService';
 import { Monitor, MapPin, Loader2, AlertCircle } from 'lucide-react';
 
 /** Mapa sede → nombre (orden alfabético = mismo que en el generador) */
@@ -39,54 +38,8 @@ export default function ShortUrlPage() {
 
     useEffect(() => {
         if (!complexName || !courtNumber) { setState('invalid'); return; }
-
-        let cancelled = false;
-        (async () => {
-            try {
-                // 1. Traer todos los torneos y filtrar por sede
-                const all = await dataService.listAllTournaments();
-                const relevant = all.filter((t: any) => t.complexName === complexName);
-
-                if (relevant.length === 0) { if (!cancelled) setState('not_found'); return; }
-
-                const now = Date.now();
-
-                type MatchCandidate = { tournamentId: string; matchId: string; scheduledMs: number; isLive: boolean };
-                const candidates: MatchCandidate[] = [];
-
-                for (const t of relevant) {
-                    const matches: any[] = await dataService.getMatches(t.id);
-                    for (const m of matches) {
-                        const mCourt = m.court ?? (m.courtIndex != null ? m.courtIndex + 1 : null);
-                        if (mCourt !== courtNumber) continue;
-                        const isLive = m.status === 'LIVE';
-                        const isPending = m.status === 'PENDING' || m.status === 'PROGRAMADO';
-                        if (!isLive && !isPending) continue;
-                        const scheduledMs = m.scheduledTime ? new Date(m.scheduledTime).getTime() : 0;
-                        candidates.push({ tournamentId: t.id, matchId: m.id, scheduledMs, isLive });
-                    }
-                }
-
-                if (cancelled) return;
-
-                if (candidates.length === 0) { setState('not_found'); return; }
-
-                // Prioridad: LIVE > el partido pendiente más próximo al momento actual
-                const live = candidates.find(c => c.isLive);
-                const target = live ?? candidates
-                    .filter(c => !c.isLive)
-                    .sort((a, b) => Math.abs(a.scheduledMs - now) - Math.abs(b.scheduledMs - now))[0];
-
-                if (!target) { setState('not_found'); return; }
-
-                setState('redirecting');
-                router.replace(`/tournaments/${target.tournamentId}/display/${encodeURIComponent(target.matchId)}`);
-            } catch (e) {
-                console.error('[ShortUrl]', e);
-                if (!cancelled) setState('not_found');
-            }
-        })();
-        return () => { cancelled = true; };
+        setState('redirecting');
+        router.replace(`/display/court/${courtNumber}?complex=${encodeURIComponent(complexName)}`);
     }, [complexName, courtNumber, router]);
 
     /* ─── UI ─────────────────────────────────────────── */
