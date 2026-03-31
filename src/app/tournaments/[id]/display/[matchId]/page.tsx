@@ -18,6 +18,7 @@ import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { inferStbFromSetScoresOnly } from '@/lib/matchFinishedScoreDisplay';
 import { resolveMatchTeamLines } from '@/lib/resolveMatchTeamLines';
 import { PizarraWarmupOverlay, parseCalentamientoEndsAt } from '@/components/PizarraWarmupOverlay';
+import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
 
 // Lottie player para animaciones JSON (biblioteca de animaciones)
 function LottieAnimationOverlay({ url }: { url: string }) {
@@ -270,6 +271,10 @@ export default function FullScreenDisplay() {
 
     // Ticker desde Supabase (Tira Informativa TV)
     const [supabaseTickerMessages, setSupabaseTickerMessages] = useState<any[]>([]);
+    const courtNumForPlaylist = Number(match?.court ?? (match?.courtIndex != null ? (match.courtIndex as number) + 1 : 0));
+    const canchaIdForPlaylist = courtNumForPlaylist > 0 ? `cancha_${courtNumForPlaylist}` : '';
+    const venueForPlaylist = String(tournament?.complexName || match?.complexName || '').trim() || null;
+    const courtPlaylists = useCourtPlaylists(canchaIdForPlaylist, venueForPlaylist);
 
     const isVideoSlotCandidate = (m: any) => {
         if (!m?.url) return false;
@@ -354,6 +359,7 @@ export default function FullScreenDisplay() {
 
     const tickerMessagesToRender = useMemo(() => {
         if (minimalScreensMode) return [];
+        if (courtPlaylists.tickerMessages.length > 0) return courtPlaylists.tickerMessages;
         if (mediaSelectionMode !== 'manual') return supabaseTickerMessages || [];
         if (!activeTickerKeys.length) return [];
         const set = new Set(activeTickerKeys);
@@ -361,7 +367,7 @@ export default function FullScreenDisplay() {
             const id = String(m?.id ?? `idx_${idx}`);
             return set.has(id);
         });
-    }, [minimalScreensMode, mediaSelectionMode, activeTickerKeys, supabaseTickerMessages]);
+    }, [minimalScreensMode, mediaSelectionMode, activeTickerKeys, supabaseTickerMessages, courtPlaylists.tickerMessages]);
 
     useEffect(() => {
         if (draftTouched) return;
@@ -1816,7 +1822,21 @@ export default function FullScreenDisplay() {
                             {/* Video Ad / Hub Media (takes the left half) */}
                             <div className="w-1/2 border border-white/8 bg-white/[0.02] relative overflow-hidden rounded-3xl">
                                 <AnimatePresence mode="wait">
-                                    {mediaSelectionMode === 'manual' && rotationVideoItems.length > 0 ? (
+                                    {courtPlaylists.currentVideoUrl ? (
+                                        <motion.video
+                                            key={courtPlaylists.videoKey}
+                                            src={courtPlaylists.currentVideoUrl}
+                                            autoPlay
+                                            muted
+                                            loop={courtPlaylists.videoUrls.length <= 1 || courtPlaylists.videoAdvanceByTimer}
+                                            playsInline
+                                            onEnded={courtPlaylists.videoAdvanceByTimer ? () => {} : courtPlaylists.onVideoEnded}
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            className="w-full h-full object-cover"
+                                        />
+                                    ) : mediaSelectionMode === 'manual' && rotationVideoItems.length > 0 ? (
                                         (() => {
                                             const currentVid = rotationVideoItems[hubLibraryVidIdx % rotationVideoItems.length];
                                             return renderHubMediaMotion(currentVid);
@@ -1891,7 +1911,31 @@ export default function FullScreenDisplay() {
                             {/* Carousel Ad / Sponsors (takes the right half) */}
                             <div className="w-1/2 min-w-0 border border-white/10 bg-white/[0.03] relative overflow-hidden rounded-2xl">
                                 <AnimatePresence mode="wait">
-                                    {mediaSelectionMode === 'manual' && rotationImageItems.length > 0 ? (
+                                    {courtPlaylists.currentImageUrl ? (
+                                        isVideoMedia(courtPlaylists.currentImageUrl) ? (
+                                            <motion.video
+                                                key={courtPlaylists.imageKey}
+                                                src={courtPlaylists.currentImageUrl}
+                                                autoPlay
+                                                muted
+                                                loop
+                                                playsInline
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            <motion.img
+                                                key={courtPlaylists.imageKey}
+                                                src={courtPlaylists.currentImageUrl}
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
+                                                className="w-full h-full object-contain p-4"
+                                            />
+                                        )
+                                    ) : mediaSelectionMode === 'manual' && rotationImageItems.length > 0 ? (
                                         (() => {
                                             const currentImg = rotationImageItems[hubLibraryImgIdx % rotationImageItems.length];
                                             return renderHubMediaMotion(currentImg);
