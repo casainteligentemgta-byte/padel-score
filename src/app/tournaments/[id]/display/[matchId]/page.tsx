@@ -10,7 +10,7 @@ import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
 import { rtdb } from '@/lib/rtdb';
 import { ref, onValue, off } from 'firebase/database';
-import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, ImageIcon, Play, Eye, Users, EyeOff, X, MessageSquare, ChevronUp, ChevronDown, Plus, Calendar } from 'lucide-react';
+import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, ImageIcon, Play, Eye, Users, EyeOff, X, MessageSquare, ChevronUp, ChevronDown, Plus, Calendar, Activity } from 'lucide-react';
 import { BouncingBall } from '@/components/BouncingBall';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 import { visibleSetNumbersForScoreboard, scoreboardGridClassForSetCount } from '@/lib/displaySetColumns';
@@ -330,7 +330,7 @@ export default function FullScreenDisplay() {
     const [mode, setMode] = useState<'score' | 'ad'>('score');
     const [currentAdIdx, setCurrentAdIdx] = useState(0);
     const [recentResults, setRecentResults] = useState<any[]>([]);
-    const [temp, setTemp] = useState<number | null>(null);
+    const [allMatches, setAllMatches] = useState<any[]>([]);
     const [carouselImages, setCarouselImages] = useState<{ url: string; orden: number }[]>([]);
     const [carouselIdx, setCarouselIdx] = useState(0);
     const [carouselInterval, setCarouselInterval] = useState(8);
@@ -603,15 +603,55 @@ export default function FullScreenDisplay() {
     const rotationImageItems = mediaSelectionMode === 'manual' ? manualImageItems : hubLibraryImgs;
 
     const tickerMessagesToRender = useMemo(() => {
-        if (courtPlaylists.tickerMessages.length > 0) return courtPlaylists.tickerMessages;
-        if (mediaSelectionMode !== 'manual') return supabaseTickerMessages || [];
-        if (!activeTickerKeys.length) return [];
-        const set = new Set(activeTickerKeys);
-        return (supabaseTickerMessages || []).filter((m: any, idx: number) => {
-            const id = String(m?.id ?? `idx_${idx}`);
-            return set.has(id);
+        let baseMessages = [];
+        if (courtPlaylists.tickerMessages.length > 0) {
+            baseMessages = courtPlaylists.tickerMessages;
+        } else if (mediaSelectionMode !== 'manual') {
+            baseMessages = supabaseTickerMessages || [];
+        } else if (activeTickerKeys.length) {
+            const set = new Set(activeTickerKeys);
+            baseMessages = (supabaseTickerMessages || []).filter((m: any, idx: number) => {
+                const id = String(m?.id ?? `idx_${idx}`);
+                return set.has(id);
+            });
+        }
+
+        // ── Generar Mensajes Dinámicos del Torneo ──────────────────────
+        const dynamicMsgs: any[] = [];
+
+        // 1. Resultados Recientes (Últimos 3 terminados)
+        recentResults.slice(0, 3).forEach((m: any) => {
+            const scoreStr = m.setScores?.map((s: any) => `${s.t1}-${s.t2}`).join(' ') || '';
+            dynamicMsgs.push({
+                id: `res_${m.id}`,
+                mensaje: `RESULTADO: ${m.t1Name} ${scoreStr} ${m.t2Name}`,
+                isDynamic: true
+            });
         });
-    }, [mediaSelectionMode, activeTickerKeys, supabaseTickerMessages, courtPlaylists.tickerMessages]);
+
+        // 2. En Pista (Otras canchas en vivo)
+        allMatches
+            .filter((m: any) => m.status === 'live' && String(m.id) !== String(matchId))
+            .forEach((m: any) => {
+                const courtLabel = m.court ? `PISTA ${m.court}` : 'OTRA PISTA';
+                const score = m.liveMarcador || '0-0';
+                dynamicMsgs.push({
+                    id: `live_${m.id}`,
+                    mensaje: `${courtLabel}: ${m.t1Name} ${score} ${m.t2Name}`,
+                    isDynamic: true
+                });
+            });
+
+        // 3. Intercalado: Un mensaje base, uno dinámico...
+        const result: any[] = [];
+        const maxLen = Math.max(baseMessages.length, dynamicMsgs.length);
+        for (let i = 0; i < maxLen; i++) {
+            if (baseMessages[i]) result.push(baseMessages[i]);
+            if (dynamicMsgs[i]) result.push(dynamicMsgs[i]);
+        }
+
+        return result.length > 0 ? result : baseMessages;
+    }, [mediaSelectionMode, activeTickerKeys, supabaseTickerMessages, courtPlaylists.tickerMessages, recentResults, allMatches, matchId]);
 
     useEffect(() => {
         if (draftTouched) return;
@@ -1294,23 +1334,26 @@ export default function FullScreenDisplay() {
                 };
                 setMatch(matchData);
 
+                // Formatear todos los partidos para el Ticker
+                const formattedMatches = ms.map((mx: any) => {
+                    const rt1 = resolveTeam(mx.team1, mx.team1Index, mx);
+                    const rt2 = resolveTeam(mx.team2, mx.team2Index, mx);
+                    return {
+                        ...mx,
+                        t1Name: rt1.name,
+                        t2Name: rt2.name,
+                    };
+                });
+                setAllMatches(formattedMatches);
+
                 // Extract latest finished matches for ticker
-                const finished = ms
+                const finished = formattedMatches
                     .filter((mx: any) => mx.status === MatchStatus.FINISHED)
                     .sort((a: any, b: any) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
-                    .slice(0, 3)
-                    .map((mx: any) => {
-                        const rt1 = resolveTeam(mx.team1, mx.team1Index, mx);
-                        const rt2 = resolveTeam(mx.team2, mx.team2Index, mx);
-                        return {
-                            ...mx,
-                            t1Name: rt1.name,
-                            t2Name: rt2.name,
-                        };
-                    });
+                    .slice(0, 5); // Tomamos 5 por si acaso
                 setRecentResults(finished);
 
-                const next = ms
+                const next = formattedMatches
                     .filter((m: any) => m.court === found.court && m.status === MatchStatus.PENDING)
                     .sort((a: any, b: any) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime())[0];
 
@@ -2057,21 +2100,33 @@ export default function FullScreenDisplay() {
                                     <div className="flex whitespace-nowrap animate-marquee">
                                         {tickerMessagesToRender.map((msg: any, idx: number) => (
                                             <div key={idx} className="flex items-center px-12">
-                                                <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
-                                                <span className="text-3xl font-black italic uppercase tracking-widest text-white">
+                                                {msg.id?.startsWith('res_') ? (
+                                                    <Trophy className="w-6 h-6 text-[#ccff00] mr-4 fill-[#ccff00]/20" />
+                                                ) : msg.id?.startsWith('live_') ? (
+                                                    <Activity className="w-6 h-6 text-cyan-400 animate-pulse mr-4" />
+                                                ) : (
+                                                    <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
+                                                )}
+                                                <span className={`text-3xl font-black italic uppercase tracking-widest ${msg.isDynamic ? 'text-white' : 'text-white/90'}`}>
                                                     {msg.mensaje || msg.texto}
                                                 </span>
-                                                <Star className="w-5 h-5 text-padel-primary ml-16 fill-padel-primary/20" />
+                                                <div className="w-px h-8 bg-white/10 ml-16" />
                                             </div>
                                         ))}
                                         {/* Duplicate for infinite scroll */}
                                         {tickerMessagesToRender.map((msg: any, idx: number) => (
                                             <div key={`dup-${idx}`} className="flex items-center px-12">
-                                                <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
-                                                <span className="text-3xl font-black italic uppercase tracking-widest text-white">
+                                                {msg.id?.startsWith('res_') ? (
+                                                    <Trophy className="w-6 h-6 text-[#ccff00] mr-4 fill-[#ccff00]/20" />
+                                                ) : msg.id?.startsWith('live_') ? (
+                                                    <Activity className="w-6 h-6 text-cyan-400 animate-pulse mr-4" />
+                                                ) : (
+                                                    <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
+                                                )}
+                                                <span className={`text-3xl font-black italic uppercase tracking-widest ${msg.isDynamic ? 'text-white' : 'text-white/90'}`}>
                                                     {msg.mensaje || msg.texto}
                                                 </span>
-                                                <Star className="w-5 h-5 text-padel-primary ml-16 fill-padel-primary/20" />
+                                                <div className="w-px h-8 bg-white/10 ml-16" />
                                             </div>
                                         ))}
                                     </div>
