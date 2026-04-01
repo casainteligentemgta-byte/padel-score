@@ -1,0 +1,402 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Layout, Save, Monitor, Clock, PlayCircle, 
+  Columns, Settings2, Trash2, ArrowRightCircle,
+  Trello, CheckCircle2, AlertCircle, RefreshCw
+} from 'lucide-react';
+
+interface DisplayTemplate {
+  id: string;
+  name: string;
+  header_vh: number;
+  score_vh: number;
+  media_vh: number;
+  ticker_vh: number;
+  split_ratio: number;
+  clock_style: 'modern' | 'classic' | 'minimal';
+  clock_color: string;
+}
+
+interface Cancha {
+  cancha_id: string;
+  current_template_id: string | null;
+}
+
+export default function AdminDisplayTemplates() {
+  const supabase = createClientComponentClient();
+  const [templates, setTemplates] = useState<DisplayTemplate[]>([]);
+  const [canchas, setCanchas] = useState<Cancha[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<DisplayTemplate | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    const { data: tps } = await supabase.from('display_templates').select('*').order('created_at', { ascending: false });
+    const { data: cns } = await supabase.from('canchas').select('*');
+    if (tps) setTemplates(tps);
+    if (cns) setCanchas(cns);
+    setIsLoading(false);
+  };
+
+  const handleCreateTemplate = () => {
+    const newTpl: DisplayTemplate = {
+      id: 'new-' + Math.random().toString(36).substr(2, 9),
+      name: 'Nuevo Template',
+      header_vh: 10,
+      score_vh: 23,
+      media_vh: 59,
+      ticker_vh: 8,
+      split_ratio: 0.5,
+      clock_style: 'modern',
+      clock_color: '#ccff00'
+    };
+    setSelectedTemplate(newTpl);
+  };
+
+  const handleVhChange = (row: keyof DisplayTemplate, value: number) => {
+    if (!selectedTemplate) return;
+    
+    // Simplistic balancing logic for now: adjust rows but ensure sum 100
+    // In a real app, this might be more complex
+    const currentSum = 100;
+    const oldVal = selectedTemplate[row] as number;
+    const diff = value - oldVal;
+    
+    // Prevent sum going over/under if possible
+    // Here we'll just set it and recalculate others proportionally
+    // But easier: let user adjust only if sum is handled
+    
+    const newTpl = { ...selectedTemplate, [row]: value };
+    // Recalculate Ticker to balance the 100vh
+    newTpl.ticker_vh = 100 - (newTpl.header_vh + newTpl.score_vh + newTpl.media_vh);
+    
+    // Bounds check
+    if (newTpl.ticker_vh < 0) {
+        // adjust media or score?
+        newTpl.media_vh += newTpl.ticker_vh;
+        newTpl.ticker_vh = 0;
+    }
+    
+    setSelectedTemplate(newTpl);
+  };
+
+  const handleSave = async () => {
+    if (!selectedTemplate) return;
+    setIsSaving(true);
+    setMessage(null);
+
+    const isNew = selectedTemplate.id.startsWith('new-');
+    const { id, ...payload } = selectedTemplate;
+
+    let res;
+    if (isNew) {
+      res = await supabase.from('display_templates').insert([payload]).select().single();
+    } else {
+      res = await supabase.from('display_templates').update(payload).eq('id', id).select().single();
+    }
+
+    if (res.error) {
+      setMessage({ text: 'Error al guardar: ' + res.error.message, type: 'error' });
+    } else {
+      setMessage({ text: 'Template guardado correctamente', type: 'success' });
+      fetchData();
+      setSelectedTemplate(res.data);
+    }
+    setIsSaving(false);
+  };
+
+  const handleApplyToCancha = async (canchaId: string) => {
+    if (!selectedTemplate || selectedTemplate.id.startsWith('new-')) return;
+    
+    const { error } = await supabase
+      .from('canchas')
+      .update({ current_template_id: selectedTemplate.id })
+      .eq('cancha_id', canchaId);
+
+    if (error) {
+      setMessage({ text: 'Error al aplicar a cancha: ' + error.message, type: 'error' });
+    } else {
+      setMessage({ text: `Template aplicado a ${canchaId}`, type: 'success' });
+      fetchData();
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#08080c] text-white">
+        <RefreshCw className="animate-spin w-12 h-12 text-padel-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#08080c] text-white p-8 lg:p-12 font-outfit">
+      <div className="max-w-[1600px] mx-auto space-y-12">
+        
+        {/* Header */}
+        <div className="flex justify-between items-end">
+          <div>
+            <h1 className="text-5xl font-black italic uppercase tracking-tighter flex items-center gap-4">
+              <Trello className="w-12 h-12 text-padel-primary" />
+              Dynamic <span className="text-padel-primary">Studio</span>
+            </h1>
+            <p className="text-gray-500 font-bold uppercase tracking-[0.3em] mt-2 italic">
+              Configura el layout dinámico de las pizarras TV
+            </p>
+          </div>
+          <button 
+            onClick={handleCreateTemplate}
+            className="px-8 py-4 bg-padel-primary text-black font-black italic uppercase rounded-2xl hover:scale-105 transition-transform flex items-center gap-3 shadow-lg shadow-padel-primary/20"
+          >
+            <Settings2 className="w-5 h-5" />
+            Crear Template
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+          
+          {/* Templates List */}
+          <div className="lg:col-span-4 space-y-6">
+            <h2 className="text-2xl font-black italic uppercase tracking-widest text-white/40 mb-4">Templates</h2>
+            <div className="space-y-4">
+              {templates.map(tpl => (
+                <button
+                  key={tpl.id}
+                  onClick={() => setSelectedTemplate(tpl)}
+                  className={`w-full p-6 text-left rounded-3xl border-2 transition-all group ${
+                    selectedTemplate?.id === tpl.id 
+                      ? 'bg-padel-primary/10 border-padel-primary shadow-xl' 
+                      : 'bg-white/5 border-white/5 hover:border-white/20'
+                  }`}
+                >
+                  <div className="flex justify-between items-center">
+                    <span className={`text-xl font-black italic uppercase tracking-tight ${selectedTemplate?.id === tpl.id ? 'text-padel-primary' : ''}`}>
+                      {tpl.name}
+                    </span>
+                    <Layout className={`w-5 h-5 ${selectedTemplate?.id === tpl.id ? 'text-padel-primary' : 'text-white/20'}`} />
+                  </div>
+                  <div className="mt-4 flex gap-2 overflow-hidden h-4 rounded-full bg-black/40">
+                    <div style={{ width: `${tpl.header_vh}%` }} className="h-full bg-blue-500" />
+                    <div style={{ width: `${tpl.score_vh}%` }} className="h-full bg-padel-primary" />
+                    <div style={{ width: `${tpl.media_vh}%` }} className="h-full bg-purple-500" />
+                    <div style={{ width: `${tpl.ticker_vh}%` }} className="h-full bg-white/20" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Editor Panel */}
+          <div className="lg:col-span-8">
+            <AnimatePresence mode="wait">
+              {selectedTemplate ? (
+                <motion.div
+                  key={selectedTemplate.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="bg-white/5 backdrop-blur-2xl rounded-[3rem] border border-white/10 p-10 space-y-12 shadow-3xl"
+                >
+                  {/* Template Meta */}
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1 max-w-md">
+                      <label className="text-[10px] font-black uppercase tracking-[0.4em] text-white/30 italic mb-2 block">Nombre del Template</label>
+                      <input 
+                        value={selectedTemplate.name}
+                        onChange={e => setSelectedTemplate({...selectedTemplate, name: e.target.value})}
+                        className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-2xl font-black italic text-white placeholder-white/20 outline-none focus:border-padel-primary transition-colors"
+                        placeholder="Ej: Torneo Champions 10/30/50/10"
+                      />
+                    </div>
+                    <div className="flex gap-4">
+                      <button 
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="p-5 bg-blue-600 rounded-2xl text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-50"
+                      >
+                        <Save className="w-6 h-6" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Layout Grid Sliders */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                    <div className="space-y-8">
+                      <h3 className="text-xl font-black italic uppercase tracking-tighter flex items-center gap-3">
+                        <Monitor className="w-5 h-5 text-padel-primary" />
+                        Vertical Proportions (VH)
+                      </h3>
+                      
+                      <div className="space-y-6">
+                        {[
+                          { label: 'Header Row', key: 'header_vh', color: 'bg-blue-500 shadow-[0_0_15px_#3b82f640]' },
+                          { label: 'Scoreboard Row', key: 'score_vh', color: 'bg-padel-primary shadow-[0_0_15px_#ccff0040]' },
+                          { label: 'Media Section', key: 'media_vh', color: 'bg-purple-500 shadow-[0_0_15px_#a855f740]' },
+                        ].map(row => (
+                          <div key={row.key} className="space-y-2">
+                            <div className="flex justify-between items-end">
+                              <span className="text-sm font-bold uppercase tracking-widest text-white/50 italic">{row.label}</span>
+                              <span className="text-xl font-black italic text-white">{selectedTemplate[row.key as keyof DisplayTemplate]}vh</span>
+                            </div>
+                            <input 
+                              type="range" min="2" max="60" 
+                              value={selectedTemplate[row.key as keyof DisplayTemplate] as number}
+                              onChange={e => handleVhChange(row.key as keyof DisplayTemplate, parseInt(e.target.value))}
+                              className="w-full h-3 bg-black/60 rounded-full appearance-none cursor-pointer accent-padel-primary hover:accent-white transition-all"
+                            />
+                          </div>
+                        ))}
+                        
+                        <div className="p-4 bg-white/5 border border-white/5 rounded-2xl flex justify-between items-center opacity-60">
+                          <span className="text-sm font-bold uppercase tracking-widest text-white/50 italic">Ticker Footer (Auto)</span>
+                          <span className="text-xl font-black italic text-white">{selectedTemplate.ticker_vh}vh</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Split Media & Style */}
+                    <div className="space-y-10">
+                      <h3 className="text-xl font-black italic uppercase tracking-tighter flex items-center gap-3">
+                        <PlayCircle className="w-5 h-5 text-padel-primary" />
+                        Split-Media & Style
+                      </h3>
+
+                      <div className="space-y-6">
+                        <div className="space-y-3">
+                          <label className="text-sm font-bold uppercase tracking-widest text-white/50 italic flex items-center gap-2">
+                            <Columns className="w-4 h-4" />
+                            Split Ratio (Left Video vs Right Image)
+                          </label>
+                          <div className="flex items-center gap-4">
+                            <span className="text-xs font-black italic text-blue-400">{Math.round(selectedTemplate.split_ratio * 100)}%</span>
+                            <input 
+                              type="range" min="0" max="1" step="0.05"
+                              value={selectedTemplate.split_ratio}
+                              onChange={e => setSelectedTemplate({...selectedTemplate, split_ratio: parseFloat(e.target.value)})}
+                              className="flex-1 h-3 bg-black/60 rounded-full appearance-none accent-blue-500"
+                            />
+                            <span className="text-xs font-black italic text-padel-primary">{Math.round((1 - selectedTemplate.split_ratio) * 100)}%</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6">
+                          <div className="space-y-3">
+                            <label className="text-sm font-bold uppercase tracking-widest text-white/50 italic flex items-center gap-2">
+                              <Clock className="w-4 h-4" />
+                              Clock Style
+                            </label>
+                            <select 
+                              value={selectedTemplate.clock_style}
+                              onChange={e => setSelectedTemplate({...selectedTemplate, clock_style: e.target.value as any})}
+                              className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3 font-bold text-white outline-none focus:border-padel-primary appearance-none cursor-pointer"
+                            >
+                              <option value="modern">Modern (Bold)</option>
+                              <option value="classic">Classic (Digital)</option>
+                              <option value="minimal">Minimal (Thin)</option>
+                            </select>
+                          </div>
+                          <div className="space-y-3">
+                            <label className="text-sm font-bold uppercase tracking-widest text-white/50 italic flex items-center gap-2">
+                              <ArrowRightCircle className="w-4 h-4" />
+                              Clock Color
+                            </label>
+                            <div className="flex items-center gap-3 bg-black/40 border border-white/10 rounded-2xl px-4 py-2">
+                              <input 
+                                type="color" 
+                                value={selectedTemplate.clock_color}
+                                onChange={e => setSelectedTemplate({...selectedTemplate, clock_color: e.target.value})}
+                                className="w-8 h-8 rounded-full border-0 bg-transparent cursor-pointer"
+                              />
+                              <span className="font-mono text-xs uppercase opacity-60">{selectedTemplate.clock_color}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Visual Preview */}
+                  <div className="space-y-4">
+                    <label className="text-xs font-black uppercase tracking-[0.4em] text-white/20 italic block">Vista Previa Proporcional (VH)</label>
+                    <div className="border border-white/10 rounded-3xl overflow-hidden shadow-2xl bg-black aspect-video relative group">
+                        <div style={{ height: `${selectedTemplate.header_vh}%` }} className="w-full bg-blue-600/20 border-b border-blue-500/30 flex items-center justify-center">
+                            <span className="text-[10px] font-black italic opacity-40">HEADER ({selectedTemplate.header_vh}vh)</span>
+                        </div>
+                        <div style={{ height: `${selectedTemplate.score_vh}%` }} className="w-full bg-padel-primary/10 border-b border-padel-primary/30 flex items-center justify-center">
+                            <span className="text-[10px] font-black italic opacity-40">SCOREBOARD ({selectedTemplate.score_vh}vh)</span>
+                        </div>
+                        <div style={{ height: `${selectedTemplate.media_vh}%` }} className="w-full bg-white/5 flex gap-1 p-1">
+                            <div style={{ width: `${selectedTemplate.split_ratio * 100}%` }} className="h-full bg-blue-500/20 rounded-xl border border-blue-500/20 flex items-center justify-center">
+                                <span className="text-[8px] font-black italic opacity-30">VIDEO</span>
+                            </div>
+                            <div style={{ width: `${(1 - selectedTemplate.split_ratio) * 100}%` }} className="h-full bg-padel-primary/20 rounded-xl border border-padel-primary/20 flex items-center justify-center">
+                                <span className="text-[8px] font-black italic opacity-30">IMAGE</span>
+                            </div>
+                        </div>
+                        <div style={{ height: `${selectedTemplate.ticker_vh}%` }} className="w-full bg-black border-t border-white/10 flex items-center justify-center">
+                            <span className="text-[8px] font-black italic opacity-30">TICKER ({selectedTemplate.ticker_vh}vh)</span>
+                        </div>
+                    </div>
+                  </div>
+
+                  {/* Apply to Court Section */}
+                  <div className="pt-8 border-t border-white/10 space-y-6">
+                    <h3 className="text-xl font-black italic uppercase tracking-tighter flex items-center gap-3">
+                      <Monitor className="w-5 h-5 text-padel-primary" />
+                      Aplicar a Canchas
+                    </h3>
+                    <div className="flex flex-wrap gap-4">
+                      {canchas.map(cn => (
+                        <button
+                          key={cn.cancha_id}
+                          onClick={() => handleApplyToCancha(cn.cancha_id)}
+                          className={`px-6 py-4 rounded-2xl font-black italic uppercase transition-all flex items-center gap-3 ${
+                            cn.current_template_id === selectedTemplate.id
+                              ? 'bg-padel-primary text-black scale-105 shadow-xl shadow-padel-primary/20'
+                              : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/10'
+                          }`}
+                        >
+                          {cn.cancha_id}
+                          {cn.current_template_id === selectedTemplate.id && <CheckCircle2 className="w-4 h-4" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Feedback Message */}
+                  {message && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className={`p-4 rounded-2xl flex items-center gap-3 ${
+                        message.type === 'success' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      }`}
+                    >
+                      {message.type === 'success' ? <CheckCircle2 /> : <AlertCircle />}
+                      <span className="font-bold underline decoration-white/20 underline-offset-4">{message.text}</span>
+                    </motion.div>
+                  )}
+                </motion.div>
+              ) : (
+                <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center space-y-6 opacity-40">
+                  <Monitor className="w-24 h-24" />
+                  <p className="text-2xl font-black italic uppercase tracking-widest">Selecciona o crea un template para editar</p>
+                </div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

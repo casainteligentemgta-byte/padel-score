@@ -303,6 +303,18 @@ function ImageCarousel({ ads }: { ads: any[] }) {
     );
 }
 
+interface DisplayTemplate {
+    id: string;
+    name: string;
+    header_vh: number;
+    score_vh: number;
+    media_vh: number;
+    ticker_vh: number;
+    split_ratio: number;
+    clock_style: 'modern' | 'classic' | 'minimal';
+    clock_color: string;
+}
+
 export default function FullScreenDisplay() {
     const routeParams = useParams<{ id: string; matchId: string }>();
     const id = String(routeParams?.id ?? '');
@@ -310,10 +322,130 @@ export default function FullScreenDisplay() {
     const searchParams = useSearchParams();
     const minimalParam = searchParams.get('minimal');
     const [minimalScreensMode, setMinimalScreensMode] = useState(minimalParam === '1' || minimalParam === 'true');
+    const [activeTemplate, setActiveTemplate] = useState<DisplayTemplate | null>(null);
     useEffect(() => {
         // Si el monitor cambia el modo vía query param, lo sincronizamos.
         setMinimalScreensMode(minimalParam === '1' || minimalParam === 'true');
     }, [minimalParam]);
+
+    // ── Configuración de Layout Dinámico de la Plantilla ──
+    useEffect(() => {
+        const supabase = createClient();
+        const courtNum = Number(match?.court ?? (match?.courtIndex != null ? (match.courtIndex as number) + 1 : 0));
+        if (!courtNum) return;
+
+        const fetchTemplate = async (templateId: string) => {
+            const { data, error } = await supabase
+                .from('display_templates')
+                .select('*')
+                .eq('id', templateId)
+                .single();
+            
+            if (data && !error) {
+                setActiveTemplate(data as DisplayTemplate);
+            }
+        };
+
+        const initCanchaTemplate = async () => {
+            // Buscamos la cancha por nombre o número para obtener el template actual
+            const { data, error } = await supabase
+                .from('canchas')
+                .select('id, current_template_id')
+                .or(`nombre.ilike.%Pista ${courtNum}%,nombre.ilike.%Cancha ${courtNum}%,nombre.ilike.%${courtNum}%`)
+                .maybeSingle();
+            
+            if (data?.current_template_id) {
+                fetchTemplate(data.current_template_id);
+            }
+
+            // Suscribirse a la cancha encontrada
+            if (data?.id) {
+                const canchaSub = supabase
+                    .channel(`cancha-template-${data.id}`)
+                    .on('postgres_changes', {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'canchas',
+                        filter: `id=eq.${data.id}`
+                    }, (payload) => {
+                        if (payload.new.current_template_id) {
+                            fetchTemplate(payload.new.current_template_id);
+                        }
+                    })
+                    .subscribe();
+                return () => canchaSub.unsubscribe();
+            }
+        };
+
+        initCanchaTemplate();
+    }, [match?.court, match?.courtIndex]);
+
+    // Suscripción al template activo por si cambia sus valores internos
+    useEffect(() => {
+        if (!activeTemplate?.id) return;
+        const supabase = createClient();
+        const templateSub = supabase
+            .channel(`template-data-${activeTemplate.id}`)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'display_templates',
+                filter: `id=eq.${activeTemplate.id}`
+            }, (payload) => {
+                setActiveTemplate(payload.new as DisplayTemplate);
+            })
+            .subscribe();
+        
+        return () => { templateSub.unsubscribe(); };
+    }, [activeTemplate?.id]);
+
+    const layout = {
+        header: activeTemplate?.header_vh ?? 10,
+        score: activeTemplate?.score_vh ?? 23,
+        media: activeTemplate?.media_vh ?? 59,
+        ticker: activeTemplate?.ticker_vh ?? 8,
+        split: activeTemplate?.split_ratio ?? 50
+    };
+
+    const SmartClock = () => {
+        const style = activeTemplate?.clock_style ?? 'modern';
+        const color = activeTemplate?.clock_color ?? '#ffffff';
+
+        if (style === 'minimal') {
+            return (
+                <div className="flex flex-col items-end">
+                    <span className="text-sm font-bold opacity-40 tracking-[0.5em] uppercase">Local Time</span>
+                    <span style={{ color }} className="text-5xl font-light tracking-tighter tabular-nums drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
+                        <DisplayClockTime />
+                    </span>
+                </div>
+            );
+        }
+
+        if (style === 'classic') {
+            return (
+                <div className="flex items-center gap-6 bg-black/60 px-8 py-4 rounded-[2rem] border border-white/10 shadow-2xl backdrop-blur-3xl">
+                    <Clock className="w-8 h-8 text-white/30" />
+                    <span style={{ color }} className="text-6xl font-mono tracking-widest font-black italic">
+                        <DisplayClockTime />
+                    </span>
+                </div>
+            );
+        }
+
+        // Default Modern
+        return (
+            <div className="flex flex-col items-end">
+                <div className="flex items-center gap-3 text-gray-500 font-black text-[15px] tracking-[0.3em] uppercase mb-2 italic">
+                    <Calendar className="w-4 h-4" />
+                    <DisplayClockDate />
+                </div>
+                <div style={{ color }} className="text-5xl lg:text-7xl font-black italic tabular-nums tracking-tighter leading-none drop-shadow-[0_0_25px_rgba(255,255,255,0.2)]">
+                    <DisplayClockTime />
+                </div>
+            </div>
+        );
+    };
     /** Tres dedos + arrastre vertical: salir al torneo (móvil / iPad, sin botón visible). */
     useThreeFingerDragExit(id ? `/tournaments/${id}` : null);
     const [tournament, setTournament] = useState<any>(null);
@@ -471,7 +603,6 @@ export default function FullScreenDisplay() {
     const rotationImageItems = mediaSelectionMode === 'manual' ? manualImageItems : hubLibraryImgs;
 
     const tickerMessagesToRender = useMemo(() => {
-        if (minimalScreensMode) return [];
         if (courtPlaylists.tickerMessages.length > 0) return courtPlaylists.tickerMessages;
         if (mediaSelectionMode !== 'manual') return supabaseTickerMessages || [];
         if (!activeTickerKeys.length) return [];
@@ -480,7 +611,7 @@ export default function FullScreenDisplay() {
             const id = String(m?.id ?? `idx_${idx}`);
             return set.has(id);
         });
-    }, [minimalScreensMode, mediaSelectionMode, activeTickerKeys, supabaseTickerMessages, courtPlaylists.tickerMessages]);
+    }, [mediaSelectionMode, activeTickerKeys, supabaseTickerMessages, courtPlaylists.tickerMessages]);
 
     useEffect(() => {
         if (draftTouched) return;
@@ -1600,64 +1731,51 @@ export default function FullScreenDisplay() {
                         <PizarraWarmupOverlay endsAt={liveCalentamientoEndsAt} layout="fullscreen" />
                         {/* ══════════════ HEADER BAR (10%) ══════════════ */}
                         <div
-                            className="flex items-center justify-between flex-shrink-0 border border-white/8 bg-white/[0.03] backdrop-blur-sm px-6"
+                            className="flex items-center justify-between flex-shrink-0 border border-white/10 bg-black/50 backdrop-blur-2xl px-12"
                             style={{
-                                height: '7vh',
+                                height: `${layout.header}vh`,
                                 borderRadius: '0 0 clamp(10px,1.4vw,22px) clamp(10px,1.4vw,22px)',
-                                marginBottom: '0.3vh'
                             }}
                         >
                             {/* Left: Tournament & Match Info */}
-                            <div className="flex items-center gap-4 h-full py-2">
-                                <div className="flex flex-col items-stretch gap-2 pr-2 border-r border-white/10">
-                                    <span className="text-[7px] font-black uppercase tracking-widest text-white/35 px-0.5">Publicidad</span>
+                            <div className="flex items-center gap-10 h-full py-2">
+                                <div className="flex flex-col items-stretch gap-2 pr-8 border-r border-white/15">
+                                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/30 px-1 italic leading-none">Control</span>
                                     <button
                                         type="button"
                                         onClick={() => setMinimalScreensMode((v) => !v)}
-                                        className={`px-3 py-2 rounded-xl border transition-colors ${minimalScreensMode ? 'bg-padel-primary/15 border-padel-primary/40' : 'bg-black/40 border-white/10 hover:bg-white/5'}`}
-                                        title={minimalScreensMode ? 'Mostrar publicidad/tiras' : 'Solo pantalla (sin publicidad/tiras)'}
+                                        className={`px-5 py-3 rounded-2xl border transition-all duration-300 ${minimalScreensMode ? 'bg-padel-primary/20 border-padel-primary/50 shadow-[0_0_20px_rgba(204,255,0,0.15)]' : 'bg-black/60 border-white/10 hover:bg-white/10 hover:border-white/20'}`}
                                     >
-                                        <div className="flex items-center gap-2">
-                                            <EyeOff className={`w-4 h-4 ${minimalScreensMode ? 'text-padel-primary' : 'text-white/50'}`} />
-                                            <span className="text-[9px] font-black uppercase tracking-widest text-white/70">Solo</span>
+                                        <div className="flex items-center gap-3">
+                                            <EyeOff className={`w-6 h-6 ${minimalScreensMode ? 'text-padel-primary' : 'text-white/40'}`} />
+                                            <span className="text-[12px] font-black uppercase tracking-[0.2em] text-white/80">{minimalScreensMode ? 'Mostrar' : 'Ocultar'}</span>
                                         </div>
                                     </button>
                                 </div>
                                 {tournament?.logo && (
-                                    <div className="h-full aspect-square bg-white/5 rounded-xl p-1.5 border border-white/10 flex items-center justify-center">
+                                    <div className="h-[7.5vh] aspect-square bg-white/10 rounded-2xl p-2.5 border border-white/20 flex items-center justify-center shadow-2xl backdrop-blur-3xl">
                                         <img src={tournament.logo} className="w-full h-full object-contain" />
                                     </div>
                                 )}
-                                <div className="flex flex-col items-start justify-center">
-                                    <span className="label-cancha leading-none font-black italic uppercase"
-                                        style={{ fontSize: 'clamp(14px,1.8vw,32px)' }}>
-                                        {match.courtName ?? (match.court != null ? `Pista ${match.court}` : 'Pista –')}
-                                    </span>
-                                    <div className="flex flex-col items-start leading-tight mt-1">
-                                        {(match.roundName || match.groupName) && (
-                                            <span className="font-bold italic uppercase tracking-tight"
-                                                style={{ fontSize: 'clamp(8px,0.8vh,14px)', color: 'rgba(255,255,255,0.60)' }}>
-                                                {match.roundName || match.groupName}
-                                            </span>
-                                        )}
-                                        <div className="flex flex-col items-start mt-0.5">
-                                            <span className="font-bold italic uppercase leading-none mb-1"
-                                                style={{ fontSize: 'clamp(8px,0.8vh,14px)', color: 'rgba(255,255,255,0.5)' }}>
-                                                {tournament?.gender === 'female' ? 'Femenino' : tournament?.gender === 'mixed' ? 'Mixto' : 'Masculino'}
-                                            </span>
-                                            {tournament?.category && (
-                                                <span className="font-bold italic uppercase tracking-wide leading-none"
-                                                    style={{ fontSize: 'clamp(10px,1vh,16px)', color: 'rgba(255,255,255,0.9)' }}>
-                                                    {formatCategory(tournament.category)}
-                                                </span>
-                                            )}
+                                <div className="flex flex-col items-start justify-center gap-2 ml-2">
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-2 bg-padel-primary/15 px-4 py-1.5 rounded-full border border-padel-primary/40">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-padel-primary animate-pulse shadow-[0_0_8px_#ccff00]" />
+                                            <span className="text-[14px] font-black tracking-[0.4em] uppercase text-padel-primary italic">LIVE</span>
                                         </div>
+                                        <span className="text-white/50 font-black italic uppercase tracking-[0.3em] text-sm">
+                                            {match.roundName || 'Partido en Directo'}
+                                        </span>
                                     </div>
+                                    <h1 className="leading-none font-black italic uppercase text-white tracking-tighter"
+                                        style={{ fontSize: 'clamp(32px,5.5vh,110px)' }}>
+                                        {match.courtName ?? (match.court != null ? `Pista ${match.court}` : 'Pista Central')}
+                                    </h1>
                                 </div>
                             </div>
 
-                            {/* Center: Match Control (Timer/Clock) */}
-                            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center">
+                            {/* Center: Match Control (Timer/Clock) - ENHANCED VISIBILITY */}
+                            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center bg-black/40 backdrop-blur-2xl px-12 py-3 rounded-full border border-white/10 shadow-3xl">
                                 <MatchDurationCounter
                                     matchStatus={match?.status}
                                     startTimeMs={markerDurationStartMs}
@@ -1668,52 +1786,38 @@ export default function FullScreenDisplay() {
                                 />
                             </div>
 
-                            {/* Right: Clock Box (Time / Date + Temp) */}
-                            <div className="flex items-center gap-3">
-
-
-                                <div className={`flex flex-col items-center justify-center border transition-all duration-700 relative overflow-hidden ${tournament?.broadcastingSettings?.clockStyle === 'broadcast'
-                                    ? 'bg-black/60 border-white/15'
-                                    : 'border-white/8 bg-white/[0.04] backdrop-blur-md'
-                                    }`}
-                                    style={{
-                                        borderRadius: 'clamp(10px,1.4vw,22px)',
-                                        paddingTop: '0.5vw',
-                                        paddingLeft: '1.2vw',
-                                        paddingRight: '1.2vw',
-                                        paddingBottom: '1.0vw',
-                                        minWidth: 'fit-content'
-                                    }}>
-                                    <div className="flex flex-col items-center w-full">
-                                        <DisplayClockTime className="font-black italic tracking-tighter leading-none"
-                                            style={{
-                                                fontSize: 'clamp(20px,2.6vw,44px)',
-                                                color: tournament?.broadcastingSettings?.clockStyle === 'broadcast' ? primaryColor : 'white',
-                                                textShadow: tournament?.broadcastingSettings?.clockStyle === 'broadcast' ? `0 0 20px ${primaryColor}40` : 'none'
-                                            }}
-                                        />
-
-                                        <div className="flex items-center justify-between w-full mt-1.5 pt-1.5 border-t border-white/10 gap-3">
-                                            <DisplayClockDate className="font-bold uppercase text-white/40 tracking-tight whitespace-nowrap"
-                                                style={{ fontSize: 'clamp(10px,1.1vw,18px)' }}
-                                            />
-
-                                            {temp !== null && (
-                                                <div className="flex items-center gap-1 pl-3 border-l border-white/10">
-                                                    <Thermometer style={{ width: 'clamp(8px,0.8vw,14px)', height: 'clamp(8px,0.8vw,14px)', color: primaryColor }} />
-                                                    <span className="font-black italic tracking-tighter" style={{ fontSize: 'clamp(10px,1vw,16px)', color: primaryColor }}>{temp}°C</span>
-                                                </div>
-                                            )}
-                                        </div>
+                            {/* Right: Premium Clock & Tournament Info */}
+                            <div className="flex items-center gap-10 h-full">
+                                <div className="hidden lg:flex flex-col items-end border-r border-white/15 pr-10">
+                                    <div className="flex items-center gap-3 font-black italic uppercase tracking-widest text-[#ccff00]" 
+                                        style={{ fontSize: 'clamp(18px,2.4vh,42px)' }}>
+                                        {formatCategory(tournament?.category || 'General')}
                                     </div>
+                                    <div className="text-white/40 font-bold uppercase tracking-[0.3em] italic mt-1.5" 
+                                        style={{ fontSize: 'clamp(12px,1.2vh,20px)' }}>
+                                        {tournament?.nombre || 'Torneo Oficial'}
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-8 bg-white/5 backdrop-blur-3xl px-10 py-5 rounded-[2.5rem] border border-white/15 shadow-3xl relative overflow-hidden group">
+                                    <div className="absolute inset-0 bg-gradient-to-br from-padel-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <div className="relative z-10">
+                                        <SmartClock />
+                                    </div>
+                                    {temp !== null && (
+                                        <div className="flex flex-col items-center pl-8 border-l border-white/15 gap-1.5 relative z-10">
+                                            <Thermometer className="w-5 h-5 text-padel-primary animate-pulse" />
+                                            <span className="text-2xl font-black italic tracking-tighter text-padel-primary">{temp}°C</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
 
                         {/* ══════════════ MARCADOR / PIZARRA (GRANDE) ══════════════ */}
                         <div
-                            className="flex-shrink-0 border border-white/10 bg-black/60 overflow-hidden flex flex-col mb-[0.4vh] relative shadow-2xl"
-                            style={{ height: '22vh', borderRadius: 'clamp(12px,1.6vw,26px)' }}
+                            className="flex-shrink-0 border border-white/10 bg-black/60 overflow-hidden flex flex-col relative shadow-2xl"
+                            style={{ height: `${layout.score}vh`, borderRadius: 'clamp(12px,1.6vw,26px)' }}
                         >
                             {/* Match Title Bar (FINAL - TOURNAMENT NAME) */}
                             <div className="h-[20%] flex items-center justify-center bg-black relative border-b border-white/[0.05]">
@@ -1929,11 +2033,14 @@ export default function FullScreenDisplay() {
                         {/* ══════════════ PUBLICIDAD MINI (SPLIT-SCREEN VIDEO + IMAGEN) ══════════════ */}
                         {!minimalScreensMode && (
                             <div
-                                className="flex-shrink-0 grid grid-cols-2 gap-4 p-4"
-                                style={{ height: '63vh' }}
+                                className="flex-shrink-0 grid gap-6 p-6"
+                                style={{ 
+                                    height: `${layout.media}vh`,
+                                    gridTemplateColumns: `${layout.split}% 1fr`
+                                }}
                             >
-                                <VideoSlot ads={courtPlaylists.rows} />
-                                <ImageCarousel ads={courtPlaylists.rows} />
+                                <VideoSlot ads={courtPlaylists.rows.filter((ad: any) => ad.posicion === 'izquierda_video' || !ad.posicion)} />
+                                <ImageCarousel ads={courtPlaylists.rows.filter((ad: any) => ad.posicion === 'derecha_imagen')} />
                             </div>
                         )}
 
@@ -1942,7 +2049,7 @@ export default function FullScreenDisplay() {
                             <div
                                 className="flex-shrink-0 overflow-hidden border-t border-white/10 bg-black/40 backdrop-blur-md relative flex items-center mb-[0.3vh]"
                                 style={{
-                                    height: '7vh',
+                                    height: `${layout.ticker}vh`,
                                     borderRadius: 'clamp(10px,1.2vw,18px) clamp(10px,1.2vw,18px) 0 0',
                                 }}
                             >
