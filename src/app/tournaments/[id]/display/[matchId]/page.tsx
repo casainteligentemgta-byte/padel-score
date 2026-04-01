@@ -331,6 +331,7 @@ export default function FullScreenDisplay() {
     const [currentAdIdx, setCurrentAdIdx] = useState(0);
     const [recentResults, setRecentResults] = useState<any[]>([]);
     const [allMatches, setAllMatches] = useState<any[]>([]);
+    const [temp, setTemp] = useState<number | null>(null);
     const [carouselImages, setCarouselImages] = useState<{ url: string; orden: number }[]>([]);
     const [carouselIdx, setCarouselIdx] = useState(0);
     const [carouselInterval, setCarouselInterval] = useState(8);
