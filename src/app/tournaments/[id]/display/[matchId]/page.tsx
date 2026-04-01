@@ -322,6 +322,20 @@ export default function FullScreenDisplay() {
     const searchParams = useSearchParams();
     const minimalParam = searchParams.get('minimal');
     const [minimalScreensMode, setMinimalScreensMode] = useState(minimalParam === '1' || minimalParam === 'true');
+    const [tournament, setTournament] = useState<any>(null);
+    const [match, setMatch] = useState<any>(null);
+    const [matchNumberInTournament, setMatchNumberInTournament] = useState<number | null>(null);
+    const [nextMatch, setNextMatch] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [mode, setMode] = useState<'score' | 'ad'>('score');
+    const [currentAdIdx, setCurrentAdIdx] = useState(0);
+    const [recentResults, setRecentResults] = useState<any[]>([]);
+    const [temp, setTemp] = useState<number | null>(null);
+    const [carouselImages, setCarouselImages] = useState<{ url: string; orden: number }[]>([]);
+    const [carouselIdx, setCarouselIdx] = useState(0);
+    const [carouselInterval, setCarouselInterval] = useState(8);
+    const prevScore = useRef<string>('');
+    const adBanner = useAdBanner();
     const [activeTemplate, setActiveTemplate] = useState<DisplayTemplate | null>(null);
     useEffect(() => {
         // Si el monitor cambia el modo vía query param, lo sincronizamos.
@@ -448,20 +462,6 @@ export default function FullScreenDisplay() {
     };
     /** Tres dedos + arrastre vertical: salir al torneo (móvil / iPad, sin botón visible). */
     useThreeFingerDragExit(id ? `/tournaments/${id}` : null);
-    const [tournament, setTournament] = useState<any>(null);
-    const [match, setMatch] = useState<any>(null);
-    const [matchNumberInTournament, setMatchNumberInTournament] = useState<number | null>(null);
-    const [nextMatch, setNextMatch] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [mode, setMode] = useState<'score' | 'ad'>('score');
-    const [currentAdIdx, setCurrentAdIdx] = useState(0);
-    const [recentResults, setRecentResults] = useState<any[]>([]);
-    const [temp, setTemp] = useState<number | null>(null);
-    const prevScore = useRef<string>('');
-    const adBanner = useAdBanner();
-    const [carouselImages, setCarouselImages] = useState<{ url: string; orden: number }[]>([]);
-    const [carouselIdx, setCarouselIdx] = useState(0);
-    const [carouselInterval, setCarouselInterval] = useState(8);
 
     const processDisplayName = (name: any) => {
         if (!name || typeof name !== 'string') return null;
