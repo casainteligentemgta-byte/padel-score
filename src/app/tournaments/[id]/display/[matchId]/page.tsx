@@ -10,7 +10,7 @@ import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
 import { rtdb } from '@/lib/rtdb';
 import { ref, onValue, off } from 'firebase/database';
-import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, ImageIcon, Play, Eye, Users, EyeOff, X, MessageSquare, ChevronUp, ChevronDown, Plus } from 'lucide-react';
+import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, ImageIcon, Play, Eye, Users, EyeOff, X, MessageSquare, ChevronUp, ChevronDown, Plus, Calendar } from 'lucide-react';
 import { BouncingBall } from '@/components/BouncingBall';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 import { visibleSetNumbersForScoreboard, scoreboardGridClassForSetCount } from '@/lib/displaySetColumns';
