@@ -1602,9 +1602,9 @@ export default function FullScreenDisplay() {
                         <div
                             className="flex items-center justify-between flex-shrink-0 border border-white/8 bg-white/[0.03] backdrop-blur-sm px-6"
                             style={{
-                                height: '10vh',
+                                height: '7vh',
                                 borderRadius: '0 0 clamp(10px,1.4vw,22px) clamp(10px,1.4vw,22px)',
-                                marginBottom: '0.5vh'
+                                marginBottom: '0.3vh'
                             }}
                         >
                             {/* Left: Tournament & Match Info */}
@@ -1712,8 +1712,8 @@ export default function FullScreenDisplay() {
 
                         {/* ══════════════ MARCADOR / PIZARRA (GRANDE) ══════════════ */}
                         <div
-                            className="flex-shrink-0 border border-white/10 bg-black/60 overflow-hidden flex flex-col mb-[0.8vh] relative shadow-2xl"
-                            style={{ height: '50vh', borderRadius: 'clamp(12px,1.6vw,26px)' }}
+                            className="flex-shrink-0 border border-white/10 bg-black/60 overflow-hidden flex flex-col mb-[0.4vh] relative shadow-2xl"
+                            style={{ height: '22vh', borderRadius: 'clamp(12px,1.6vw,26px)' }}
                         >
                             {/* Match Title Bar (FINAL - TOURNAMENT NAME) */}
                             <div className="h-[20%] flex items-center justify-center bg-black relative border-b border-white/[0.05]">
@@ -1797,7 +1797,7 @@ export default function FullScreenDisplay() {
                                             <div className="flex flex-col justify-center h-full pr-6 relative">
                                                 <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden shadow-2xl">
                                                     <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
-                                                    <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
+                                                    <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(20px,3.2vh,48px)', lineHeight: 1.0 }}>
                                                         <span className="flex items-center">
                                                             <AnimatePresence>
                                                                 {(displayServer?.team === 1 && displayServer?.player === 1) && (
@@ -1846,14 +1846,14 @@ export default function FullScreenDisplay() {
                                                 }
                                                 return (
                                                     <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
-                                                        <span className="font-black italic text-white tabular-nums text-center block w-full" style={{ fontSize: 'clamp(36px,6.5vh,80px)', fontVariantNumeric: 'tabular-nums' }}>{val !== '' ? val : '-'}</span>
+                                                        <span className="font-black italic text-white tabular-nums text-center block w-full" style={{ fontSize: 'clamp(32px,5.5vh,75px)', fontVariantNumeric: 'tabular-nums' }}>{val !== '' ? val : '-'}</span>
                                                     </div>
                                                 );
                                             })}
                                             <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ backgroundColor: `${primaryColor}40` }}>
                                                 <motion.span key={ptsT1} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                                                     className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060] tabular-nums text-center block w-full"
-                                                    style={{ fontSize: 'clamp(42px,9vh,110px)', fontVariantNumeric: 'tabular-nums' }}>{ptsT1}</motion.span>
+                                                    style={{ fontSize: 'clamp(38px,6.5vh,100px)', fontVariantNumeric: 'tabular-nums' }}>{ptsT1}</motion.span>
                                             </div>
                                         </div>
 
@@ -1862,7 +1862,7 @@ export default function FullScreenDisplay() {
                                             <div className="flex flex-col justify-center h-full pr-6 relative">
                                                 <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden">
                                                     <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
-                                                    <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(22px,3.8vh,52px)', lineHeight: 1.0 }}>
+                                                    <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(20px,3.2vh,48px)', lineHeight: 1.0 }}>
                                                         <span className="flex items-center">
                                                             <AnimatePresence>
                                                                 {(displayServer?.team === 2 && displayServer?.player === 1) && (
@@ -1911,14 +1911,14 @@ export default function FullScreenDisplay() {
                                                 }
                                                 return (
                                                     <div key={s} className="flex items-center justify-center border-l border-white/[0.1] h-full">
-                                                        <span className="font-black italic text-white tabular-nums text-center block w-full" style={{ fontSize: 'clamp(36px,6.5vh,80px)', fontVariantNumeric: 'tabular-nums' }}>{val !== '' ? val : '-'}</span>
+                                                        <span className="font-black italic text-white tabular-nums text-center block w-full" style={{ fontSize: 'clamp(32px,5.5vh,75px)', fontVariantNumeric: 'tabular-nums' }}>{val !== '' ? val : '-'}</span>
                                                     </div>
                                                 );
                                             })}
                                             <div className="flex items-center justify-center border-l border-white/[0.2] h-full" style={{ backgroundColor: `${primaryColor}40` }}>
                                                 <motion.span key={ptsT2} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                                                     className="font-black italic text-[#ccff00] drop-shadow-[0_0_15px_#ccff0060] tabular-nums text-center block w-full"
-                                                    style={{ fontSize: 'clamp(42px,9vh,110px)', fontVariantNumeric: 'tabular-nums' }}>{ptsT2}</motion.span>
+                                                    style={{ fontSize: 'clamp(38px,6.5vh,100px)', fontVariantNumeric: 'tabular-nums' }}>{ptsT2}</motion.span>
                                             </div>
                                         </div>
                                     </>
@@ -1930,7 +1930,7 @@ export default function FullScreenDisplay() {
                         {!minimalScreensMode && (
                             <div
                                 className="flex-shrink-0 grid grid-cols-2 gap-4 p-4"
-                                style={{ height: '50vh' }}
+                                style={{ height: '63vh' }}
                             >
                                 <VideoSlot ads={courtPlaylists.rows} />
                                 <ImageCarousel ads={courtPlaylists.rows} />
@@ -1940,9 +1940,9 @@ export default function FullScreenDisplay() {
                         {/* ══════════════ FOOTER BAR (10%) ══════════════ */}
                         {tickerMessagesToRender.length > 0 && (
                             <div
-                                className="flex-shrink-0 overflow-hidden border-t border-white/10 bg-black/40 backdrop-blur-md relative flex items-center mb-[0.8vh]"
+                                className="flex-shrink-0 overflow-hidden border-t border-white/10 bg-black/40 backdrop-blur-md relative flex items-center mb-[0.3vh]"
                                 style={{
-                                    height: '9.5vh',
+                                    height: '7vh',
                                     borderRadius: 'clamp(10px,1.2vw,18px) clamp(10px,1.2vw,18px) 0 0',
                                 }}
                             >
