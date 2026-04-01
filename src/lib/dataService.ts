@@ -3,6 +3,7 @@ import { sanitizeString } from './apiValidation';
 import { getAuthHeaders } from './apiAuth';
 import { getScoringRules } from './matchScoringRules';
 import { syncMatchOrderFields } from './matchOrderMeta';
+import { selectCanchaPublicidadPlaylist } from './canchaPublicidadQuery';
 
 const supabase = () => {
     const c = getSupabaseClient();
@@ -2302,6 +2303,25 @@ export const dataService = {
             })
             .subscribe();
         return () => channel.unsubscribe();
+    },
+    async getPublicidadByCancha(canchaId: string) {
+        const client = getSupabaseClient();
+        if (!client) return [];
+        try {
+            const { data, error } = await selectCanchaPublicidadPlaylist(client, canchaId);
+            if (error) {
+                console.warn('[dataService] getPublicidadByCancha error:', error.message);
+                return [];
+            }
+            // Retornar los items con el media_content cargado (ya sea por media_content(*) o publicidad(*))
+            return (data || []).map((item: any) => ({
+                ...item,
+                media_content: item.media_content || item.publicidad
+            }));
+        } catch (e) {
+            console.warn('[dataService] getPublicidadByCancha exception:', e);
+            return [];
+        }
     },
 };
 

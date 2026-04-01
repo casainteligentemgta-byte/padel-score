@@ -1,8 +1,8 @@
 /** Con `venue_name` (migración 017+). */
 const CANCHA_PUBLICIDAD_BASE_VENUE =
-  'id, cancha_id, venue_name, media_id, orden, duracion_segundos';
+  'id, cancha_id, venue_name, media_id, orden, duracion_segundos, posicion_pantalla';
 /** Sin `venue_name` (tablas antiguas). */
-const CANCHA_PUBLICIDAD_BASE = 'id, cancha_id, media_id, orden, duracion_segundos';
+const CANCHA_PUBLICIDAD_BASE = 'id, cancha_id, media_id, orden, duracion_segundos, posicion_pantalla';
 
 /**
  * Carga la playlist de publicidad por cancha.

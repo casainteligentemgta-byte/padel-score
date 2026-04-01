@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import lottie from 'lottie-web';
@@ -177,6 +177,132 @@ function MatchDurationCounter({
     return null;
 }
 
+const isVideoSlotCandidate = (m: any) => {
+    if (!m?.url) return false;
+    const tipo = String(m?.tipo || '').toLowerCase();
+    if (tipo === 'url_web') return true;
+    return isVideoMedia(m);
+};
+
+const isImageSlotCandidate = (m: any) => {
+    if (!m?.url) return false;
+    const tipo = String(m?.tipo || '').toLowerCase();
+    if (tipo === 'url_web') return false;
+    return !isVideoMedia(m);
+};
+
+function VideoSlot({ ads }: { ads: any[] }) {
+    const videoAd = React.useMemo(() => 
+        ads.find(ad => ad.posicion_pantalla === 'izquierda_video'), 
+    [ads]);
+
+    if (!videoAd || !videoAd.media_content?.url) {
+        return (
+            <div className="w-full h-full bg-black/40 rounded-3xl border border-white/5 flex items-center justify-center p-8 overflow-hidden group">
+                <Video className="w-12 h-12 text-white/10 group-hover:text-padel-primary/40 transition-colors duration-500" />
+            </div>
+        );
+    }
+
+    const { url } = videoAd.media_content;
+    const isExternalStream = url.includes('youtube.com') || url.includes('youtu.be') || url.includes('twitch.tv') || url.includes('vimeo.com') || url.includes('stream') || url.includes('embed');
+
+    return (
+        <div className="w-full h-full bg-black/60 rounded-3xl border border-white/10 overflow-hidden relative shadow-2xl group flex items-center justify-center">
+            {isExternalStream ? (
+                <iframe
+                    src={(() => {
+                        if (url.includes('youtube.com/watch?v=')) {
+                            const videoId = url.split('v=')[1]?.split('&')[0];
+                            return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`;
+                        }
+                        if (url.includes('youtu.be/')) {
+                            const videoId = url.split('youtu.be/')[1]?.split('?')[0];
+                            return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`;
+                        }
+                        return url;
+                    })()}
+                    className="w-full h-full border-0 absolute inset-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    title="Live Stream"
+                />
+            ) : (
+                <video
+                    src={url}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-contain absolute inset-0"
+                />
+            )}
+            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-[10px] font-bold text-white uppercase tracking-wider">Live Content</span>
+            </div>
+        </div>
+    );
+}
+
+function ImageCarousel({ ads }: { ads: any[] }) {
+    const images = React.useMemo(() => 
+        ads.filter(ad => ad.posicion_pantalla === 'derecha_imagen')
+           .map(ad => ad.media_content?.url)
+           .filter(Boolean),
+    [ads]);
+
+    const [index, setIndex] = React.useState(0);
+
+    React.useEffect(() => {
+        if (images.length <= 1) return;
+        const interval = setInterval(() => {
+            setIndex((prev) => (prev + 1) % images.length);
+        }, 7000);
+        return () => clearInterval(interval);
+    }, [images.length]);
+
+    if (!images.length) {
+        return (
+            <div className="w-full h-full bg-black/40 rounded-3xl border border-white/5 flex items-center justify-center p-8 overflow-hidden group">
+                <ImageIcon className="w-12 h-12 text-white/10 group-hover:text-padel-primary/40 transition-colors duration-500" />
+            </div>
+        );
+    }
+
+    return (
+        <div className="w-full h-full bg-black/60 rounded-3xl border border-white/10 overflow-hidden relative shadow-2xl group">
+            <AnimatePresence mode="wait">
+                <motion.img
+                    key={images[index]}
+                    src={images[index]}
+                    initial={{ opacity: 0, scale: 1.05 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 1.2, ease: "easeInOut" }}
+                    className="w-full h-full object-contain absolute inset-0"
+                />
+            </AnimatePresence>
+            
+            {/* Carousel indicators */}
+            {images.length > 1 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
+                    {images.map((_, i) => (
+                        <div 
+                            key={i} 
+                            className={`h-1 rounded-full transition-all duration-500 ${i === index ? 'w-6 bg-padel-primary shadow-[0_0_8px_rgba(var(--padel-primary-rgb),0.5)]' : 'w-1.5 bg-white/20'}`}
+                        />
+                    ))}
+                </div>
+            )}
+            
+            <div className="absolute top-4 right-4 z-20 bg-padel-primary/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-padel-primary/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <span className="text-[10px] font-bold text-padel-primary uppercase tracking-wider">Premium Sponsor</span>
+            </div>
+        </div>
+    );
+}
+
 export default function FullScreenDisplay() {
     const routeParams = useParams<{ id: string; matchId: string }>();
     const id = String(routeParams?.id ?? '');
@@ -276,19 +402,6 @@ export default function FullScreenDisplay() {
     const venueForPlaylist = String(tournament?.complexName || match?.complexName || '').trim() || null;
     const courtPlaylists = useCourtPlaylists(canchaIdForPlaylist, venueForPlaylist);
 
-    const isVideoSlotCandidate = (m: any) => {
-        if (!m?.url) return false;
-        const tipo = String(m?.tipo || '').toLowerCase();
-        if (tipo === 'url_web') return true;
-        return isVideoMedia(m);
-    };
-
-    const isImageSlotCandidate = (m: any) => {
-        if (!m?.url) return false;
-        const tipo = String(m?.tipo || '').toLowerCase();
-        if (tipo === 'url_web') return false;
-        return !isVideoMedia(m);
-    };
 
     const videoOptionItems = useMemo(() => {
         const items: any[] = [];
@@ -1813,178 +1926,14 @@ export default function FullScreenDisplay() {
                             })()}
                         </div>
 
-                        {/* ══════════════ PUBLICIDAD MINI (VIDEO + IMAGEN) ══════════════ */}
+                        {/* ══════════════ PUBLICIDAD MINI (SPLIT-SCREEN VIDEO + IMAGEN) ══════════════ */}
                         {!minimalScreensMode && (
                             <div
-                                className="flex-shrink-0 flex flex-row items-stretch justify-between gap-2 mb-[1vh] px-6"
-                                style={{ height: '18.5vh' }}
+                                className="flex-shrink-0 grid grid-cols-2 gap-4 p-4"
+                                style={{ height: '50vh' }}
                             >
-                            {/* Video Ad / Hub Media (takes the left half) */}
-                            <div className="w-[24.5%] border border-white/8 bg-white/[0.02] relative overflow-hidden rounded-3xl">
-                                <span className="absolute top-2 left-3 z-10 text-[8px] font-black uppercase tracking-widest text-white/50">Video</span>
-                                <AnimatePresence mode="wait">
-                                    {courtPlaylists.currentVideoUrl ? (
-                                        <motion.video
-                                            key={courtPlaylists.videoKey}
-                                            src={courtPlaylists.currentVideoUrl}
-                                            autoPlay
-                                            muted
-                                            loop={courtPlaylists.videoUrls.length <= 1 || courtPlaylists.videoAdvanceByTimer}
-                                            playsInline
-                                            onEnded={courtPlaylists.videoAdvanceByTimer ? () => {} : courtPlaylists.onVideoEnded}
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            exit={{ opacity: 0 }}
-                                            className="w-full h-full object-cover"
-                                        />
-                                    ) : mediaSelectionMode === 'manual' && rotationVideoItems.length > 0 ? (
-                                        (() => {
-                                            const currentVid = rotationVideoItems[hubLibraryVidIdx % rotationVideoItems.length];
-                                            return renderHubMediaMotion(currentVid);
-                                        })()
-                                    ) : hubMedia ? (
-                                        hubMedia.tipo === 'url_web' ? (
-                                            <motion.iframe
-                                                key={hubMedia.url}
-                                                src={hubMedia.url}
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                exit={{ opacity: 0 }}
-                                                className="w-full h-full border-none pointer-events-none"
-                                                loading="lazy"
-                                            />
-                                        ) : isVideoMedia(hubMedia) ? (
-                                            <motion.video
-                                                key={hubMedia.url}
-                                                src={hubMedia.url}
-                                                autoPlay
-                                                muted
-                                                loop
-                                                playsInline
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                exit={{ opacity: 0 }}
-                                                className="w-full h-full object-cover"
-                                            />
-                                        ) : (
-                                            <motion.img
-                                                key={hubMedia.url}
-                                                src={hubMedia.url}
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                exit={{ opacity: 0 }}
-                                                className="w-full h-full object-contain p-4"
-                                            />
-                                        )
-                                    ) : hubLibraryVids.length > 0 ? (
-                                        (() => {
-                                            const currentVid = hubLibraryVids[hubLibraryVidIdx % hubLibraryVids.length];
-                                            return (
-                                                <motion.video
-                                                    key={currentVid.url}
-                                                    src={currentVid.url}
-                                                    autoPlay
-                                                    muted
-                                                    loop
-                                                    playsInline
-                                                    initial={{ opacity: 0 }}
-                                                    animate={{ opacity: 1 }}
-                                                    exit={{ opacity: 0 }}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            );
-                                        })()
-                                    ) : adBanner.isVisible && adBanner.currentImageUrl ? (
-                                        isVideoMedia(adBanner.currentImageUrl) ? (
-                                            <motion.video key={adBanner.currentImageUrl} src={adBanner.currentImageUrl} autoPlay muted loop playsInline initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <motion.img key={adBanner.currentImageUrl} src={adBanner.currentImageUrl} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full object-contain p-4" />
-                                        )
-                                    ) : (
-                                        <div className="flex flex-col items-center justify-center h-full opacity-20">
-                                            <Megaphone className="w-12 h-12 mb-2" style={{ color: primaryColor }} />
-                                            <span className="font-black italic uppercase tracking-widest text-[10px]">Espacio Publicitario Hub</span>
-                                        </div>
-                                    )}
-
-                                </AnimatePresence>
-                            </div>
-                            {/* Carousel Ad / Sponsors (takes the right half) */}
-                            <div className="w-[24.5%] min-w-0 border border-white/10 bg-white/[0.03] relative overflow-hidden rounded-2xl">
-                                <span className="absolute top-2 left-3 z-10 text-[8px] font-black uppercase tracking-widest text-white/50">Imagen</span>
-                                <AnimatePresence mode="wait">
-                                    {courtPlaylists.currentImageUrl ? (
-                                        <motion.img
-                                            key={courtPlaylists.imageKey}
-                                            src={courtPlaylists.currentImageUrl}
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            exit={{ opacity: 0 }}
-                                            className="w-full h-full object-contain p-4"
-                                        />
-                                    ) : mediaSelectionMode === 'manual' && rotationImageItems.length > 0 ? (
-                                        (() => {
-                                            const currentImg = rotationImageItems[hubLibraryImgIdx % rotationImageItems.length];
-                                            return renderHubMediaMotion(currentImg);
-                                        })()
-                                    ) : hubCarousel ? (
-                                        hubCarousel.tipo === 'url_web' ? (
-                                            <motion.iframe
-                                                key={hubCarousel.url}
-                                                src={hubCarousel.url}
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                exit={{ opacity: 0 }}
-                                                className="w-full h-full border-none pointer-events-none"
-                                                loading="lazy"
-                                            />
-                                        ) : isVideoMedia(hubCarousel) ? (
-                                            <motion.video
-                                                key={hubCarousel.url}
-                                                src={hubCarousel.url}
-                                                autoPlay
-                                                muted
-                                                loop
-                                                playsInline
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                exit={{ opacity: 0 }}
-                                                className="w-full h-full object-cover"
-                                            />
-                                        ) : (
-                                            <motion.img
-                                                key={hubCarousel.url}
-                                                src={hubCarousel.url}
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                exit={{ opacity: 0 }}
-                                                className="w-full h-full object-contain p-4"
-                                            />
-                                        )
-                                    ) : hubLibraryImgs.length > 0 ? (
-                                        (() => {
-                                            const currentImg = hubLibraryImgs[hubLibraryImgIdx % hubLibraryImgs.length];
-                                            return (
-                                                <motion.img
-                                                    key={currentImg.url}
-                                                    src={currentImg.url}
-                                                    initial={{ opacity: 0, x: 20 }}
-                                                    animate={{ opacity: 1, x: 0 }}
-                                                    exit={{ opacity: 0, x: -20 }}
-                                                    transition={{ duration: 0.5 }}
-                                                    className="w-full h-full object-contain p-4"
-                                                />
-                                            );
-                                        })()
-                                    ) : (
-                                        <div className="flex flex-col items-center justify-center h-full opacity-20">
-                                            <Megaphone className="w-12 h-12 mb-2" style={{ color: primaryColor }} />
-                                            <span className="font-black italic uppercase tracking-widest text-[10px]">Carrusel de Imágenes Hub</span>
-                                        </div>
-                                    )}
-
-                                </AnimatePresence>
-                            </div>
+                                <VideoSlot ads={courtPlaylists.rows} />
+                                <ImageCarousel ads={courtPlaylists.rows} />
                             </div>
                         )}
 

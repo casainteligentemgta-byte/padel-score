@@ -12,6 +12,7 @@ import {
 } from '@/lib/courtPlaylists';
 
 export type CourtPlaylistsState = {
+  rows: CourtPlaylistRowDb[];
   videoUrls: string[];
   imageItems: { url: string; duracionSeg: number }[];
   videoIndex: number;
@@ -179,6 +180,7 @@ export function useCourtPlaylists(canchaId: string, venueName: string | null | u
   const currentImageUrl = imageItems.length ? imageItems[ii]?.url ?? null : null;
 
   return {
+    rows,
     videoUrls,
     imageItems,
     videoIndex: vi,

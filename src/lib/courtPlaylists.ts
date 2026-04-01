@@ -53,6 +53,7 @@ export type CourtPlaylistRowDb = {
   orden: number;
   duracion_segundos: number;
   playlist_slot?: PlaylistSlot;
+  posicion_pantalla?: string | null;
   media_content?: {
     id: string;
     tipo: string;
@@ -103,6 +104,7 @@ export function normalizeCourtPlaylistRows(rows: unknown[]): CourtPlaylistRowDb[
       orden: Number(row.orden || 0),
       duracion_segundos: Number(row.duracion_segundos || 0),
       playlist_slot: (row.playlist_slot as PlaylistSlot | undefined) ?? undefined,
+      posicion_pantalla: row.posicion_pantalla ? String(row.posicion_pantalla) : null,
       media_content: normalizeMediaContent(row.media_content ?? row.publicidad),
     };
   });
@@ -144,7 +146,7 @@ export async function fetchCanchaPlaylistRows(
   const vn = venueName?.trim() || null;
   let q = supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, media_content(*)')
+    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, posicion_pantalla, media_content(*)')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   if (vn) q = q.eq('venue_name', vn);
@@ -156,7 +158,7 @@ export async function fetchCanchaPlaylistRows(
   if (vn) {
     const rLike = await supabase
       .from('cancha_publicidad')
-      .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, media_content(*)')
+      .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, media_content(*)')
       .in('cancha_id', canchaIds)
       .ilike('venue_name', vn)
       .order('orden', { ascending: true });
@@ -169,7 +171,7 @@ export async function fetchCanchaPlaylistRows(
   // Algunas BD exponen la relación como `publicidad` en lugar de `media_content`.
   let qRelFallback = supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, publicidad(*)')
+    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, posicion_pantalla, publicidad(*)')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   if (vn) qRelFallback = qRelFallback.eq('venue_name', vn);
@@ -181,7 +183,7 @@ export async function fetchCanchaPlaylistRows(
   if (vn) {
     const rRelLike = await supabase
       .from('cancha_publicidad')
-      .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, publicidad(*)')
+      .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, publicidad(*)')
       .in('cancha_id', canchaIds)
       .ilike('venue_name', vn)
       .order('orden', { ascending: true });
@@ -194,7 +196,7 @@ export async function fetchCanchaPlaylistRows(
   // Fallback: sin sede (cuando no coincide venue_name en la data).
   let q2 = supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, media_id, orden, duracion_segundos, media_content(*)')
+    .select('id, cancha_id, media_id, orden, duracion_segundos, posicion_pantalla, media_content(*)')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   const r2 = await q2;
@@ -205,7 +207,7 @@ export async function fetchCanchaPlaylistRows(
 
   let q3 = supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, media_id, orden, duracion_segundos, publicidad(*)')
+    .select('id, cancha_id, media_id, orden, duracion_segundos, posicion_pantalla, publicidad(*)')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   const r3 = await q3;
@@ -218,7 +220,7 @@ export async function fetchCanchaPlaylistRows(
   // Luego resolvemos media por `media_id` con query independiente.
   let q4 = supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot')
+    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   if (vn) {
@@ -232,7 +234,7 @@ export async function fetchCanchaPlaylistRows(
 
   const r5 = await supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, media_id, orden, duracion_segundos, playlist_slot')
+    .select('id, cancha_id, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   if (!r5.error) {
