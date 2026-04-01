@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Layout, Save, Monitor, Clock, PlayCircle, 
@@ -27,7 +27,7 @@ interface Cancha {
 }
 
 export default function AdminDisplayTemplates() {
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const [templates, setTemplates] = useState<DisplayTemplate[]>([]);
   const [canchas, setCanchas] = useState<Cancha[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<DisplayTemplate | null>(null);
