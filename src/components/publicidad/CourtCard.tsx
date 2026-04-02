@@ -45,6 +45,7 @@ export type CourtPlaylistRow = {
   orden: number;
   duracion_segundos: number;
   playlist_slot?: string | null;
+  venue_name?: string | null;
   media_content?: MediaContent | null;
 };
 
@@ -139,22 +140,26 @@ export default function CourtCard({
 
   const prevPanel = useRef<typeof openPanel | undefined>(undefined);
   useEffect(() => {
-    if (prevPanel.current === openPanel) return;
+    const panelChanged = prevPanel.current !== openPanel;
     prevPanel.current = openPanel;
+
     if (openPanel === 'video') {
-      setDraftVideoIds(orderedMediaIdsFromRows(videoRows));
+      const serverIds = orderedMediaIdsFromRows(videoRows);
+      // Only force sync if the panel just opened OR the data actually changed from server
+      setDraftVideoIds(serverIds);
       setDraftVideoMin(videoCambioMinutos);
-      setVideoSearch('');
+      if (panelChanged) setVideoSearch('');
     } else if (openPanel === 'imagen') {
-      setDraftImageIds(orderedMediaIdsFromRows(imageRows));
+      const serverIds = orderedMediaIdsFromRows(imageRows);
+      setDraftImageIds(serverIds);
       setDraftImageMin(imagenCambioMinutos);
       setDraftImagenLoop(imagenLoop);
       setDraftImagenPausa(imagenPausaSeg);
-      setImageSearch('');
+      if (panelChanged) setImageSearch('');
     } else if (openPanel === 'texto') {
       setDraftTiraIds([...linkedTiraIds]);
       setDraftTiraMin(tiraCambioMinutos);
-      setTiraSearch('');
+      if (panelChanged) setTiraSearch('');
     }
   }, [
     openPanel,
@@ -294,6 +299,51 @@ export default function CourtCard({
           {minimalMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
           {minimalMode ? 'Solo pizarra' : 'Con publicidad'}
         </button>
+
+        {/* RESUMEN DE PLAYLIST ACTUAL (VISIBLE SIEMPRE) */}
+        {!openPanel && (
+          <div className="mt-1 space-y-2">
+            {videoRows.length > 0 && (
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-2">
+                <p className="text-[8px] font-black uppercase text-white/40 mb-1 flex items-center gap-1">
+                  <Video size={10} className="text-padel-primary" /> Playlist Videos
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {videoRows.map((r, i) => (
+                    <span
+                      key={r.id}
+                      className="text-[9px] px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-white/80"
+                    >
+                      {i + 1}. {r.media_content?.nombre_sponsor || r.media_content?.nombre || 'Clip'}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {imageRows.length > 0 && (
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-2">
+                <p className="text-[8px] font-black uppercase text-white/40 mb-1 flex items-center gap-1">
+                  <ImageIcon size={10} className="text-padel-primary" /> Carrusel Imágenes
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {imageRows.map((r, i) => (
+                    <span
+                      key={r.id}
+                      className="text-[9px] px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-white/80"
+                    >
+                      {i + 1}. {r.media_content?.nombre_sponsor || r.media_content?.nombre || 'Imagen'}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {videoRows.length === 0 && imageRows.length === 0 && !minimalMode && (
+              <p className="text-center py-2 text-[9px] text-white/30 italic">Sin contenido asignado</p>
+            )}
+          </div>
+        )}
 
         {openPanel && (
           <div className="overflow-y-auto max-h-[520px] rounded-xl border border-white/10 bg-black/25 p-2 space-y-2">

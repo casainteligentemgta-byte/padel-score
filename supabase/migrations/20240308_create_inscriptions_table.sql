@@ -21,16 +21,16 @@ CREATE TABLE IF NOT EXISTS public.inscriptions (
 -- Enable RLS
 ALTER TABLE public.inscriptions ENABLE ROW LEVEL SECURITY;
 
--- Create policies
--- Allow everyone to view inscriptions (useful for public listings if needed, or restrict if sensitive)
+-- Create policies (idempotente si la tabla ya existía en remoto)
+DROP POLICY IF EXISTS "Allow public view for inscriptions" ON public.inscriptions;
 CREATE POLICY "Allow public view for inscriptions" ON public.inscriptions
     FOR SELECT USING (true);
 
--- Allow authenticated users to create inscriptions
+DROP POLICY IF EXISTS "Allow authenticated insert for inscriptions" ON public.inscriptions;
 CREATE POLICY "Allow authenticated insert for inscriptions" ON public.inscriptions
     FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 
--- Allow owners or admins to update
+DROP POLICY IF EXISTS "Allow update for owners or admins" ON public.inscriptions;
 CREATE POLICY "Allow update for owners or admins" ON public.inscriptions
     FOR UPDATE USING (
         auth.uid()::text = owner_id OR 
@@ -40,7 +40,7 @@ CREATE POLICY "Allow update for owners or admins" ON public.inscriptions
         )
     );
 
--- Allow owners or admins to delete
+DROP POLICY IF EXISTS "Allow delete for owners or admins" ON public.inscriptions;
 CREATE POLICY "Allow delete for owners or admins" ON public.inscriptions
     FOR DELETE USING (
         auth.uid()::text = owner_id OR 

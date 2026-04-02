@@ -12,31 +12,44 @@ const CANCHA_PUBLICIDAD_BASE = 'id, cancha_id, media_id, orden, duracion_segundo
 export async function selectCanchaPublicidadPlaylist(
   supabase: { from: (t: string) => any },
   canchaId: string,
+  venueName?: string | null,
 ) {
-  let res = await supabase
-    .from('cancha_publicidad')
-    .select(`${CANCHA_PUBLICIDAD_BASE_VENUE}, media_content(*)`)
-    .eq('cancha_id', canchaId)
-    .order('orden', { ascending: true });
+  const vn = venueName?.trim() || null;
+
+  let res = await (() => {
+    let q = supabase
+      .from('cancha_publicidad')
+      .select(`${CANCHA_PUBLICIDAD_BASE_VENUE}, media_content(*)`)
+      .eq('cancha_id', canchaId);
+    if (vn) q = q.eq('venue_name', vn);
+    return q.order('orden', { ascending: true });
+  })();
   if (!res.error) return res;
 
-  res = await supabase
-    .from('cancha_publicidad')
-    .select(`${CANCHA_PUBLICIDAD_BASE}, media_content(*)`)
-    .eq('cancha_id', canchaId)
-    .order('orden', { ascending: true });
+  res = await (() => {
+    let q = supabase
+      .from('cancha_publicidad')
+      .select(`${CANCHA_PUBLICIDAD_BASE}, media_content(*)`)
+      .eq('cancha_id', canchaId);
+    if (vn) q = q.eq('venue_name', vn);
+    return q.order('orden', { ascending: true });
+  })();
   if (!res.error) return res;
 
-  res = await supabase
-    .from('cancha_publicidad')
-    .select(`${CANCHA_PUBLICIDAD_BASE_VENUE}, publicidad(*)`)
-    .eq('cancha_id', canchaId)
-    .order('orden', { ascending: true });
+  res = await (() => {
+    let q = supabase
+      .from('cancha_publicidad')
+      .select(`${CANCHA_PUBLICIDAD_BASE_VENUE}, publicidad(*)`)
+      .eq('cancha_id', canchaId);
+    if (vn) q = q.eq('venue_name', vn);
+    return q.order('orden', { ascending: true });
+  })();
   if (!res.error) return res;
 
-  return supabase
+  let q = supabase
     .from('cancha_publicidad')
     .select(`${CANCHA_PUBLICIDAD_BASE}, publicidad(*)`)
-    .eq('cancha_id', canchaId)
-    .order('orden', { ascending: true });
+    .eq('cancha_id', canchaId);
+  if (vn) q = q.eq('venue_name', vn);
+  return q.order('orden', { ascending: true });
 }

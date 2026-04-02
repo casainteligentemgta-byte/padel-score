@@ -271,18 +271,126 @@ html {
     -webkit-box-shadow: 0 0 0px 1000px #0a0a0a inset !important;
     transition: background-color 5000s ease-in-out 0s;
   }
-  /* Animation for the ticker (marquee) */
+  /* Marquee continuo (dos copias del contenido): -50% = exactamente una copia → bucle sin salto */
   @keyframes marquee {
     0% {
-      transform: translateX(0);
+      transform: translate3d(0, 0, 0);
     }
     100% {
-      transform: translateX(-50%);
+      transform: translate3d(-50%, 0, 0);
     }
   }
 
   .animate-marquee {
-    animation: marquee 20s linear infinite;
+    animation: marquee var(--marquee-duration, 50s) linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-marquee {
+      animation-duration: calc(var(--marquee-duration, 50s) * 2.5);
+    }
+  }
+
+  /**
+   * Carril: dos mitades iguales (.marquee-half), cada una con hueco inicial (viewport) para que
+   * el texto entre por la derecha y se desplace hacia la izquierda; translateX(-50%) = una mitad.
+   */
+  .marquee-track {
+    display: inline-flex;
+    width: max-content;
+    max-width: none;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    flex-shrink: 0;
+    white-space: nowrap;
+    will-change: transform;
+  }
+
+  .marquee-half {
+    display: inline-flex;
+    flex-flow: row nowrap;
+    align-items: center;
+    flex-shrink: 0;
+    max-width: none;
+  }
+
+  /**
+   * Tira a ancho real del viewport dentro de un padre con padding u overflow-hidden.
+   * --pizarra-vw alinea el hueco del marquee con el mismo ancho que el bleed.
+   */
+  .pizarra-ticker-bleed {
+    --pizarra-vw: 100vw;
+    position: relative;
+    left: auto;
+    right: auto;
+    transform: none;
+    box-sizing: border-box;
+    width: var(--pizarra-vw);
+    max-width: var(--pizarra-vw);
+    flex-shrink: 0;
+    align-self: stretch;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    overflow-x: hidden;
+    overflow-y: visible;
+  }
+
+  @supports (overflow: clip) {
+    .pizarra-ticker-bleed {
+      overflow-x: clip;
+    }
+  }
+
+  @supports (width: 100dvw) {
+    .pizarra-ticker-bleed {
+      --pizarra-vw: 100dvw;
+      width: 100dvw;
+      max-width: 100dvw;
+      margin-left: calc(50% - 50dvw);
+      margin-right: calc(50% - 50dvw);
+    }
+  }
+
+  /* Padre ya ocupa todo el ancho útil: sin márgenes negativos (TV / cancha sin padding) */
+  .pizarra-ticker-bleed--flush {
+    margin-left: 0;
+    margin-right: 0;
+    width: 100%;
+    max-width: none;
+    --pizarra-vw: 100vw;
+  }
+
+  @supports (width: 100dvw) {
+    .pizarra-ticker-bleed--flush {
+      --pizarra-vw: 100dvw;
+    }
+  }
+
+  /* Recorte del carril: el transform del marquee no sale del clip */
+  .marquee-ticker-viewport {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-y: visible;
+  }
+
+  @supports (overflow: clip) {
+    .marquee-ticker-viewport {
+      overflow-x: clip;
+    }
+  }
+
+  /* Hueco inicial = mismo ancho que la tira visible */
+  .marquee-enter-gap {
+    flex: 0 0 var(--pizarra-vw, 100vw);
+    width: var(--pizarra-vw, 100vw);
+    max-width: var(--pizarra-vw, 100vw);
+    min-height: 1.5rem;
+    align-self: stretch;
+    pointer-events: none;
+    visibility: hidden;
   }
 }
 

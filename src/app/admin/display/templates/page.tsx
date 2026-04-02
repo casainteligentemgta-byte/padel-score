@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { saveTemplateAction, applyTemplateToCanchaAction } from './actions';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Layout, Save, Monitor, Clock, PlayCircle, 
@@ -96,38 +97,47 @@ export default function AdminDisplayTemplates() {
     setMessage(null);
 
     const isNew = selectedTemplate.id.startsWith('new-');
-    const { id, ...payload } = selectedTemplate;
+    const id = selectedTemplate.id;
+    const data = selectedTemplate;
 
-    let res;
-    if (isNew) {
-      res = await supabase.from('display_templates').insert([payload]).select().single();
-    } else {
-      res = await supabase.from('display_templates').update(payload).eq('id', id).select().single();
-    }
+    // Aseguramos que los valores sean enteros para el CHECK constraint de la BD
+    const h = Math.round(Number(data.header_vh) || 10);
+    const s = Math.round(Number(data.score_vh) || 23);
+    const m = Math.round(Number(data.media_vh) || 59);
+    const t = 100 - (h + s + m); // El ticker absorbe el resto para sumar EXACTAMENTE 100
 
-    if (res.error) {
-      setMessage({ text: 'Error al guardar: ' + res.error.message, type: 'error' });
-    } else {
+    const payload = { 
+      name: data.name || 'Sin Nombre',
+      header_vh: h,
+      score_vh: s,
+      media_vh: m,
+      ticker_vh: t,
+      split_ratio: Number(data.split_ratio) || 0.5,
+      clock_style: data.clock_style || 'modern',
+      clock_color: data.clock_color || '#ccff00'
+    };
+
+    try {
+      const resData = await saveTemplateAction(id, payload);
       setMessage({ text: 'Template guardado correctamente', type: 'success' });
       fetchData();
-      setSelectedTemplate(res.data);
+      setSelectedTemplate(resData);
+    } catch (err: any) {
+      setMessage({ text: 'Error al guardar: ' + err.message, type: 'error' });
     }
+    
     setIsSaving(false);
   };
 
   const handleApplyToCancha = async (canchaId: string) => {
     if (!selectedTemplate || selectedTemplate.id.startsWith('new-')) return;
     
-    const { error } = await supabase
-      .from('canchas')
-      .update({ current_template_id: selectedTemplate.id })
-      .eq('cancha_id', canchaId);
-
-    if (error) {
-      setMessage({ text: 'Error al aplicar a cancha: ' + error.message, type: 'error' });
-    } else {
+    try {
+      await applyTemplateToCanchaAction(canchaId, selectedTemplate.id);
       setMessage({ text: `Template aplicado a ${canchaId}`, type: 'success' });
       fetchData();
+    } catch (err: any) {
+      setMessage({ text: 'Error al aplicar a cancha: ' + err.message, type: 'error' });
     }
   };
 

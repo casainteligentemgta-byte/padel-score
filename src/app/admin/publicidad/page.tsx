@@ -16,6 +16,17 @@ import {
 } from '@/lib/courtPlaylists';
 import { AlertCircle, Check, ChevronLeft, Download, Edit3, Eye, Loader2, Trash2, Upload, X } from 'lucide-react';
 import type { MediaContent, TiraInformativa } from '@/lib/supabase/publicidad';
+import { 
+  addMediaContentAction, 
+  deleteMediaAction, 
+  renameMediaAction, 
+  addTickerAction, 
+  deleteTickerAction, 
+  savePlaylistAction, 
+  saveTiraPlaylistAction, 
+  upsertPlaylistConfigAction,
+  fetchAssignmentsAction,
+} from './actions';
 
 type VenueWithCourts = {
   name: string;
@@ -51,7 +62,7 @@ function buildVenuesAndCourtsFromTournaments(tournaments: any[]): VenueWithCourt
         } else {
           label = `Pista ${displayNum}`;
         }
-        courts.push({ key: `cancha_${displayNum}`, label, displayNum });
+        courts.push({ key: String(displayNum), label, displayNum });
       }
       return { name, courts };
     })
@@ -133,96 +144,53 @@ export default function AdminPublicidadPage() {
   const courtKeySet = useMemo(() => new Set(selectedVenueCourts.map((c) => c.key)), [selectedVenueCourts]);
 
   const fetchAssignments = useCallback(async () => {
-    if (!selectedVenue || selectedVenueCourts.length === 0) {
-      setAssignments([]);
-      return;
-    }
-    const keys = selectedVenueCourts.map((c) => c.key);
-
-    const r1 = await supabase
-      .from('cancha_publicidad')
-      .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, media_content(*)')
-      .in('cancha_id', keys)
-      .eq('venue_name', selectedVenue)
-      .order('orden', { ascending: true });
-
-    let raw: unknown[] = [];
-    if (!r1.error && r1.data) {
-      raw = r1.data as unknown[];
-    } else {
-      const r2 = await supabase
-        .from('cancha_publicidad')
-        .select('id, cancha_id, media_id, orden, duracion_segundos, media_content(*)')
-        .in('cancha_id', keys)
-        .order('orden', { ascending: true });
-      if (r2.error) throw r2.error;
-      raw = (r2.data as unknown[]) || [];
-    }
-    type RowIn = {
-      id: string;
-      cancha_id: string;
-      orden: number;
-      duracion_segundos: number;
-      playlist_slot?: string | null;
-      media_content?: MediaContent | MediaContent[] | null;
-    };
-    const filtered: CourtPlaylistRow[] = (raw as RowIn[])
-      .filter((r) => courtKeySet.has(r.cancha_id))
-      .map((r) => {
+    if (!selectedVenue) return;
+    const keys = selectedVenueCourts.map((c) => String(c.key).trim());
+    try {
+      const { assignments: data, config, tiras } = await fetchAssignmentsAction(selectedVenue);
+      
+      const filtered: CourtPlaylistRow[] = (data || []).map((r: any) => {
         const mc = r.media_content;
         const media_content = Array.isArray(mc) ? mc[0] ?? null : mc ?? null;
         return {
           id: String(r.id),
-          cancha_id: String(r.cancha_id),
+          cancha_id: String(r.cancha_id || '').trim(),
+          venue_name: String(r.venue_name || '').trim(),
           orden: Number(r.orden),
           duracion_segundos: Number(r.duracion_segundos),
           playlist_slot: r.playlist_slot ?? undefined,
           media_content,
         };
       });
-    setAssignments(filtered);
+      setAssignments(filtered);
 
-    const tmap: Record<string, string[]> = {};
-    keys.forEach((k) => {
-      tmap[k] = [];
-    });
-    const tr = await supabase
-      .from('cancha_tira')
-      .select('cancha_id, tira_informativa_id, orden')
-      .eq('venue_name', selectedVenue)
-      .order('orden', { ascending: true });
-    if (!tr.error && tr.data) {
-      (tr.data as { cancha_id: string; tira_informativa_id: string }[]).forEach((row) => {
-        if (!tmap[row.cancha_id]) tmap[row.cancha_id] = [];
-        tmap[row.cancha_id].push(row.tira_informativa_id);
+      const tmap: Record<string, string[]> = {};
+      keys.forEach((k) => { tmap[k] = []; });
+      (tiras || []).forEach((row: any) => {
+        const cid = (row.cancha_id || '').trim();
+        if (tmap[cid]) {
+          tmap[cid].push(row.tira_informativa_id);
+        }
       });
-    }
-    setTiraLinksByCourt(tmap);
+      setTiraLinksByCourt(tmap);
 
-    const cmap: Record<
-      string,
-      {
-        imagen_loop: boolean;
-        imagen_pausa_entre_segundos: number;
-        video_cambio_cada_minutos: number;
-        imagen_cambio_cada_minutos: number;
-        tira_cambio_cada_minutos: number;
-      }
-    > = {};
-    const cr = await supabase.from('cancha_playlist_config').select('*').eq('venue_name', selectedVenue);
-    if (!cr.error && cr.data) {
-      (cr.data as any[]).forEach((r) => {
-        cmap[r.cancha_id] = {
+      const cmap: Record<string, any> = {};
+      (config || []).forEach((r: any) => {
+        const cid = (r.cancha_id || '').trim();
+        cmap[cid] = {
           imagen_loop: r.imagen_loop !== false,
           imagen_pausa_entre_segundos: Math.max(0, Number(r.imagen_pausa_entre_segundos) || 0),
-          video_cambio_cada_minutos: Math.max(0, Math.floor(Number(r.video_cambio_cada_minutos) || 0)),
-          imagen_cambio_cada_minutos: Math.max(0, Math.floor(Number(r.imagen_cambio_cada_minutos) || 0)),
-          tira_cambio_cada_minutos: Math.max(0, Math.floor(Number(r.tira_cambio_cada_minutos) || 0)),
+          video_cambio_cada_minutos: Number(r.video_cambio_cada_minutos) || 0,
+          imagen_cambio_cada_minutos: Number(r.imagen_cambio_cada_minutos) || 0,
+          tira_cambio_cada_minutos: Number(r.tira_cambio_cada_minutos) || 0,
         };
       });
+      setPlaylistConfigByCourt(cmap);
+    } catch (e) {
+      console.error('Error fetching assignments:', e);
     }
-    setPlaylistConfigByCourt(cmap);
-  }, [selectedVenue, selectedVenueCourts, supabase, courtKeySet]);
+  }, [selectedVenue, selectedVenueCourts]);
+
 
   useEffect(() => {
     let mounted = true;
@@ -240,9 +208,6 @@ export default function AdminPublicidadPage() {
     return () => { mounted = false; };
   }, [fetchMedia, fetchTicker, loadVenuesAndCourts]);
 
-  useEffect(() => {
-    fetchAssignments().catch((e: any) => setError(e?.message || 'No se pudo cargar asignaciones.'));
-  }, [fetchAssignments]);
 
   useEffect(() => {
     const keys = selectedVenueCourts.map((c) => c.key);
@@ -267,50 +232,23 @@ export default function AdminPublicidadPage() {
     return () => window.clearInterval(id);
   }, [selectedVenueCourts, supabase]);
 
+  useEffect(() => {
+    fetchAssignments();
+  }, [selectedVenue, selectedVenueCourts, fetchAssignments]);
+
   const videos = useMemo(() => mediaList.filter((m) => String(m.tipo).includes('video')), [mediaList]);
   const carrusel = useMemo(() => mediaList.filter((m) => m.tipo === 'imagen'), [mediaList]);
 
-  const insertCanchaPublicidadRow = async (base: Record<string, unknown>): Promise<string | null> => {
-    const row: Record<string, unknown> = { ...base };
-    if (selectedVenue) row.venue_name = selectedVenue;
-    let { error } = await supabase.from('cancha_publicidad').insert(row);
-    if (error && error.message?.toLowerCase().includes('venue')) {
-      delete row.venue_name;
-      ({ error } = await supabase.from('cancha_publicidad').insert(row));
-    }
-    if (error && (error.message?.includes('playlist_slot') || error.message?.includes('schema cache'))) {
-      const row2 = { ...row };
-      delete row2.playlist_slot;
-      ({ error } = await supabase.from('cancha_publicidad').insert(row2));
-    }
-    return error?.message ?? null;
-  };
+
 
   const saveVideoPlaylistForCourt = async (courtKey: string, orderedMediaIds: string[], cambioMin: number) => {
     if (!selectedVenue) return;
     setSavingCourtKey(courtKey);
     setError(null);
     try {
-      const toRemove = assignments.filter((a) => a.cancha_id === courtKey && playlistRowKind(a) === 'video');
-      for (const a of toRemove) {
-        const { error } = await supabase.from('cancha_publicidad').delete().eq('id', a.id);
-        if (error) throw new Error(error.message);
-      }
       const durSec = cambioMin > 0 ? cambioMin * 60 : 30;
-      for (let i = 0; i < orderedMediaIds.length; i++) {
-        const err = await insertCanchaPublicidadRow({
-          cancha_id: courtKey,
-          media_id: orderedMediaIds[i],
-          orden: i + 1,
-          duracion_segundos: durSec,
-          playlist_slot: 'video',
-        });
-        if (err) throw new Error(err);
-      }
-      const { error: cfgErr } = await upsertCanchaPlaylistConfig(supabase, selectedVenue, courtKey, {
-        video_cambio_cada_minutos: cambioMin,
-      });
-      if (cfgErr) throw new Error(cfgErr.message);
+      await savePlaylistAction(courtKey, selectedVenue, orderedMediaIds, 'video', durSec);
+      await upsertPlaylistConfigAction(selectedVenue, courtKey, { video_cambio_cada_minutos: cambioMin });
       await fetchAssignments();
     } catch (e: any) {
       setError(e?.message || 'No se pudo guardar videos.');
@@ -330,28 +268,13 @@ export default function AdminPublicidadPage() {
     setSavingCourtKey(courtKey);
     setError(null);
     try {
-      const toRemove = assignments.filter((a) => a.cancha_id === courtKey && playlistRowKind(a) === 'imagen');
-      for (const a of toRemove) {
-        const { error } = await supabase.from('cancha_publicidad').delete().eq('id', a.id);
-        if (error) throw new Error(error.message);
-      }
       const durSec = cambioMin > 0 ? cambioMin * 60 : 10;
-      for (let i = 0; i < orderedMediaIds.length; i++) {
-        const err = await insertCanchaPublicidadRow({
-          cancha_id: courtKey,
-          media_id: orderedMediaIds[i],
-          orden: i + 1,
-          duracion_segundos: durSec,
-          playlist_slot: 'imagen',
-        });
-        if (err) throw new Error(err);
-      }
-      const { error: cfgErr } = await upsertCanchaPlaylistConfig(supabase, selectedVenue, courtKey, {
+      await savePlaylistAction(courtKey, selectedVenue, orderedMediaIds, 'imagen', durSec);
+      await upsertPlaylistConfigAction(selectedVenue, courtKey, {
         imagen_cambio_cada_minutos: cambioMin,
         imagen_loop: loop,
         imagen_pausa_entre_segundos: pausaSeg,
       });
-      if (cfgErr) throw new Error(cfgErr.message);
       await fetchAssignments();
     } catch (e: any) {
       setError(e?.message || 'No se pudo guardar imágenes.');
@@ -365,33 +288,10 @@ export default function AdminPublicidadPage() {
     setSavingCourtKey(courtKey);
     setError(null);
     try {
-      let del = await supabase
-        .from('cancha_tira')
-        .delete()
-        .eq('cancha_id', courtKey)
-        .eq('venue_name', selectedVenue);
-      if (del.error) {
-        del = await supabase.from('cancha_tira').delete().eq('cancha_id', courtKey);
-        if (del.error) throw new Error(del.error.message);
-      }
-      for (let i = 0; i < orderedTiraIds.length; i++) {
-        const row: Record<string, unknown> = {
-          cancha_id: courtKey,
-          tira_informativa_id: orderedTiraIds[i],
-          orden: i + 1,
-        };
-        if (selectedVenue) row.venue_name = selectedVenue;
-        let ins = await supabase.from('cancha_tira').insert(row);
-        if (ins.error && ins.error.message?.toLowerCase().includes('venue')) {
-          delete row.venue_name;
-          ins = await supabase.from('cancha_tira').insert(row);
-        }
-        if (ins.error) throw new Error(ins.error.message);
-      }
-      const { error: cfgErr } = await upsertCanchaPlaylistConfig(supabase, selectedVenue, courtKey, {
+      await saveTiraPlaylistAction(courtKey, selectedVenue, orderedTiraIds);
+      await upsertPlaylistConfigAction(selectedVenue, courtKey, {
         tira_cambio_cada_minutos: cambioMin,
       });
-      if (cfgErr) throw new Error(cfgErr.message);
       await fetchAssignments();
     } catch (e: any) {
       setError(e?.message || 'No se pudo guardar la tira.');
@@ -426,7 +326,7 @@ export default function AdminPublicidadPage() {
         const path = `ads/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
         const pub = await tryUploadToBuckets(path, file);
         const tipo = isVideoFile(file) ? 'video_file' : isImageFile(file) ? 'imagen' : 'video_file';
-        const ins = await supabase.from('media_content').insert({
+        await addMediaContentAction({
           tipo,
           url: pub.publicUrl,
           nombre: file.name,
@@ -435,7 +335,6 @@ export default function AdminPublicidadPage() {
           duracion_segundos: tipo === 'imagen' ? 10 : null,
           activa: true,
         });
-        if (ins.error) throw ins.error;
       }
       await fetchMedia();
     } catch (e: any) {
@@ -461,27 +360,27 @@ export default function AdminPublicidadPage() {
 
   const deleteMedia = async (id: string) => {
     if (!confirm('¿Eliminar este medio?')) return;
-    const { error } = await supabase.from('media_content').delete().eq('id', id);
-    if (error) return setError(error.message);
-    await fetchMedia();
-    await fetchAssignments();
+    try {
+      await deleteMediaAction(id);
+      await fetchMedia();
+      await fetchAssignments();
+    } catch (e: any) {
+      setError(e.message);
+    }
   };
 
   const renameMedia = async (id: string, nextNameRaw: string) => {
     const nextName = nextNameRaw.trim();
     if (!nextName) return;
     setError(null);
-    const { error } = await supabase
-      .from('media_content')
-      .update({
-        nombre: nextName,
-        nombre_sponsor: nextName.replace(/\.[^/.]+$/, ''),
-      })
-      .eq('id', id);
-    if (error) return setError(error.message);
-    setEditingMediaId(null);
-    setEditingMediaName('');
-    await fetchMedia();
+    try {
+      await renameMediaAction(id, nextName);
+      setEditingMediaId(null);
+      setEditingMediaName('');
+      await fetchMedia();
+    } catch (e: any) {
+      setError(e.message);
+    }
   };
 
   const download = async (url: string, name: string) => {
@@ -504,21 +403,22 @@ export default function AdminPublicidadPage() {
   const addTicker = async () => {
     const msg = nuevoTicker.trim();
     if (!msg) return;
-    const { error } = await supabase.from('tira_informativa').insert({
-      mensaje: msg,
-      activo: true,
-      orden: tiraList.length,
-      pantalla_id: null,
-    });
-    if (error) return setError(error.message);
-    setNuevoTicker('');
-    await fetchTicker();
+    try {
+      await addTickerAction(msg, tiraList.length);
+      setNuevoTicker('');
+      await fetchTicker();
+    } catch (e: any) {
+      setError(e.message);
+    }
   };
 
   const deleteTicker = async (id: string) => {
-    const { error } = await supabase.from('tira_informativa').delete().eq('id', id);
-    if (error) return setError(error.message);
-    await fetchTicker();
+    try {
+      await deleteTickerAction(id);
+      await fetchTicker();
+    } catch (e: any) {
+      setError(e.message);
+    }
   };
 
   const renderMediaTable = (title: string, items: MediaContent[], allowRename = false) => (
@@ -712,7 +612,10 @@ export default function AdminPublicidadPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {selectedVenueCourts.map((court) => {
-                const rows = assignments.filter((a) => a.cancha_id === court.key);
+                const rows = assignments.filter((a: any) => 
+                  String(a.cancha_id).trim() === String(court.key).trim() && 
+                  String(a.venue_name || '').trim() === String(selectedVenue || '').trim()
+                );
                 const { video, imagen } = partitionPlaylistRows(rows as CourtPlaylistRowDb[]);
                 const cfg = playlistConfigByCourt[court.key];
                 return (

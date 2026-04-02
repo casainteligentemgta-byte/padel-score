@@ -95,5 +95,5 @@ GRANT EXECUTE ON FUNCTION public.finalizar_partido_y_liberar_cancha(text, uuid, 
 GRANT EXECUTE ON FUNCTION public.finalizar_partido_y_liberar_cancha(text, uuid, text, jsonb) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.finalizar_partido_y_liberar_cancha(text, uuid, text, jsonb) TO service_role;
 
-COMMENT ON FUNCTION public.finalizar_partido_y_liberar_cancha IS
+COMMENT ON FUNCTION public.finalizar_partido_y_liberar_cancha(text, uuid, text, jsonb) IS
   'Ver encabezado migración 023: ok true, merge data partido, pizarra finalizado + nonce, forbidden / not_authenticated.';

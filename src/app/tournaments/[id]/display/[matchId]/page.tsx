@@ -414,12 +414,18 @@ export default function FullScreenDisplay() {
         return () => { templateSub.unsubscribe(); };
     }, [activeTemplate?.id]);
 
+    const rawSplit = activeTemplate?.split_ratio;
+    const splitPercent =
+        typeof rawSplit === 'number' && rawSplit > 0 && rawSplit <= 1
+            ? Math.round(rawSplit * 100)
+            : Math.min(100, Math.max(0, Math.round(Number(rawSplit) || 50)));
+
     const layout = {
         header: activeTemplate?.header_vh ?? 10,
         score: activeTemplate?.score_vh ?? 23,
         media: activeTemplate?.media_vh ?? 59,
         ticker: activeTemplate?.ticker_vh ?? 8,
-        split: activeTemplate?.split_ratio ?? 50
+        split: splitPercent,
     };
 
     const SmartClock = () => {
@@ -2091,45 +2097,53 @@ export default function FullScreenDisplay() {
                         {/* ══════════════ FOOTER BAR (10%) ══════════════ */}
                         {tickerMessagesToRender.length > 0 && (
                             <div
-                                className="flex-shrink-0 overflow-hidden border-t border-white/10 bg-black/40 backdrop-blur-md relative flex items-center mb-[0.3vh]"
+                                className="pizarra-ticker-bleed z-20 box-border flex min-w-0 flex-shrink-0 flex-row items-center border-t border-white/10 bg-black/40 backdrop-blur-md mb-[0.3vh] rounded-none"
                                 style={{
-                                    height: `${layout.ticker}vh`,
-                                    borderRadius: 'clamp(10px,1.2vw,18px) clamp(10px,1.2vw,18px) 0 0',
+                                    minHeight: `max(5rem, ${layout.ticker}vh)`,
                                 }}
                             >
-                                <div className="w-full overflow-hidden relative py-2">
-                                    <div className="flex whitespace-nowrap animate-marquee">
-                                        {tickerMessagesToRender.map((msg: any, idx: number) => (
-                                            <div key={idx} className="flex items-center px-12">
-                                                {msg.id?.startsWith('res_') ? (
-                                                    <Trophy className="w-6 h-6 text-[#ccff00] mr-4 fill-[#ccff00]/20" />
-                                                ) : msg.id?.startsWith('live_') ? (
-                                                    <Activity className="w-6 h-6 text-cyan-400 animate-pulse mr-4" />
-                                                ) : (
-                                                    <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
-                                                )}
-                                                <span className={`text-3xl font-black italic uppercase tracking-widest ${msg.isDynamic ? 'text-white' : 'text-white/90'}`}>
-                                                    {msg.mensaje || msg.texto}
-                                                </span>
-                                                <div className="w-px h-8 bg-white/10 ml-16" />
-                                            </div>
-                                        ))}
-                                        {/* Duplicate for infinite scroll */}
-                                        {tickerMessagesToRender.map((msg: any, idx: number) => (
-                                            <div key={`dup-${idx}`} className="flex items-center px-12">
-                                                {msg.id?.startsWith('res_') ? (
-                                                    <Trophy className="w-6 h-6 text-[#ccff00] mr-4 fill-[#ccff00]/20" />
-                                                ) : msg.id?.startsWith('live_') ? (
-                                                    <Activity className="w-6 h-6 text-cyan-400 animate-pulse mr-4" />
-                                                ) : (
-                                                    <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
-                                                )}
-                                                <span className={`text-3xl font-black italic uppercase tracking-widest ${msg.isDynamic ? 'text-white' : 'text-white/90'}`}>
-                                                    {msg.mensaje || msg.texto}
-                                                </span>
-                                                <div className="w-px h-8 bg-white/10 ml-16" />
-                                            </div>
-                                        ))}
+                                <div className="marquee-ticker-viewport relative min-w-0 w-full shrink-0 py-3">
+                                    <div className="marquee-track animate-marquee">
+                                        <div className="marquee-half">
+                                            <span className="marquee-enter-gap" aria-hidden />
+                                            {tickerMessagesToRender.map((msg: any, idx: number) => (
+                                                <div key={idx} className="flex shrink-0 items-center px-12">
+                                                    {msg.id?.startsWith('res_') ? (
+                                                        <Trophy className="w-6 h-6 text-[#ccff00] mr-4 fill-[#ccff00]/20" />
+                                                    ) : msg.id?.startsWith('live_') ? (
+                                                        <Activity className="w-6 h-6 text-cyan-400 animate-pulse mr-4" />
+                                                    ) : (
+                                                        <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
+                                                    )}
+                                                    <span
+                                                        className={`whitespace-nowrap text-3xl font-black italic uppercase tracking-widest ${msg.isDynamic ? 'text-white' : 'text-white/90'}`}
+                                                    >
+                                                        {msg.mensaje || msg.texto}
+                                                    </span>
+                                                    <div className="w-px h-8 bg-white/10 ml-16" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="marquee-half">
+                                            <span className="marquee-enter-gap" aria-hidden />
+                                            {tickerMessagesToRender.map((msg: any, idx: number) => (
+                                                <div key={`dup-${idx}`} className="flex shrink-0 items-center px-12">
+                                                    {msg.id?.startsWith('res_') ? (
+                                                        <Trophy className="w-6 h-6 text-[#ccff00] mr-4 fill-[#ccff00]/20" />
+                                                    ) : msg.id?.startsWith('live_') ? (
+                                                        <Activity className="w-6 h-6 text-cyan-400 animate-pulse mr-4" />
+                                                    ) : (
+                                                        <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
+                                                    )}
+                                                    <span
+                                                        className={`whitespace-nowrap text-3xl font-black italic uppercase tracking-widest ${msg.isDynamic ? 'text-white' : 'text-white/90'}`}
+                                                    >
+                                                        {msg.mensaje || msg.texto}
+                                                    </span>
+                                                    <div className="w-px h-8 bg-white/10 ml-16" />
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                             </div>

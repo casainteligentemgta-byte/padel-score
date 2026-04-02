@@ -146,7 +146,7 @@ export async function fetchCanchaPlaylistRows(
   const vn = venueName?.trim() || null;
   let q = supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, posicion_pantalla, media_content(*)')
+    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, media_content(*)')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   if (vn) q = q.eq('venue_name', vn);
@@ -171,7 +171,7 @@ export async function fetchCanchaPlaylistRows(
   // Algunas BD exponen la relación como `publicidad` en lugar de `media_content`.
   let qRelFallback = supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, posicion_pantalla, publicidad(*)')
+    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, publicidad(*)')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   if (vn) qRelFallback = qRelFallback.eq('venue_name', vn);
@@ -196,7 +196,7 @@ export async function fetchCanchaPlaylistRows(
   // Fallback: sin sede (cuando no coincide venue_name en la data).
   let q2 = supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, media_id, orden, duracion_segundos, posicion_pantalla, media_content(*)')
+    .select('id, cancha_id, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, media_content(*)')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   const r2 = await q2;
@@ -207,7 +207,7 @@ export async function fetchCanchaPlaylistRows(
 
   let q3 = supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, media_id, orden, duracion_segundos, posicion_pantalla, publicidad(*)')
+    .select('id, cancha_id, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, publicidad(*)')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   const r3 = await q3;

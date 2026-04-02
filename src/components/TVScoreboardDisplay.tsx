@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import SponsorCarousel from './publicidad/SponsorCarousel';
 import { BouncingBall } from '@/components/BouncingBall';
+import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
 
 interface TVScoreboardDisplayProps {
     playerA1?: string;
@@ -165,14 +166,14 @@ export default function TVScoreboardDisplay({
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
                         transition={{ duration: 0.8, ease: "easeOut" }}
-                        className="h-full grid grid-rows-[10vh_23vh_59vh_8vh] relative overflow-hidden bg-[#08080c] font-outfit"
+                        className="relative flex h-full w-full min-h-0 flex-col overflow-hidden bg-[#08080c] font-outfit"
                     >
-                        {/* Background Ambiance */}
-                        <div className="absolute inset-0 pointer-events-none opacity-20">
-                            <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full blur-[150px]" style={{ backgroundColor: `${smartPadelColor}22` }} />
-                            <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[150px]" />
+                        <div className="pointer-events-none absolute inset-0 z-0 opacity-20">
+                            <div className="absolute top-[-20%] left-[-10%] h-[50%] w-[50%] rounded-full blur-[150px]" style={{ backgroundColor: `${smartPadelColor}22` }} />
+                            <div className="absolute bottom-[-20%] right-[-10%] h-[50%] w-[50%] rounded-full bg-blue-600/10 blur-[150px]" />
                         </div>
 
+                        <div className="relative z-10 grid min-h-0 flex-1 grid-rows-[10vh_23vh_minmax(0,1fr)] overflow-hidden">
                         {/* ROW 1: Header (Top Strip) - ENHANCED VISIBILITY */}
                         <div className="flex justify-between items-center relative z-10 px-12 lg:px-24 border-b border-white/10 bg-black/50 backdrop-blur-2xl">
                             <div className="flex flex-col gap-1">
@@ -287,23 +288,21 @@ export default function TVScoreboardDisplay({
                         </div>
 
                         {/* ROW 3: HEROS ADS (Big Split-Screen) */}
-                        <div className="grid grid-cols-2 gap-8 p-8 relative z-10 overflow-hidden">
+                        <div className="relative z-10 grid min-h-0 grid-cols-2 gap-8 overflow-hidden p-8">
                             {/* Ads Left: Video Slot */}
                             <div className="bg-black/60 backdrop-blur-2xl rounded-[3rem] border-2 border-white/10 overflow-hidden relative shadow-[0_0_80px_rgba(0,0,0,0.5)]">
                                 {adsPlaylist.length > 0 ? (
-                                    <video
+                                    <CourtAdVideoOrIframe
                                         key={`large-ad-${currentAdIdx}`}
-                                        src={adsPlaylist[currentAdIdx]}
-                                        autoPlay
-                                        muted
-                                        playsInline
+                                        videoKey={`large-ad-${currentAdIdx}`}
+                                        url={adsPlaylist[currentAdIdx]}
+                                        className="h-full w-full object-cover"
                                         loop={adsPlaylist.length === 1}
                                         onEnded={() => {
                                             if (adsPlaylist.length > 1) {
-                                                setCurrentAdIdx(prev => (prev + 1) % adsPlaylist.length);
+                                                setCurrentAdIdx((prev) => (prev + 1) % adsPlaylist.length);
                                             }
                                         }}
-                                        className="w-full h-full object-cover"
                                     />
                                 ) : (
                                     <div className="w-full h-full flex flex-col items-center justify-center opacity-30 gap-6">
@@ -342,37 +341,45 @@ export default function TVScoreboardDisplay({
                                 </div>
                             </div>
                         </div>
+                        </div>
 
-                        {/* ROW 4: Ticker Strip */}
-                        <div className="bg-black/60 backdrop-blur-3xl border-t border-white/10 flex items-center overflow-hidden h-full z-20">
-                            <div className="flex items-center whitespace-nowrap animate-marquee">
-                                {tickerMessages.length > 0 ? tickerMessages.map((msg: any, i: number) => (
-                                    <div key={msg.id} className="flex items-center gap-6 mx-12">
-                                        <div className="w-3 h-3 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
-                                        <span className="text-2xl font-black italic uppercase tracking-[0.2em] text-white underline decoration-padel-primary/40 underline-offset-8">
-                                            {msg.mensaje}
-                                        </span>
-                                    </div>
-                                )) : (
-                                    <div className="flex items-center gap-6 mx-12">
-                                        <div className="w-3 h-3 rounded-full bg-padel-primary/30" />
-                                        <span className="text-2xl font-black italic uppercase tracking-[0.3em] text-padel-primary/40">tira informativa TV a la espera de contenido.</span>
-                                    </div>
-                                )}
-                                {/* Duplicate for seamless loop */}
-                                {tickerMessages.length > 0 ? tickerMessages.map((msg: any, i: number) => (
-                                    <div key={`${msg.id}-dup`} className="flex items-center gap-6 mx-12">
-                                        <div className="w-3 h-3 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
-                                        <span className="text-2xl font-black italic uppercase tracking-[0.2em] text-white underline decoration-padel-primary/40 underline-offset-8">
-                                            {msg.mensaje}
-                                        </span>
-                                    </div>
-                                )) : (
-                                    <div className="flex items-center gap-6 mx-12">
-                                        <div className="w-3 h-3 rounded-full bg-padel-primary/30" />
-                                        <span className="text-2xl font-black italic uppercase tracking-[0.3em] text-padel-primary/40">tira informativa TV a la espera de contenido.</span>
-                                    </div>
-                                )}
+                        {/* Tira a ancho real del viewport (fuera del grid con overflow/transform) */}
+                        <div className="pizarra-ticker-bleed pizarra-ticker-bleed--flush relative z-30 box-border flex min-h-[4.5rem] shrink-0 flex-col items-stretch border-t border-white/10 bg-black/60 py-3 backdrop-blur-3xl">
+                            <div className="marquee-ticker-viewport">
+                            <div className="marquee-track animate-marquee">
+                                <div className="marquee-half">
+                                    <span className="marquee-enter-gap" aria-hidden />
+                                    {tickerMessages.length > 0 ? tickerMessages.map((msg: any) => (
+                                        <div key={msg.id} className="flex shrink-0 items-center gap-6 mx-12">
+                                            <div className="w-3 h-3 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
+                                            <span className="whitespace-nowrap text-2xl font-black italic uppercase tracking-[0.2em] text-white underline decoration-padel-primary/40 underline-offset-8">
+                                                {msg.mensaje}
+                                            </span>
+                                        </div>
+                                    )) : (
+                                        <div className="flex shrink-0 items-center gap-6 mx-12">
+                                            <div className="w-3 h-3 rounded-full bg-padel-primary/30" />
+                                            <span className="text-2xl font-black italic uppercase tracking-[0.3em] text-padel-primary/40">tira informativa TV a la espera de contenido.</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="marquee-half">
+                                    <span className="marquee-enter-gap" aria-hidden />
+                                    {tickerMessages.length > 0 ? tickerMessages.map((msg: any) => (
+                                        <div key={`${msg.id}-dup`} className="flex shrink-0 items-center gap-6 mx-12">
+                                            <div className="w-3 h-3 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
+                                            <span className="whitespace-nowrap text-2xl font-black italic uppercase tracking-[0.2em] text-white underline decoration-padel-primary/40 underline-offset-8">
+                                                {msg.mensaje}
+                                            </span>
+                                        </div>
+                                    )) : (
+                                        <div className="flex shrink-0 items-center gap-6 mx-12">
+                                            <div className="w-3 h-3 rounded-full bg-padel-primary/30" />
+                                            <span className="text-2xl font-black italic uppercase tracking-[0.3em] text-padel-primary/40">tira informativa TV a la espera de contenido.</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                             </div>
                         </div>
                     </motion.div>
@@ -385,19 +392,17 @@ export default function TVScoreboardDisplay({
                         className="h-full w-full bg-black relative flex items-center justify-center"
                     >
                         {adsPlaylist.length > 0 ? (
-                            <video
+                            <CourtAdVideoOrIframe
                                 key={`full-ad-${currentAdIdx}`}
-                                src={adsPlaylist[currentAdIdx]}
-                                autoPlay
-                                muted
-                                playsInline
+                                videoKey={`full-ad-${currentAdIdx}`}
+                                url={adsPlaylist[currentAdIdx]}
+                                className="h-full w-full object-cover"
                                 loop={adsPlaylist.length === 1}
                                 onEnded={() => {
                                     if (adsPlaylist.length > 1) {
-                                        setCurrentAdIdx(prev => (prev + 1) % adsPlaylist.length);
+                                        setCurrentAdIdx((prev) => (prev + 1) % adsPlaylist.length);
                                     }
                                 }}
-                                className="w-full h-full object-cover"
                             />
                         ) : (
                             <div className="flex flex-col items-center gap-12">

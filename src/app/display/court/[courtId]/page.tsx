@@ -13,6 +13,7 @@ import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { inferStbFromSetScoresOnly } from '@/lib/matchFinishedScoreDisplay';
 import { useCourtDisplayHeartbeat } from '@/lib/courtDisplayHeartbeat';
 import { logDisplayVideoError } from '@/lib/logDisplayVideoError';
+import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
 import { PizarraWarmupOverlay, parseCalentamientoEndsAt } from '@/components/PizarraWarmupOverlay';
 
 /** Historial RTDB → forma mínima para inferir STB por setScores (1-1 + desempate). */
@@ -78,18 +79,26 @@ function courtSetCell(
 function TickerMarquee({ messages }: { messages: { id: string; mensaje: string }[] }) {
     if (!messages.length) return null;
     return (
-        <div className="w-full overflow-hidden border-b border-white/10 bg-black/60 backdrop-blur-md py-2">
-            <div className="flex items-center whitespace-nowrap animate-marquee">
-                {messages.map((msg) => (
-                    <span key={msg.id} className="mx-10 text-xs font-black uppercase tracking-widest text-padel-primary/90">
-                        {msg.mensaje}
-                    </span>
-                ))}
-                {messages.map((msg) => (
-                    <span key={`${msg.id}-d`} className="mx-10 text-xs font-black uppercase tracking-widest text-padel-primary/90">
-                        {msg.mensaje}
-                    </span>
-                ))}
+        <div className="pizarra-ticker-bleed pizarra-ticker-bleed--flush box-border flex min-w-0 flex-row items-center border-b border-white/10 bg-black/60 py-3 backdrop-blur-md min-h-[3rem]">
+            <div className="marquee-ticker-viewport">
+            <div className="marquee-track animate-marquee">
+                <div className="marquee-half">
+                    <span className="marquee-enter-gap" aria-hidden />
+                    {messages.map((msg) => (
+                        <span key={msg.id} className="mx-10 shrink-0 whitespace-nowrap text-xs font-black uppercase tracking-widest text-padel-primary/90">
+                            {msg.mensaje}
+                        </span>
+                    ))}
+                </div>
+                <div className="marquee-half">
+                    <span className="marquee-enter-gap" aria-hidden />
+                    {messages.map((msg) => (
+                        <span key={`${msg.id}-d`} className="mx-10 shrink-0 whitespace-nowrap text-xs font-black uppercase tracking-widest text-padel-primary/90">
+                            {msg.mensaje}
+                        </span>
+                    ))}
+                </div>
+            </div>
             </div>
         </div>
     );
@@ -115,37 +124,32 @@ function DualPlaylistStrip({
     const hasVideo = Boolean(currentVideoUrl);
     const hasImage = Boolean(currentImageUrl);
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-white/10 min-h-[7rem]">
-            <div className="relative bg-black/80 overflow-hidden flex items-center justify-center">
+        <div className="grid w-full grid-cols-1 grid-rows-2 gap-px bg-white/10 min-h-[min(22vh,10rem)] sm:grid-cols-2 sm:grid-rows-1 sm:min-h-[min(26vh,12rem)] sm:[grid-template-columns:50%_50%]">
+            <div className="relative min-h-0 h-full w-full min-w-0 bg-black/80 overflow-hidden">
                 {hasVideo ? (
-                    <video
-                        key={videoKey}
-                        src={currentVideoUrl!}
-                        className="w-full h-full object-cover opacity-90 max-h-32"
-                        autoPlay
-                        muted
-                        playsInline
+                    <CourtAdVideoOrIframe
+                        url={currentVideoUrl!}
+                        videoKey={videoKey}
+                        className="absolute inset-0 h-full w-full object-cover opacity-95"
                         loop={singleVideoLoop}
                         onEnded={onVideoEnded}
-                        onError={() => logDisplayVideoError(canchaId, currentVideoUrl!)}
+                        onNativeVideoError={() => logDisplayVideoError(canchaId, currentVideoUrl!)}
                     />
                 ) : (
                     <span className="text-[10px] font-black uppercase text-white/25 tracking-widest">Sin vídeos</span>
                 )}
-                <span className="absolute bottom-1 left-2 text-[8px] font-black uppercase text-white/40">Vídeo</span>
             </div>
-            <div className="relative bg-black/80 overflow-hidden flex items-center justify-center">
+            <div className="relative min-h-0 h-full w-full min-w-0 bg-black/80 overflow-hidden">
                 {hasImage ? (
                     <img
                         key={imageKey}
                         src={currentImageUrl!}
                         alt=""
-                        className="w-full h-full object-cover opacity-90 max-h-32"
+                        className="absolute inset-0 h-full w-full object-cover opacity-90"
                     />
                 ) : (
                     <span className="text-[10px] font-black uppercase text-white/25 tracking-widest">Sin imágenes</span>
                 )}
-                <span className="absolute bottom-1 left-2 text-[8px] font-black uppercase text-white/40">Imagen</span>
             </div>
         </div>
     );
@@ -228,7 +232,7 @@ export default function CourtDisplayPage() {
     // ── Estado ESPERA ──────────────────────────────────────────────────────
     if (!isEnVivo) {
         return (
-            <div className="h-screen w-screen bg-[#050505] flex flex-col items-center justify-center text-white font-outfit relative overflow-hidden">
+            <div className="h-screen w-full max-w-none min-w-0 bg-[#050505] flex flex-col items-center justify-center text-white font-outfit relative overflow-x-hidden overflow-y-hidden">
                 <div className="absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_center,_#ccff00_0%,_transparent_70%)]" />
 
                 <div className="relative z-10 flex flex-col items-center gap-8">
@@ -254,10 +258,9 @@ export default function CourtDisplayPage() {
                     </div>
                 </div>
 
-                <div className="absolute bottom-0 left-0 right-0 z-10">
+                <div className="absolute bottom-0 left-0 right-0 z-10 flex w-full min-w-0 max-w-none flex-col items-stretch">
                     {!minimalMode && (
                         <>
-                            <TickerMarquee messages={playlists.tickerMessages} />
                             <DualPlaylistStrip
                                 canchaId={canchaId}
                                 currentVideoUrl={playlists.currentVideoUrl}
@@ -267,6 +270,7 @@ export default function CourtDisplayPage() {
                                 onVideoEnded={playlists.videoAdvanceByTimer ? () => {} : playlists.onVideoEnded}
                                 singleVideoLoop={playlists.videoUrls.length <= 1 || playlists.videoAdvanceByTimer}
                             />
+                            <TickerMarquee messages={playlists.tickerMessages} />
                         </>
                     )}
                     <div className="h-8 bg-gradient-to-t from-black to-transparent pointer-events-none" />
@@ -287,7 +291,7 @@ export default function CourtDisplayPage() {
 
     // ── Estado EN VIVO — Marcador completo ─────────────────────────────────
     return (
-        <div className="h-screen w-screen bg-[#050505] text-white font-outfit flex flex-col overflow-hidden select-none">
+        <div className="flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-x-hidden overflow-y-hidden bg-[#050505] font-outfit text-white select-none">
             <PizarraWarmupOverlay endsAt={warmupEndsAt} layout="fullscreen" />
             {/* Banda superior */}
             <div className="bg-black/60 backdrop-blur-xl border-b border-white/10 px-8 py-3 flex items-center justify-between">
@@ -426,7 +430,7 @@ export default function CourtDisplayPage() {
 
             {!minimalMode && (
                 <>
-                    <div className="relative border-t border-white/10 flex-shrink-0 overflow-hidden">
+                    <div className="relative w-full min-w-0 max-w-none border-t border-white/10 flex-shrink-0 overflow-hidden">
                         <DualPlaylistStrip
                             canchaId={canchaId}
                             currentVideoUrl={playlists.currentVideoUrl}

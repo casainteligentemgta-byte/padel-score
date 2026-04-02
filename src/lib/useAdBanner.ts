@@ -38,7 +38,7 @@ function rowMedia(row: any): { url: string; kind: 'image' | 'video' } | null {
  * Playlist por cancha: tabla `cancha_publicidad` con embed `media_content` o `publicidad`,
  * `.eq('cancha_id', canchaId).order('orden', { ascending: true })`.
  */
-export function useAdBanner(canchaId?: string | null): AdState {
+export function useAdBanner(canchaId?: string | null, venueName?: string | null): AdState {
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [playlist, setPlaylist] = useState<PlaylistItem[]>([]);
   const [index, setIndex] = useState(0);
@@ -53,7 +53,7 @@ export function useAdBanner(canchaId?: string | null): AdState {
     let mounted = true;
 
     const load = async () => {
-      const { data, error } = await selectCanchaPublicidadPlaylist(supabase, canchaId);
+      const { data, error } = await selectCanchaPublicidadPlaylist(supabase, canchaId, venueName);
       if (!mounted) return;
       if (error || !data) {
         setPlaylist([]);
@@ -80,9 +80,18 @@ export function useAdBanner(canchaId?: string | null): AdState {
 
     load();
 
+    const filter = venueName 
+      ? `and(cancha_id.eq.${canchaId},venue_name.ilike.${venueName})`
+      : `cancha_id.eq.${canchaId}`;
+
     const ch = supabase
-      .channel(`cancha_publicidad_${canchaId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cancha_publicidad', filter: `cancha_id=eq.${canchaId}` }, load)
+      .channel(`cancha_publicidad_${canchaId}_${venueName || 'global'}`)
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'cancha_publicidad', 
+        filter: filter 
+      }, load)
       .subscribe();
 
     return () => {
