@@ -14,24 +14,23 @@ function serviceMissing(): Err {
   };
 }
 
-/** Columnas INTEGER en cancha_playlist_config: el cliente puede enviar decimales (p. ej. pausa 0.5 s). */
-const PLAYLIST_CONFIG_INT_KEYS = new Set([
+/** Solo estas columnas existen en cancha_playlist_config; el resto se ignora (evita p. ej. split_ratio → INTEGER). */
+const PLAYLIST_CONFIG_INT_KEYS = [
   'video_cambio_cada_minutos',
   'imagen_cambio_cada_minutos',
   'tira_cambio_cada_minutos',
   'imagen_pausa_entre_segundos',
-]);
+] as const;
 
 function sanitizePlaylistConfigPatch(patch: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const [key, raw] of Object.entries(patch)) {
-    if (PLAYLIST_CONFIG_INT_KEYS.has(key)) {
-      out[key] = Math.max(0, Math.floor(Number(raw) || 0));
-    } else if (key === 'imagen_loop') {
-      out[key] = Boolean(raw);
-    } else {
-      out[key] = raw;
+  for (const key of PLAYLIST_CONFIG_INT_KEYS) {
+    if (key in patch && patch[key] !== undefined) {
+      out[key] = Math.max(0, Math.floor(Number(patch[key]) || 0));
     }
+  }
+  if ('imagen_loop' in patch && patch.imagen_loop !== undefined) {
+    out.imagen_loop = Boolean(patch.imagen_loop);
   }
   return out;
 }
@@ -100,8 +99,9 @@ export async function renameMediaAction(id: string, nombre: string): Promise<{ o
 export async function addTickerAction(mensaje: string, orden: number): Promise<{ ok: true } | Err> {
   const supabase = getSupabaseServiceClient();
   if (!supabase) return serviceMissing();
+  const ordenInt = Math.max(0, Math.floor(Number(orden) || 0));
   try {
-    const { error } = await supabase.from('tira_informativa').insert({ mensaje, orden, activo: true });
+    const { error } = await supabase.from('tira_informativa').insert({ mensaje, orden: ordenInt, activo: true });
     if (error) return { ok: false, error: error.message || 'No se pudo añadir el mensaje.' };
     revalidatePath('/admin/publicidad');
     return { ok: true };

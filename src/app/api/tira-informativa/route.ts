@@ -37,12 +37,15 @@ export async function POST(request: Request) {
   if (!mensaje) {
     return NextResponse.json({ error: 'mensaje es obligatorio' }, { status: 400 });
   }
+  const ordenRaw = body.orden ?? 0;
+  const orden = Math.max(0, Math.floor(Number(ordenRaw) || 0));
+
   const { data, error } = await supabase
     .from('tira_informativa')
     .insert({
       mensaje,
       activo: body.activo ?? true,
-      orden: body.orden ?? 0,
+      orden,
       pantalla_id: body.pantalla_id ?? null,
     })
     .select()
@@ -61,7 +64,7 @@ export async function PATCH(request: Request) {
       { status: 501 }
     );
   }
-  let body: { id: string; orden?: number; pantalla_id?: string | null };
+  let body: { id: string; orden?: number | string; pantalla_id?: string | null };
   try {
     body = await request.json();
   } catch {
@@ -71,7 +74,10 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'id es obligatorio' }, { status: 400 });
   }
   const updates: { orden?: number; pantalla_id?: string | null } = {};
-  if (typeof body.orden === 'number') updates.orden = body.orden;
+  if (body.orden !== undefined && body.orden !== null && body.orden !== '') {
+    const n = Number(body.orden);
+    if (Number.isFinite(n)) updates.orden = Math.max(0, Math.floor(n));
+  }
   if (body.pantalla_id !== undefined) updates.pantalla_id = body.pantalla_id;
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'Indica orden o pantalla_id' }, { status: 400 });

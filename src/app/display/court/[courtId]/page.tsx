@@ -139,13 +139,13 @@ function DualPlaylistStrip({
                     <span className="text-[10px] font-black uppercase text-white/25 tracking-widest">Sin vídeos</span>
                 )}
             </div>
-            <div className="relative min-h-0 h-full w-full min-w-0 bg-black/80 overflow-hidden">
+            <div className="relative flex min-h-0 h-full w-full min-w-0 items-center justify-center bg-black/80 overflow-hidden p-1 sm:p-2">
                 {hasImage ? (
                     <img
                         key={imageKey}
                         src={currentImageUrl!}
                         alt=""
-                        className="absolute inset-0 h-full w-full object-cover opacity-90"
+                        className="max-h-full max-w-full object-contain object-center opacity-95"
                     />
                 ) : (
                     <span className="text-[10px] font-black uppercase text-white/25 tracking-widest">Sin imágenes</span>

@@ -699,11 +699,11 @@ export default function SmartDisplay({
                     key={`carousel-${currentCarouselIdx}`}
                     src={carouselPlaylist[currentCarouselIdx]}
                     alt="Sponsor"
-                    initial={{ opacity: 0, scale: 1.08 }}
+                    initial={{ opacity: 0, scale: 1.04 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.93 }}
+                    exit={{ opacity: 0, scale: 0.97 }}
                     transition={{ duration: 0.7 }}
-                    className="w-full h-full object-cover"
+                    className="max-h-full max-w-full object-contain object-center"
                   />
                 ) : (
                   <SponsorCarousel

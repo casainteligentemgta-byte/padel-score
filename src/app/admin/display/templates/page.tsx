@@ -4,10 +4,24 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { saveTemplateAction, applyTemplateToCanchaAction } from './actions';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Layout, Save, Monitor, Clock, PlayCircle, 
-  Columns, Settings2, Trash2, ArrowRightCircle,
-  Trello, CheckCircle2, AlertCircle, RefreshCw
+import {
+  Layout,
+  Save,
+  Monitor,
+  Clock,
+  PlayCircle,
+  Columns,
+  Settings2,
+  Trash2,
+  ArrowRightCircle,
+  Trello,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
+  PanelTop,
+  Trophy,
+  Image as ImageLucide,
+  MessageSquare,
 } from 'lucide-react';
 
 interface DisplayTemplate {
@@ -351,27 +365,78 @@ export default function AdminDisplayTemplates() {
                     </div>
                   </div>
 
-                  {/* Visual Preview */}
+                  {/* Visual Preview — mismo orden que la pizarra TV: cabecera → marcador → media → tira */}
                   <div className="space-y-4 min-h-0">
-                    <label className="text-xs font-black uppercase tracking-[0.4em] text-white/20 italic block">Vista Previa Proporcional (VH)</label>
-                    <div className="border border-white/10 rounded-3xl overflow-hidden shadow-2xl bg-black aspect-video max-h-[min(56vh,520px)] w-full relative group">
-                        <div style={{ height: `${selectedTemplate.header_vh}%` }} className="w-full bg-blue-600/20 border-b border-blue-500/30 flex items-center justify-center">
-                            <span className="text-[10px] font-black italic opacity-40">HEADER ({selectedTemplate.header_vh}vh)</span>
+                    <label className="text-xs font-black uppercase tracking-[0.4em] text-white/35 italic block">
+                      Vista previa pizarra (proporción vertical)
+                    </label>
+                    <p className="text-[10px] text-white/45 font-bold uppercase tracking-wider leading-snug -mt-2">
+                      Arriba: cabecera y marcador · Centro: vídeo e imagen (split) · Abajo: tira informativa
+                    </p>
+                    <div className="border border-white/15 rounded-3xl overflow-hidden shadow-2xl bg-[#0a0a0c] aspect-video max-h-[min(56vh,520px)] w-full flex flex-col ring-1 ring-white/5">
+                      {/* Cabecera / head */}
+                      <div
+                        style={{ height: `${selectedTemplate.header_vh}%` }}
+                        className="w-full shrink-0 flex flex-col items-center justify-center gap-0.5 bg-gradient-to-b from-slate-900 to-slate-900/60 border-b border-slate-600/50 px-2 min-h-0"
+                      >
+                        <PanelTop className="w-4 h-4 text-sky-400 shrink-0" aria-hidden />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-sky-100/95 text-center leading-tight">
+                          Cabecera
+                        </span>
+                        <span className="text-[8px] font-mono text-sky-400/70">{selectedTemplate.header_vh}%</span>
+                      </div>
+                      {/* Marcador */}
+                      <div
+                        style={{ height: `${selectedTemplate.score_vh}%` }}
+                        className="w-full shrink-0 flex flex-col items-center justify-center gap-0.5 bg-gradient-to-b from-padel-primary/18 to-padel-primary/8 border-b border-padel-primary/35 px-2 min-h-0"
+                      >
+                        <Trophy className="w-4 h-4 text-padel-primary shrink-0" aria-hidden />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white text-center leading-tight">
+                          Marcador
+                        </span>
+                        <span className="text-[8px] font-mono text-padel-primary/80">{selectedTemplate.score_vh}%</span>
+                      </div>
+                      {/* Vídeo + imagen */}
+                      <div
+                        style={{ height: `${selectedTemplate.media_vh}%` }}
+                        className="w-full shrink-0 flex gap-1 p-1.5 bg-zinc-950/90 min-h-0 border-b border-white/10"
+                      >
+                        <div
+                          style={{ width: `${selectedTemplate.split_ratio * 100}%` }}
+                          className="h-full min-w-0 rounded-xl border border-blue-500/35 bg-blue-950/50 flex flex-col items-center justify-center gap-1 px-1"
+                        >
+                          <PlayCircle className="w-5 h-5 text-blue-400 shrink-0" aria-hidden />
+                          <span className="text-[9px] font-black uppercase tracking-wider text-blue-100 text-center leading-tight">
+                            Vídeo
+                          </span>
+                          <span className="text-[7px] font-mono text-blue-400/70">
+                            {Math.round(selectedTemplate.split_ratio * 100)}% ancho
+                          </span>
                         </div>
-                        <div style={{ height: `${selectedTemplate.score_vh}%` }} className="w-full bg-padel-primary/10 border-b border-padel-primary/30 flex items-center justify-center">
-                            <span className="text-[10px] font-black italic opacity-40">SCOREBOARD ({selectedTemplate.score_vh}vh)</span>
+                        <div
+                          style={{ width: `${(1 - selectedTemplate.split_ratio) * 100}%` }}
+                          className="h-full min-w-0 rounded-xl border border-padel-primary/40 bg-padel-primary/10 flex flex-col items-center justify-center gap-1 px-1"
+                        >
+                          <ImageLucide className="w-5 h-5 text-padel-primary shrink-0" aria-hidden />
+                          <span className="text-[9px] font-black uppercase tracking-wider text-white text-center leading-tight">
+                            Imagen
+                          </span>
+                          <span className="text-[7px] font-mono text-padel-primary/80">
+                            {Math.round((1 - selectedTemplate.split_ratio) * 100)}% ancho
+                          </span>
                         </div>
-                        <div style={{ height: `${selectedTemplate.media_vh}%` }} className="w-full bg-white/5 flex gap-1 p-1">
-                            <div style={{ width: `${selectedTemplate.split_ratio * 100}%` }} className="h-full bg-blue-500/20 rounded-xl border border-blue-500/20 flex items-center justify-center">
-                                <span className="text-[8px] font-black italic opacity-30">VIDEO</span>
-                            </div>
-                            <div style={{ width: `${(1 - selectedTemplate.split_ratio) * 100}%` }} className="h-full bg-padel-primary/20 rounded-xl border border-padel-primary/20 flex items-center justify-center">
-                                <span className="text-[8px] font-black italic opacity-30">IMAGE</span>
-                            </div>
-                        </div>
-                        <div style={{ height: `${selectedTemplate.ticker_vh}%` }} className="w-full bg-black border-t border-white/10 flex items-center justify-center">
-                            <span className="text-[8px] font-black italic opacity-30">TICKER ({selectedTemplate.ticker_vh}vh)</span>
-                        </div>
+                      </div>
+                      {/* Tira abajo */}
+                      <div
+                        style={{ height: `${selectedTemplate.ticker_vh}%` }}
+                        className="w-full shrink-0 flex flex-col items-center justify-center gap-0.5 bg-black border-t border-white/15 px-2 min-h-0"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-zinc-400 shrink-0" aria-hidden />
+                        <span className="text-[9px] font-black uppercase tracking-[0.25em] text-zinc-200 text-center leading-tight">
+                          Tira informativa
+                        </span>
+                        <span className="text-[8px] font-mono text-zinc-500">{selectedTemplate.ticker_vh}%</span>
+                      </div>
                     </div>
                   </div>
 
