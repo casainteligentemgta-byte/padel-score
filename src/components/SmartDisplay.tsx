@@ -20,7 +20,11 @@ import { Calendar, Tv } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
 import SponsorCarousel from '@/components/publicidad/SponsorCarousel';
-import { partitionPlaylistRows, fetchCanchaPlaylistRows } from '@/lib/courtPlaylists';
+import {
+  fetchCanchaPlaylistRows,
+  normalizeCourtPlaylistRows,
+  partitionPlaylistRows,
+} from '@/lib/courtPlaylists';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -209,7 +213,8 @@ export default function SmartDisplay({
     if (!supabase) return;
     const result = await fetchCanchaPlaylistRows(supabase as any, canchaId, venueName);
     if (result.error || !result.data) return;
-    const { video, imagen } = partitionPlaylistRows(result.data);
+    const rows = normalizeCourtPlaylistRows((result.data as unknown[]) || []);
+    const { video, imagen } = partitionPlaylistRows(rows);
     setAdsPlaylist(video.map((r) => r.media_content?.url ?? '').filter(Boolean));
     const imgUrls = imagen.map((r) => r.media_content?.url ?? '').filter(Boolean);
     const imgDurs = imagen.map((r) => r.duracion_segundos ?? 8);
