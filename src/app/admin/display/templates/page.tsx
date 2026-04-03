@@ -118,14 +118,22 @@ export default function AdminDisplayTemplates() {
     };
 
     try {
-      const resData = await saveTemplateAction(id, payload);
-      setMessage({ text: 'Template guardado correctamente', type: 'success' });
-      fetchData();
-      setSelectedTemplate(resData);
-    } catch (err: any) {
-      setMessage({ text: 'Error al guardar: ' + err.message, type: 'error' });
+      const res = await saveTemplateAction(id, payload);
+      if (!res.ok) {
+        setMessage({ text: res.error, type: 'error' });
+      } else {
+        setMessage({ text: 'Template guardado correctamente', type: 'success' });
+        await fetchData();
+        setSelectedTemplate(res.data as DisplayTemplate);
+      }
+    } catch {
+      setMessage({
+        text:
+          'Error al guardar el template. Comprueba SUPABASE_SERVICE_ROLE_KEY en Vercel y que la migración display_templates esté aplicada en Supabase.',
+        type: 'error',
+      });
     }
-    
+
     setIsSaving(false);
   };
 
@@ -133,11 +141,19 @@ export default function AdminDisplayTemplates() {
     if (!selectedTemplate || selectedTemplate.id.startsWith('new-')) return;
     
     try {
-      await applyTemplateToCanchaAction(canchaId, selectedTemplate.id);
-      setMessage({ text: `Template aplicado a ${canchaId}`, type: 'success' });
-      fetchData();
-    } catch (err: any) {
-      setMessage({ text: 'Error al aplicar a cancha: ' + err.message, type: 'error' });
+      const applied = await applyTemplateToCanchaAction(canchaId, selectedTemplate.id);
+      if (!applied.ok) {
+        setMessage({ text: applied.error, type: 'error' });
+      } else {
+        setMessage({ text: `Template aplicado a ${canchaId}`, type: 'success' });
+        await fetchData();
+      }
+    } catch {
+      setMessage({
+        text:
+          'Error al aplicar el template. Revisa SUPABASE_SERVICE_ROLE_KEY y que la tabla canchas tenga current_template_id.',
+        type: 'error',
+      });
     }
   };
 

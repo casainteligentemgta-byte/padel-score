@@ -1,210 +1,273 @@
-'use server'
+'use server';
+
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { normalizeCanchaIdKey } from '@/lib/courtPlaylists';
 
+type Err = { ok: false; error: string };
+
+function serviceMissing(): Err {
+  return {
+    ok: false,
+    error:
+      'Servidor sin credenciales Supabase. Añade SUPABASE_SERVICE_ROLE_KEY en Vercel (Environment Variables) y vuelve a desplegar.',
+  };
+}
+
 /**
- * Acciones para Admin Publicidad que evaden RLS usando el Service Role.
+ * Las Server Actions no deben usar throw hacia el cliente en producción:
+ * Next.js oculta el mensaje real. Devolvemos { ok, error } siempre.
  */
 
-// --- BIBLIOTECA MEDIA ---
-
-export async function addMediaContentAction(payload: any) {
+export async function addMediaContentAction(
+  payload: Record<string, unknown>,
+): Promise<{ ok: true; data: Record<string, unknown> } | Err> {
   const supabase = getSupabaseServiceClient();
-  if (!supabase) throw new Error('Servidor no configurado');
-  const { error, data } = await supabase.from('media_content').insert([payload]).select().single();
-  if (error) throw new Error(error.message);
-  revalidatePath('/admin/publicidad');
-  return data;
+  if (!supabase) return serviceMissing();
+  try {
+    const { error, data } = await supabase.from('media_content').insert([payload]).select().single();
+    if (error) return { ok: false, error: error.message || 'No se pudo crear el contenido.' };
+    revalidatePath('/admin/publicidad');
+    return { ok: true, data: data as Record<string, unknown> };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al crear contenido.' };
+  }
 }
 
-export async function deleteMediaAction(id: string) {
+export async function deleteMediaAction(id: string): Promise<{ ok: true } | Err> {
   const supabase = getSupabaseServiceClient();
-  if (!supabase) throw new Error('Servidor no configurado');
-  const { error } = await supabase.from('media_content').delete().eq('id', id);
-  if (error) throw new Error(error.message);
-  revalidatePath('/admin/publicidad');
+  if (!supabase) return serviceMissing();
+  try {
+    const { error } = await supabase.from('media_content').delete().eq('id', id);
+    if (error) return { ok: false, error: error.message || 'No se pudo eliminar.' };
+    revalidatePath('/admin/publicidad');
+    return { ok: true };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al eliminar.' };
+  }
 }
 
-export async function renameMediaAction(id: string, nombre: string) {
+export async function renameMediaAction(id: string, nombre: string): Promise<{ ok: true } | Err> {
   const supabase = getSupabaseServiceClient();
-  if (!supabase) throw new Error('Servidor no configurado');
-  const { error } = await supabase
-    .from('media_content')
-    .update({ nombre, nombre_sponsor: nombre.replace(/\.[^/.]+$/, '') })
-    .eq('id', id);
-  if (error) throw new Error(error.message);
-  revalidatePath('/admin/publicidad');
+  if (!supabase) return serviceMissing();
+  try {
+    const { error } = await supabase
+      .from('media_content')
+      .update({ nombre, nombre_sponsor: nombre.replace(/\.[^/.]+$/, '') })
+      .eq('id', id);
+    if (error) return { ok: false, error: error.message || 'No se pudo renombrar.' };
+    revalidatePath('/admin/publicidad');
+    return { ok: true };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al renombrar.' };
+  }
 }
 
-// --- TICKER ---
-
-export async function addTickerAction(mensaje: string, orden: number) {
+export async function addTickerAction(mensaje: string, orden: number): Promise<{ ok: true } | Err> {
   const supabase = getSupabaseServiceClient();
-  if (!supabase) throw new Error('Servidor no configurado');
-  const { error } = await supabase.from('tira_informativa').insert({ mensaje, orden, activo: true });
-  if (error) throw new Error(error.message);
-  revalidatePath('/admin/publicidad');
+  if (!supabase) return serviceMissing();
+  try {
+    const { error } = await supabase.from('tira_informativa').insert({ mensaje, orden, activo: true });
+    if (error) return { ok: false, error: error.message || 'No se pudo añadir el mensaje.' };
+    revalidatePath('/admin/publicidad');
+    return { ok: true };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al añadir tira.' };
+  }
 }
 
-export async function deleteTickerAction(id: string) {
+export async function deleteTickerAction(id: string): Promise<{ ok: true } | Err> {
   const supabase = getSupabaseServiceClient();
-  if (!supabase) throw new Error('Servidor no configurado');
-  const { error } = await supabase.from('tira_informativa').delete().eq('id', id);
-  if (error) throw new Error(error.message);
-  revalidatePath('/admin/publicidad');
+  if (!supabase) return serviceMissing();
+  try {
+    const { error } = await supabase.from('tira_informativa').delete().eq('id', id);
+    if (error) return { ok: false, error: error.message || 'No se pudo eliminar el mensaje.' };
+    revalidatePath('/admin/publicidad');
+    return { ok: true };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al eliminar tira.' };
+  }
 }
-
-// --- PLAYLISTS POR CANCHA ---
 
 export async function savePlaylistAction(
-  courtKey: string, 
-  venueName: string, 
-  mediaIds: string[], 
-  slot: 'video' | 'imagen', 
-  durSeconds: number
-) {
+  courtKey: string,
+  venueName: string,
+  mediaIds: string[],
+  slot: 'video' | 'imagen',
+  durSeconds: number,
+): Promise<{ ok: true } | Err> {
   const supabase = getSupabaseServiceClient();
-  if (!supabase) throw new Error('Servidor no configurado');
+  if (!supabase) return serviceMissing();
 
   const cleanCourtKey = courtKey.trim();
   const cleanVenueName = venueName.trim();
 
-  // 1. Borrar anteriores del mismo tipo de manera agresiva
-  // Borramos los que coinciden con el slot O los que no tienen slot (migración legacy)
-  const { error: delErr } = await supabase
-    .from('cancha_publicidad')
-    .delete()
-    .eq('cancha_id', cleanCourtKey)
-    .eq('venue_name', cleanVenueName)
-    .or(`playlist_slot.eq.${slot},playlist_slot.is.null`);
-  
-  if (delErr) {
-    console.error('Error al borrar playlist previa:', delErr);
-    throw new Error(`Error al limpiar playlist previa: ${delErr.message}`);
-  }
+  try {
+    const { error: delErr } = await supabase
+      .from('cancha_publicidad')
+      .delete()
+      .eq('cancha_id', cleanCourtKey)
+      .eq('venue_name', cleanVenueName)
+      .or(`playlist_slot.eq.${slot},playlist_slot.is.null`);
 
-  // 2. Insertar nuevas (sin duplicados: mismo id dos veces rompe índices únicos por slot+orden)
-  const orderedUniqueIds = (() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const id of mediaIds) {
-      const t = String(id || '').trim();
-      if (!t || seen.has(t)) continue;
-      seen.add(t);
-      out.push(t);
+    if (delErr) {
+      console.error('Error al borrar playlist previa:', delErr);
+      return { ok: false, error: `Al limpiar playlist: ${delErr.message}` };
     }
-    return out;
-  })();
 
-  if (orderedUniqueIds.length > 0) {
-    const rows = orderedUniqueIds.map((mid, i) => ({
-      cancha_id: cleanCourtKey,
-      venue_name: cleanVenueName,
-      media_id: mid,
-      orden: i + 1,
-      duracion_segundos: durSeconds || 10,
-      playlist_slot: slot
-    }));
-    
-    const { error: insErr } = await supabase.from('cancha_publicidad').insert(rows);
-    if (insErr) {
-      console.error('Error al insertar nueva playlist:', insErr);
-      throw new Error(`Error al guardar: ${insErr.message}`);
+    const orderedUniqueIds = (() => {
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const id of mediaIds) {
+        const t = String(id || '').trim();
+        if (!t || seen.has(t)) continue;
+        seen.add(t);
+        out.push(t);
+      }
+      return out;
+    })();
+
+    if (orderedUniqueIds.length > 0) {
+      const rows = orderedUniqueIds.map((mid, i) => ({
+        cancha_id: cleanCourtKey,
+        venue_name: cleanVenueName,
+        media_id: mid,
+        orden: i + 1,
+        duracion_segundos: durSeconds || 10,
+        playlist_slot: slot,
+      }));
+
+      const { error: insErr } = await supabase.from('cancha_publicidad').insert(rows);
+      if (insErr) {
+        console.error('Error al insertar nueva playlist:', insErr);
+        return { ok: false, error: insErr.message || 'Error al guardar la playlist.' };
+      }
     }
-  }
 
-  revalidatePath('/admin/publicidad');
+    revalidatePath('/admin/publicidad');
+    return { ok: true };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al guardar playlist.' };
+  }
 }
 
-export async function saveTiraPlaylistAction(courtKey: string, venueName: string, tiraIds: string[]) {
+export async function saveTiraPlaylistAction(
+  courtKey: string,
+  venueName: string,
+  tiraIds: string[],
+): Promise<{ ok: true } | Err> {
   const supabase = getSupabaseServiceClient();
-  if (!supabase) throw new Error('Servidor no configurado');
+  if (!supabase) return serviceMissing();
 
   const cleanVenueName = venueName.trim();
   const cleanCourtKey = courtKey.trim();
 
-  const { error: delErr } = await supabase
-    .from('cancha_tira')
-    .delete()
-    .eq('cancha_id', cleanCourtKey)
-    .eq('venue_name', cleanVenueName);
-  
-  if (delErr) throw new Error(delErr.message);
+  try {
+    const { error: delErr } = await supabase
+      .from('cancha_tira')
+      .delete()
+      .eq('cancha_id', cleanCourtKey)
+      .eq('venue_name', cleanVenueName);
 
-  if (tiraIds.length > 0) {
-    const rows = tiraIds.map((tid, i) => ({
-      cancha_id: cleanCourtKey,
-      venue_name: cleanVenueName,
-      tira_informativa_id: tid,
-      orden: i + 1
-    }));
-    const { error: insErr } = await supabase.from('cancha_tira').insert(rows);
-    if (insErr) throw new Error(insErr.message);
+    if (delErr) return { ok: false, error: delErr.message || 'No se pudo limpiar la tira.' };
+
+    if (tiraIds.length > 0) {
+      const rows = tiraIds.map((tid, i) => ({
+        cancha_id: cleanCourtKey,
+        venue_name: cleanVenueName,
+        tira_informativa_id: tid,
+        orden: i + 1,
+      }));
+      const { error: insErr } = await supabase.from('cancha_tira').insert(rows);
+      if (insErr) return { ok: false, error: insErr.message || 'No se pudo guardar la tira.' };
+    }
+
+    revalidatePath('/admin/publicidad');
+    return { ok: true };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al guardar tira.' };
   }
-
-  revalidatePath('/admin/publicidad');
 }
 
-export async function upsertPlaylistConfigAction(venueName: string, canchaId: string, patch: any) {
+export async function upsertPlaylistConfigAction(
+  venueName: string,
+  canchaId: string,
+  patch: Record<string, unknown>,
+): Promise<{ ok: true } | Err> {
   const supabase = getSupabaseServiceClient();
-  if (!supabase) throw new Error('Servidor no configurado');
+  if (!supabase) return serviceMissing();
 
-  const { error } = await supabase.from('cancha_playlist_config').upsert({
-    venue_name: venueName.trim(),
-    cancha_id: canchaId.trim(),
-    ...patch,
-    updated_at: new Date().toISOString()
-  }, { onConflict: 'venue_name,cancha_id' });
+  try {
+    const { error } = await supabase.from('cancha_playlist_config').upsert(
+      {
+        venue_name: venueName.trim(),
+        cancha_id: canchaId.trim(),
+        ...patch,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'venue_name,cancha_id' },
+    );
 
-  if (error) throw new Error(error.message);
-  revalidatePath('/admin/publicidad');
+    if (error) return { ok: false, error: error.message || 'No se pudo guardar la configuración.' };
+    revalidatePath('/admin/publicidad');
+    return { ok: true };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al guardar configuración.' };
+  }
 }
 
-export async function fetchAssignmentsAction(venueName?: string, keys?: string[]) {
+export type FetchAssignmentsOk = {
+  assignments: unknown[];
+  config: unknown[];
+  tiras: unknown[];
+};
+
+export async function fetchAssignmentsAction(
+  venueName?: string,
+  keys?: string[],
+): Promise<{ ok: true } & FetchAssignmentsOk | Err> {
   const supabase = getSupabaseServiceClient();
-  if (!supabase) throw new Error('Servidor no configurado');
+  if (!supabase) return serviceMissing();
 
   const v = venueName?.trim();
-  let q = supabase
-    .from('cancha_publicidad')
-    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, media_content(*)');
-  
-  if (v) q = q.ilike('venue_name', v);
-  if (keys && keys.length > 0) q = q.in('cancha_id', keys);
+  try {
+    let q = supabase
+      .from('cancha_publicidad')
+      .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, media_content(*)');
 
-  const { data, error } = await q.order('orden', { ascending: true });
-  if (error) {
-    console.error('Error in fetchAssignmentsAction:', error);
-    throw new Error(error.message);
+    if (v) q = q.ilike('venue_name', v);
+    if (keys && keys.length > 0) q = q.in('cancha_id', keys);
+
+    const { data, error } = await q.order('orden', { ascending: true });
+    if (error) {
+      console.error('Error in fetchAssignmentsAction:', error);
+      return { ok: false, error: error.message || 'No se pudieron cargar las asignaciones.' };
+    }
+
+    const assignments = (data || []).map((r: Record<string, unknown>) => ({
+      ...r,
+      venue_name: String(r.venue_name || '').trim(),
+      cancha_id: normalizeCanchaIdKey(String(r.cancha_id || '')),
+    }));
+
+    const { data: config } = await supabase.from('cancha_playlist_config').select('*').eq('venue_name', v || '');
+
+    const { data: tiras } = await supabase
+      .from('cancha_tira')
+      .select('cancha_id, tira_informativa_id, orden, venue_name')
+      .eq('venue_name', v || '');
+
+    const configNorm = (config || []).map((r: Record<string, unknown>) => ({
+      ...r,
+      cancha_id: normalizeCanchaIdKey(String(r.cancha_id || '')),
+    }));
+    const tirasNorm = (tiras || []).map((r: Record<string, unknown>) => ({
+      ...r,
+      cancha_id: normalizeCanchaIdKey(String(r.cancha_id || '')),
+    }));
+
+    return { ok: true, assignments, config: configNorm, tiras: tirasNorm };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al cargar asignaciones.' };
   }
-
-  const assignments = (data || []).map((r: any) => ({
-    ...r,
-    venue_name: (r.venue_name || '').trim(),
-    cancha_id: normalizeCanchaIdKey(r.cancha_id),
-  }));
-
-  // Cargar configuración de todas las canchas para este venue para evitar filtros complejos en loop
-  const { data: config } = await supabase
-    .from('cancha_playlist_config')
-    .select('*')
-    .eq('venue_name', v || '');
-  
-  // Y tiras
-  const { data: tiras } = await supabase
-    .from('cancha_tira')
-    .select('cancha_id, tira_informativa_id, orden, venue_name')
-    .eq('venue_name', v || '');
-
-  const configNorm = (config || []).map((r: any) => ({
-    ...r,
-    cancha_id: normalizeCanchaIdKey(r.cancha_id),
-  }));
-  const tirasNorm = (tiras || []).map((r: any) => ({
-    ...r,
-    cancha_id: normalizeCanchaIdKey(r.cancha_id),
-  }));
-
-  return { assignments, config: configNorm, tiras: tirasNorm };
 }

@@ -148,8 +148,13 @@ export default function AdminPublicidadPage() {
     if (!selectedVenue) return;
     const keys = selectedVenueCourts.map((c) => String(c.key).trim());
     try {
-      const { assignments: data, config, tiras } = await fetchAssignmentsAction(selectedVenue);
-      
+      const res = await fetchAssignmentsAction(selectedVenue);
+      if (!res.ok) {
+        console.error('fetchAssignmentsAction:', res.error);
+        return;
+      }
+      const { assignments: data, config, tiras } = res;
+
       const filtered: CourtPlaylistRow[] = (data || []).map((r: any) => {
         const mc = r.media_content;
         const media_content = Array.isArray(mc) ? mc[0] ?? null : mc ?? null;
@@ -260,8 +265,18 @@ export default function AdminPublicidadPage() {
     setError(null);
     try {
       const durSec = cambioMin > 0 ? cambioMin * 60 : 30;
-      await savePlaylistAction(courtKey, selectedVenue, orderedMediaIds, 'video', durSec);
-      await upsertPlaylistConfigAction(selectedVenue, courtKey, { video_cambio_cada_minutos: cambioMin });
+      const s1 = await savePlaylistAction(courtKey, selectedVenue, orderedMediaIds, 'video', durSec);
+      if (!s1.ok) {
+        setError(s1.error);
+        return;
+      }
+      const s2 = await upsertPlaylistConfigAction(selectedVenue, courtKey, {
+        video_cambio_cada_minutos: cambioMin,
+      });
+      if (!s2.ok) {
+        setError(s2.error);
+        return;
+      }
       await fetchAssignments();
     } catch (e: any) {
       setError(e?.message || 'No se pudo guardar videos.');
@@ -282,12 +297,20 @@ export default function AdminPublicidadPage() {
     setError(null);
     try {
       const durSec = cambioMin > 0 ? cambioMin * 60 : 10;
-      await savePlaylistAction(courtKey, selectedVenue, orderedMediaIds, 'imagen', durSec);
-      await upsertPlaylistConfigAction(selectedVenue, courtKey, {
+      const s1 = await savePlaylistAction(courtKey, selectedVenue, orderedMediaIds, 'imagen', durSec);
+      if (!s1.ok) {
+        setError(s1.error);
+        return;
+      }
+      const s2 = await upsertPlaylistConfigAction(selectedVenue, courtKey, {
         imagen_cambio_cada_minutos: cambioMin,
         imagen_loop: loop,
         imagen_pausa_entre_segundos: pausaSeg,
       });
+      if (!s2.ok) {
+        setError(s2.error);
+        return;
+      }
       await fetchAssignments();
     } catch (e: any) {
       setError(e?.message || 'No se pudo guardar imágenes.');
@@ -301,10 +324,18 @@ export default function AdminPublicidadPage() {
     setSavingCourtKey(courtKey);
     setError(null);
     try {
-      await saveTiraPlaylistAction(courtKey, selectedVenue, orderedTiraIds);
-      await upsertPlaylistConfigAction(selectedVenue, courtKey, {
+      const s1 = await saveTiraPlaylistAction(courtKey, selectedVenue, orderedTiraIds);
+      if (!s1.ok) {
+        setError(s1.error);
+        return;
+      }
+      const s2 = await upsertPlaylistConfigAction(selectedVenue, courtKey, {
         tira_cambio_cada_minutos: cambioMin,
       });
+      if (!s2.ok) {
+        setError(s2.error);
+        return;
+      }
       await fetchAssignments();
     } catch (e: any) {
       setError(e?.message || 'No se pudo guardar la tira.');
@@ -339,7 +370,7 @@ export default function AdminPublicidadPage() {
         const path = `ads/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
         const pub = await tryUploadToBuckets(path, file);
         const tipo = isVideoFile(file) ? 'video_file' : isImageFile(file) ? 'imagen' : 'video_file';
-        await addMediaContentAction({
+        const addRes = await addMediaContentAction({
           tipo,
           url: pub.publicUrl,
           nombre: file.name,
@@ -348,6 +379,10 @@ export default function AdminPublicidadPage() {
           duracion_segundos: tipo === 'imagen' ? 10 : null,
           activa: true,
         });
+        if (!addRes.ok) {
+          setError(addRes.error);
+          return;
+        }
       }
       await fetchMedia();
     } catch (e: any) {
@@ -374,7 +409,11 @@ export default function AdminPublicidadPage() {
   const deleteMedia = async (id: string) => {
     if (!confirm('¿Eliminar este medio?')) return;
     try {
-      await deleteMediaAction(id);
+      const r = await deleteMediaAction(id);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
       await fetchMedia();
       await fetchAssignments();
     } catch (e: any) {
@@ -387,7 +426,11 @@ export default function AdminPublicidadPage() {
     if (!nextName) return;
     setError(null);
     try {
-      await renameMediaAction(id, nextName);
+      const r = await renameMediaAction(id, nextName);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
       setEditingMediaId(null);
       setEditingMediaName('');
       await fetchMedia();
@@ -417,7 +460,11 @@ export default function AdminPublicidadPage() {
     const msg = nuevoTicker.trim();
     if (!msg) return;
     try {
-      await addTickerAction(msg, tiraList.length);
+      const r = await addTickerAction(msg, tiraList.length);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
       setNuevoTicker('');
       await fetchTicker();
     } catch (e: any) {
@@ -427,7 +474,11 @@ export default function AdminPublicidadPage() {
 
   const deleteTicker = async (id: string) => {
     try {
-      await deleteTickerAction(id);
+      const r = await deleteTickerAction(id);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
       await fetchTicker();
     } catch (e: any) {
       setError(e.message);
