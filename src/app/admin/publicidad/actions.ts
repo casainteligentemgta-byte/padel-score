@@ -123,6 +123,20 @@ export async function deleteTickerAction(id: string): Promise<{ ok: true } | Err
   }
 }
 
+/** Filas `playlist_slot = legacy`: decidir si pertenecen al slot vídeo o imagen (misma regla que `partitionPlaylistRows`). */
+function legacyRowMatchesPlaylistSlot(
+  row: {
+    media_content?: { tipo?: string | null } | { tipo?: string | null }[] | null;
+  },
+  slot: 'video' | 'imagen',
+): boolean {
+  const raw = row.media_content;
+  const mc = Array.isArray(raw) ? raw[0] : raw;
+  const tipo = String(mc?.tipo ?? '').toLowerCase();
+  if (tipo === 'imagen') return slot === 'imagen';
+  return slot === 'video';
+}
+
 export async function savePlaylistAction(
   courtKey: string,
   venueName: string,
@@ -137,17 +151,47 @@ export async function savePlaylistAction(
   const courtIdVariants = canchaIdCandidates(canonicalCancha);
   const cleanVenueName = venueName.trim();
 
+  if (!courtIdVariants.length) {
+    return { ok: false, error: 'Cancha inválida.' };
+  }
+
   try {
-    const { error: delErr } = await supabase
+    // 1) Quitar filas ya etiquetadas con este slot (mismo venue exacto que el insert).
+    const { error: delSlotErr } = await supabase
       .from('cancha_publicidad')
       .delete()
       .in('cancha_id', courtIdVariants)
-      .ilike('venue_name', cleanVenueName)
-      .or(`playlist_slot.eq.${slot},playlist_slot.is.null`);
+      .eq('venue_name', cleanVenueName)
+      .eq('playlist_slot', slot);
 
-    if (delErr) {
-      console.error('Error al borrar playlist previa:', delErr);
-      return { ok: false, error: `Al limpiar playlist: ${delErr.message}` };
+    if (delSlotErr) {
+      console.error('Error al borrar playlist por slot:', delSlotErr);
+      return { ok: false, error: `Al limpiar playlist: ${delSlotErr.message}` };
+    }
+
+    // 2) Quitar filas legacy que correspondan a este tipo de medio (playlist_slot es NOT NULL; nunca fue NULL).
+    const { data: legacyRows, error: legSelErr } = await supabase
+      .from('cancha_publicidad')
+      .select('id, media_content(tipo)')
+      .in('cancha_id', courtIdVariants)
+      .eq('venue_name', cleanVenueName)
+      .eq('playlist_slot', 'legacy');
+
+    if (legSelErr) {
+      console.error('Error al listar legacy cancha_publicidad:', legSelErr);
+      return { ok: false, error: `Al limpiar playlist legacy: ${legSelErr.message}` };
+    }
+
+    const legacyIds = (legacyRows || [])
+      .filter((r: { id: string }) => legacyRowMatchesPlaylistSlot(r, slot))
+      .map((r: { id: string }) => r.id);
+
+    if (legacyIds.length > 0) {
+      const { error: delLegErr } = await supabase.from('cancha_publicidad').delete().in('id', legacyIds);
+      if (delLegErr) {
+        console.error('Error al borrar filas legacy:', delLegErr);
+        return { ok: false, error: `Al limpiar playlist antigua: ${delLegErr.message}` };
+      }
     }
 
     const orderedUniqueIds = (() => {
@@ -204,7 +248,7 @@ export async function saveTiraPlaylistAction(
       .from('cancha_tira')
       .delete()
       .in('cancha_id', courtIdVariants)
-      .ilike('venue_name', cleanVenueName);
+      .eq('venue_name', cleanVenueName);
 
     if (delErr) return { ok: false, error: delErr.message || 'No se pudo limpiar la tira.' };
 
