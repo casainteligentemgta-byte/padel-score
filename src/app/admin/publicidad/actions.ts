@@ -41,13 +41,25 @@ function sanitizePlaylistConfigPatch(patch: Record<string, unknown>): Record<str
  * Next.js oculta el mensaje real. Devolvemos { ok, error } siempre.
  */
 
+function sanitizeMediaContentInsert(payload: Record<string, unknown>): Record<string, unknown> {
+  const row = { ...payload };
+  if (row.duracion_segundos != null && row.duracion_segundos !== '') {
+    row.duracion_segundos = Math.max(0, Math.round(Number(row.duracion_segundos) || 0));
+  }
+  if (row.file_size_bytes != null && row.file_size_bytes !== '') {
+    row.file_size_bytes = Math.max(0, Math.floor(Number(row.file_size_bytes) || 0));
+  }
+  return row;
+}
+
 export async function addMediaContentAction(
   payload: Record<string, unknown>,
 ): Promise<{ ok: true; data: Record<string, unknown> } | Err> {
   const supabase = getSupabaseServiceClient();
   if (!supabase) return serviceMissing();
   try {
-    const { error, data } = await supabase.from('media_content').insert([payload]).select().single();
+    const row = sanitizeMediaContentInsert(payload);
+    const { error, data } = await supabase.from('media_content').insert([row]).select().single();
     if (error) return { ok: false, error: error.message || 'No se pudo crear el contenido.' };
     revalidatePath('/admin/publicidad');
     return { ok: true, data: data as Record<string, unknown> };

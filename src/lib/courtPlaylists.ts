@@ -307,8 +307,8 @@ export async function upsertCanchaPlaylistConfig(
     imagen_loop: patch.imagen_loop ?? (ex.imagen_loop as boolean) ?? true,
     imagen_pausa_entre_segundos:
       patch.imagen_pausa_entre_segundos !== undefined
-        ? Math.max(0, Number(patch.imagen_pausa_entre_segundos) || 0)
-        : Math.max(0, Number(ex.imagen_pausa_entre_segundos) || 0),
+        ? Math.max(0, Math.floor(Number(patch.imagen_pausa_entre_segundos) || 0))
+        : Math.max(0, Math.floor(Number(ex.imagen_pausa_entre_segundos) || 0)),
     video_cambio_cada_minutos:
       patch.video_cambio_cada_minutos !== undefined
         ? Math.max(0, Math.floor(Number(patch.video_cambio_cada_minutos) || 0))

@@ -185,10 +185,10 @@ export default function AdminPublicidadPage() {
         const cid = (r.cancha_id || '').trim();
         cmap[cid] = {
           imagen_loop: r.imagen_loop !== false,
-          imagen_pausa_entre_segundos: Math.max(0, Number(r.imagen_pausa_entre_segundos) || 0),
-          video_cambio_cada_minutos: Number(r.video_cambio_cada_minutos) || 0,
-          imagen_cambio_cada_minutos: Number(r.imagen_cambio_cada_minutos) || 0,
-          tira_cambio_cada_minutos: Number(r.tira_cambio_cada_minutos) || 0,
+          imagen_pausa_entre_segundos: Math.max(0, Math.floor(Number(r.imagen_pausa_entre_segundos) || 0)),
+          video_cambio_cada_minutos: Math.max(0, Math.floor(Number(r.video_cambio_cada_minutos) || 0)),
+          imagen_cambio_cada_minutos: Math.max(0, Math.floor(Number(r.imagen_cambio_cada_minutos) || 0)),
+          tira_cambio_cada_minutos: Math.max(0, Math.floor(Number(r.tira_cambio_cada_minutos) || 0)),
         };
       });
       setPlaylistConfigByCourt(cmap);
@@ -271,7 +271,7 @@ export default function AdminPublicidadPage() {
         return;
       }
       const s2 = await upsertPlaylistConfigAction(selectedVenue, courtKey, {
-        video_cambio_cada_minutos: cambioMin,
+        video_cambio_cada_minutos: Math.max(0, Math.floor(Number(cambioMin) || 0)),
       });
       if (!s2.ok) {
         setError(s2.error);
@@ -303,9 +303,9 @@ export default function AdminPublicidadPage() {
         return;
       }
       const s2 = await upsertPlaylistConfigAction(selectedVenue, courtKey, {
-        imagen_cambio_cada_minutos: cambioMin,
+        imagen_cambio_cada_minutos: Math.max(0, Math.floor(Number(cambioMin) || 0)),
         imagen_loop: loop,
-        imagen_pausa_entre_segundos: pausaSeg,
+        imagen_pausa_entre_segundos: Math.max(0, Math.floor(Number(pausaSeg) || 0)),
       });
       if (!s2.ok) {
         setError(s2.error);
@@ -330,7 +330,7 @@ export default function AdminPublicidadPage() {
         return;
       }
       const s2 = await upsertPlaylistConfigAction(selectedVenue, courtKey, {
-        tira_cambio_cada_minutos: cambioMin,
+        tira_cambio_cada_minutos: Math.max(0, Math.floor(Number(cambioMin) || 0)),
       });
       if (!s2.ok) {
         setError(s2.error);

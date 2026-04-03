@@ -134,7 +134,10 @@ export default function TVCourtDisplayPage() {
                     cfg
                         ? {
                               imagen_loop: cfg.imagen_loop !== false,
-                              imagen_pausa_entre_segundos: Math.max(0, Number(cfg.imagen_pausa_entre_segundos) || 0),
+                              imagen_pausa_entre_segundos: Math.max(
+                                  0,
+                                  Math.floor(Number(cfg.imagen_pausa_entre_segundos) || 0),
+                              ),
                           }
                         : null,
                 );

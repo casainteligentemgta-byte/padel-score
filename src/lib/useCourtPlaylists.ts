@@ -64,7 +64,7 @@ export function useCourtPlaylists(canchaId: string, venueName: string | null | u
       const cfg = await fetchCanchaPlaylistConfig(supabase, canchaId, venueName);
       if (cfg) {
         setImagenLoop(cfg.imagen_loop !== false);
-        setImagenPausa(Math.max(0, Number(cfg.imagen_pausa_entre_segundos) || 0));
+        setImagenPausa(Math.max(0, Math.floor(Number(cfg.imagen_pausa_entre_segundos) || 0)));
         setVideoCambioMinutos(Math.max(0, Math.floor(Number(cfg.video_cambio_cada_minutos) || 0)));
         setImagenCambioMinutos(Math.max(0, Math.floor(Number(cfg.imagen_cambio_cada_minutos) || 0)));
       } else {
