@@ -183,8 +183,8 @@ export async function savePlaylistAction(
     }
 
     const legacyIds = (legacyRows || [])
-      .filter((r: { id: string }) => legacyRowMatchesPlaylistSlot(r, slot))
-      .map((r: { id: string }) => r.id);
+      .filter((r) => legacyRowMatchesPlaylistSlot(r, slot))
+      .map((r) => r.id);
 
     if (legacyIds.length > 0) {
       const { error: delLegErr } = await supabase.from('cancha_publicidad').delete().in('id', legacyIds);
