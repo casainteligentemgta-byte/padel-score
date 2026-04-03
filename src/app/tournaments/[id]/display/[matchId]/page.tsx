@@ -2117,7 +2117,7 @@ export default function FullScreenDisplay() {
                                                         <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
                                                     )}
                                                     <span
-                                                        className={`whitespace-nowrap text-3xl font-black italic uppercase tracking-widest ${msg.isDynamic ? 'text-white' : 'text-white/90'}`}
+                                                        className={`whitespace-nowrap text-4xl font-black italic uppercase tracking-widest sm:text-5xl ${msg.isDynamic ? 'text-white' : 'text-white/90'}`}
                                                     >
                                                         {msg.mensaje || msg.texto}
                                                     </span>
@@ -2137,7 +2137,7 @@ export default function FullScreenDisplay() {
                                                         <Star className="w-5 h-5 text-padel-primary mr-4 fill-padel-primary/20" />
                                                     )}
                                                     <span
-                                                        className={`whitespace-nowrap text-3xl font-black italic uppercase tracking-widest ${msg.isDynamic ? 'text-white' : 'text-white/90'}`}
+                                                        className={`whitespace-nowrap text-4xl font-black italic uppercase tracking-widest sm:text-5xl ${msg.isDynamic ? 'text-white' : 'text-white/90'}`}
                                                     >
                                                         {msg.mensaje || msg.texto}
                                                     </span>

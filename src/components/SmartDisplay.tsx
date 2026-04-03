@@ -729,7 +729,7 @@ export default function SmartDisplay({
         </div>
 
         {/* ── ROW 4: TICKER ─────────────────────────────────────────────── */}
-        <div className="relative z-0 flex shrink-0 flex-col items-stretch border-t border-white/10 bg-black/60 py-3 backdrop-blur-3xl overflow-hidden">
+        <div className="relative z-0 flex min-h-[4.5rem] shrink-0 flex-col items-stretch border-t border-white/10 bg-black/60 py-4 backdrop-blur-3xl overflow-hidden sm:min-h-[5rem]">
           <div className="overflow-hidden w-full flex items-center" style={{ height: '100%' }}>
             <div className="flex whitespace-nowrap animate-marquee gap-0">
               {/* Two halves for seamless loop */}
@@ -749,7 +749,7 @@ export default function SmartDisplay({
                             boxShadow: `0 0 10px ${smartPadelColor}`,
                           }}
                         />
-                        <span className="whitespace-nowrap text-2xl font-black italic uppercase tracking-[0.2em] text-white underline decoration-white/20 underline-offset-8">
+                        <span className="whitespace-nowrap text-3xl font-black italic uppercase tracking-[0.2em] text-white underline decoration-white/20 underline-offset-8 sm:text-4xl">
                           {msg.mensaje}
                         </span>
                       </div>
@@ -761,7 +761,7 @@ export default function SmartDisplay({
                         style={{ backgroundColor: smartPadelColor }}
                       />
                       <span
-                        className="text-2xl font-black italic uppercase tracking-[0.3em] opacity-30"
+                        className="text-3xl font-black italic uppercase tracking-[0.3em] opacity-30 sm:text-4xl"
                         style={{ color: smartPadelColor }}
                       >
                         tira informativa TV · en espera de contenido.

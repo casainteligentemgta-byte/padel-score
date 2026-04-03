@@ -143,13 +143,13 @@ function PizarraCenterChrono({
 function TickerMarquee({ messages }: { messages: { id: string; mensaje: string }[] }) {
     if (!messages.length) return null;
     return (
-        <div className="pizarra-ticker-bleed pizarra-ticker-bleed--flush relative z-0 box-border flex min-w-0 flex-row items-center border-b border-white/10 bg-black/60 py-3 backdrop-blur-md min-h-[3rem]">
+        <div className="pizarra-ticker-bleed pizarra-ticker-bleed--flush relative z-0 box-border flex min-w-0 flex-row items-center border-b border-white/10 bg-black/60 py-4 backdrop-blur-md min-h-[4rem] sm:min-h-[4.5rem]">
             <div className="marquee-ticker-viewport">
             <div className="marquee-track animate-marquee">
                 <div className="marquee-half">
                     <span className="marquee-enter-gap" aria-hidden />
                     {messages.map((msg) => (
-                        <span key={msg.id} className="mx-10 shrink-0 whitespace-nowrap text-xs font-black uppercase tracking-widest text-padel-primary/90">
+                        <span key={msg.id} className="mx-10 shrink-0 whitespace-nowrap text-lg font-black uppercase tracking-[0.2em] text-padel-primary/90 sm:text-xl md:text-2xl">
                             {msg.mensaje}
                         </span>
                     ))}
@@ -157,7 +157,7 @@ function TickerMarquee({ messages }: { messages: { id: string; mensaje: string }
                 <div className="marquee-half">
                     <span className="marquee-enter-gap" aria-hidden />
                     {messages.map((msg) => (
-                        <span key={`${msg.id}-d`} className="mx-10 shrink-0 whitespace-nowrap text-xs font-black uppercase tracking-widest text-padel-primary/90">
+                        <span key={`${msg.id}-d`} className="mx-10 shrink-0 whitespace-nowrap text-lg font-black uppercase tracking-[0.2em] text-padel-primary/90 sm:text-xl md:text-2xl">
                             {msg.mensaje}
                         </span>
                     ))}

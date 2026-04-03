@@ -344,7 +344,7 @@ export default function TVScoreboardDisplay({
                         </div>
 
                         {/* Tira a ancho real del viewport (fuera del grid con overflow/transform) */}
-                        <div className="pizarra-ticker-bleed pizarra-ticker-bleed--flush relative z-0 box-border flex min-h-[4.5rem] shrink-0 flex-col items-stretch border-t border-white/10 bg-black/60 py-3 backdrop-blur-3xl">
+                        <div className="pizarra-ticker-bleed pizarra-ticker-bleed--flush relative z-0 box-border flex min-h-[5rem] shrink-0 flex-col items-stretch border-t border-white/10 bg-black/60 py-4 backdrop-blur-3xl sm:min-h-[5.5rem]">
                             <div className="marquee-ticker-viewport">
                             <div className="marquee-track animate-marquee">
                                 <div className="marquee-half">
@@ -352,14 +352,14 @@ export default function TVScoreboardDisplay({
                                     {tickerMessages.length > 0 ? tickerMessages.map((msg: any) => (
                                         <div key={msg.id} className="flex shrink-0 items-center gap-6 mx-12">
                                             <div className="w-3 h-3 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
-                                            <span className="whitespace-nowrap text-2xl font-black italic uppercase tracking-[0.2em] text-white underline decoration-padel-primary/40 underline-offset-8">
+                                            <span className="whitespace-nowrap text-3xl font-black italic uppercase tracking-[0.2em] text-white underline decoration-padel-primary/40 underline-offset-8 sm:text-4xl">
                                                 {msg.mensaje}
                                             </span>
                                         </div>
                                     )) : (
                                         <div className="flex shrink-0 items-center gap-6 mx-12">
                                             <div className="w-3 h-3 rounded-full bg-padel-primary/30" />
-                                            <span className="text-2xl font-black italic uppercase tracking-[0.3em] text-padel-primary/40">tira informativa TV a la espera de contenido.</span>
+                                            <span className="text-3xl font-black italic uppercase tracking-[0.3em] text-padel-primary/40 sm:text-4xl">tira informativa TV a la espera de contenido.</span>
                                         </div>
                                     )}
                                 </div>
@@ -368,14 +368,14 @@ export default function TVScoreboardDisplay({
                                     {tickerMessages.length > 0 ? tickerMessages.map((msg: any) => (
                                         <div key={`${msg.id}-dup`} className="flex shrink-0 items-center gap-6 mx-12">
                                             <div className="w-3 h-3 rounded-full bg-padel-primary shadow-[0_0_10px_#ccff00]" />
-                                            <span className="whitespace-nowrap text-2xl font-black italic uppercase tracking-[0.2em] text-white underline decoration-padel-primary/40 underline-offset-8">
+                                            <span className="whitespace-nowrap text-3xl font-black italic uppercase tracking-[0.2em] text-white underline decoration-padel-primary/40 underline-offset-8 sm:text-4xl">
                                                 {msg.mensaje}
                                             </span>
                                         </div>
                                     )) : (
                                         <div className="flex shrink-0 items-center gap-6 mx-12">
                                             <div className="w-3 h-3 rounded-full bg-padel-primary/30" />
-                                            <span className="text-2xl font-black italic uppercase tracking-[0.3em] text-padel-primary/40">tira informativa TV a la espera de contenido.</span>
+                                            <span className="text-3xl font-black italic uppercase tracking-[0.3em] text-padel-primary/40 sm:text-4xl">tira informativa TV a la espera de contenido.</span>
                                         </div>
                                     )}
                                 </div>
