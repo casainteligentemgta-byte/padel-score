@@ -1,7 +1,7 @@
 -- =============================================================================
 -- tv_sessions: sistema de pantallas (TV) conectadas por short_id
 -- -----------------------------------------------------------------------------
--- Crea una fila por TV (generada en /tv). El Admin (/admin/screens) cambia:
+-- Crea una fila por TV (generada en /tv). Actualizar torneo/vista en esta tabla (p. ej. desde Supabase):
 --   status: waiting | active
 --   tournament_id
 --   current_view: score/bracket/ads (y variantes score_court_1/2)

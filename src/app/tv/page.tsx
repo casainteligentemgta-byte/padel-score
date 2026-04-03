@@ -15,8 +15,6 @@ type TvSession = {
     updated_at?: string;
 };
 
-const ADMIN_BIND_BASE = 'https://www.smartpadel58.com/admin/screens?bind=';
-
 function randomShortId(): number {
     // 4 dígitos (1000–9999)
     return Math.floor(1000 + Math.random() * 9000);
@@ -163,7 +161,14 @@ export default function TVKioskPage() {
 
     const isActive = session?.status === 'active';
     const iframeSrc = useMemo(() => getIframeSrc(session), [session]);
-    const qrValue = useMemo(() => (shortId ? `${ADMIN_BIND_BASE}${shortId}` : ''), [shortId]);
+    /** Texto para QR: identificador de esta TV (configuración vía Supabase `tv_sessions`, sin pantalla admin). */
+    const qrValue = useMemo(
+        () =>
+            shortId
+                ? `Smart Padel TV · short_id=${shortId} · Configura torneo y vista en Supabase (tabla tv_sessions).`
+                : '',
+        [shortId],
+    );
 
     return (
         <div className="fixed inset-0 bg-black text-white overflow-hidden select-none font-outfit">
@@ -219,7 +224,7 @@ export default function TVKioskPage() {
                                     Falta configuración (tournament_id)
                                 </h2>
                                 <p className="mt-3 text-gray-500 max-w-xl">
-                                    Admin debe activar la pantalla con un torneo válido.
+                                    Activa la fila en tv_sessions (tournament_id y vista) en Supabase o desde tu panel interno.
                                 </p>
                             </div>
                         )}
@@ -250,12 +255,12 @@ export default function TVKioskPage() {
                                 {shortId}
                             </div>
 
-                            <div className="mt-6 text-center">
-                                <p className="text-[clamp(16px,2.2vw,28px)] font-bold uppercase tracking-widest text-white/80">
-                                    Escanea el QR desde el Admin
+                            <div className="mt-6 text-center max-w-xl mx-auto">
+                                <p className="text-[clamp(14px,1.8vw,22px)] font-bold uppercase tracking-widest text-white/75 leading-snug">
+                                    Código de pantalla (tabla tv_sessions en Supabase)
                                 </p>
-                                <p className="mt-2 text-xs font-black uppercase tracking-[0.4em] text-gray-500">
-                                    smartpadel58.com
+                                <p className="mt-2 text-xs font-black uppercase tracking-[0.35em] text-gray-500">
+                                    El QR guarda este texto para copiarlo o archivarlo
                                 </p>
                             </div>
 

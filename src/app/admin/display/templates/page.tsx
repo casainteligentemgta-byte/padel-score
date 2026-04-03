@@ -215,7 +215,7 @@ export default function AdminDisplayTemplates() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-white/5 backdrop-blur-2xl rounded-[3rem] border border-white/10 p-10 space-y-12 shadow-3xl"
+                  className="bg-white/5 backdrop-blur-2xl rounded-[3rem] border border-white/10 p-10 pb-12 space-y-12 shadow-3xl overflow-visible"
                 >
                   {/* Template Meta */}
                   <div className="flex justify-between items-start">
@@ -336,9 +336,9 @@ export default function AdminDisplayTemplates() {
                   </div>
 
                   {/* Visual Preview */}
-                  <div className="space-y-4">
+                  <div className="space-y-4 min-h-0">
                     <label className="text-xs font-black uppercase tracking-[0.4em] text-white/20 italic block">Vista Previa Proporcional (VH)</label>
-                    <div className="border border-white/10 rounded-3xl overflow-hidden shadow-2xl bg-black aspect-video relative group">
+                    <div className="border border-white/10 rounded-3xl overflow-hidden shadow-2xl bg-black aspect-video max-h-[min(56vh,520px)] w-full relative group">
                         <div style={{ height: `${selectedTemplate.header_vh}%` }} className="w-full bg-blue-600/20 border-b border-blue-500/30 flex items-center justify-center">
                             <span className="text-[10px] font-black italic opacity-40">HEADER ({selectedTemplate.header_vh}vh)</span>
                         </div>
@@ -359,43 +359,49 @@ export default function AdminDisplayTemplates() {
                     </div>
                   </div>
 
-                  {/* Apply to Court Section */}
-                  <div className="pt-8 border-t border-white/10 space-y-6">
-                    <h3 className="text-xl font-black italic uppercase tracking-tighter flex items-center gap-3">
-                      <Monitor className="w-5 h-5 text-padel-primary" />
-                      Aplicar a Canchas
-                    </h3>
-                    <div className="flex flex-wrap gap-4">
-                      {canchas.map(cn => (
-                        <button
-                          key={cn.cancha_id}
-                          onClick={() => handleApplyToCancha(cn.cancha_id)}
-                          className={`px-6 py-4 rounded-2xl font-black italic uppercase transition-all flex items-center gap-3 ${
-                            cn.current_template_id === selectedTemplate.id
-                              ? 'bg-padel-primary text-black scale-105 shadow-xl shadow-padel-primary/20'
-                              : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/10'
-                          }`}
-                        >
-                          {cn.cancha_id}
-                          {cn.current_template_id === selectedTemplate.id && <CheckCircle2 className="w-4 h-4" />}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Feedback Message */}
+                  {/* Feedback Message (encima de «Aplicar» para no empujar ni tapar los botones) */}
                   {message && (
                     <motion.div
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
-                      className={`p-4 rounded-2xl flex items-center gap-3 ${
+                      className={`p-4 rounded-2xl flex items-start gap-3 shrink-0 ${
                         message.type === 'success' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
                       }`}
                     >
-                      {message.type === 'success' ? <CheckCircle2 /> : <AlertCircle />}
-                      <span className="font-bold underline decoration-white/20 underline-offset-4">{message.text}</span>
+                      {message.type === 'success' ? <CheckCircle2 className="shrink-0 mt-0.5" /> : <AlertCircle className="shrink-0 mt-0.5" />}
+                      <span className="font-bold underline decoration-white/20 underline-offset-4 break-words text-left">{message.text}</span>
                     </motion.div>
                   )}
+
+                  {/* Apply to Court Section */}
+                  <div className="pt-8 border-t border-white/10 space-y-4">
+                    <h3 className="text-xl font-black italic uppercase tracking-tighter flex items-center gap-3">
+                      <Monitor className="w-5 h-5 text-padel-primary shrink-0" />
+                      Aplicar a Canchas
+                    </h3>
+                    <p className="text-xs font-bold uppercase tracking-widest text-white/35">
+                      Pulsa una cancha para asignar el template seleccionado
+                    </p>
+                    <div className="grid grid-cols-1 min-[480px]:grid-cols-2 xl:grid-cols-3 gap-3 w-full">
+                      {canchas.map((cn) => (
+                        <button
+                          key={cn.cancha_id}
+                          type="button"
+                          onClick={() => handleApplyToCancha(cn.cancha_id)}
+                          className={`min-h-[3.25rem] w-full px-4 py-3 rounded-2xl font-black italic uppercase transition-all flex items-center justify-center gap-2 text-center text-sm sm:text-base leading-tight ${
+                            cn.current_template_id === selectedTemplate.id
+                              ? 'bg-padel-primary text-black shadow-lg shadow-padel-primary/25 ring-2 ring-padel-primary/50'
+                              : 'bg-white/5 text-white/80 hover:bg-white/10 border border-white/10 hover:border-white/20'
+                          }`}
+                        >
+                          <span className="break-all line-clamp-2">{cn.cancha_id}</span>
+                          {cn.current_template_id === selectedTemplate.id && (
+                            <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </motion.div>
               ) : (
                 <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center space-y-6 opacity-40">

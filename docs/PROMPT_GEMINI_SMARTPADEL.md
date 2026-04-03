@@ -32,7 +32,7 @@ Eres un experto en el producto Smart Padel (repositorio "Padel Score"). Conoces 
 
 ## 3. ROLES DE USUARIO
 
-- **admin:** Acceso a /admin (panel de control). Gestiona jugadores (/admin/users), torneos, boards/pantallas (/admin/boards), publicidad (/admin/publicidad), validación de pagos (/admin/validacion-pagos), agentes AI, ajustes. Identificado por profiles.role === 'admin'.
+- **admin:** Acceso a /admin (panel de control). Gestiona jugadores (/admin/users), torneos, publicidad y pantallas (/admin/publicidad), validación de pagos (/admin/validacion-pagos), agentes AI, ajustes. Identificado por profiles.role === 'admin'.
 - **marker:** Puede llevar el marcador en vivo en canchas asignadas. profiles.marker_canchas (array) indica en qué canchas puede marcar. Vistas: /marker/[canchaId], control de partido por cancha.
 - **player:** Usuario estándar. Accede al Hub (/hub), Mi perfil (/mi-cuenta), torneos (/tournaments), inscripciones, ranking, ficha de jugador (/players/register, /players/[id]).
 
@@ -79,7 +79,7 @@ Migraciones relevantes: inscriptions con is_placeholder y group_name; tournament
 6. **Reporte de resultado (solo 4 jugadores):** Ruta /match/[id]/report donde id = "tournamentId--matchId". Solo los 4 jugadores del partido (Pareja A y B) pueden cargar resultado. Cliente valida y envía POST /api/match/report con { compositeId, winnerTeam }. La API valida con requireAuth, comprueba que el uid esté entre los owner_id de los 4 participants del partido, y actualiza tournament_matches con getSupabaseServiceClient(). Sin service role en servidor, la API devuelve 501.
 7. **Pizarras por cancha:** /p/[court] (court 1, 2, 3…) redirige a /tournaments/[tournamentId]/display/[matchId] según asignación de la API /api/pizarra-cancha/[num]. La pantalla de display usa Realtime y 100% viewport.
 8. **Planilla de juegos:** En /tournaments/event (evento multi-torneo) se genera PDF con tabla: **Hora | Pista | Categoría | Fase | Equipo 1 | Equipo 2**. Orden cronológico estricto. En /tournaments/[id] el PDF del cuadro incluye Fecha del torneo en cabecera y columnas #, Fecha, Hora, Pista, Equipo 1, Resultado, Equipo 2, Fase.
-9. **Publicidad y pantallas:** /admin/publicidad; tira informativa y contenido en display; APIs como /api/tira-informativa (service role). Boards en /admin/boards.
+9. **Publicidad y pantallas:** /admin/publicidad; tira informativa y contenido en display; APIs como /api/tira-informativa (service role). URLs de pizarra: /display/court/[courtId], /display/tv/[courtId], /live.
 10. **Validación de pagos:** /admin/validacion-pagos (inscripciones y estados de pago).
 
 ---
@@ -106,7 +106,7 @@ Migraciones relevantes: inscriptions con is_placeholder y group_name; tournament
 - /match/[id]/report — Reporte de resultado (id = tournamentId--matchId); solo 4 jugadores.
 - /p/[court] — Pizarra por cancha (redirige a display del partido asignado).
 - **Rewrites (next.config.js):** /pizarra/cancha/:id → /display/tv/:id (pantalla TV por cancha; el source debe ser /pizarra/cancha/:id con barra antes de :id). /pizarra/scort → /live?tv=true. /pizarra/publicidad → /display/ads. Redirect: /p → /pizarra.
-- /admin, /admin/users, /admin/boards, /admin/publicidad, /admin/validacion-pagos, /admin/master-generator, etc.
+- /admin, /admin/users, /admin/publicidad, /admin/validacion-pagos, /admin/master-generator, etc.
 - /players, /players/register, /players/[id] — Fichas de jugadores.
 - /ranking — Ranking.
 

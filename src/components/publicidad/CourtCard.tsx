@@ -180,10 +180,14 @@ export default function CourtCard({
   const sedeIndex = sedeIndexFromVenueName(venueName);
   const pizarraShortPath = sedeIndex ? buildPizarraShortPath(sedeIndex, displayCourtNum) : null;
 
-  const directDisplayUrl = venueName.trim().length > 0
-    ? `/display/court/${displayCourtNum}?complex=${encodeURIComponent(venueName)}${minimalMode ? '&minimal=1' : ''}`
-    : `/display/court/${displayCourtNum}${minimalMode ? '?minimal=1' : ''}`;
-  const previewSrc = directDisplayUrl;
+  /**
+   * Misma ruta que la pizarra real; el escalado va centrado (no top-left) para que el marcador
+   * o el estado «en espera» no queden fuera del recorte.
+   */
+  const previewIframeSrc =
+    venueName.trim().length > 0
+      ? `/display/court/${displayCourtNum}?complex=${encodeURIComponent(venueName)}${minimalMode ? '&minimal=1' : ''}`
+      : `/display/court/${displayCourtNum}${minimalMode ? '?minimal=1' : ''}`;
   const shortHref = pizarraShortPath ? `/${pizarraShortPath}${minimalMode ? '?minimal=1' : ''}` : null;
 
   const videoById = (id: string) => libraryVideos.find((m) => m.id === id);
@@ -221,17 +225,21 @@ export default function CourtCard({
         </div>
       </div>
 
-      <div className="relative h-40 overflow-hidden rounded-xl border border-white/10 bg-black shrink-0">
+      <div className="relative h-40 w-full overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shrink-0">
         <iframe
-          src={previewSrc}
-          className="absolute top-0 left-0 border-0 pointer-events-none"
+          src={previewIframeSrc}
+          title={`Vista previa pizarra ${courtKey}`}
+          loading="eager"
+          className="pointer-events-none border-0"
           style={{
-            transform: 'scale(0.22)',
-            transformOrigin: 'top left',
-            width: '450%',
-            height: '450%',
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            width: 1920,
+            height: 1080,
+            transform: 'translate(-50%, -50%) scale(0.148148)',
+            transformOrigin: 'center center',
           }}
-          title={`preview-${courtKey}`}
         />
       </div>
       {shortHref && (

@@ -526,12 +526,11 @@ export default function AdminPublicidadPage() {
             <button
               type="button"
               onClick={() => router.back()}
-              className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-white/70 hover:text-white transition-colors"
-              aria-label="Atrás"
+              className="w-10 h-10 flex items-center justify-center hover:bg-white/5 rounded-xl transition-colors border border-white/5 bg-black/20 group"
+              aria-label="Volver"
               title="Volver"
             >
-              <ChevronLeft className="w-4 h-4 text-padel-primary" />
-              Atrás
+              <ChevronLeft className="w-5 h-5 text-gray-500 group-hover:text-padel-primary transition-colors" />
             </button>
           </div>
 
