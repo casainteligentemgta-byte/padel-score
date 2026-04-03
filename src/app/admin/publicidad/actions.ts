@@ -1,8 +1,13 @@
 'use server';
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import { canchaIdCandidates, normalizeCanchaIdKey } from '@/lib/courtPlaylists';
+import {
+  canchaIdCandidates,
+  canchaIdStoredForPublicidadTables,
+  normalizeCanchaIdKey,
+} from '@/lib/courtPlaylists';
 
 type Err = { ok: false; error: string };
 
@@ -33,6 +38,47 @@ function sanitizePlaylistConfigPatch(patch: Record<string, unknown>): Record<str
     out.imagen_loop = Boolean(patch.imagen_loop);
   }
   return out;
+}
+
+/**
+ * `cancha_publicidad` (y similares) tienen FK a `public.canchas(cancha_id)`.
+ * En producción puede existir `1` o `cancha_1`; debemos escribir exactamente el id que ya está (o crear `cancha_N` por defecto).
+ */
+async function resolveCanchaIdForPublicidadFk(
+  supabase: SupabaseClient,
+  courtKey: string,
+): Promise<{ ok: true; storageId: string; variants: string[] } | Err> {
+  const canonical = normalizeCanchaIdKey(courtKey.trim());
+  const variants = canchaIdCandidates(canonical);
+  if (!variants.length) return { ok: false, error: 'Cancha inválida.' };
+  const preferred = canchaIdStoredForPublicidadTables(courtKey.trim());
+
+  const { data: hits, error: selErr } = await supabase
+    .from('canchas')
+    .select('cancha_id')
+    .in('cancha_id', variants);
+
+  if (selErr) {
+    console.warn('[publicidad] canchas lookup:', selErr.message);
+  }
+
+  const existing = new Set((hits || []).map((r: { cancha_id: string }) => r.cancha_id));
+  if (existing.size > 0) {
+    const pickOrder = [preferred, ...variants.filter((v) => v !== preferred)];
+    for (const id of pickOrder) {
+      if (existing.has(id)) return { ok: true, storageId: id, variants };
+    }
+  }
+
+  const iso = new Date().toISOString();
+  const { error: upErr } = await supabase.from('canchas').upsert(
+    { cancha_id: preferred, last_seen: null, updated_at: iso },
+    { onConflict: 'cancha_id' },
+  );
+  if (upErr) {
+    return { ok: false, error: upErr.message || 'No se pudo registrar la cancha en canchas.' };
+  }
+  return { ok: true, storageId: preferred, variants };
 }
 
 /**
@@ -147,15 +193,13 @@ export async function savePlaylistAction(
   const supabase = getSupabaseServiceClient();
   if (!supabase) return serviceMissing();
 
-  const canonicalCancha = normalizeCanchaIdKey(courtKey.trim());
-  const courtIdVariants = canchaIdCandidates(canonicalCancha);
   const cleanVenueName = venueName.trim();
 
-  if (!courtIdVariants.length) {
-    return { ok: false, error: 'Cancha inválida.' };
-  }
-
   try {
+    const resolved = await resolveCanchaIdForPublicidadFk(supabase, courtKey.trim());
+    if (!resolved.ok) return resolved;
+    const { storageId: storageCanchaId, variants: courtIdVariants } = resolved;
+
     // 1) Quitar filas ya etiquetadas con este slot (mismo venue exacto que el insert).
     const { error: delSlotErr } = await supabase
       .from('cancha_publicidad')
@@ -209,7 +253,7 @@ export async function savePlaylistAction(
     if (orderedUniqueIds.length > 0) {
       const durInt = Math.max(1, Math.round(Number(durSeconds) || 10));
       const rows = orderedUniqueIds.map((mid, i) => ({
-        cancha_id: canonicalCancha,
+        cancha_id: storageCanchaId,
         venue_name: cleanVenueName,
         media_id: mid,
         orden: i + 1,
@@ -240,10 +284,12 @@ export async function saveTiraPlaylistAction(
   if (!supabase) return serviceMissing();
 
   const cleanVenueName = venueName.trim();
-  const canonicalCancha = normalizeCanchaIdKey(courtKey.trim());
-  const courtIdVariants = canchaIdCandidates(canonicalCancha);
 
   try {
+    const resolved = await resolveCanchaIdForPublicidadFk(supabase, courtKey.trim());
+    if (!resolved.ok) return resolved;
+    const { storageId: storageCanchaId, variants: courtIdVariants } = resolved;
+
     const { error: delErr } = await supabase
       .from('cancha_tira')
       .delete()
@@ -254,7 +300,7 @@ export async function saveTiraPlaylistAction(
 
     if (tiraIds.length > 0) {
       const rows = tiraIds.map((tid, i) => ({
-        cancha_id: canonicalCancha,
+        cancha_id: storageCanchaId,
         venue_name: cleanVenueName,
         tira_informativa_id: tid,
         orden: i + 1,
@@ -280,12 +326,17 @@ export async function upsertPlaylistConfigAction(
 
   try {
     const safePatch = sanitizePlaylistConfigPatch(patch);
+    const resolved = await resolveCanchaIdForPublicidadFk(supabase, canchaId.trim());
+    if (!resolved.ok) return resolved;
+    const storageCanchaId = resolved.storageId;
+    const iso = new Date().toISOString();
+
     const { error } = await supabase.from('cancha_playlist_config').upsert(
       {
         venue_name: venueName.trim(),
-        cancha_id: normalizeCanchaIdKey(canchaId.trim()),
+        cancha_id: storageCanchaId,
         ...safePatch,
-        updated_at: new Date().toISOString(),
+        updated_at: iso,
       },
       { onConflict: 'venue_name,cancha_id' },
     );

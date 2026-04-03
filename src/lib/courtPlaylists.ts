@@ -12,6 +12,18 @@ export function normalizeCanchaIdKey(raw: unknown): string {
   return m ? m[1].trim() : s;
 }
 
+/**
+ * Valor a persistir en tablas con FK a `public.canchas(cancha_id)` (p. ej. `cancha_publicidad`).
+ * Heartbeat y `/display/court` usan `cancha_N`; un `cancha_id` solo numérico suele violar esa FK.
+ */
+export function canchaIdStoredForPublicidadTables(courtKeyOrCanchaId: string): string {
+  const n = normalizeCanchaIdKey(courtKeyOrCanchaId);
+  if (/^\d+$/.test(n)) return `cancha_${n}`;
+  const s = String(courtKeyOrCanchaId ?? '').trim();
+  if (/^cancha_/i.test(s)) return s;
+  return n;
+}
+
 /** Variantes de `cancha_id` en BD (`1` vs `cancha_1`) para consultas `.in(...)`. */
 export function canchaIdCandidates(canchaId: string): string[] {
   const id = String(canchaId || '').trim();
