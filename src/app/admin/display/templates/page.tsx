@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { splitRatioFromDatabase, splitRatioToDatabase } from '@/lib/displayTemplateSplitRatio';
 import { saveTemplateAction, applyTemplateToCanchaAction } from './actions';
@@ -15,6 +16,7 @@ import {
   Settings2,
   Trash2,
   ArrowRightCircle,
+  ArrowLeft,
   Trello,
   CheckCircle2,
   AlertCircle,
@@ -43,6 +45,7 @@ interface Cancha {
 }
 
 export default function AdminDisplayTemplates() {
+  const router = useRouter();
   const supabase = createClient();
   const [templates, setTemplates] = useState<DisplayTemplate[]>([]);
   const [canchas, setCanchas] = useState<Cancha[]>([]);
@@ -194,7 +197,21 @@ export default function AdminDisplayTemplates() {
   return (
     <div className="min-h-screen bg-[#08080c] text-white p-8 lg:p-12 font-outfit">
       <div className="max-w-[1600px] mx-auto space-y-12">
-        
+        <div className="flex items-start">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="inline-flex items-center justify-center gap-2 pl-2 pr-3 py-2.5 rounded-xl transition-colors border border-white/10 bg-black/30 hover:bg-white/10 hover:border-white/20 group"
+            aria-label="Volver atrás"
+            title="Volver atrás"
+          >
+            <ArrowLeft
+              className="w-5 h-5 shrink-0 text-white/80 group-hover:text-padel-primary transition-colors"
+              strokeWidth={2.25}
+            />
+          </button>
+        </div>
+
         {/* Header */}
         <div className="flex justify-between items-end">
           <div>

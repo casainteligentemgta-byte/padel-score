@@ -19,6 +19,7 @@ import { inferStbFromSetScoresOnly } from '@/lib/matchFinishedScoreDisplay';
 import { resolveMatchTeamLines } from '@/lib/resolveMatchTeamLines';
 import { PizarraWarmupOverlay, parseCalentamientoEndsAt } from '@/components/PizarraWarmupOverlay';
 import { splitRatioFromDatabase } from '@/lib/displayTemplateSplitRatio';
+import { canchaIdCandidates } from '@/lib/courtPlaylists';
 import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
 
 // Lottie player para animaciones JSON (biblioteca de animaciones)
@@ -350,6 +351,9 @@ export default function FullScreenDisplay() {
         const courtNum = Number(match?.court ?? (match?.courtIndex != null ? (match.courtIndex as number) + 1 : 0));
         if (!courtNum) return;
 
+        let cancelled = false;
+        let canchaSub: ReturnType<typeof supabase.channel> | null = null;
+
         const fetchTemplate = async (templateId: string) => {
             const { data, error } = await supabase
                 .from('display_templates')
@@ -367,37 +371,51 @@ export default function FullScreenDisplay() {
         };
 
         const initCanchaTemplate = async () => {
-            // Buscamos la cancha por nombre o número para obtener el template actual
-            const { data, error } = await supabase
+            const keys = canchaIdCandidates(String(courtNum));
+            if (!keys.length) return;
+
+            const { data: rows } = await supabase
                 .from('canchas')
-                .select('id, current_template_id')
-                .or(`nombre.ilike.%Pista ${courtNum}%,nombre.ilike.%Cancha ${courtNum}%,nombre.ilike.%${courtNum}%`)
-                .maybeSingle();
-            
+                .select('cancha_id, current_template_id')
+                .in('cancha_id', keys)
+                .limit(1);
+
+            if (cancelled) return;
+
+            const data = rows?.[0];
             if (data?.current_template_id) {
                 fetchTemplate(data.current_template_id);
             }
 
-            // Suscribirse a la cancha encontrada
-            if (data?.id) {
-                const canchaSub = supabase
-                    .channel(`cancha-template-${data.id}`)
-                    .on('postgres_changes', {
-                        event: 'UPDATE',
-                        schema: 'public',
-                        table: 'canchas',
-                        filter: `id=eq.${data.id}`
-                    }, (payload) => {
-                        if (payload.new.current_template_id) {
-                            fetchTemplate(payload.new.current_template_id);
-                        }
-                    })
+            if (cancelled) return;
+
+            if (data?.cancha_id) {
+                const cid = String(data.cancha_id);
+                canchaSub = supabase
+                    .channel(`cancha-template-${cid}`)
+                    .on(
+                        'postgres_changes',
+                        {
+                            event: 'UPDATE',
+                            schema: 'public',
+                            table: 'canchas',
+                            filter: `cancha_id=eq.${cid}`,
+                        },
+                        (payload) => {
+                            const next = (payload.new as { current_template_id?: string | null })?.current_template_id;
+                            if (next) fetchTemplate(next);
+                        },
+                    )
                     .subscribe();
-                return () => canchaSub.unsubscribe();
             }
         };
 
         initCanchaTemplate();
+
+        return () => {
+            cancelled = true;
+            if (canchaSub) supabase.removeChannel(canchaSub);
+        };
     }, [match?.court, match?.courtIndex]);
 
     // Suscripción al template activo por si cambia sus valores internos

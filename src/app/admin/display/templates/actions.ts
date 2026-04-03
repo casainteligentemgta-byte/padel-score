@@ -139,13 +139,21 @@ export async function applyTemplateToCanchaAction(
   }
 
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('canchas')
       .update({ current_template_id: templateId })
-      .eq('cancha_id', canchaId);
+      .eq('cancha_id', canchaId)
+      .select('cancha_id');
 
     if (error) {
       return { ok: false, error: error.message || 'No se pudo aplicar el template a la cancha.' };
+    }
+    if (!data?.length) {
+      return {
+        ok: false,
+        error:
+          'No hay fila en canchas con ese cancha_id. Abre la pizarra de esa pista una vez (heartbeat) o crea el registro en Supabase.',
+      };
     }
     revalidatePath('/admin/display/templates');
     return { ok: true };

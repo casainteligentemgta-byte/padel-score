@@ -22,6 +22,7 @@ import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
 import SponsorCarousel from '@/components/publicidad/SponsorCarousel';
 import { splitRatioFromDatabase } from '@/lib/displayTemplateSplitRatio';
 import {
+  canchaIdCandidates,
   fetchCanchaPlaylistRows,
   normalizeCourtPlaylistRows,
   partitionPlaylistRows,
@@ -268,28 +269,18 @@ export default function SmartDisplay({
     let templateSub: ReturnType<typeof supabase.channel> | null = null;
     let canchaSub: ReturnType<typeof supabase.channel> | null = null;
 
-    // Carga inicial
+    // Carga inicial: public.canchas usa cancha_id (TEXT PK), no id/nombre
     const init = async () => {
-      // Intenta encontrar la cancha por ID string (ej. cancha_1, 1, Pista 1…)
-      const courtNum = Number(
-        canchaId.replace(/[^0-9]/g, '') || '0',
-      );
-      const query = supabase
-        .from('canchas')
-        .select('id, current_template_id')
-        .or(
-          [
-            courtNum ? `nombre.ilike.%Pista ${courtNum}%` : null,
-            courtNum ? `nombre.ilike.%Cancha ${courtNum}%` : null,
-            courtNum ? `nombre.ilike.%${courtNum}%` : null,
-            `nombre.ilike.%${canchaId}%`,
-          ]
-            .filter(Boolean)
-            .join(','),
-        )
-        .maybeSingle();
-
-      const { data: canchaData } = await query;
+      const keys = canchaIdCandidates(canchaId);
+      let canchaData: { cancha_id: string; current_template_id: string | null } | undefined;
+      if (keys.length) {
+        const { data: rows } = await supabase
+          .from('canchas')
+          .select('cancha_id, current_template_id')
+          .in('cancha_id', keys)
+          .limit(1);
+        canchaData = rows?.[0];
+      }
 
       if (canchaData?.current_template_id) {
         await loadTemplate(canchaData.current_template_id);
@@ -297,17 +288,17 @@ export default function SmartDisplay({
       await loadPlaylists();
       await loadMatch();
 
-      // Suscribirse a la cancha por UUID
-      if (canchaData?.id) {
+      if (canchaData?.cancha_id) {
+        const cid = String(canchaData.cancha_id);
         canchaSub = supabase
-          .channel(`smart_display_cancha_${canchaData.id}`)
+          .channel(`smart_display_cancha_${cid}`)
           .on(
             'postgres_changes',
             {
               event: 'UPDATE',
               schema: 'public',
               table: 'canchas',
-              filter: `id=eq.${canchaData.id}`,
+              filter: `cancha_id=eq.${cid}`,
             },
             async (payload) => {
               const newTemplateId =
