@@ -53,16 +53,23 @@ async function resolveCanchaIdForPublicidadFk(
   if (!variants.length) return { ok: false, error: 'Cancha inválida.' };
   const preferred = canchaIdStoredForPublicidadTables(courtKey.trim());
 
-  const { data: hits, error: selErr } = await supabase
+  // Algunas instancias no exponen `public.canchas` o la columna `cancha_id` en la API (caché PostgREST / esquema distinto).
+  // En ese caso seguimos sin fallar: escribimos `cancha_N` y las consultas usan `canchaIdCandidates`.
+  let hits: { cancha_id?: string }[] | null = null;
+  const { data: selData, error: selErr } = await supabase
     .from('canchas')
     .select('cancha_id')
     .in('cancha_id', variants);
 
   if (selErr) {
-    console.warn('[publicidad] canchas lookup:', selErr.message);
+    console.warn('[publicidad] canchas lookup omitido:', selErr.message);
+  } else {
+    hits = selData;
   }
 
-  const existing = new Set((hits || []).map((r: { cancha_id: string }) => r.cancha_id));
+  const existing = new Set(
+    (hits || []).map((r) => String(r?.cancha_id ?? '').trim()).filter(Boolean),
+  );
   if (existing.size > 0) {
     const pickOrder = [preferred, ...variants.filter((v) => v !== preferred)];
     for (const id of pickOrder) {
@@ -76,7 +83,7 @@ async function resolveCanchaIdForPublicidadFk(
     { onConflict: 'cancha_id' },
   );
   if (upErr) {
-    return { ok: false, error: upErr.message || 'No se pudo registrar la cancha en canchas.' };
+    console.warn('[publicidad] canchas upsert omitido:', upErr.message);
   }
   return { ok: true, storageId: preferred, variants };
 }
