@@ -336,7 +336,7 @@ export default function CourtDisplayPage() {
     const canchaId = `cancha_${courtId}`;
     const router = useRouter();
     const searchParams = useSearchParams();
-    const venueFilter = searchParams.get('complex') || searchParams.get('venue') || null;
+    const venueFilter = (searchParams.get('complex') || searchParams.get('venue') || '').trim() || null;
     const minimalMode = searchParams.get('minimal') === '1' || searchParams.get('minimal') === 'true';
     const nativeMode = searchParams.get('native') === '1';
     const premiumMode = searchParams.get('premium') === '1';
@@ -345,7 +345,7 @@ export default function CourtDisplayPage() {
     const [pizarraData, setPizarraData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const playlists = useCourtPlaylists(canchaId, venueFilter);
-    useCourtDisplayHeartbeat(canchaId);
+    useCourtDisplayHeartbeat(canchaId, venueFilter);
     const redirectedRef = useRef(false);
 
     // ── Fuente única: Supabase pizarra (misma fuente que marker / árbitro) ─

@@ -23,6 +23,7 @@ import SponsorCarousel from '@/components/publicidad/SponsorCarousel';
 import { splitRatioFromDatabase } from '@/lib/displayTemplateSplitRatio';
 import {
   canchaIdCandidates,
+  canchaIdStoredForPublicidadTables,
   fetchCanchaPlaylistRows,
   normalizeCourtPlaylistRows,
   partitionPlaylistRows,
@@ -269,17 +270,37 @@ export default function SmartDisplay({
     let templateSub: ReturnType<typeof supabase.channel> | null = null;
     let canchaSub: ReturnType<typeof supabase.channel> | null = null;
 
-    // Carga inicial: public.canchas usa cancha_id (TEXT PK), no id/nombre
+    // Carga inicial: PK compuesta (venue_name, cancha_id) — misma lógica que pizarra torneo
     const init = async () => {
-      const keys = canchaIdCandidates(canchaId);
-      let canchaData: { cancha_id: string; current_template_id: string | null } | undefined;
+      const preferredVenue = String(venueName ?? '').trim();
+      const storageCanchaId = canchaIdStoredForPublicidadTables(canchaId);
+      const keys = canchaIdCandidates(storageCanchaId);
+
+      let canchaData: {
+        cancha_id: string;
+        venue_name?: string | null;
+        current_template_id: string | null;
+      } | null = null;
+
       if (keys.length) {
-        const { data: rows } = await supabase
-          .from('canchas')
-          .select('cancha_id, current_template_id')
-          .in('cancha_id', keys)
-          .limit(1);
-        canchaData = rows?.[0];
+        if (preferredVenue) {
+          const { data: r1 } = await supabase
+            .from('canchas')
+            .select('cancha_id, venue_name, current_template_id')
+            .eq('venue_name', preferredVenue)
+            .in('cancha_id', keys)
+            .limit(1);
+          canchaData = r1?.[0] ?? null;
+        }
+        if (!canchaData) {
+          const { data: r2 } = await supabase
+            .from('canchas')
+            .select('cancha_id, venue_name, current_template_id')
+            .eq('venue_name', '')
+            .in('cancha_id', keys)
+            .limit(1);
+          canchaData = r2?.[0] ?? null;
+        }
       }
 
       if (canchaData?.current_template_id) {
@@ -288,27 +309,28 @@ export default function SmartDisplay({
       await loadPlaylists();
       await loadMatch();
 
-      if (canchaData?.cancha_id) {
-        const cid = String(canchaData.cancha_id);
-        canchaSub = supabase
-          .channel(`smart_display_cancha_${cid}`)
-          .on(
-            'postgres_changes',
-            {
-              event: 'UPDATE',
-              schema: 'public',
-              table: 'canchas',
-              filter: `cancha_id=eq.${cid}`,
-            },
-            async (payload) => {
-              const newTemplateId =
-                (payload.new as any)?.current_template_id ?? null;
-              if (newTemplateId) await loadTemplate(newTemplateId);
-              await loadPlaylists();
-            },
-          )
-          .subscribe();
-      }
+      const filterCanchaId = String(canchaData?.cancha_id || storageCanchaId);
+      const watchVenue = String(canchaData?.venue_name ?? (preferredVenue || '')).trim();
+
+      canchaSub = supabase
+        .channel(`smart_display_cancha_${watchVenue}_${filterCanchaId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'canchas',
+            filter: `cancha_id=eq.${filterCanchaId}`,
+          },
+          async (payload) => {
+            const row = payload.new as { venue_name?: string | null; current_template_id?: string | null };
+            if (String(row?.venue_name ?? '').trim() !== watchVenue) return;
+            const newTemplateId = row?.current_template_id ?? null;
+            if (newTemplateId) await loadTemplate(newTemplateId);
+            await loadPlaylists();
+          },
+        )
+        .subscribe();
     };
     init();
 
@@ -316,7 +338,7 @@ export default function SmartDisplay({
       if (canchaSub) supabase.removeChannel(canchaSub);
       if (templateSub) supabase.removeChannel(templateSub);
     };
-  }, [supabase, canchaId, loadTemplate, loadPlaylists, loadMatch]);
+  }, [supabase, canchaId, venueName, loadTemplate, loadPlaylists, loadMatch]);
 
   // ── Suscripción a display_templates (para cuando cambian valores del template activo) ─
   useEffect(() => {

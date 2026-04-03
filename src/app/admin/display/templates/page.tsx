@@ -1,8 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { useAuth } from '@/lib/AuthContext';
+import { dataService } from '@/lib/dataService';
+import { buildVenuesAndCourtsFromTournaments } from '@/lib/venuesFromTournaments';
+import {
+  canchaIdCandidates,
+  canchaIdStoredForPublicidadTables,
+} from '@/lib/courtPlaylists';
 import { splitRatioFromDatabase, splitRatioToDatabase } from '@/lib/displayTemplateSplitRatio';
 import { saveTemplateAction, applyTemplateToCanchaAction } from './actions';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -40,28 +47,33 @@ interface DisplayTemplate {
 }
 
 interface Cancha {
+  venue_name?: string;
   cancha_id: string;
   current_template_id: string | null;
 }
 
 export default function AdminDisplayTemplates() {
   const router = useRouter();
+  const { isAdmin, loading: authLoading } = useAuth();
   const supabase = createClient();
   const [templates, setTemplates] = useState<DisplayTemplate[]>([]);
   const [canchas, setCanchas] = useState<Cancha[]>([]);
+  const [venues, setVenues] = useState<ReturnType<typeof buildVenuesAndCourtsFromTournaments>>([]);
+  const [selectedVenue, setSelectedVenue] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<DisplayTemplate | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!authLoading && !isAdmin) router.push('/');
+  }, [authLoading, isAdmin, router]);
 
-  const fetchData = async () => {
-    setIsLoading(true);
+  const refreshTemplatesAndCanchas = useCallback(async () => {
     const { data: tps } = await supabase.from('display_templates').select('*').order('created_at', { ascending: false });
-    const { data: cns } = await supabase.from('canchas').select('*');
+    const { data: cns } = await supabase
+      .from('canchas')
+      .select('venue_name, cancha_id, current_template_id, last_seen, updated_at');
     if (tps) {
       setTemplates(
         tps.map((row) => ({
@@ -70,9 +82,60 @@ export default function AdminDisplayTemplates() {
         })) as DisplayTemplate[],
       );
     }
-    if (cns) setCanchas(cns);
-    setIsLoading(false);
-  };
+    if (cns) {
+      setCanchas(
+        (cns as Cancha[]).map((r) => ({
+          ...r,
+          venue_name: String((r as Cancha).venue_name ?? '').trim(),
+        })),
+      );
+    }
+  }, [supabase]);
+
+  useEffect(() => {
+    if (authLoading || !isAdmin) return;
+    let cancelled = false;
+    (async () => {
+      setIsLoading(true);
+      try {
+        const all = await dataService.listAllTournaments();
+        if (cancelled) return;
+        const list = buildVenuesAndCourtsFromTournaments(all || []);
+        setVenues(list);
+        setSelectedVenue((prev) => (prev ? prev : list[0]?.name ?? ''));
+        await refreshTemplatesAndCanchas();
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAdmin, refreshTemplatesAndCanchas]);
+
+  const selectedVenueCourts = useMemo(() => {
+    const want = String(selectedVenue || '').trim().toLowerCase();
+    if (!want) return [];
+    return venues.find((v) => v.name.trim().toLowerCase() === want)?.courts ?? [];
+  }, [venues, selectedVenue]);
+
+  const globalCanchaIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const c of canchas) {
+      if (!String(c.venue_name ?? '').trim()) s.add(String(c.cancha_id));
+    }
+    return Array.from(s).sort();
+  }, [canchas]);
+
+  const standardGlobalStoredIds = useMemo(
+    () => new Set(['1', '2', '3', '4', '5', '6'].map((k) => canchaIdStoredForPublicidadTables(k))),
+    [],
+  );
+
+  const extraGlobalCanchaIds = useMemo(
+    () => globalCanchaIds.filter((id) => !standardGlobalStoredIds.has(id)),
+    [globalCanchaIds, standardGlobalStoredIds],
+  );
 
   const handleCreateTemplate = () => {
     const newTpl: DisplayTemplate = {
@@ -149,7 +212,7 @@ export default function AdminDisplayTemplates() {
         setMessage({ text: res.error, type: 'error' });
       } else {
         setMessage({ text: 'Template guardado correctamente', type: 'success' });
-        await fetchData();
+        await refreshTemplatesAndCanchas();
         setSelectedTemplate(res.data as DisplayTemplate);
       }
     } catch {
@@ -166,25 +229,60 @@ export default function AdminDisplayTemplates() {
   const templateIdMatches = (a: string | null | undefined, b: string | null | undefined) =>
     String(a ?? '') === String(b ?? '');
 
-  const handleApplyToCancha = async (canchaId: string) => {
+  const courtHasThisTemplate = (venueName: string, courtKey: string) => {
+    if (!selectedTemplate || selectedTemplate.id.startsWith('new-')) return false;
+    const v = String(venueName ?? '').trim();
+    const stored = canchaIdStoredForPublicidadTables(courtKey);
+    const keys = canchaIdCandidates(stored);
+    return canchas.some(
+      (cn) =>
+        String(cn.venue_name ?? '').trim() === v &&
+        keys.includes(String(cn.cancha_id)) &&
+        templateIdMatches(cn.current_template_id, selectedTemplate.id),
+    );
+  };
+
+  const globalRowHasThisTemplate = (canchaStorageId: string) => {
+    if (!selectedTemplate || selectedTemplate.id.startsWith('new-')) return false;
+    const keys = canchaIdCandidates(canchaStorageId);
+    return canchas.some(
+      (cn) =>
+        !String(cn.venue_name ?? '').trim() &&
+        keys.includes(String(cn.cancha_id)) &&
+        templateIdMatches(cn.current_template_id, selectedTemplate.id),
+    );
+  };
+
+  const handleApplyToVenueCourt = async (venueName: string, courtKey: string) => {
     if (!selectedTemplate || selectedTemplate.id.startsWith('new-')) return;
-    
+    const stored = canchaIdStoredForPublicidadTables(courtKey);
     try {
-      const applied = await applyTemplateToCanchaAction(canchaId, selectedTemplate.id);
+      const applied = await applyTemplateToCanchaAction(venueName, stored, selectedTemplate.id);
       if (!applied.ok) {
         setMessage({ text: applied.error, type: 'error' });
       } else {
-        setMessage({ text: `Template aplicado a ${canchaId}`, type: 'success' });
-        await fetchData();
+        setMessage({
+          text: `Template aplicado a ${venueName || '(sin sede)'} · ${stored}`,
+          type: 'success',
+        });
+        await refreshTemplatesAndCanchas();
       }
     } catch {
       setMessage({
         text:
-          'Error al aplicar el template. Revisa SUPABASE_SERVICE_ROLE_KEY y que la tabla canchas tenga current_template_id.',
+          'Error al aplicar el template. Revisa SUPABASE_SERVICE_ROLE_KEY y la migración 040 (venue_name en canchas).',
         type: 'error',
       });
     }
   };
+
+  if (authLoading || !isAdmin) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#08080c] text-white">
+        <RefreshCw className="animate-spin w-12 h-12 text-padel-primary" />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -495,40 +593,114 @@ export default function AdminDisplayTemplates() {
                     </motion.div>
                   )}
 
-                  {/* Apply to Court Section */}
+                  {/* Apply to Court Section — misma sede que Publicidad; la pizarra usa complexName + cancha_N */}
                   <div className="pt-8 border-t border-white/10 space-y-4">
                     <h3 className="text-xl font-black italic uppercase tracking-tighter flex items-center gap-3">
                       <Monitor className="w-5 h-5 text-padel-primary shrink-0" />
-                      Aplicar a Canchas
+                      Aplicar a sede y pista
                     </h3>
-                    <p className="text-xs font-bold uppercase tracking-widest text-zinc-300">
-                      Pulsa una cancha para asignar el template seleccionado
+                    <p className="text-xs font-bold uppercase tracking-widest text-zinc-300 leading-relaxed">
+                      Elige la sede (mismo nombre que el complejo del torneo). La TV del torneo usa ese nombre; la pizarra{' '}
+                      <span className="text-white/90">/display/court/N?complex=…</span> debe usar el mismo texto en{' '}
+                      <span className="text-white/90">complex</span>.
                     </p>
-                    <div className="grid grid-cols-1 min-[480px]:grid-cols-2 xl:grid-cols-3 gap-3 w-full">
-                      {canchas.map((cn) => {
-                        const canchaHasThisTemplate = templateIdMatches(
-                          cn.current_template_id,
-                          selectedTemplate.id,
-                        );
-                        return (
-                        <button
-                          key={cn.cancha_id}
-                          type="button"
-                          onClick={() => handleApplyToCancha(cn.cancha_id)}
-                          aria-pressed={canchaHasThisTemplate}
-                          className={`min-h-[3.25rem] w-full px-4 py-3 rounded-2xl font-black italic uppercase transition-all duration-200 flex items-center justify-center gap-2 text-center text-sm sm:text-base leading-tight border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-padel-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#08080c] active:scale-[0.98] ${
-                            canchaHasThisTemplate
-                              ? 'bg-padel-primary text-black border-padel-primary shadow-[inset_0_2px_8px_rgba(0,0,0,0.2)] ring-2 ring-padel-primary/90 ring-offset-2 ring-offset-[#08080c]'
-                              : 'bg-zinc-900 text-white border-white/25 hover:bg-zinc-800 hover:border-padel-primary/60 hover:text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
-                          }`}
+
+                    {venues.length > 0 ? (
+                      <div className="space-y-3">
+                        <label className="text-[10px] font-black uppercase tracking-[0.35em] text-white/35 italic block">
+                          Sede
+                        </label>
+                        <select
+                          value={selectedVenue}
+                          onChange={(e) => setSelectedVenue(e.target.value)}
+                          className="w-full max-w-xl bg-black/40 border border-white/15 rounded-2xl px-4 py-3 font-bold text-white outline-none focus:border-padel-primary cursor-pointer"
                         >
-                          <span className="break-all line-clamp-2">{cn.cancha_id}</span>
-                          {canchaHasThisTemplate ? (
-                            <CheckCircle2 className="w-5 h-5 shrink-0 text-black" aria-hidden />
-                          ) : null}
-                        </button>
-                        );
-                      })}
+                          {venues.map((v) => (
+                            <option key={v.name} value={v.name}>
+                              {v.name}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="grid grid-cols-1 min-[480px]:grid-cols-2 xl:grid-cols-3 gap-3 w-full pt-2">
+                          {selectedVenueCourts.map((court) => {
+                            const active = courtHasThisTemplate(selectedVenue, court.key);
+                            return (
+                              <button
+                                key={court.key}
+                                type="button"
+                                onClick={() => handleApplyToVenueCourt(selectedVenue, court.key)}
+                                aria-pressed={active}
+                                className={`min-h-[3.25rem] w-full px-4 py-3 rounded-2xl font-black italic uppercase transition-all duration-200 flex items-center justify-center gap-2 text-center text-sm sm:text-base leading-tight border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-padel-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#08080c] active:scale-[0.98] ${
+                                  active
+                                    ? 'bg-padel-primary text-black border-padel-primary shadow-[inset_0_2px_8px_rgba(0,0,0,0.2)] ring-2 ring-padel-primary/90 ring-offset-2 ring-offset-[#08080c]'
+                                    : 'bg-zinc-900 text-white border-white/25 hover:bg-zinc-800 hover:border-padel-primary/60 hover:text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
+                                }`}
+                              >
+                                <span className="line-clamp-2">{court.label}</span>
+                                {active ? (
+                                  <CheckCircle2 className="w-5 h-5 shrink-0 text-black" aria-hidden />
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-amber-400/90 font-bold">
+                        No hay sedes con <span className="font-mono text-xs">complexName</span> en torneos. Crea o edita un
+                        torneo con complejo, o usa el bloque “sin sede” abajo.
+                      </p>
+                    )}
+
+                    <div className="pt-6 space-y-2 border-t border-white/5">
+                      <h4 className="text-sm font-black uppercase tracking-wider text-white/50">
+                        Modo global (sin sede)
+                      </h4>
+                      <p className="text-[11px] text-white/45 font-bold uppercase tracking-wide">
+                        Solo si la URL de la pizarra no lleva <span className="font-mono">?complex=</span>. Misma clave{' '}
+                        <span className="font-mono">cancha_N</span> que en heartbeat.
+                      </p>
+                      <div className="grid grid-cols-1 min-[480px]:grid-cols-2 xl:grid-cols-3 gap-3 w-full">
+                        {['1', '2', '3', '4', '5', '6'].map((key) => {
+                          const stored = canchaIdStoredForPublicidadTables(key);
+                          const active = globalRowHasThisTemplate(stored);
+                          return (
+                            <button
+                              key={`global-${key}`}
+                              type="button"
+                              onClick={() => handleApplyToVenueCourt('', key)}
+                              aria-pressed={active}
+                              className={`min-h-[3.25rem] w-full px-4 py-3 rounded-2xl font-black italic uppercase transition-all duration-200 flex items-center justify-center gap-2 text-center text-sm border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-padel-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#08080c] active:scale-[0.98] ${
+                                active
+                                  ? 'bg-padel-primary text-black border-padel-primary ring-2 ring-padel-primary/90 ring-offset-2 ring-offset-[#08080c]'
+                                  : 'bg-zinc-900 text-white border-white/25 hover:bg-zinc-800 hover:border-padel-primary/60'
+                              }`}
+                            >
+                              <span>Pista {key}</span>
+                              <span className="text-[10px] font-mono opacity-70 normal-case">({stored})</span>
+                              {active ? <CheckCircle2 className="w-5 h-5 shrink-0 text-black" aria-hidden /> : null}
+                            </button>
+                          );
+                        })}
+                        {extraGlobalCanchaIds.map((cid) => {
+                          const active = globalRowHasThisTemplate(cid);
+                          return (
+                            <button
+                              key={`gextra-${cid}`}
+                              type="button"
+                              onClick={() => handleApplyToVenueCourt('', cid)}
+                              aria-pressed={active}
+                              className={`min-h-[3.25rem] w-full px-4 py-3 rounded-2xl font-black italic uppercase transition-all border-2 text-sm ${
+                                active
+                                  ? 'bg-padel-primary text-black border-padel-primary'
+                                  : 'bg-zinc-900 text-white border-white/25 hover:border-padel-primary/60'
+                              }`}
+                            >
+                              <span className="break-all">{cid}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 </motion.div>

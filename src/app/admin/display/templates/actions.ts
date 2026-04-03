@@ -126,7 +126,8 @@ export async function saveTemplateAction(
 }
 
 export async function applyTemplateToCanchaAction(
-  canchaId: string,
+  venueName: string,
+  canchaStorageId: string,
   templateId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = getSupabaseServiceClient();
@@ -138,11 +139,25 @@ export async function applyTemplateToCanchaAction(
     };
   }
 
+  const v = String(venueName ?? '').trim();
+  const cid = String(canchaStorageId ?? '').trim();
+  if (!cid) {
+    return { ok: false, error: 'cancha_id inválido.' };
+  }
+
   try {
+    const iso = new Date().toISOString();
     const { data, error } = await supabase
       .from('canchas')
-      .update({ current_template_id: templateId })
-      .eq('cancha_id', canchaId)
+      .upsert(
+        {
+          venue_name: v,
+          cancha_id: cid,
+          current_template_id: templateId,
+          updated_at: iso,
+        },
+        { onConflict: 'venue_name,cancha_id' },
+      )
       .select('cancha_id');
 
     if (error) {
@@ -151,8 +166,7 @@ export async function applyTemplateToCanchaAction(
     if (!data?.length) {
       return {
         ok: false,
-        error:
-          'No hay fila en canchas con ese cancha_id. Abre la pizarra de esa pista una vez (heartbeat) o crea el registro en Supabase.',
+        error: 'No se pudo confirmar la fila en canchas. Revisa la migración 040 (venue_name + cancha_id).',
       };
     }
     revalidatePath('/admin/display/templates');

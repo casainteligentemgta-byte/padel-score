@@ -15,6 +15,7 @@ import {
   upsertCanchaPlaylistConfig,
   type CourtPlaylistRowDb,
 } from '@/lib/courtPlaylists';
+import { buildVenuesAndCourtsFromTournaments, type VenueWithCourts } from '@/lib/venuesFromTournaments';
 import { AlertCircle, ArrowLeft, Check, Download, Edit3, Eye, Layout, Loader2, Trash2, Upload, X } from 'lucide-react';
 import type { MediaContent, TiraInformativa } from '@/lib/supabase/publicidad';
 import { 
@@ -28,47 +29,6 @@ import {
   upsertPlaylistConfigAction,
   fetchAssignmentsAction,
 } from './actions';
-
-type VenueWithCourts = {
-  name: string;
-  courts: { key: string; label: string; displayNum: number }[];
-};
-
-function buildVenuesAndCourtsFromTournaments(tournaments: any[]): VenueWithCourts[] {
-  const map = new Map<string, { maxN: number; bestNames: string[] }>();
-
-  for (const t of tournaments || []) {
-    const name = String(t?.complexName || (t as any)?.complex || (t as any)?._complexName || '').trim();
-    if (!name) continue;
-    const courtNames = Array.isArray(t.courtNames) ? t.courtNames.map((x: any) => String(x).trim()) : [];
-    const totalFromNum = Number(t.totalCourts) || 0;
-    const n = Math.max(courtNames.length, totalFromNum, 1);
-    const prev = map.get(name);
-    const useNames = courtNames.length >= (prev?.bestNames.length ?? 0) ? courtNames : prev?.bestNames ?? courtNames;
-    map.set(name, {
-      maxN: Math.max(prev?.maxN ?? 0, n),
-      bestNames: useNames,
-    });
-  }
-
-  return Array.from(map.entries())
-    .map(([name, v]) => {
-      const courts: { key: string; label: string; displayNum: number }[] = [];
-      for (let i = 0; i < v.maxN; i++) {
-        const displayNum = i + 1;
-        const raw = v.bestNames[i]?.trim();
-        let label: string;
-        if (raw) {
-          label = /^pista\s*\d/i.test(raw) ? raw : `Pista ${displayNum} — ${raw}`;
-        } else {
-          label = `Pista ${displayNum}`;
-        }
-        courts.push({ key: String(displayNum), label, displayNum });
-      }
-      return { name, courts };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
-}
 
 const mb = (bytes?: number | null) => {
   if (!bytes || Number(bytes) <= 0) return '—';
@@ -238,9 +198,11 @@ export default function AdminPublicidadPage() {
           keys.flatMap((k) => (k.toLowerCase().startsWith('cancha_') ? [k] : [k, `cancha_${k}`])),
         ),
       );
+      const venueRow = String(selectedVenue || '').trim();
       const { data, error } = await supabase
         .from('canchas')
         .select('cancha_id, last_seen')
+        .eq('venue_name', venueRow)
         .in('cancha_id', dbKeys);
       if (error) return;
       const keySet = new Set(keys);
@@ -259,7 +221,7 @@ export default function AdminPublicidadPage() {
     void load();
     const id = window.setInterval(load, 15_000);
     return () => window.clearInterval(id);
-  }, [selectedVenueCourts, supabase]);
+  }, [selectedVenue, selectedVenueCourts, supabase]);
 
   useEffect(() => {
     fetchAssignments();
