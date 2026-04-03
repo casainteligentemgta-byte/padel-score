@@ -9,6 +9,7 @@ import { dataService } from '@/lib/dataService';
 import CourtCard from '@/components/publicidad/CourtCard';
 import type { CourtPlaylistRow } from '@/components/publicidad/CourtCard';
 import {
+  normalizeCanchaIdKey,
   partitionPlaylistRows,
   playlistRowKind,
   upsertCanchaPlaylistConfig,
@@ -210,20 +211,32 @@ export default function AdminPublicidadPage() {
 
 
   useEffect(() => {
-    const keys = selectedVenueCourts.map((c) => c.key);
+    const keys = selectedVenueCourts.map((c) => String(c.key).trim());
     if (keys.length === 0) {
       setCanchasHealth({});
       return;
     }
     const load = async () => {
-      const { data, error } = await supabase.from('canchas').select('cancha_id, last_seen').in('cancha_id', keys);
+      const dbKeys = Array.from(
+        new Set(
+          keys.flatMap((k) => (k.toLowerCase().startsWith('cancha_') ? [k] : [k, `cancha_${k}`])),
+        ),
+      );
+      const { data, error } = await supabase
+        .from('canchas')
+        .select('cancha_id, last_seen')
+        .in('cancha_id', dbKeys);
       if (error) return;
+      const keySet = new Set(keys);
       const m: Record<string, string | null> = {};
       keys.forEach((k) => {
         m[k] = null;
       });
       (data || []).forEach((r: { cancha_id: string; last_seen: string | null }) => {
-        m[r.cancha_id] = r.last_seen;
+        const nk = normalizeCanchaIdKey(r.cancha_id);
+        if (keySet.has(nk)) {
+          m[nk] = r.last_seen;
+        }
       });
       setCanchasHealth(m);
     };

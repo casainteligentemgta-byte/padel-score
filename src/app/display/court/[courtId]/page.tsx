@@ -79,7 +79,7 @@ function courtSetCell(
 function TickerMarquee({ messages }: { messages: { id: string; mensaje: string }[] }) {
     if (!messages.length) return null;
     return (
-        <div className="pizarra-ticker-bleed pizarra-ticker-bleed--flush box-border flex min-w-0 flex-row items-center border-b border-white/10 bg-black/60 py-3 backdrop-blur-md min-h-[3rem]">
+        <div className="pizarra-ticker-bleed pizarra-ticker-bleed--flush relative z-0 box-border flex min-w-0 flex-row items-center border-b border-white/10 bg-black/60 py-3 backdrop-blur-md min-h-[3rem]">
             <div className="marquee-ticker-viewport">
             <div className="marquee-track animate-marquee">
                 <div className="marquee-half">
@@ -151,6 +151,45 @@ function DualPlaylistStrip({
                     <span className="text-[10px] font-black uppercase text-white/25 tracking-widest">Sin imágenes</span>
                 )}
             </div>
+        </div>
+    );
+}
+
+/** Barra superior común: visible en espera y en vivo (misma línea visual que TVs del club). */
+function PistaTopBar({
+    courtId,
+    mode,
+    goldenPoint,
+}: {
+    courtId: string;
+    mode: 'live' | 'wait';
+    goldenPoint?: boolean;
+}) {
+    return (
+        <div className="relative z-20 flex w-full flex-shrink-0 items-center justify-between border-b border-white/10 bg-black/60 px-8 py-3 backdrop-blur-xl">
+            <div className="flex items-center gap-3">
+                {mode === 'live' ? (
+                    <>
+                        <div className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400">EN VIVO</span>
+                        <Wifi className="h-3 w-3 text-green-400" />
+                    </>
+                ) : (
+                    <>
+                        <div className="h-2 w-2 animate-pulse rounded-full bg-amber-500/90" />
+                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400">EN ESPERA</span>
+                    </>
+                )}
+            </div>
+            <div className="rounded-full bg-padel-primary px-5 py-1 text-xs font-black uppercase italic text-black">
+                PISTA {courtId}
+            </div>
+            {mode === 'live' && goldenPoint ? (
+                <div className="flex items-center gap-2 text-yellow-400">
+                    <Zap className="h-4 w-4" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Punto de Oro</span>
+                </div>
+            ) : null}
         </div>
     );
 }
@@ -232,15 +271,14 @@ export default function CourtDisplayPage() {
     // ── Estado ESPERA ──────────────────────────────────────────────────────
     if (!isEnVivo) {
         return (
-            <div className="h-screen w-full max-w-none min-w-0 bg-[#050505] flex flex-col items-center justify-center text-white font-outfit relative overflow-x-hidden overflow-y-hidden">
-                <div className="absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_center,_#ccff00_0%,_transparent_70%)]" />
+            <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-x-hidden overflow-y-hidden bg-[#050505] font-outfit text-white">
+                <div className="pointer-events-none absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_center,_#ccff00_0%,_transparent_70%)]" />
 
-                <div className="relative z-10 flex flex-col items-center gap-8">
-                    <div className="p-12 bg-white/5 rounded-[4rem] border border-white/10 shadow-2xl backdrop-blur-xl relative">
-                        <MonitorOff className="w-24 h-24 text-gray-700 animate-pulse" />
-                        <div className="absolute -top-4 -right-4 bg-padel-primary text-black px-6 py-2 rounded-2xl font-black italic uppercase text-sm shadow-[0_10px_20px_rgba(204,255,0,0.3)]">
-                            PISTA {courtId}
-                        </div>
+                <PistaTopBar courtId={courtId} mode="wait" />
+
+                <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-4">
+                    <div className="relative rounded-[4rem] border border-white/10 bg-white/5 p-12 shadow-2xl backdrop-blur-xl">
+                        <MonitorOff className="h-24 w-24 animate-pulse text-gray-700" />
                     </div>
                     <div className="text-center">
                         <h1 className="text-5xl font-black italic uppercase tracking-tighter mb-2">
@@ -293,23 +331,7 @@ export default function CourtDisplayPage() {
     return (
         <div className="flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-x-hidden overflow-y-hidden bg-[#050505] font-outfit text-white select-none">
             <PizarraWarmupOverlay endsAt={warmupEndsAt} layout="fullscreen" />
-            {/* Banda superior */}
-            <div className="bg-black/60 backdrop-blur-xl border-b border-white/10 px-8 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400">EN VIVO</span>
-                    <Wifi className="w-3 h-3 text-green-400" />
-                </div>
-                <div className="bg-padel-primary text-black px-5 py-1 rounded-full font-black italic uppercase text-xs">
-                    PISTA {courtId}
-                </div>
-                {marcador?.golden_point && (
-                    <div className="flex items-center gap-2 text-yellow-400">
-                        <Zap className="w-4 h-4" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Punto de Oro</span>
-                    </div>
-                )}
-            </div>
+            <PistaTopBar courtId={courtId} mode="live" goldenPoint={Boolean(marcador?.golden_point)} />
 
             {/* Marcador principal */}
             <div className="flex-1 flex flex-col items-center justify-center gap-6 px-8">
@@ -430,7 +452,7 @@ export default function CourtDisplayPage() {
 
             {!minimalMode && (
                 <>
-                    <div className="relative w-full min-w-0 max-w-none border-t border-white/10 flex-shrink-0 overflow-hidden">
+                    <div className="relative z-10 w-full min-w-0 max-w-none border-t border-white/10 flex-shrink-0 overflow-hidden">
                         <DualPlaylistStrip
                             canchaId={canchaId}
                             currentVideoUrl={playlists.currentVideoUrl}

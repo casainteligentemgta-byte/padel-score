@@ -344,7 +344,7 @@ export default function TVScoreboardDisplay({
                         </div>
 
                         {/* Tira a ancho real del viewport (fuera del grid con overflow/transform) */}
-                        <div className="pizarra-ticker-bleed pizarra-ticker-bleed--flush relative z-30 box-border flex min-h-[4.5rem] shrink-0 flex-col items-stretch border-t border-white/10 bg-black/60 py-3 backdrop-blur-3xl">
+                        <div className="pizarra-ticker-bleed pizarra-ticker-bleed--flush relative z-0 box-border flex min-h-[4.5rem] shrink-0 flex-col items-stretch border-t border-white/10 bg-black/60 py-3 backdrop-blur-3xl">
                             <div className="marquee-ticker-viewport">
                             <div className="marquee-track animate-marquee">
                                 <div className="marquee-half">

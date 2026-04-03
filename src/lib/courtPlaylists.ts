@@ -2,6 +2,16 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type PlaylistSlot = 'video' | 'imagen' | 'legacy';
 
+/**
+ * Unifica `cancha_1` y `1` para admin y mapas.
+ * El heartbeat de pizarra escribe `cancha_N`; las tarjetas de sede usan clave numérica `N`.
+ */
+export function normalizeCanchaIdKey(raw: unknown): string {
+  const s = String(raw ?? '').trim();
+  const m = s.match(/^cancha_(.+)$/i);
+  return m ? m[1].trim() : s;
+}
+
 function canchaIdCandidates(canchaId: string): string[] {
   const id = String(canchaId || '').trim();
   if (!id) return [];

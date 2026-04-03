@@ -2080,10 +2080,11 @@ export default function FullScreenDisplay() {
                             })()}
                         </div>
 
-                        {/* ══════════════ PUBLICIDAD MINI (SPLIT-SCREEN VIDEO + IMAGEN) ══════════════ */}
+                        {/* ══════════════ PUBLICIDAD + TIRA (vídeo/carrusel encima; tira debajo; z-index evita solapamiento) ══════════════ */}
+                        <div className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden">
                         {!minimalScreensMode && (
                             <div
-                                className="flex-shrink-0 grid gap-6 p-6"
+                                className="relative z-10 flex-shrink-0 grid gap-6 p-6"
                                 style={{ 
                                     height: `${layout.media}vh`,
                                     gridTemplateColumns: `${layout.split}% 1fr`
@@ -2094,10 +2095,10 @@ export default function FullScreenDisplay() {
                             </div>
                         )}
 
-                        {/* ══════════════ FOOTER BAR (10%) ══════════════ */}
+                        {/* FOOTER BAR: siempre debajo del bloque vídeo + imágenes */}
                         {tickerMessagesToRender.length > 0 && (
                             <div
-                                className="pizarra-ticker-bleed z-20 box-border flex min-w-0 flex-shrink-0 flex-row items-center border-t border-white/10 bg-black/40 backdrop-blur-md mb-[0.3vh] rounded-none"
+                                className="pizarra-ticker-bleed relative z-0 box-border flex min-w-0 flex-shrink-0 flex-row items-center border-t border-white/10 bg-black/40 backdrop-blur-md mb-[0.3vh] rounded-none"
                                 style={{
                                     minHeight: `max(5rem, ${layout.ticker}vh)`,
                                 }}
@@ -2148,6 +2149,7 @@ export default function FullScreenDisplay() {
                                 </div>
                             </div>
                         )}
+                        </div>
 
                         {/* Overlay animación disparada por el marker (debajo de los puntos) */}
                         <AnimatePresence>

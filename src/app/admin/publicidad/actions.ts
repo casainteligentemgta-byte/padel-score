@@ -1,6 +1,7 @@
 'use server'
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { normalizeCanchaIdKey } from '@/lib/courtPlaylists';
 
 /**
  * Acciones para Admin Publicidad que evaden RLS usando el Service Role.
@@ -181,7 +182,7 @@ export async function fetchAssignmentsAction(venueName?: string, keys?: string[]
   const assignments = (data || []).map((r: any) => ({
     ...r,
     venue_name: (r.venue_name || '').trim(),
-    cancha_id: (r.cancha_id || '').trim(),
+    cancha_id: normalizeCanchaIdKey(r.cancha_id),
   }));
 
   // Cargar configuración de todas las canchas para este venue para evitar filtros complejos en loop
@@ -196,5 +197,14 @@ export async function fetchAssignmentsAction(venueName?: string, keys?: string[]
     .select('cancha_id, tira_informativa_id, orden, venue_name')
     .eq('venue_name', v || '');
 
-  return { assignments, config: config || [], tiras: tiras || [] };
+  const configNorm = (config || []).map((r: any) => ({
+    ...r,
+    cancha_id: normalizeCanchaIdKey(r.cancha_id),
+  }));
+  const tirasNorm = (tiras || []).map((r: any) => ({
+    ...r,
+    cancha_id: normalizeCanchaIdKey(r.cancha_id),
+  }));
+
+  return { assignments, config: configNorm, tiras: tirasNorm };
 }

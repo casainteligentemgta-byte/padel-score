@@ -28,22 +28,28 @@ export default function ShortUrlPage() {
     const sedeMatch = sedeRaw.match(/^S(\d+)$/);
     const canchaMatch = canchaRaw.match(/^C(\d+)$/);
     const complexName = sedeMatch ? SEDE_MAP[sedeRaw] : null;
-    const courtNumber = canchaMatch ? parseInt(canchaMatch[1]) : null;
+    const courtNumber = canchaMatch ? parseInt(canchaMatch[1], 10) : null;
+    const courtOk =
+        complexName != null &&
+        courtNumber != null &&
+        Number.isFinite(courtNumber) &&
+        courtNumber >= 1;
 
-    const [state, setState] = useState<State>(
-        !complexName || !courtNumber ? 'invalid' : 'loading'
-    );
+    const [state, setState] = useState<State>(!courtOk ? 'invalid' : 'loading');
     const [sedeLabel] = useState(sedeRaw);
     const [canchaLabel] = useState(canchaRaw);
     const [sedeName] = useState(complexName ?? '');
 
     useEffect(() => {
-        if (!complexName || !courtNumber) { setState('invalid'); return; }
+        if (!courtOk) {
+            setState('invalid');
+            return;
+        }
         setState('redirecting');
         const qp = new URLSearchParams(searchParams?.toString() || '');
         qp.set('complex', complexName);
         router.replace(`/display/court/${courtNumber}?${qp.toString()}`);
-    }, [complexName, courtNumber, router, searchParams]);
+    }, [courtOk, complexName, courtNumber, router, searchParams]);
 
     /* ─── UI ─────────────────────────────────────────── */
     return (

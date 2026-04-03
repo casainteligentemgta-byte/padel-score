@@ -47,6 +47,16 @@
   --text-secondary: 156, 163, 175;
   --text-muted: 107, 114, 128;
   --text-accent: 204, 255, 0;
+
+  /* ── SmartDisplay: alias de marca para pizarras TV ────────────────────────
+   * --neon-color se usa en .glow-neon y en los componentes SmartDisplay.
+   * Por defecto apunta al verde Padel; se puede sobreescribir con style="" inline.
+   */
+  --neon-color: #ccff00;
+}
+
+html {
+  margin: 0;
 }
 
 html,
@@ -148,6 +158,37 @@ html {
 
   .border-glow {
     box-shadow: 0 0 30px rgba(204, 255, 0, 0.15);
+  }
+
+  /* ── SmartDisplay: clases de pizarra TV ────────────────────────────────── */
+
+  /**
+   * Efecto neón de 3 capas sobre texto.
+   * Usa --neon-color (definida en :root o sobreescribible con style="").
+   */
+  .glow-neon {
+    color: var(--neon-color);
+    text-shadow:
+      0 0 5px var(--neon-color),
+      0 0 15px var(--neon-color),
+      0 0 30px rgba(204, 255, 0, 0.4);
+  }
+
+  /**
+   * Tarjeta glassmorphism para casillas de marcador y bloques de score.
+   * Equivalente visual al patrón bg-white/5 + backdrop-blur + border-white/10
+   * pero como clase reutilizable en pizarras TV.
+   */
+  .score-card {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      rgba(255, 255, 255, 0.03) 100%
+    );
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
   }
 
   /* ── Tipografía unificada (usan variables de :root) ───────────────────── */
