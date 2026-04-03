@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { clearSupabaseBrowserStorage, isInvalidRefreshTokenError } from '@/lib/authErrorMessages';
 import { dataService, ROLES } from '@/lib/dataService';
 import { isAdminAccess } from '@/lib/adminAccess';
 import type { AppUser } from '@/lib/types/auth';
@@ -114,7 +115,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (event, session) => {
                 // Token inválido o expirado sin posibilidad de renovar → limpiar sesión silenciosamente
                 if ((event as string) === 'TOKEN_REFRESHED' && !session) {
-                    console.warn('AuthContext: TOKEN_REFRESHED sin session, forzando signOut.');
+                    console.warn('[Auth] Sesión no renovada; cerrando sesión.');
+                    clearSupabaseBrowserStorage();
                     await supabase.auth.signOut();
                     setUser(null);
                     setProfile(null);
@@ -165,29 +167,43 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 }
                 clearTimeout(safetyTimeout);
             })
-            .catch((e: any) => {
-                console.error('AuthContext: getSession failed', e);
-                // Si el error es de token de refresco inválido, forzamos logout y limpiamos storage
-                const isTokenError = e?.message?.includes('Refresh Token') ||
-                    e?.message?.includes('refresh_token') ||
-                    e?.status === 400 || e?.status === 401;
-                if (isTokenError) {
-                    supabase.auth.signOut().catch(() => { });
-                    // Limpiar claves de Supabase en localStorage como respaldo
-                    if (typeof window !== 'undefined') {
-                        Object.keys(localStorage).forEach(k => {
-                            if (k.startsWith('sb-')) localStorage.removeItem(k);
-                        });
+            .catch((e: unknown) => {
+                if (isInvalidRefreshTokenError(e)) {
+                    clearSupabaseBrowserStorage();
+                    void supabase.auth.signOut().catch(() => { });
+                    setUser(null);
+                    setProfile(null);
+                    if (process.env.NODE_ENV === 'development') {
+                        console.warn('[Auth] Token de refresco inválido o ausente; sesión limpiada. Vuelve a iniciar sesión.');
                     }
+                } else {
+                    console.error('AuthContext: getSession failed', e);
                 }
                 setLoading(false);
                 setProfileLoading(false);
                 clearTimeout(safetyTimeout);
             });
 
+        const onUnhandledRejection = (ev: PromiseRejectionEvent) => {
+            const r = ev.reason;
+            if (!isInvalidRefreshTokenError(r)) return;
+            ev.preventDefault();
+            clearSupabaseBrowserStorage();
+            void supabase.auth.signOut().catch(() => { });
+            setUser(null);
+            setProfile(null);
+            setLoading(false);
+            setProfileLoading(false);
+            if (process.env.NODE_ENV === 'development') {
+                console.warn('[Auth] Error de token en segundo plano; sesión limpiada.');
+            }
+        };
+        window.addEventListener('unhandledrejection', onUnhandledRejection);
+
         return () => {
             subscription?.unsubscribe();
             clearTimeout(safetyTimeout);
+            window.removeEventListener('unhandledrejection', onUnhandledRejection);
         };
     }, [supabase]);
 
@@ -268,6 +284,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 console.error('AuthContext: Error during signOut:', e);
             }
         }
+        clearSupabaseBrowserStorage();
         setUser(null);
         setProfile(null);
     };

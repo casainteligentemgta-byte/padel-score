@@ -1,11 +1,8 @@
 import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Deep DEBUG for the user's issue
-if (typeof window !== 'undefined') {
-    console.log('--- SUPABASE ENV DEBUG ---');
-    console.log('URL exists:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
-    console.log('Key exists:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-    console.log('URL value:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_DEBUG_SUPABASE === '1') {
+    console.log('[Supabase] URL configurada:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
+    console.log('[Supabase] Anon key configurada:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();

@@ -15,7 +15,7 @@ import {
   upsertCanchaPlaylistConfig,
   type CourtPlaylistRowDb,
 } from '@/lib/courtPlaylists';
-import { AlertCircle, Check, ChevronLeft, Download, Edit3, Eye, Loader2, Trash2, Upload, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronLeft, Download, Edit3, Eye, Layout, Loader2, Trash2, Upload, X } from 'lucide-react';
 import type { MediaContent, TiraInformativa } from '@/lib/supabase/publicidad';
 import { 
   addMediaContentAction, 
@@ -535,9 +535,20 @@ export default function AdminPublicidadPage() {
             </button>
           </div>
 
-          <header className="space-y-1">
-            <h1 className="text-2xl md:text-3xl font-black uppercase italic leading-none">Admin Publicidad</h1>
-            <p className="text-[11px] text-white/60 uppercase tracking-wider leading-tight">Playlist independiente por sede y cancha</p>
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="space-y-1">
+              <h1 className="text-2xl md:text-3xl font-black uppercase italic leading-none">Admin Publicidad</h1>
+              <p className="text-[11px] text-white/60 uppercase tracking-wider leading-tight">Playlist independiente por sede y cancha</p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => router.push('/admin/display/templates')}
+              className="px-4 py-2 rounded-xl bg-zinc-900 border border-white/10 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 hover:bg-zinc-800 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-black/20"
+            >
+              <Layout className="w-4 h-4 text-padel-primary" />
+              Dynamic Studio
+            </button>
           </header>
 
           {error && (
