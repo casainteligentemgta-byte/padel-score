@@ -81,6 +81,65 @@ function courtSetCell(
     return '—';
 }
 
+/** Segundos totales del cronómetro del marker (misma lógica que `marker/[canchaId]`). */
+function pizarraCronometroTotalSec(
+    cron: { elapsedSec?: number; running?: boolean; startedAt?: number | null } | null | undefined,
+): number {
+    if (!cron) return 0;
+    const base = Number(cron.elapsedSec ?? 0) || 0;
+    if (cron.running && cron.startedAt != null) {
+        const startMs = Number(cron.startedAt);
+        if (!Number.isNaN(startMs)) {
+            return base + Math.floor((dataService.getSyncedNow() - startMs) / 1000);
+        }
+    }
+    return base;
+}
+
+/** Cronómetro grande entre los dos equipos (datos en `marcador.cronometro` desde Supabase). */
+function PizarraCenterChrono({
+    cron,
+}: {
+    cron: { elapsedSec?: number; running?: boolean; startedAt?: number | null } | null | undefined;
+}) {
+    const [display, setDisplay] = useState('00:00');
+
+    useEffect(() => {
+        void dataService.syncSystemClock();
+    }, []);
+
+    useEffect(() => {
+        const tick = () => {
+            const totalSec = Math.max(0, pizarraCronometroTotalSec(cron));
+            const h = Math.floor(totalSec / 3600);
+            const m = Math.floor((totalSec % 3600) / 60);
+            const s = totalSec % 60;
+            if (h > 0) {
+                setDisplay(
+                    `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`,
+                );
+            } else {
+                setDisplay(`${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
+            }
+        };
+        tick();
+        const ms = cron?.running ? 250 : 1000;
+        const id = setInterval(tick, ms);
+        return () => clearInterval(id);
+    }, [cron?.elapsedSec, cron?.running, cron?.startedAt]);
+
+    return (
+        <div className="flex flex-col items-center justify-center gap-1 py-1">
+            <span className="text-[8px] font-black uppercase tracking-[0.35em] text-gray-500 sm:text-[9px]">
+                Tiempo partido
+            </span>
+            <span className="font-mono text-[clamp(1.75rem,5vw,3rem)] font-black tabular-nums leading-none tracking-tight text-padel-primary drop-shadow-[0_0_20px_rgba(204,255,0,0.25)]">
+                {display}
+            </span>
+        </div>
+    );
+}
+
 function TickerMarquee({ messages }: { messages: { id: string; mensaje: string }[] }) {
     if (!messages.length) return null;
     return (
@@ -486,11 +545,12 @@ export default function CourtDisplayPage() {
                             side="left"
                         />
 
-                        {/* Divisor central */}
-                        <div className="flex flex-col items-center justify-center gap-4">
-                            <div className="w-px h-32 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
-                            <span className="text-gray-700 font-black text-xl">VS</span>
-                            <div className="w-px h-32 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+                        {/* Centro: cronómetro del partido + VS */}
+                        <div className="flex min-w-[6.5rem] flex-col items-center justify-center gap-3 sm:min-w-[8rem]">
+                            <div className="h-px w-12 bg-gradient-to-r from-transparent via-white/25 to-transparent sm:w-16" />
+                            <PizarraCenterChrono cron={marcador?.cronometro} />
+                            <span className="text-base font-black tracking-widest text-gray-600 sm:text-lg">VS</span>
+                            <div className="h-px w-12 bg-gradient-to-r from-transparent via-white/25 to-transparent sm:w-16" />
                         </div>
 
                         {/* Equipo 2 */}
