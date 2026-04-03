@@ -15,7 +15,7 @@ import {
   upsertCanchaPlaylistConfig,
   type CourtPlaylistRowDb,
 } from '@/lib/courtPlaylists';
-import { AlertCircle, Check, ChevronLeft, Download, Edit3, Eye, Layout, Loader2, Trash2, Upload, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Check, Download, Edit3, Eye, Layout, Loader2, Trash2, Upload, X } from 'lucide-react';
 import type { MediaContent, TiraInformativa } from '@/lib/supabase/publicidad';
 import { 
   addMediaContentAction, 
@@ -74,6 +74,15 @@ const mb = (bytes?: number | null) => {
   if (!bytes || Number(bytes) <= 0) return '—';
   return `${(Number(bytes) / (1024 * 1024)).toFixed(1)} MB`;
 };
+
+/** `fetchAssignmentsAction` filtra sede con ilike en servidor; el listado por cancha debe alinear el criterio (mayúsculas/espacios). */
+function adminPublicidadVenueMatches(rowVenue: string | null | undefined, selectedVenue: string | null | undefined): boolean {
+  return String(rowVenue || '').trim().toLowerCase() === String(selectedVenue || '').trim().toLowerCase();
+}
+
+function adminPublicidadCanchaMatches(rowCancha: string | null | undefined, courtKey: string | null | undefined): boolean {
+  return normalizeCanchaIdKey(rowCancha) === normalizeCanchaIdKey(courtKey);
+}
 
 const isVideoFile = (f: File) => f.type.startsWith('video/');
 const isImageFile = (f: File) => f.type.startsWith('image/');
@@ -139,7 +148,9 @@ export default function AdminPublicidadPage() {
   }, [selectedVenue]);
 
   const selectedVenueCourts = useMemo(() => {
-    return venues.find((v) => v.name === selectedVenue)?.courts ?? [];
+    const want = String(selectedVenue || '').trim().toLowerCase();
+    if (!want) return [];
+    return venues.find((v) => v.name.trim().toLowerCase() === want)?.courts ?? [];
   }, [venues, selectedVenue]);
 
   const courtKeySet = useMemo(() => new Set(selectedVenueCourts.map((c) => c.key)), [selectedVenueCourts]);
@@ -577,11 +588,11 @@ export default function AdminPublicidadPage() {
             <button
               type="button"
               onClick={() => router.back()}
-              className="w-10 h-10 flex items-center justify-center hover:bg-white/5 rounded-xl transition-colors border border-white/5 bg-black/20 group"
-              aria-label="Volver"
-              title="Volver"
+              className="inline-flex items-center justify-center gap-2 pl-2 pr-3 py-2.5 rounded-xl transition-colors border border-white/10 bg-black/30 hover:bg-white/10 hover:border-white/20 group"
+              aria-label="Volver atrás"
+              title="Volver atrás"
             >
-              <ChevronLeft className="w-5 h-5 text-gray-500 group-hover:text-padel-primary transition-colors" />
+              <ArrowLeft className="w-5 h-5 shrink-0 text-white/80 group-hover:text-padel-primary transition-colors" strokeWidth={2.25} />
             </button>
           </div>
 
@@ -686,9 +697,10 @@ export default function AdminPublicidadPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {selectedVenueCourts.map((court) => {
-                const rows = assignments.filter((a: any) => 
-                  String(a.cancha_id).trim() === String(court.key).trim() && 
-                  String(a.venue_name || '').trim() === String(selectedVenue || '').trim()
+                const rows = assignments.filter(
+                  (a: CourtPlaylistRow) =>
+                    adminPublicidadCanchaMatches(a.cancha_id, court.key) &&
+                    adminPublicidadVenueMatches(a.venue_name, selectedVenue),
                 );
                 const { video, imagen } = partitionPlaylistRows(rows as CourtPlaylistRowDb[]);
                 const cfg = playlistConfigByCourt[court.key];

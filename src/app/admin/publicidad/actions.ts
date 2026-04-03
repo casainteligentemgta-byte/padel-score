@@ -2,7 +2,7 @@
 
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import { normalizeCanchaIdKey } from '@/lib/courtPlaylists';
+import { canchaIdCandidates, normalizeCanchaIdKey } from '@/lib/courtPlaylists';
 
 type Err = { ok: false; error: string };
 
@@ -133,15 +133,16 @@ export async function savePlaylistAction(
   const supabase = getSupabaseServiceClient();
   if (!supabase) return serviceMissing();
 
-  const cleanCourtKey = courtKey.trim();
+  const canonicalCancha = normalizeCanchaIdKey(courtKey.trim());
+  const courtIdVariants = canchaIdCandidates(canonicalCancha);
   const cleanVenueName = venueName.trim();
 
   try {
     const { error: delErr } = await supabase
       .from('cancha_publicidad')
       .delete()
-      .eq('cancha_id', cleanCourtKey)
-      .eq('venue_name', cleanVenueName)
+      .in('cancha_id', courtIdVariants)
+      .ilike('venue_name', cleanVenueName)
       .or(`playlist_slot.eq.${slot},playlist_slot.is.null`);
 
     if (delErr) {
@@ -164,7 +165,7 @@ export async function savePlaylistAction(
     if (orderedUniqueIds.length > 0) {
       const durInt = Math.max(1, Math.round(Number(durSeconds) || 10));
       const rows = orderedUniqueIds.map((mid, i) => ({
-        cancha_id: cleanCourtKey,
+        cancha_id: canonicalCancha,
         venue_name: cleanVenueName,
         media_id: mid,
         orden: i + 1,
@@ -195,20 +196,21 @@ export async function saveTiraPlaylistAction(
   if (!supabase) return serviceMissing();
 
   const cleanVenueName = venueName.trim();
-  const cleanCourtKey = courtKey.trim();
+  const canonicalCancha = normalizeCanchaIdKey(courtKey.trim());
+  const courtIdVariants = canchaIdCandidates(canonicalCancha);
 
   try {
     const { error: delErr } = await supabase
       .from('cancha_tira')
       .delete()
-      .eq('cancha_id', cleanCourtKey)
-      .eq('venue_name', cleanVenueName);
+      .in('cancha_id', courtIdVariants)
+      .ilike('venue_name', cleanVenueName);
 
     if (delErr) return { ok: false, error: delErr.message || 'No se pudo limpiar la tira.' };
 
     if (tiraIds.length > 0) {
       const rows = tiraIds.map((tid, i) => ({
-        cancha_id: cleanCourtKey,
+        cancha_id: canonicalCancha,
         venue_name: cleanVenueName,
         tira_informativa_id: tid,
         orden: i + 1,
@@ -237,7 +239,7 @@ export async function upsertPlaylistConfigAction(
     const { error } = await supabase.from('cancha_playlist_config').upsert(
       {
         venue_name: venueName.trim(),
-        cancha_id: canchaId.trim(),
+        cancha_id: normalizeCanchaIdKey(canchaId.trim()),
         ...safePatch,
         updated_at: new Date().toISOString(),
       },
@@ -286,12 +288,15 @@ export async function fetchAssignmentsAction(
       cancha_id: normalizeCanchaIdKey(String(r.cancha_id || '')),
     }));
 
-    const { data: config } = await supabase.from('cancha_playlist_config').select('*').eq('venue_name', v || '');
+    let qConfig = supabase.from('cancha_playlist_config').select('*');
+    if (v) qConfig = qConfig.ilike('venue_name', v);
+    const { data: config } = await qConfig;
 
-    const { data: tiras } = await supabase
+    let qTiras = supabase
       .from('cancha_tira')
-      .select('cancha_id, tira_informativa_id, orden, venue_name')
-      .eq('venue_name', v || '');
+      .select('cancha_id, tira_informativa_id, orden, venue_name');
+    if (v) qTiras = qTiras.ilike('venue_name', v);
+    const { data: tiras } = await qTiras;
 
     const configNorm = (config || []).map((r: Record<string, unknown>) => ({
       ...r,

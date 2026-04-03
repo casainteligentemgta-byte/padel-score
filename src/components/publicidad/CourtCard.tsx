@@ -316,15 +316,31 @@ export default function CourtCard({
                 <p className="text-[8px] font-black uppercase text-white/40 mb-1 flex items-center gap-1">
                   <Video size={10} className="text-padel-primary" /> Playlist Videos
                 </p>
-                <div className="flex flex-wrap gap-1">
-                  {videoRows.map((r, i) => (
-                    <span
-                      key={r.id}
-                      className="text-[9px] px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-white/80"
-                    >
-                      {i + 1}. {r.media_content?.nombre_sponsor || r.media_content?.nombre || 'Clip'}
-                    </span>
-                  ))}
+                <div className="flex flex-wrap gap-1.5">
+                  {videoRows.map((r, i) => {
+                    const url = r.media_content?.url;
+                    const isVid = url && String(r.media_content?.tipo || '').toLowerCase().includes('video');
+                    return (
+                      <span
+                        key={r.id}
+                        className="inline-flex items-center gap-1.5 text-[9px] px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-white/80"
+                      >
+                        {isVid ? (
+                          <video
+                            src={url}
+                            className="h-7 w-12 shrink-0 rounded object-cover border border-white/10 bg-black"
+                            muted
+                            playsInline
+                            preload="metadata"
+                            aria-hidden
+                          />
+                        ) : null}
+                        <span className="truncate max-w-[10rem]">
+                          {i + 1}. {r.media_content?.nombre_sponsor || r.media_content?.nombre || 'Clip'}
+                        </span>
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -334,15 +350,29 @@ export default function CourtCard({
                 <p className="text-[8px] font-black uppercase text-white/40 mb-1 flex items-center gap-1">
                   <ImageIcon size={10} className="text-padel-primary" /> Carrusel Imágenes
                 </p>
-                <div className="flex flex-wrap gap-1">
-                  {imageRows.map((r, i) => (
-                    <span
-                      key={r.id}
-                      className="text-[9px] px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-white/80"
-                    >
-                      {i + 1}. {r.media_content?.nombre_sponsor || r.media_content?.nombre || 'Imagen'}
-                    </span>
-                  ))}
+                <div className="flex flex-wrap gap-1.5">
+                  {imageRows.map((r, i) => {
+                    const url = r.media_content?.url;
+                    return (
+                      <span
+                        key={r.id}
+                        className="inline-flex items-center gap-1.5 text-[9px] px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-white/80"
+                      >
+                        {url ? (
+                          <img
+                            src={url}
+                            alt=""
+                            className="h-7 w-7 shrink-0 rounded object-cover border border-white/10 bg-black"
+                          />
+                        ) : (
+                          <span className="h-7 w-7 shrink-0 rounded bg-white/5 border border-white/10" />
+                        )}
+                        <span className="truncate max-w-[10rem]">
+                          {i + 1}. {r.media_content?.nombre_sponsor || r.media_content?.nombre || 'Imagen'}
+                        </span>
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -12,7 +12,8 @@ export function normalizeCanchaIdKey(raw: unknown): string {
   return m ? m[1].trim() : s;
 }
 
-function canchaIdCandidates(canchaId: string): string[] {
+/** Variantes de `cancha_id` en BD (`1` vs `cancha_1`) para consultas `.in(...)`. */
+export function canchaIdCandidates(canchaId: string): string[] {
   const id = String(canchaId || '').trim();
   if (!id) return [];
   const m = id.match(/^cancha_(\d+)$/i);
@@ -120,6 +121,12 @@ export function normalizeCourtPlaylistRows(rows: unknown[]): CourtPlaylistRowDb[
   });
 }
 
+function filterPlaylistRowsByVenueLoose(rows: CourtPlaylistRowDb[], vn: string | null): CourtPlaylistRowDb[] {
+  if (!vn) return rows;
+  const want = vn.trim().toLowerCase();
+  return rows.filter((r) => String(r.venue_name ?? '').trim().toLowerCase() === want);
+}
+
 export type CanchaPlaylistConfig = {
   venue_name: string;
   cancha_id: string;
@@ -159,23 +166,11 @@ export async function fetchCanchaPlaylistRows(
     .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, media_content(*)')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
-  if (vn) q = q.eq('venue_name', vn);
+  if (vn) q = q.ilike('venue_name', vn);
   const r = await q;
   if (!r.error && ((r.data as unknown[]) || []).length > 0) {
     const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r.data as unknown[]) || []));
-    if (hasPlayableRows(norm)) return { ...r, data: norm };
-  }
-  if (vn) {
-    const rLike = await supabase
-      .from('cancha_publicidad')
-      .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, media_content(*)')
-      .in('cancha_id', canchaIds)
-      .ilike('venue_name', vn)
-      .order('orden', { ascending: true });
-    if (!rLike.error && ((rLike.data as unknown[]) || []).length > 0) {
-      const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((rLike.data as unknown[]) || []));
-      if (hasPlayableRows(norm)) return { ...rLike, data: norm };
-    }
+    if (hasPlayableRows(norm) || norm.length > 0) return { ...r, data: norm };
   }
 
   // Algunas BD exponen la relación como `publicidad` en lugar de `media_content`.
@@ -184,46 +179,36 @@ export async function fetchCanchaPlaylistRows(
     .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, publicidad(*)')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
-  if (vn) qRelFallback = qRelFallback.eq('venue_name', vn);
+  if (vn) qRelFallback = qRelFallback.ilike('venue_name', vn);
   const rRelFallback = await qRelFallback;
   if (!rRelFallback.error && ((rRelFallback.data as unknown[]) || []).length > 0) {
     const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((rRelFallback.data as unknown[]) || []));
-    if (hasPlayableRows(norm)) return { ...rRelFallback, data: norm };
-  }
-  if (vn) {
-    const rRelLike = await supabase
-      .from('cancha_publicidad')
-      .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, publicidad(*)')
-      .in('cancha_id', canchaIds)
-      .ilike('venue_name', vn)
-      .order('orden', { ascending: true });
-    if (!rRelLike.error && ((rRelLike.data as unknown[]) || []).length > 0) {
-      const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((rRelLike.data as unknown[]) || []));
-      if (hasPlayableRows(norm)) return { ...rRelLike, data: norm };
-    }
+    if (hasPlayableRows(norm) || norm.length > 0) return { ...rRelFallback, data: norm };
   }
 
-  // Fallback: sin sede (cuando no coincide venue_name en la data).
+  // Fallback: sin filtro sede en SQL; acotamos por sede en cliente si hace falta.
   let q2 = supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, media_content(*)')
+    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, media_content(*)')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   const r2 = await q2;
   if (!r2.error) {
-    const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r2.data as unknown[]) || []));
+    let norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r2.data as unknown[]) || []));
+    norm = filterPlaylistRowsByVenueLoose(norm, vn);
     if (hasPlayableRows(norm) || norm.length > 0) return { ...r2, data: norm };
   }
 
   let q3 = supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, publicidad(*)')
+    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, publicidad(*)')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   const r3 = await q3;
   if (!r3.error) {
-    const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r3.data as unknown[]) || []));
-    return { ...r3, data: norm };
+    let norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r3.data as unknown[]) || []));
+    norm = filterPlaylistRowsByVenueLoose(norm, vn);
+    if (norm.length > 0 || !vn) return { ...r3, data: norm };
   }
 
   // Fallback final: sin relaciones embebidas (evita fallos de schema cache/FK en PostgREST).
@@ -238,17 +223,19 @@ export async function fetchCanchaPlaylistRows(
   }
   const r4 = await q4;
   if (!r4.error) {
-    const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r4.data as unknown[]) || []));
+    let norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r4.data as unknown[]) || []));
+    norm = filterPlaylistRowsByVenueLoose(norm, vn);
     if (hasPlayableRows(norm) || norm.length > 0) return { ...r4, data: norm };
   }
 
   const r5 = await supabase
     .from('cancha_publicidad')
-    .select('id, cancha_id, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla')
+    .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla')
     .in('cancha_id', canchaIds)
     .order('orden', { ascending: true });
   if (!r5.error) {
-    const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r5.data as unknown[]) || []));
+    let norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r5.data as unknown[]) || []));
+    norm = filterPlaylistRowsByVenueLoose(norm, vn);
     return { ...r5, data: norm };
   }
   return r3;
@@ -261,13 +248,22 @@ export async function fetchCanchaPlaylistConfig(
 ): Promise<CanchaPlaylistConfig | null> {
   if (!venueName.trim()) return null;
   const canchaIds = canchaIdCandidates(canchaId);
-  const { data, error } = await supabase
+  const vn = venueName.trim();
+  const { data: rowsIlike, error: errIlike } = await supabase
     .from('cancha_playlist_config')
     .select('*')
     .in('cancha_id', canchaIds)
-    .eq('venue_name', venueName.trim())
+    .ilike('venue_name', vn)
+    .limit(1);
+  if (!errIlike && rowsIlike?.[0]) return rowsIlike[0] as CanchaPlaylistConfig;
+
+  const { data: dataEq, error: errEq } = await supabase
+    .from('cancha_playlist_config')
+    .select('*')
+    .in('cancha_id', canchaIds)
+    .eq('venue_name', vn)
     .maybeSingle();
-  if (!error && data) return data as CanchaPlaylistConfig;
+  if (!errEq && dataEq) return dataEq as CanchaPlaylistConfig;
 
   // Fallback: algunas instalaciones no guardan/filtran por venue_name.
   const { data: data2, error: error2 } = await supabase
@@ -339,7 +335,7 @@ export async function fetchCanchaTiraMessages(
       .from('cancha_tira')
       .select('tira_informativa_id, orden')
       .in('cancha_id', canchaIds)
-      .eq('venue_name', vn)
+      .ilike('venue_name', vn)
       .order('orden', { ascending: true });
     if (!e1 && links?.length) {
       const ids = links.map((l: { tira_informativa_id: string }) => l.tira_informativa_id);
@@ -355,24 +351,30 @@ export async function fetchCanchaTiraMessages(
         .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
     }
 
-    // Fallback 1: cancha_tira sin filtrar por sede.
+    // Fallback 1: mismas canchas, filtrar sede en cliente.
     const { data: links2, error: e1b } = await supabase
       .from('cancha_tira')
-      .select('tira_informativa_id, orden')
+      .select('tira_informativa_id, orden, venue_name')
       .in('cancha_id', canchaIds)
       .order('orden', { ascending: true });
     if (!e1b && links2?.length) {
-      const ids = links2.map((l: { tira_informativa_id: string }) => l.tira_informativa_id);
-      const { data: msgs, error: e2 } = await supabase
-        .from('tira_informativa')
-        .select('id, mensaje, activo')
-        .in('id', ids)
-        .eq('activo', true);
-      if (!e2 && msgs?.length) {
-        const order = new Map(ids.map((id, i) => [id, i]));
-        return (msgs as { id: string; mensaje: string }[])
-          .filter((m) => order.has(m.id))
-          .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+      const want = vn.toLowerCase();
+      const scoped = links2.filter(
+        (l: { venue_name?: string | null }) => String(l.venue_name ?? '').trim().toLowerCase() === want,
+      );
+      if (scoped.length > 0) {
+        const ids = scoped.map((l: { tira_informativa_id: string }) => l.tira_informativa_id);
+        const { data: msgs, error: e2 } = await supabase
+          .from('tira_informativa')
+          .select('id, mensaje, activo')
+          .in('id', ids)
+          .eq('activo', true);
+        if (!e2 && msgs?.length) {
+          const order = new Map(ids.map((id, i) => [id, i]));
+          return (msgs as { id: string; mensaje: string }[])
+            .filter((m) => order.has(m.id))
+            .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+        }
       }
     }
   }
