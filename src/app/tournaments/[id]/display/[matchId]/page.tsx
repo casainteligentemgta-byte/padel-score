@@ -18,6 +18,7 @@ import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { inferStbFromSetScoresOnly } from '@/lib/matchFinishedScoreDisplay';
 import { resolveMatchTeamLines } from '@/lib/resolveMatchTeamLines';
 import { PizarraWarmupOverlay, parseCalentamientoEndsAt } from '@/components/PizarraWarmupOverlay';
+import { splitRatioFromDatabase } from '@/lib/displayTemplateSplitRatio';
 import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
 
 // Lottie player para animaciones JSON (biblioteca de animaciones)
@@ -357,7 +358,11 @@ export default function FullScreenDisplay() {
                 .single();
             
             if (data && !error) {
-                setActiveTemplate(data as DisplayTemplate);
+                const row = data as DisplayTemplate;
+                setActiveTemplate({
+                    ...row,
+                    split_ratio: splitRatioFromDatabase((row as { split_ratio?: unknown }).split_ratio),
+                });
             }
         };
 
@@ -407,18 +412,20 @@ export default function FullScreenDisplay() {
                 table: 'display_templates',
                 filter: `id=eq.${activeTemplate.id}`
             }, (payload) => {
-                setActiveTemplate(payload.new as DisplayTemplate);
+                const row = payload.new as DisplayTemplate;
+                setActiveTemplate({
+                    ...row,
+                    split_ratio: splitRatioFromDatabase((row as { split_ratio?: unknown }).split_ratio),
+                });
             })
             .subscribe();
         
         return () => { templateSub.unsubscribe(); };
     }, [activeTemplate?.id]);
 
-    const rawSplit = activeTemplate?.split_ratio;
-    const splitPercent =
-        typeof rawSplit === 'number' && rawSplit > 0 && rawSplit <= 1
-            ? Math.round(rawSplit * 100)
-            : Math.min(100, Math.max(0, Math.round(Number(rawSplit) || 50)));
+    const splitPercent = Math.round(
+        splitRatioFromDatabase(activeTemplate?.split_ratio) * 100,
+    );
 
     const layout = {
         header: activeTemplate?.header_vh ?? 10,

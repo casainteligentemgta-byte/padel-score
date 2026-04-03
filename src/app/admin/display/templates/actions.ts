@@ -1,5 +1,6 @@
 'use server';
 
+import { splitRatioFromDatabase, splitRatioToDatabase } from '@/lib/displayTemplateSplitRatio';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 
@@ -37,7 +38,7 @@ function toPlainTemplateRow(row: Record<string, unknown>): TemplateRow {
     score_vh: Number(row.score_vh) || 0,
     media_vh: Number(row.media_vh) || 0,
     ticker_vh: Number(row.ticker_vh) || 0,
-    split_ratio: Number(row.split_ratio) || 0.5,
+    split_ratio: splitRatioFromDatabase(row.split_ratio),
     clock_style: String(row.clock_style ?? 'modern'),
     clock_color: String(row.clock_color ?? '#ccff00'),
     created_at: row.created_at != null ? String(row.created_at) : undefined,
@@ -58,7 +59,7 @@ function normalizeTemplatePayload(input: RawTemplatePayload) {
     score_vh: s,
     media_vh: m,
     ticker_vh: t,
-    split_ratio: Math.min(1, Math.max(0, Number(input.split_ratio) || 0.5)),
+    split_ratio: splitRatioToDatabase(input.split_ratio ?? 0.5),
     clock_style: input.clock_style || 'modern',
     clock_color: input.clock_color || '#ccff00',
   };

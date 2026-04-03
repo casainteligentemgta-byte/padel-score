@@ -10,7 +10,7 @@
  *  • Firebase RTDB: `canchas/${canchaId}`   → marcador en tiempo real (canal rápido).
  *  • El layout CSS grid se recalcula desde los campos del DisplayTemplate:
  *    header_vh / score_vh / media_vh / ticker_vh.
- *  • La columna de media se parte con split_ratio (float 0–1).
+ *  • La columna de media se parte con split_ratio en UI (0–1); en BD suele ser entero 0–100.
  *  • SmartClock usa la fuente Orbitron cuando clock_style === 'classic' (digital).
  */
 
@@ -20,6 +20,7 @@ import { Calendar, Tv } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
 import SponsorCarousel from '@/components/publicidad/SponsorCarousel';
+import { splitRatioFromDatabase } from '@/lib/displayTemplateSplitRatio';
 import {
   fetchCanchaPlaylistRows,
   normalizeCourtPlaylistRows,
@@ -202,7 +203,11 @@ export default function SmartDisplay({
         .single();
       if (!error && data) {
         templateIdRef.current = templateId;
-        setTemplate(data as DisplayTemplate);
+        const row = data as DisplayTemplate;
+        setTemplate({
+          ...row,
+          split_ratio: splitRatioFromDatabase((row as { split_ratio?: unknown }).split_ratio),
+        });
       }
     },
     [supabase],
@@ -336,9 +341,12 @@ export default function SmartDisplay({
           filter: `id=eq.${template.id}`,
         },
         (payload) => {
-          setTemplate(payload.new as DisplayTemplate);
-          // Resetear la ref para que loadTemplate recargue si hay cambio de ID
-          templateIdRef.current = (payload.new as any)?.id ?? null;
+          const row = payload.new as DisplayTemplate;
+          setTemplate({
+            ...row,
+            split_ratio: splitRatioFromDatabase((row as { split_ratio?: unknown }).split_ratio),
+          });
+          templateIdRef.current = (payload.new as { id?: string })?.id ?? null;
         },
       )
       .subscribe();
@@ -386,8 +394,11 @@ export default function SmartDisplay({
   // ── Derived grid string from template ─────────────────────────────────────
   const gridTemplateRows = `${template.header_vh}vh ${template.score_vh}vh ${template.media_vh}vh ${template.ticker_vh}vh`;
 
-  const leftPct = Math.round(template.split_ratio * 100);
-  const rightPct = 100 - leftPct;
+  /** Entero 0–100 para la columna izquierda del bloque media (`${n}% 1fr`). */
+  const splitRounded = Math.round(splitRatioFromDatabase(template.split_ratio) * 100);
+  const splitPercent = Number.isFinite(splitRounded)
+    ? Math.min(100, Math.max(0, splitRounded))
+    : 50;
 
   const {
     playerA1 = 'JUGADOR 1',
@@ -636,15 +647,13 @@ export default function SmartDisplay({
         {/* ── ROW 3: MEDIA — sub-grid dinamico por split_ratio ──────────── */}
         <div className="relative min-h-0 overflow-hidden p-8">
           {/*
-           * Sub-grid de 2 columnas controlado por split_ratio del template.
-           * Usamos CSS transition en lugar de framer-motion para grid-template-columns
-           * ya que framer-motion tampoco interpola ese valor.
+           * Sub-grid: primera columna en % (entero desde template), segunda `1fr` (resto).
+           * Transition en grid-template-columns (no animable bien con framer-motion).
            */}
           <div
-            className="grid gap-8 h-full"
+            className="grid h-full w-full gap-4 transition-all duration-700 ease-in-out"
             style={{
-              gridTemplateColumns: `${leftPct}fr ${rightPct}fr`,
-              transition: 'grid-template-columns 0.6s ease-in-out',
+              gridTemplateColumns: `${splitPercent}% 1fr`,
             }}
           >
             {/* LEFT: Video slot */}

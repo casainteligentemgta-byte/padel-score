@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { splitRatioFromDatabase, splitRatioToDatabase } from '@/lib/displayTemplateSplitRatio';
 import { saveTemplateAction, applyTemplateToCanchaAction } from './actions';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -58,7 +59,14 @@ export default function AdminDisplayTemplates() {
     setIsLoading(true);
     const { data: tps } = await supabase.from('display_templates').select('*').order('created_at', { ascending: false });
     const { data: cns } = await supabase.from('canchas').select('*');
-    if (tps) setTemplates(tps);
+    if (tps) {
+      setTemplates(
+        tps.map((row) => ({
+          ...row,
+          split_ratio: splitRatioFromDatabase((row as DisplayTemplate).split_ratio),
+        })) as DisplayTemplate[],
+      );
+    }
     if (cns) setCanchas(cns);
     setIsLoading(false);
   };
@@ -120,15 +128,16 @@ export default function AdminDisplayTemplates() {
     const m = Math.round(Number(data.media_vh) || 59);
     const t = 100 - (h + s + m); // El ticker absorbe el resto para sumar EXACTAMENTE 100
 
-    const payload = { 
+    // split_ratio en BD = entero 0–100 (la UI del slider sigue en 0–1)
+    const payload = {
       name: data.name || 'Sin Nombre',
       header_vh: h,
       score_vh: s,
       media_vh: m,
       ticker_vh: t,
-      split_ratio: Number(data.split_ratio) || 0.5,
+      split_ratio: splitRatioToDatabase(data.split_ratio ?? 0.5),
       clock_style: data.clock_style || 'modern',
-      clock_color: data.clock_color || '#ccff00'
+      clock_color: data.clock_color || '#ccff00',
     };
 
     try {
@@ -150,6 +159,9 @@ export default function AdminDisplayTemplates() {
 
     setIsSaving(false);
   };
+
+  const templateIdMatches = (a: string | null | undefined, b: string | null | undefined) =>
+    String(a ?? '') === String(b ?? '');
 
   const handleApplyToCancha = async (canchaId: string) => {
     if (!selectedTemplate || selectedTemplate.id.startsWith('new-')) return;
@@ -209,21 +221,32 @@ export default function AdminDisplayTemplates() {
           <div className="lg:col-span-4 space-y-6">
             <h2 className="text-2xl font-black italic uppercase tracking-widest text-white/40 mb-4">Templates</h2>
             <div className="space-y-4">
-              {templates.map(tpl => (
+              {templates.map((tpl) => {
+                const tplSelected = templateIdMatches(selectedTemplate?.id, tpl.id);
+                return (
                 <button
                   key={tpl.id}
+                  type="button"
                   onClick={() => setSelectedTemplate(tpl)}
-                  className={`w-full p-6 text-left rounded-3xl border-2 transition-all group ${
-                    selectedTemplate?.id === tpl.id 
-                      ? 'bg-padel-primary/10 border-padel-primary shadow-xl' 
-                      : 'bg-white/5 border-white/5 hover:border-white/20'
+                  aria-pressed={tplSelected}
+                  className={`w-full p-6 text-left rounded-3xl border-2 transition-all duration-200 group ${
+                    tplSelected
+                      ? 'bg-padel-primary/20 border-padel-primary text-white shadow-[inset_0_2px_12px_rgba(0,0,0,0.35)] ring-2 ring-padel-primary ring-offset-2 ring-offset-[#08080c]'
+                      : 'bg-zinc-900/90 border-zinc-500/80 text-white hover:border-white/40 hover:bg-zinc-800/95 active:scale-[0.99]'
                   }`}
                 >
                   <div className="flex justify-between items-center">
-                    <span className={`text-xl font-black italic uppercase tracking-tight ${selectedTemplate?.id === tpl.id ? 'text-padel-primary' : ''}`}>
+                    <span
+                      className={`text-xl font-black italic uppercase tracking-tight ${
+                        tplSelected ? 'text-padel-primary drop-shadow-[0_0_12px_rgba(204,255,0,0.35)]' : 'text-white'
+                      }`}
+                    >
                       {tpl.name}
                     </span>
-                    <Layout className={`w-5 h-5 ${selectedTemplate?.id === tpl.id ? 'text-padel-primary' : 'text-white/20'}`} />
+                    <Layout
+                      className={`w-5 h-5 shrink-0 ${tplSelected ? 'text-padel-primary' : 'text-zinc-400'}`}
+                      aria-hidden
+                    />
                   </div>
                   <div className="mt-4 flex gap-2 overflow-hidden h-4 rounded-full bg-black/40">
                     <div style={{ width: `${tpl.header_vh}%` }} className="h-full bg-blue-500" />
@@ -232,7 +255,8 @@ export default function AdminDisplayTemplates() {
                     <div style={{ width: `${tpl.ticker_vh}%` }} className="h-full bg-white/20" />
                   </div>
                 </button>
-              ))}
+              );
+              })}
             </div>
           </div>
 
@@ -464,23 +488,30 @@ export default function AdminDisplayTemplates() {
                       Pulsa una cancha para asignar el template seleccionado
                     </p>
                     <div className="grid grid-cols-1 min-[480px]:grid-cols-2 xl:grid-cols-3 gap-3 w-full">
-                      {canchas.map((cn) => (
+                      {canchas.map((cn) => {
+                        const canchaHasThisTemplate = templateIdMatches(
+                          cn.current_template_id,
+                          selectedTemplate.id,
+                        );
+                        return (
                         <button
                           key={cn.cancha_id}
                           type="button"
                           onClick={() => handleApplyToCancha(cn.cancha_id)}
-                          className={`min-h-[3.25rem] w-full px-4 py-3 rounded-2xl font-black italic uppercase transition-all flex items-center justify-center gap-2 text-center text-sm sm:text-base leading-tight border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-padel-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#08080c] ${
-                            cn.current_template_id === selectedTemplate.id
-                              ? 'bg-padel-primary text-black border-padel-primary shadow-lg shadow-padel-primary/35'
-                              : 'bg-zinc-950 text-zinc-50 border-zinc-500 hover:bg-zinc-900 hover:border-padel-primary/70 hover:text-white active:bg-zinc-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
+                          aria-pressed={canchaHasThisTemplate}
+                          className={`min-h-[3.25rem] w-full px-4 py-3 rounded-2xl font-black italic uppercase transition-all duration-200 flex items-center justify-center gap-2 text-center text-sm sm:text-base leading-tight border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-padel-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#08080c] active:scale-[0.98] ${
+                            canchaHasThisTemplate
+                              ? 'bg-padel-primary text-black border-padel-primary shadow-[inset_0_2px_8px_rgba(0,0,0,0.2)] ring-2 ring-padel-primary/90 ring-offset-2 ring-offset-[#08080c]'
+                              : 'bg-zinc-900 text-white border-white/25 hover:bg-zinc-800 hover:border-padel-primary/60 hover:text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
                           }`}
                         >
                           <span className="break-all line-clamp-2">{cn.cancha_id}</span>
-                          {cn.current_template_id === selectedTemplate.id && (
-                            <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden />
-                          )}
+                          {canchaHasThisTemplate ? (
+                            <CheckCircle2 className="w-5 h-5 shrink-0 text-black" aria-hidden />
+                          ) : null}
                         </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </motion.div>
