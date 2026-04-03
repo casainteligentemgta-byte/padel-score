@@ -491,9 +491,12 @@ export default function CourtCard({
                       type="number"
                       min={1}
                       max={120}
+                      step={1}
                       disabled={draftVideoMin === 0}
                       value={draftVideoMin > 0 ? draftVideoMin : 1}
-                      onChange={(e) => setDraftVideoMin(Math.max(1, Number(e.target.value) || 1))}
+                      onChange={(e) =>
+                        setDraftVideoMin(Math.max(1, Math.floor(Number(e.target.value) || 1)))
+                      }
                       className="w-12 bg-black/50 border border-white/10 rounded px-1 py-0.5 text-[10px] text-white [color-scheme:dark] disabled:opacity-40"
                     />
                     <span>min pasar al siguiente (aunque el clip siga)</span>
@@ -643,9 +646,12 @@ export default function CourtCard({
                       type="number"
                       min={1}
                       max={120}
+                      step={1}
                       disabled={draftImageMin === 0}
                       value={draftImageMin > 0 ? draftImageMin : 1}
-                      onChange={(e) => setDraftImageMin(Math.max(1, Number(e.target.value) || 1))}
+                      onChange={(e) =>
+                        setDraftImageMin(Math.max(1, Math.floor(Number(e.target.value) || 1)))
+                      }
                       className="w-12 bg-black/50 border border-white/10 rounded px-1 py-0.5 text-[10px] [color-scheme:dark] disabled:opacity-40"
                     />
                     <span>min por imagen</span>
@@ -664,8 +670,11 @@ export default function CourtCard({
                       type="number"
                       min={0}
                       max={120}
+                      step={1}
                       value={draftImagenPausa}
-                      onChange={(e) => setDraftImagenPausa(Number(e.target.value) || 0)}
+                      onChange={(e) =>
+                        setDraftImagenPausa(Math.max(0, Math.floor(Number(e.target.value) || 0)))
+                      }
                       className="w-14 bg-black/50 border border-white/10 rounded px-1 py-0.5 [color-scheme:dark]"
                     />
                   </div>
@@ -813,9 +822,12 @@ export default function CourtCard({
                       type="number"
                       min={1}
                       max={60}
+                      step={1}
                       disabled={draftTiraMin === 0}
                       value={draftTiraMin > 0 ? draftTiraMin : 2}
-                      onChange={(e) => setDraftTiraMin(Math.max(1, Number(e.target.value) || 1))}
+                      onChange={(e) =>
+                        setDraftTiraMin(Math.max(1, Math.floor(Number(e.target.value) || 1)))
+                      }
                       className="w-12 bg-black/50 border border-white/10 rounded px-1 py-0.5 text-[10px] [color-scheme:dark] disabled:opacity-40"
                     />
                     <span>min (config guardada; pantallas pueden leerla)</span>

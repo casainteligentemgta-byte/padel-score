@@ -395,7 +395,7 @@ export default function AdminDisplayTemplates() {
                       <Monitor className="w-5 h-5 text-padel-primary shrink-0" />
                       Aplicar a Canchas
                     </h3>
-                    <p className="text-xs font-bold uppercase tracking-widest text-white/35">
+                    <p className="text-xs font-bold uppercase tracking-widest text-zinc-300">
                       Pulsa una cancha para asignar el template seleccionado
                     </p>
                     <div className="grid grid-cols-1 min-[480px]:grid-cols-2 xl:grid-cols-3 gap-3 w-full">
@@ -404,10 +404,10 @@ export default function AdminDisplayTemplates() {
                           key={cn.cancha_id}
                           type="button"
                           onClick={() => handleApplyToCancha(cn.cancha_id)}
-                          className={`min-h-[3.25rem] w-full px-4 py-3 rounded-2xl font-black italic uppercase transition-all flex items-center justify-center gap-2 text-center text-sm sm:text-base leading-tight ${
+                          className={`min-h-[3.25rem] w-full px-4 py-3 rounded-2xl font-black italic uppercase transition-all flex items-center justify-center gap-2 text-center text-sm sm:text-base leading-tight border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-padel-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#08080c] ${
                             cn.current_template_id === selectedTemplate.id
-                              ? 'bg-padel-primary text-black shadow-lg shadow-padel-primary/25 ring-2 ring-padel-primary/50'
-                              : 'bg-white/5 text-white/80 hover:bg-white/10 border border-white/10 hover:border-white/20'
+                              ? 'bg-padel-primary text-black border-padel-primary shadow-lg shadow-padel-primary/35'
+                              : 'bg-zinc-950 text-zinc-50 border-zinc-500 hover:bg-zinc-900 hover:border-padel-primary/70 hover:text-white active:bg-zinc-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
                           }`}
                         >
                           <span className="break-all line-clamp-2">{cn.cancha_id}</span>

@@ -14,6 +14,28 @@ function serviceMissing(): Err {
   };
 }
 
+/** Columnas INTEGER en cancha_playlist_config: el cliente puede enviar decimales (p. ej. pausa 0.5 s). */
+const PLAYLIST_CONFIG_INT_KEYS = new Set([
+  'video_cambio_cada_minutos',
+  'imagen_cambio_cada_minutos',
+  'tira_cambio_cada_minutos',
+  'imagen_pausa_entre_segundos',
+]);
+
+function sanitizePlaylistConfigPatch(patch: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(patch)) {
+    if (PLAYLIST_CONFIG_INT_KEYS.has(key)) {
+      out[key] = Math.max(0, Math.floor(Number(raw) || 0));
+    } else if (key === 'imagen_loop') {
+      out[key] = Boolean(raw);
+    } else {
+      out[key] = raw;
+    }
+  }
+  return out;
+}
+
 /**
  * Las Server Actions no deben usar throw hacia el cliente en producción:
  * Next.js oculta el mensaje real. Devolvemos { ok, error } siempre.
@@ -128,12 +150,13 @@ export async function savePlaylistAction(
     })();
 
     if (orderedUniqueIds.length > 0) {
+      const durInt = Math.max(1, Math.round(Number(durSeconds) || 10));
       const rows = orderedUniqueIds.map((mid, i) => ({
         cancha_id: cleanCourtKey,
         venue_name: cleanVenueName,
         media_id: mid,
         orden: i + 1,
-        duracion_segundos: durSeconds || 10,
+        duracion_segundos: durInt,
         playlist_slot: slot,
       }));
 
@@ -198,11 +221,12 @@ export async function upsertPlaylistConfigAction(
   if (!supabase) return serviceMissing();
 
   try {
+    const safePatch = sanitizePlaylistConfigPatch(patch);
     const { error } = await supabase.from('cancha_playlist_config').upsert(
       {
         venue_name: venueName.trim(),
         cancha_id: canchaId.trim(),
-        ...patch,
+        ...safePatch,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'venue_name,cancha_id' },
