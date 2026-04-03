@@ -319,7 +319,7 @@ export default function TVScoreboardDisplay({
                             </div>
 
                             {/* Ads Right: Image Carousel */}
-                            <div className="bg-black/60 backdrop-blur-2xl rounded-[3rem] border-2 border-white/10 overflow-hidden relative shadow-[0_0_80px_rgba(0,0,0,0.5)] flex items-center justify-center">
+                            <div className="bg-black/60 backdrop-blur-2xl rounded-[3rem] border-2 border-white/10 overflow-hidden relative shadow-[0_0_80px_rgba(0,0,0,0.5)]">
                                 <AnimatePresence mode="wait">
                                     {carouselPlaylist.length > 0 ? (
                                         <motion.img
@@ -329,7 +329,7 @@ export default function TVScoreboardDisplay({
                                             animate={{ opacity: 1, scale: 1 }}
                                             exit={{ opacity: 0, scale: 0.9 }}
                                             transition={{ duration: 0.8 }}
-                                            className="w-full h-full object-contain p-12"
+                                            className="absolute inset-0 h-full w-full object-cover object-center"
                                         />
                                     ) : (
                                         <SponsorCarousel tournamentId={tournamentId} className="w-full h-full" />

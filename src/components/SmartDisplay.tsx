@@ -697,7 +697,7 @@ export default function SmartDisplay({
             </div>
 
             {/* RIGHT: Sponsor Carousel slot */}
-            <div className="bg-black/60 backdrop-blur-2xl rounded-[3rem] border-2 border-white/10 overflow-hidden relative shadow-[0_0_80px_rgba(0,0,0,0.5)] flex items-center justify-center min-h-0">
+            <div className="bg-black/60 backdrop-blur-2xl rounded-[3rem] border-2 border-white/10 overflow-hidden relative shadow-[0_0_80px_rgba(0,0,0,0.5)] min-h-0">
               <AnimatePresence mode="wait">
                 {carouselPlaylist.length > 0 ? (
                   <motion.img
@@ -708,7 +708,7 @@ export default function SmartDisplay({
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.97 }}
                     transition={{ duration: 0.7 }}
-                    className="max-h-full max-w-full object-contain object-center"
+                    className="absolute inset-0 h-full w-full object-cover object-center"
                   />
                 ) : (
                   <SponsorCarousel

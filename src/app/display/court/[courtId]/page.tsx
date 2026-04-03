@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { dataService } from '@/lib/dataService';
 import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
-import { MonitorOff, Megaphone, Wifi, Zap } from 'lucide-react';
+import { MonitorOff, Megaphone, Thermometer, Wifi, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
+import { useTripleTap } from '@/lib/useTripleTap';
 import { visibleSetNumbersForScoreboard } from '@/lib/displaySetColumns';
 import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { inferStbFromSetScoresOnly } from '@/lib/matchFinishedScoreDisplay';
@@ -15,6 +16,10 @@ import { useCourtDisplayHeartbeat } from '@/lib/courtDisplayHeartbeat';
 import { logDisplayVideoError } from '@/lib/logDisplayVideoError';
 import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
 import { PizarraWarmupOverlay, parseCalentamientoEndsAt } from '@/components/PizarraWarmupOverlay';
+import {
+    buildCourtHeadline,
+    splitPizarraCategoryMeta,
+} from '@/lib/pizarraHeaderLabels';
 
 /** Historial RTDB → forma mínima para inferir STB por setScores (1-1 + desempate). */
 function matchStubFromMarcadorHistorico(marcador: any) {
@@ -139,13 +144,13 @@ function DualPlaylistStrip({
                     <span className="text-[10px] font-black uppercase text-white/25 tracking-widest">Sin vídeos</span>
                 )}
             </div>
-            <div className="relative flex min-h-0 h-full w-full min-w-0 items-center justify-center bg-black/80 overflow-hidden p-1 sm:p-2">
+            <div className="relative min-h-0 h-full w-full min-w-0 bg-black/80 overflow-hidden">
                 {hasImage ? (
                     <img
                         key={imageKey}
                         src={currentImageUrl!}
                         alt=""
-                        className="max-h-full max-w-full object-contain object-center opacity-95"
+                        className="absolute inset-0 h-full w-full object-cover object-center opacity-95"
                     />
                 ) : (
                     <span className="text-[10px] font-black uppercase text-white/25 tracking-widest">Sin imágenes</span>
@@ -155,41 +160,114 @@ function DualPlaylistStrip({
     );
 }
 
-/** Barra superior común: visible en espera y en vivo (misma línea visual que TVs del club). */
+/** Barra superior: izq. pista + categoría; centro estado; der. fecha / hora / temperatura (Open-Meteo Margarita). */
 function PistaTopBar({
-    courtId,
+    courtHeadline,
+    levelLine,
+    genderLine,
     mode,
     goldenPoint,
+    onOpenPremiumScoreboard,
 }: {
-    courtId: string;
+    courtHeadline: string;
+    levelLine: string;
+    genderLine: string;
     mode: 'live' | 'wait';
     goldenPoint?: boolean;
+    onOpenPremiumScoreboard?: () => void;
 }) {
+    const [now, setNow] = useState(() => new Date());
+    const [tempC, setTempC] = useState<number | null>(null);
+
+    useEffect(() => {
+        const id = setInterval(() => setNow(new Date()), 1000);
+        return () => clearInterval(id);
+    }, []);
+
+    useEffect(() => {
+        fetch('https://api.open-meteo.com/v1/forecast?latitude=11.0&longitude=-63.9&current_weather=true')
+            .then((r) => r.json())
+            .then((data) => {
+                const t = data?.current_weather?.temperature;
+                if (typeof t === 'number' && Number.isFinite(t)) setTempC(Math.round(t));
+            })
+            .catch(() => {});
+    }, []);
+
+    const tripleTapLive = useTripleTap(
+        () => onOpenPremiumScoreboard?.(),
+        mode === 'live' && typeof onOpenPremiumScoreboard === 'function',
+    );
+
+    const dateStr = now
+        .toLocaleDateString('es-VE', { weekday: 'short', day: '2-digit', month: 'short' })
+        .toUpperCase();
+    const timeStr = now.toLocaleTimeString('es-VE', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+    const tempStr =
+        tempC != null && Number.isFinite(tempC) ? `${tempC}°C` : '—';
+
+    const metaMuted = 'text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500';
+
     return (
-        <div className="relative z-20 flex w-full flex-shrink-0 items-center justify-between border-b border-white/10 bg-black/60 px-8 py-3 backdrop-blur-xl">
-            <div className="flex items-center gap-3">
+        <div className="relative z-20 grid w-full flex-shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-3 border-b border-white/10 bg-black/60 px-4 py-2.5 backdrop-blur-xl sm:gap-4 sm:px-8 sm:py-3">
+            <div className="min-w-0 flex flex-col gap-0.5 pr-1 text-left">
+                <span className="truncate text-[11px] font-black uppercase tracking-[0.12em] text-white sm:text-xs">
+                    {courtHeadline}
+                </span>
+                {levelLine ? <span className={metaMuted}>{levelLine}</span> : null}
+                {genderLine ? <span className={metaMuted}>{genderLine}</span> : null}
+            </div>
+
+            <div className="flex shrink-0 flex-col items-center justify-start gap-1 pt-0.5">
                 {mode === 'live' ? (
-                    <>
-                        <div className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400">EN VIVO</span>
-                        <Wifi className="h-3 w-3 text-green-400" />
-                    </>
+                    <div
+                        onClick={onOpenPremiumScoreboard ? tripleTapLive : undefined}
+                        className={
+                            onOpenPremiumScoreboard
+                                ? 'flex cursor-pointer touch-manipulation select-none items-center gap-2 rounded-xl px-2 py-1 sm:gap-3 sm:px-3 sm:py-2'
+                                : 'flex items-center gap-2 sm:gap-3'
+                        }
+                    >
+                        <div className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-red-500" />
+                        <span className="text-[9px] font-black uppercase tracking-[0.35em] text-gray-300 sm:text-[10px] sm:tracking-[0.4em]">
+                            EN VIVO
+                        </span>
+                        <Wifi className="h-3 w-3 shrink-0 text-green-400" />
+                    </div>
                 ) : (
-                    <>
-                        <div className="h-2 w-2 animate-pulse rounded-full bg-amber-500/90" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400">EN ESPERA</span>
-                    </>
+                    <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-500/90" />
+                        <span className="text-[9px] font-black uppercase tracking-[0.35em] text-gray-400 sm:text-[10px] sm:tracking-[0.4em]">
+                            EN ESPERA
+                        </span>
+                    </div>
                 )}
+                {mode === 'live' && goldenPoint ? (
+                    <div className="flex items-center gap-1 text-yellow-400">
+                        <Zap className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
+                        <span className="text-[8px] font-black uppercase tracking-widest sm:text-[10px]">
+                            Punto de Oro
+                        </span>
+                    </div>
+                ) : null}
             </div>
-            <div className="rounded-full bg-padel-primary px-5 py-1 text-xs font-black uppercase italic text-black">
-                PISTA {courtId}
+
+            <div className="min-w-0 flex flex-col items-end gap-0.5 text-right">
+                <span className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-300 sm:text-[10px]">
+                    {dateStr}
+                </span>
+                <span className="font-mono text-sm font-black tabular-nums text-padel-primary sm:text-base">
+                    {timeStr}
+                </span>
+                <span className="flex items-center justify-end gap-1 text-[9px] font-bold uppercase tracking-widest text-gray-400 sm:text-[10px]">
+                    <Thermometer className="h-3 w-3 shrink-0 text-padel-primary/80" aria-hidden />
+                    {tempStr}
+                </span>
             </div>
-            {mode === 'live' && goldenPoint ? (
-                <div className="flex items-center gap-2 text-yellow-400">
-                    <Zap className="h-4 w-4" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Punto de Oro</span>
-                </div>
-            ) : null}
         </div>
     );
 }
@@ -256,6 +334,54 @@ export default function CourtDisplayPage() {
     const warmupEndsAt = parseCalentamientoEndsAt(effectiveCancha?.calentamiento);
     const SHOW_LEGACY_SET_PANEL = false;
 
+    const openPremiumScoreboard = useCallback(() => {
+        const torneoId = String(effectiveCancha?.torneo_id || '').trim();
+        const rawPid = String(effectiveCancha?.partido_id || '').trim();
+        const partidoId = rawPid.startsWith('live_') ? rawPid.slice(5) : rawPid;
+        if (!torneoId || !partidoId) return;
+        router.push(
+            `/tournaments/${encodeURIComponent(torneoId)}/display/${encodeURIComponent(partidoId)}`,
+        );
+    }, [effectiveCancha?.torneo_id, effectiveCancha?.partido_id, router]);
+
+    const canTripleTapPremiumScoreboard = useMemo(() => {
+        const torneoId = String(effectiveCancha?.torneo_id || '').trim();
+        const rawPid = String(effectiveCancha?.partido_id || '').trim();
+        const partidoId = rawPid.startsWith('live_') ? rawPid.slice(5) : rawPid;
+        return Boolean(torneoId && partidoId);
+    }, [effectiveCancha?.torneo_id, effectiveCancha?.partido_id]);
+
+    const [tournamentMeta, setTournamentMeta] = useState<{ category?: string; gender?: string } | null>(null);
+    useEffect(() => {
+        const tid = String(pizarraData?.torneo_id ?? '').trim();
+        if (!tid) {
+            setTournamentMeta(null);
+            return;
+        }
+        let cancelled = false;
+        dataService
+            .getTournament(tid)
+            .then((t) => {
+                if (cancelled || !t) return;
+                setTournamentMeta({
+                    category: (t as { category?: string }).category,
+                    gender: (t as { gender?: string }).gender,
+                });
+            })
+            .catch(() => {
+                if (!cancelled) setTournamentMeta(null);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [pizarraData?.torneo_id]);
+
+    const courtHeadline = useMemo(() => buildCourtHeadline(venueFilter, courtId), [venueFilter, courtId]);
+    const { levelLine, genderLine } = useMemo(
+        () => splitPizarraCategoryMeta(tournamentMeta),
+        [tournamentMeta],
+    );
+
     // ── Loading ────────────────────────────────────────────────────────────
     if (loading) return (
         <div className="h-screen bg-black flex items-center justify-center">
@@ -274,7 +400,12 @@ export default function CourtDisplayPage() {
             <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-x-hidden overflow-y-hidden bg-[#050505] font-outfit text-white">
                 <div className="pointer-events-none absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_center,_#ccff00_0%,_transparent_70%)]" />
 
-                <PistaTopBar courtId={courtId} mode="wait" />
+                <PistaTopBar
+                    courtHeadline={courtHeadline}
+                    levelLine={levelLine}
+                    genderLine={genderLine}
+                    mode="wait"
+                />
 
                 <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-4">
                     <div className="relative rounded-[4rem] border border-white/10 bg-white/5 p-12 shadow-2xl backdrop-blur-xl">
@@ -331,7 +462,14 @@ export default function CourtDisplayPage() {
     return (
         <div className="flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-x-hidden overflow-y-hidden bg-[#050505] font-outfit text-white select-none">
             <PizarraWarmupOverlay endsAt={warmupEndsAt} layout="fullscreen" />
-            <PistaTopBar courtId={courtId} mode="live" goldenPoint={Boolean(marcador?.golden_point)} />
+            <PistaTopBar
+                courtHeadline={courtHeadline}
+                levelLine={levelLine}
+                genderLine={genderLine}
+                mode="live"
+                goldenPoint={Boolean(marcador?.golden_point)}
+                onOpenPremiumScoreboard={canTripleTapPremiumScoreboard ? openPremiumScoreboard : undefined}
+            />
 
             {/* Marcador principal */}
             <div className="flex-1 flex flex-col items-center justify-center gap-6 px-8">
