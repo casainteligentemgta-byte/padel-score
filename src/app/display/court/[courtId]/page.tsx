@@ -179,7 +179,7 @@ function PizarraCenterChrono({
 function ScoreCell({ children, color }: { children: React.ReactNode; color: string }) {
     return (
         <span
-            className="inline-flex min-w-[2.75rem] items-center justify-center rounded-md border border-white/20 bg-black/50 px-2 py-1 font-mono text-sm font-black tabular-nums sm:min-w-[3rem] sm:px-2.5 sm:text-base"
+            className="inline-flex w-full min-w-0 max-w-full items-center justify-center rounded border border-white/20 bg-black/50 px-1 py-0.5 font-mono text-[11px] font-black tabular-nums sm:px-1.5 sm:text-xs md:text-sm"
             style={{ color }}
         >
             {children}
@@ -234,78 +234,73 @@ function PizarraTableScoreboard({ marcador }: { marcador: any }) {
     const ptsV = String(marcador.puntos?.visitante ?? '0');
     const saqueEq = Number(marcador?.saque?.equipo);
 
-    const gridTemplateColumns = [
-        'minmax(0,1fr)',
-        '2.25rem',
-        ...visible.map(() => 'minmax(2.75rem,1fr)'),
-        'minmax(3.25rem,1fr)',
-    ].join(' ');
+    /** Ancho fijo compacto para alinear cabeceras y celdas; el nombre usa todo el resto. */
+    const colSet = 'w-[2.1rem] min-w-[2.1rem] max-w-[2.1rem] shrink-0 sm:w-[2.35rem] sm:min-w-[2.35rem] sm:max-w-[2.35rem]';
+    const colPts = 'w-[3rem] min-w-[3rem] max-w-[3.25rem] shrink-0 sm:w-[3.1rem]';
+
+    const scoreBlock = (side: 'local' | 'visitante', color: string, pts: string) => (
+        <div className="flex shrink-0 items-stretch gap-0.5 sm:gap-1">
+            {visible.map((s) => {
+                const v = courtSetCell(s, side, marcador, currentSet);
+                return (
+                    <div key={`${side}-${s}`} className={`flex justify-center ${colSet}`}>
+                        <ScoreCell color={color}>{v}</ScoreCell>
+                    </div>
+                );
+            })}
+            <div className={`flex justify-center ${colPts}`}>
+                <ScoreCell color={color}>{pts}</ScoreCell>
+            </div>
+        </div>
+    );
 
     return (
         <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-black/45 px-3 py-3 shadow-[0_0_40px_rgba(0,0,0,0.5)] backdrop-blur-sm sm:px-5 sm:py-4">
-            <div
-                className="grid items-end gap-x-2 gap-y-1 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 sm:gap-x-3 sm:text-[10px] sm:tracking-[0.28em]"
-                style={{ gridTemplateColumns }}
-            >
-                <div className="min-w-0" />
-                <div aria-hidden className="text-center" />
-                {visible.map((s) => (
-                    <div key={`h-${s}`} className="text-center">
-                        {setColumnLabel(s)}
+            {/* Cabecera: espacio nombres | saque | bloque SET + POINTS */}
+            <div className="flex w-full min-w-0 items-end gap-2 pb-2 sm:gap-3">
+                <div className="min-w-0 flex-1" />
+                <div className="flex w-9 shrink-0 justify-center sm:w-10" aria-hidden />
+                <div className="flex shrink-0 items-end gap-0.5 sm:gap-1">
+                    {visible.map((s) => (
+                        <div
+                            key={`h-${s}`}
+                            className={`${colSet} text-center text-[8px] font-black uppercase leading-tight tracking-wider text-gray-500 sm:text-[9px] sm:tracking-[0.2em]`}
+                        >
+                            {setColumnLabel(s)}
+                        </div>
+                    ))}
+                    <div
+                        className={`${colPts} text-center text-[7px] font-black uppercase leading-tight tracking-[0.12em] text-padel-primary sm:text-[8px] sm:tracking-[0.18em]`}
+                    >
+                        POINTS
                     </div>
-                ))}
-                <div className="text-center tracking-[0.25em] text-padel-primary">POINTS</div>
+                </div>
             </div>
 
-            <div
-                className="mt-3 grid items-center gap-x-2 gap-y-2 border-b border-white/20 pb-3 sm:mt-4 sm:gap-x-3 sm:pb-3.5"
-                style={{ gridTemplateColumns }}
-            >
+            <div className="flex w-full min-w-0 items-start gap-2 border-b border-white/20 pb-3 sm:gap-3 sm:pb-3.5">
                 <div
-                    className="min-w-0 truncate text-left text-[11px] font-black italic uppercase leading-snug tracking-tight sm:text-xs md:text-sm"
+                    className="min-w-0 flex-1 text-left text-[11px] font-black italic uppercase leading-snug tracking-tight break-words [overflow-wrap:anywhere] sm:text-xs md:text-sm"
                     style={{ color: c1 }}
-                    title={teamLineCompact(marcador, 'local')}
                 >
                     {teamLineCompact(marcador, 'local')}
                 </div>
-                <div className="flex min-h-[1.5rem] items-center justify-center" aria-hidden>
+                <div className="flex min-h-[1.5rem] w-9 shrink-0 items-start justify-center pt-0.5 sm:w-10" aria-hidden>
                     {saqueEq === 1 ? <SmartPadelBallIcon size={24} title="Saque" /> : null}
                 </div>
-                {visible.map((s) => {
-                    const v = courtSetCell(s, 'local', marcador, currentSet);
-                    return (
-                        <div key={`t1-${s}`} className="flex justify-center">
-                            <ScoreCell color={c1}>{v}</ScoreCell>
-                        </div>
-                    );
-                })}
-                <div className="flex justify-center">
-                    <ScoreCell color={c1}>{ptsL}</ScoreCell>
-                </div>
+                {scoreBlock('local', c1, ptsL)}
             </div>
 
-            <div className="mt-3 grid items-center gap-x-2 gap-y-2 sm:mt-3.5 sm:gap-x-3" style={{ gridTemplateColumns }}>
+            <div className="mt-3 flex w-full min-w-0 items-start gap-2 sm:mt-3.5 sm:gap-3">
                 <div
-                    className="min-w-0 truncate text-left text-[11px] font-black italic uppercase leading-snug tracking-tight sm:text-xs md:text-sm"
+                    className="min-w-0 flex-1 text-left text-[11px] font-black italic uppercase leading-snug tracking-tight break-words [overflow-wrap:anywhere] sm:text-xs md:text-sm"
                     style={{ color: c2 }}
-                    title={teamLineCompact(marcador, 'visitante')}
                 >
                     {teamLineCompact(marcador, 'visitante')}
                 </div>
-                <div className="flex min-h-[1.5rem] items-center justify-center" aria-hidden>
+                <div className="flex min-h-[1.5rem] w-9 shrink-0 items-start justify-center pt-0.5 sm:w-10" aria-hidden>
                     {saqueEq === 2 ? <SmartPadelBallIcon size={24} title="Saque" /> : null}
                 </div>
-                {visible.map((s) => {
-                    const v = courtSetCell(s, 'visitante', marcador, currentSet);
-                    return (
-                        <div key={`t2-${s}`} className="flex justify-center">
-                            <ScoreCell color={c2}>{v}</ScoreCell>
-                        </div>
-                    );
-                })}
-                <div className="flex justify-center">
-                    <ScoreCell color={c2}>{ptsV}</ScoreCell>
-                </div>
+                {scoreBlock('visitante', c2, ptsV)}
             </div>
         </div>
     );
