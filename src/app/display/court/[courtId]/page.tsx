@@ -14,6 +14,7 @@ import { inferStbFromSetScoresOnly } from '@/lib/matchFinishedScoreDisplay';
 import { useCourtDisplayHeartbeat } from '@/lib/courtDisplayHeartbeat';
 import { logDisplayVideoError } from '@/lib/logDisplayVideoError';
 import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
+import { SmartPadelBallIcon } from '@/components/SmartPadelBallIcon';
 import { PizarraWarmupOverlay, parseCalentamientoEndsAt } from '@/components/PizarraWarmupOverlay';
 import {
     buildCourtHeadline,
@@ -175,20 +176,18 @@ function PizarraCenterChrono({
     );
 }
 
-function BracketScore({ children, color }: { children: React.ReactNode; color: string }) {
+function ScoreCell({ children, color }: { children: React.ReactNode; color: string }) {
     return (
         <span
             className="inline-flex min-w-[2.75rem] items-center justify-center rounded-md border border-white/20 bg-black/50 px-2 py-1 font-mono text-sm font-black tabular-nums sm:min-w-[3rem] sm:px-2.5 sm:text-base"
             style={{ color }}
         >
-            {'[ '}
             {children}
-            {' ]'}
         </span>
     );
 }
 
-/** Pizarra en filas: SET 1 / SET 2 / POINTS + saque 🎾 entre nombres y números. */
+/** Pizarra en filas: SET 1 / SET 2 / POINTS + pelota Smart Padel de saque entre nombres y números. */
 function PizarraTableScoreboard({ marcador }: { marcador: any }) {
     const setsL = Number(marcador.sets?.local ?? 0) || 0;
     const setsV = Number(marcador.sets?.visitante ?? 0) || 0;
@@ -207,7 +206,12 @@ function PizarraTableScoreboard({ marcador }: { marcador: any }) {
         twoPlusStb &&
         setsL + setsV === 0 &&
         (Number(marcador.games?.local ?? 0) >= 6 || Number(marcador.games?.visitante ?? 0) >= 6);
-    const visible = shouldForceSecondSetCol ? [1, 2] : visibleBase;
+    const oneSetOnly = fmt === 'ONE_SET_6' || fmt === 'ONE_SET_9';
+    let visible = shouldForceSecondSetCol ? [1, 2] : visibleBase;
+    // Mostrar siempre SET 1 y SET 2 en partidos que no son a un solo set (la 2.ª muestra — hasta que aplique).
+    if (!oneSetOnly) {
+        visible = Array.from(new Set([...visible, 1, 2])).sort((a, b) => a - b);
+    }
     const scoreboardCol3Tb =
         fmt === 'TIEBREAK' || marcador.modo_puntos === 'tiebreak' || marcador.tiebreak === true;
     const scoreboardCol3Stb =
@@ -264,19 +268,19 @@ function PizarraTableScoreboard({ marcador }: { marcador: any }) {
                 >
                     {teamLineCompact(marcador, 'local')}
                 </div>
-                <div className="flex justify-center text-xl leading-none sm:text-2xl" aria-hidden>
-                    {saqueEq === 1 ? '🎾' : ''}
+                <div className="flex min-h-[1.5rem] items-center justify-center" aria-hidden>
+                    {saqueEq === 1 ? <SmartPadelBallIcon size={24} title="Saque" /> : null}
                 </div>
                 {visible.map((s) => {
                     const v = courtSetCell(s, 'local', marcador, currentSet);
                     return (
                         <div key={`t1-${s}`} className="flex justify-center">
-                            <BracketScore color={c1}>{v}</BracketScore>
+                            <ScoreCell color={c1}>{v}</ScoreCell>
                         </div>
                     );
                 })}
                 <div className="flex justify-center">
-                    <BracketScore color={c1}>{ptsL}</BracketScore>
+                    <ScoreCell color={c1}>{ptsL}</ScoreCell>
                 </div>
             </div>
 
@@ -288,19 +292,19 @@ function PizarraTableScoreboard({ marcador }: { marcador: any }) {
                 >
                     {teamLineCompact(marcador, 'visitante')}
                 </div>
-                <div className="flex justify-center text-xl leading-none sm:text-2xl" aria-hidden>
-                    {saqueEq === 2 ? '🎾' : ''}
+                <div className="flex min-h-[1.5rem] items-center justify-center" aria-hidden>
+                    {saqueEq === 2 ? <SmartPadelBallIcon size={24} title="Saque" /> : null}
                 </div>
                 {visible.map((s) => {
                     const v = courtSetCell(s, 'visitante', marcador, currentSet);
                     return (
                         <div key={`t2-${s}`} className="flex justify-center">
-                            <BracketScore color={c2}>{v}</BracketScore>
+                            <ScoreCell color={c2}>{v}</ScoreCell>
                         </div>
                     );
                 })}
                 <div className="flex justify-center">
-                    <BracketScore color={c2}>{ptsV}</BracketScore>
+                    <ScoreCell color={c2}>{ptsV}</ScoreCell>
                 </div>
             </div>
         </div>

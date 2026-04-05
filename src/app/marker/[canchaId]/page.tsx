@@ -23,6 +23,7 @@ import {
     parseCalentamientoEndsAt,
     useWarmupRemainingSec,
 } from '@/components/PizarraWarmupOverlay';
+import { SmartPadelBallIcon } from '@/components/SmartPadelBallIcon';
 
 const PUNTOS_NORMAL = ['0', '15', '30', '40', 'AD'];
 const PUNTOS_TB = Array.from({ length: 21 }, (_, i) => String(i)); // 0..20 (más que suficiente)
@@ -1864,9 +1865,11 @@ export default function MarkerControlPage() {
                                                             }`}
                                                             title={isServing ? 'Sacando' : 'Toca para asignar saque'}
                                                         >
-                                                            <span className={`text-base leading-none transition-all ${
-                                                                isServing ? 'opacity-100 grayscale-0' : 'opacity-30 grayscale'
-                                                            }`}>🎾</span>
+                                                            <span className={`flex shrink-0 transition-all ${
+                                                                isServing ? 'opacity-100' : 'opacity-30 grayscale'
+                                                            }`}>
+                                                                <SmartPadelBallIcon size={18} title={isServing ? 'Sacando' : 'Asignar saque'} />
+                                                            </span>
                                                             <span className={`font-bold italic uppercase tracking-tight text-[11px] truncate leading-tight ${
                                                                 isServing
                                                                     ? 'text-[#ccff00]'
@@ -1898,7 +1901,9 @@ export default function MarkerControlPage() {
                                                                         : 'border-white/10 opacity-40 grayscale hover:opacity-80 hover:grayscale-0 bg-black'
                                                                 }`}
                                                                 title={`J${jNum} saca`}
-                                                            >🎾</button>
+                                                            >
+                                                                <SmartPadelBallIcon size={14} title="Saque" />
+                                                            </button>
                                                         );
                                                     })}
                                                 </div>

@@ -12,6 +12,7 @@ import { rtdb } from '@/lib/rtdb';
 import { ref, onValue, off } from 'firebase/database';
 import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, ImageIcon, Play, Eye, Users, EyeOff, X, MessageSquare, ChevronUp, ChevronDown, Plus, Calendar, Activity } from 'lucide-react';
 import { BouncingBall } from '@/components/BouncingBall';
+import { SmartPadelBallIcon } from '@/components/SmartPadelBallIcon';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 import { visibleSetNumbersForScoreboard, scoreboardGridClassForSetCount } from '@/lib/displaySetColumns';
 import { formatPlayerFichaName } from '@/lib/playerFichaName';
@@ -2010,7 +2011,7 @@ export default function FullScreenDisplay() {
                                                                 {(displayServer?.team === 1 && displayServer?.player === 1) && (
                                                                     <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
                                                                         className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
-                                                                        <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                                        <SmartPadelBallIcon size={14} title="Saque" />
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
@@ -2021,7 +2022,7 @@ export default function FullScreenDisplay() {
                                                                 {(displayServer?.team === 1 && displayServer?.player === 2) && (
                                                                     <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
                                                                         className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
-                                                                        <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                                        <SmartPadelBallIcon size={14} title="Saque" />
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
@@ -2077,7 +2078,7 @@ export default function FullScreenDisplay() {
                                                                 {(displayServer?.team === 2 && displayServer?.player === 1) && (
                                                                     <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
                                                                         className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
-                                                                        <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                                        <SmartPadelBallIcon size={14} title="Saque" />
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
@@ -2088,7 +2089,7 @@ export default function FullScreenDisplay() {
                                                                 {(displayServer?.team === 2 && displayServer?.player === 2) && (
                                                                     <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
                                                                         className="mr-3 w-[1.2em] h-[1.2em] rounded-full bg-[#ccff00] shadow-[0_0_20px_#ccff00,inset_0_0_8px_#000] flex items-center justify-center flex-shrink-0">
-                                                                        <span style={{ fontSize: '0.6em' }}>🎾</span>
+                                                                        <SmartPadelBallIcon size={14} title="Saque" />
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
