@@ -188,7 +188,7 @@ function DualPlaylistStrip({
     const hasVideo = Boolean(currentVideoUrl);
     const hasImage = Boolean(currentImageUrl);
     return (
-        <div className="grid w-full grid-cols-1 grid-rows-2 gap-px bg-white/10 min-h-[min(22vh,10rem)] sm:grid-cols-2 sm:grid-rows-1 sm:min-h-[min(26vh,12rem)] sm:[grid-template-columns:50%_50%]">
+        <div className="grid w-full grid-cols-1 grid-rows-2 gap-px bg-white/10 min-h-[min(11vh,5rem)] sm:grid-cols-2 sm:grid-rows-1 sm:min-h-[min(13vh,6rem)] sm:[grid-template-columns:50%_50%]">
             <div className="relative flex min-h-0 h-full w-full min-w-0 items-center justify-center overflow-hidden bg-black">
                 {hasVideo ? (
                     <CourtAdVideoOrIframe
