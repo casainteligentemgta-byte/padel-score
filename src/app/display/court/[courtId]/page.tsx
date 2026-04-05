@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useState, useRef, useCallback, useMemo } fr
 import { useRouter, useSearchParams } from 'next/navigation';
 import { dataService } from '@/lib/dataService';
 import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
-import { MonitorOff, Megaphone, Thermometer, Wifi, Zap } from 'lucide-react';
+import { MonitorOff, Megaphone, Thermometer, Zap } from 'lucide-react';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 import { useTripleTap } from '@/lib/useTripleTap';
@@ -111,11 +111,13 @@ function pizarraCronometroTotalSec(
     return base;
 }
 
-/** Cronómetro grande entre los dos equipos (datos en `marcador.cronometro` desde Supabase). */
+/** Cronómetro del partido (`marcador.cronometro`). `compact` = barra superior. */
 function PizarraCenterChrono({
     cron,
+    compact,
 }: {
     cron: { elapsedSec?: number; running?: boolean; startedAt?: number | null } | null | undefined;
+    compact?: boolean;
 }) {
     const [display, setDisplay] = useState('00:00');
 
@@ -144,11 +146,29 @@ function PizarraCenterChrono({
     }, [cron?.elapsedSec, cron?.running, cron?.startedAt]);
 
     return (
-        <div className="flex flex-col items-center justify-center gap-1 py-1">
-            <span className="text-[8px] font-black uppercase tracking-[0.35em] text-gray-500 sm:text-[9px]">
+        <div
+            className={
+                compact
+                    ? 'flex flex-col items-center justify-center gap-0 py-0'
+                    : 'flex flex-col items-center justify-center gap-1 py-1'
+            }
+        >
+            <span
+                className={
+                    compact
+                        ? 'text-[7px] font-black uppercase tracking-[0.28em] text-gray-500 sm:text-[8px] sm:tracking-[0.32em]'
+                        : 'text-[8px] font-black uppercase tracking-[0.35em] text-gray-500 sm:text-[9px]'
+                }
+            >
                 Tiempo partido
             </span>
-            <span className="font-mono text-[clamp(1.35rem,min(5vw,6vmin),3rem)] font-black tabular-nums leading-none tracking-tight text-padel-primary drop-shadow-[0_0_20px_rgba(204,255,0,0.25)]">
+            <span
+                className={
+                    compact
+                        ? 'font-mono text-[clamp(0.85rem,min(3.2vw,4.5vmin),1.35rem)] font-black tabular-nums leading-none tracking-tight text-padel-primary drop-shadow-[0_0_14px_rgba(204,255,0,0.22)] sm:text-[clamp(1rem,min(2.8vw,4vmin),1.5rem)]'
+                        : 'font-mono text-[clamp(1.35rem,min(5vw,6vmin),3rem)] font-black tabular-nums leading-none tracking-tight text-padel-primary drop-shadow-[0_0_20px_rgba(204,255,0,0.25)]'
+                }
+            >
                 {display}
             </span>
         </div>
@@ -355,7 +375,7 @@ function PizarraScoreboardFit({ children }: { children: React.ReactNode }) {
     return (
         <div
             ref={containerRef}
-            className="flex min-h-0 w-full flex-1 flex-col items-stretch justify-center overflow-hidden px-3 py-1 sm:px-6"
+            className="flex min-h-0 w-full flex-1 flex-col items-stretch justify-start overflow-hidden px-3 pt-1 pb-2 sm:px-6 sm:pt-2"
         >
             <div
                 ref={contentRef}
@@ -390,7 +410,7 @@ function DualPlaylistStrip({
     const hasVideo = Boolean(currentVideoUrl);
     const hasImage = Boolean(currentImageUrl);
     return (
-        <div className="grid h-[min(11vh,5rem)] w-full grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-px overflow-hidden bg-white/10 sm:h-[min(13vh,6rem)] sm:grid-cols-2 sm:grid-rows-1 sm:[grid-template-columns:50%_50%]">
+        <div className="grid h-[min(22vh,10rem)] w-full grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-px overflow-hidden bg-white/10 sm:h-[min(26vh,12rem)] sm:grid-cols-2 sm:grid-rows-1 sm:[grid-template-columns:50%_50%]">
             <div className="relative flex min-h-0 min-w-0 h-full w-full items-center justify-center overflow-hidden bg-black">
                 {hasVideo ? (
                     <CourtAdVideoOrIframe
@@ -429,6 +449,7 @@ function PistaTopBar({
     mode,
     goldenPoint,
     onOpenPremiumScoreboard,
+    matchChronoCron,
 }: {
     courtHeadline: string;
     levelLine: string;
@@ -436,6 +457,8 @@ function PistaTopBar({
     mode: 'live' | 'wait';
     goldenPoint?: boolean;
     onOpenPremiumScoreboard?: () => void;
+    /** En vivo: cronómetro del partido en el centro (sustituye “EN VIVO”). */
+    matchChronoCron?: { elapsedSec?: number; running?: boolean; startedAt?: number | null } | null;
 }) {
     const [now, setNow] = useState(() => new Date());
     const [tempC, setTempC] = useState<number | null>(null);
@@ -489,15 +512,11 @@ function PistaTopBar({
                         onClick={onOpenPremiumScoreboard ? tripleTapLive : undefined}
                         className={
                             onOpenPremiumScoreboard
-                                ? 'flex cursor-pointer touch-manipulation select-none items-center gap-2 rounded-xl px-2 py-1 sm:gap-3 sm:px-3 sm:py-2'
-                                : 'flex items-center gap-2 sm:gap-3'
+                                ? 'flex cursor-pointer touch-manipulation select-none flex-col items-center rounded-xl px-1 py-0.5 sm:px-2'
+                                : 'flex flex-col items-center'
                         }
                     >
-                        <div className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-red-500" />
-                        <span className="text-[9px] font-black uppercase tracking-[0.35em] text-gray-300 sm:text-[10px] sm:tracking-[0.4em]">
-                            EN VIVO
-                        </span>
-                        <Wifi className="h-3 w-3 shrink-0 text-green-400" />
+                        <PizarraCenterChrono cron={matchChronoCron} compact />
                     </div>
                 ) : (
                     <div className="flex items-center gap-2 sm:gap-3">
@@ -731,11 +750,11 @@ export default function CourtDisplayPage() {
                 mode="live"
                 goldenPoint={Boolean(marcador?.golden_point)}
                 onOpenPremiumScoreboard={canTripleTapPremiumScoreboard ? openPremiumScoreboard : undefined}
+                matchChronoCron={cronometroPartido as Parameters<typeof PizarraCenterChrono>[0]['cron']}
             />
 
             <PizarraScoreboardFit>
-                <div className="flex w-full min-h-0 flex-col items-center gap-4 overflow-x-hidden px-1">
-                    <PizarraCenterChrono cron={cronometroPartido as Parameters<typeof PizarraCenterChrono>[0]['cron']} />
+                <div className="flex w-full min-h-0 flex-col items-center gap-2 overflow-x-hidden px-1 pt-0">
                     {marcador ? <PizarraTableScoreboard marcador={marcador} /> : null}
                 </div>
             </PizarraScoreboardFit>
