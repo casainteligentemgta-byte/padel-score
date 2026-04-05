@@ -79,49 +79,6 @@ function pairPlayerNames(marcador: any, side: 'local' | 'visitante'): [string, s
 
 const PIZARRA_SAQUE_BALL_PX = 12;
 
-function PlayerFirstLineWithServe({
-    name,
-    showBall,
-}: {
-    name: string;
-    showBall: boolean;
-}) {
-    const words = name.trim().split(/\s+/).filter(Boolean);
-    const first = words[0] ?? '';
-    const rest = words.slice(1).join(' ');
-    return (
-        <span className="inline-flex flex-wrap items-center gap-1">
-            {showBall ? <SmartPadelBallIcon size={PIZARRA_SAQUE_BALL_PX} title="Saque" /> : null}
-            <span>{first}</span>
-            {rest ? <span>{' '}{rest}</span> : null}
-        </span>
-    );
-}
-
-/** Pelota inmediatamente después de la última letra del apellido (última palabra del nombre). */
-function PlayerSecondLineWithServe({
-    name,
-    showBall,
-}: {
-    name: string;
-    showBall: boolean;
-}) {
-    const words = name.trim().split(/\s+/).filter(Boolean);
-    if (words.length === 0) return null;
-    const surname = words[words.length - 1];
-    const lastLetter = surname.slice(-1);
-    const surnameWithoutLast = surname.slice(0, -1);
-    const beforeSurname = words.slice(0, -1).join(' ');
-    return (
-        <span className="inline-flex flex-wrap items-baseline gap-0.5">
-            {beforeSurname ? <span>{beforeSurname} </span> : null}
-            <span>{surnameWithoutLast}</span>
-            <span>{lastLetter}</span>
-            {showBall ? <SmartPadelBallIcon size={PIZARRA_SAQUE_BALL_PX} title="Saque" /> : null}
-        </span>
-    );
-}
-
 function TeamNamesWithServe({
     marcador,
     side,
@@ -153,31 +110,43 @@ function TeamNamesWithServe({
     const same = p1 === p2;
 
     const cls =
-        'text-[11px] font-black italic uppercase leading-snug tracking-tight break-words [overflow-wrap:anywhere] sm:text-xs md:text-sm';
+        'inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] font-black italic uppercase leading-snug tracking-tight break-words [overflow-wrap:anywhere] sm:text-xs md:text-sm';
+
+    const ball = <SmartPadelBallIcon size={PIZARRA_SAQUE_BALL_PX} title="Saque" />;
 
     if (same) {
         return (
-            <div className={cls} style={{ color }}>
-                {j1 ? (
-                    <PlayerFirstLineWithServe name={p1} showBall />
-                ) : j2 ? (
-                    <PlayerSecondLineWithServe name={p1} showBall />
-                ) : (
-                    <span>{p1}</span>
-                )}
-            </div>
+            <span className={cls} style={{ color }}>
+                {(j1 || j2) && ball}
+                <span>{p1}</span>
+            </span>
         );
     }
 
     return (
-        <div className={`flex min-w-0 flex-1 flex-col gap-0.5 ${cls}`} style={{ color }}>
-            <div>
-                <PlayerFirstLineWithServe name={p1} showBall={j1} />
-            </div>
-            <div>
-                <PlayerSecondLineWithServe name={p2} showBall={j2} />
-            </div>
-        </div>
+        <span className={cls} style={{ color }}>
+            {j1 ? (
+                <>
+                    {ball}
+                    <span>{p1}</span>
+                    <span className="shrink-0 px-0.5 text-white/45">{' / '}</span>
+                    <span>{p2}</span>
+                </>
+            ) : j2 ? (
+                <>
+                    <span>{p1}</span>
+                    <span className="shrink-0 px-0.5 text-white/45">{' / '}</span>
+                    {ball}
+                    <span>{p2}</span>
+                </>
+            ) : (
+                <>
+                    <span>{p1}</span>
+                    <span className="shrink-0 px-0.5 text-white/45">{' / '}</span>
+                    <span>{p2}</span>
+                </>
+            )}
+        </span>
     );
 }
 
