@@ -11,7 +11,11 @@ import {
   canchaIdStoredForPublicidadTables,
 } from '@/lib/courtPlaylists';
 import { splitRatioFromDatabase, splitRatioToDatabase } from '@/lib/displayTemplateSplitRatio';
-import { saveTemplateAction, applyTemplateToCanchaAction } from './actions';
+import {
+  saveTemplateAction,
+  applyTemplateToCanchaAction,
+  updateTemplateSplitRatioAction,
+} from './actions';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Layout,
@@ -63,6 +67,7 @@ export default function AdminDisplayTemplates() {
   const [selectedTemplate, setSelectedTemplate] = useState<DisplayTemplate | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [splitRatioSaving, setSplitRatioSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {

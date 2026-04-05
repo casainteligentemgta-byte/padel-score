@@ -273,16 +273,16 @@ function ImageCarousel({ ads }: { ads: any[] }) {
     }
 
     return (
-        <div className="w-full h-full bg-black/60 rounded-3xl border border-white/10 overflow-hidden relative shadow-2xl group">
+        <div className="group relative flex h-full min-h-0 w-full items-center justify-center overflow-hidden rounded-3xl border border-white/10 bg-black/60 shadow-2xl">
             <AnimatePresence mode="wait">
                 <motion.img
                     key={images[index]}
                     src={images[index]}
-                    initial={{ opacity: 0, scale: 1.05 }}
+                    initial={{ opacity: 0, scale: 1.02 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
                     transition={{ duration: 1.2, ease: "easeInOut" }}
-                    className="w-full h-full object-contain absolute inset-0"
+                    className="max-h-full max-w-full object-contain object-center"
                 />
             </AnimatePresence>
             
@@ -1083,7 +1083,7 @@ export default function FullScreenDisplay() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="w-full h-full object-cover"
+                    className="h-full w-full object-contain object-center"
                 />
             );
         }
@@ -1094,7 +1094,7 @@ export default function FullScreenDisplay() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="w-full h-full object-contain p-4"
+                className="h-full w-full max-h-full max-w-full object-contain object-center p-2"
             />
         );
     };
@@ -2001,8 +2001,11 @@ export default function FullScreenDisplay() {
                                             <div className="flex flex-col justify-center h-full pr-6 relative">
                                                 <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden shadow-2xl">
                                                     <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
-                                                    <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(20px,3.2vh,48px)', lineHeight: 1.0 }}>
-                                                        <span className="flex items-center">
+                                                    <div
+                                                        className="font-black italic uppercase tracking-tighter text-white drop-shadow-xl z-0 pl-4 pr-12 flex flex-col justify-center gap-1 min-h-0"
+                                                        style={{ fontSize: 'clamp(18px,2.9vh,44px)', lineHeight: 1.12 }}
+                                                    >
+                                                        <span className="flex items-center min-h-0">
                                                             <AnimatePresence>
                                                                 {(displayServer?.team === 1 && displayServer?.player === 1) && (
                                                                     <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
@@ -2011,10 +2014,9 @@ export default function FullScreenDisplay() {
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
-                                                            {processDisplayName(t1Live.p1) || t1Live.p1}
+                                                            <span className="truncate">{processDisplayName(t1Live.p1) || t1Live.p1}</span>
                                                         </span>
-                                                        <span className="text-white/30 mx-3">/</span>
-                                                        <span className="flex items-center">
+                                                        <span className="flex items-center min-h-0">
                                                             <AnimatePresence>
                                                                 {(displayServer?.team === 1 && displayServer?.player === 2) && (
                                                                     <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
@@ -2023,7 +2025,7 @@ export default function FullScreenDisplay() {
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
-                                                            {processDisplayName(t1Live.p2) || t1Live.p2}
+                                                            <span className="truncate">{processDisplayName(t1Live.p2) || t1Live.p2}</span>
                                                         </span>
                                                     </div>
                                                 </div>
@@ -2066,8 +2068,11 @@ export default function FullScreenDisplay() {
                                             <div className="flex flex-col justify-center h-full pr-6 relative">
                                                 <div className="relative flex items-center w-full h-[75%] bg-gradient-to-r from-white/[0.08] to-transparent rounded-xl border border-white/[0.1] backdrop-blur-md px-4 overflow-hidden">
                                                     <div className="absolute left-0 top-0 w-full h-full bg-gradient-to-b from-white/[0.05] to-transparent pointer-events-none" />
-                                                    <div className="font-black italic uppercase tracking-tighter text-white truncate drop-shadow-xl z-0 pl-4 pr-12 flex items-center" style={{ fontSize: 'clamp(20px,3.2vh,48px)', lineHeight: 1.0 }}>
-                                                        <span className="flex items-center">
+                                                    <div
+                                                        className="font-black italic uppercase tracking-tighter text-white drop-shadow-xl z-0 pl-4 pr-12 flex flex-col justify-center gap-1 min-h-0"
+                                                        style={{ fontSize: 'clamp(18px,2.9vh,44px)', lineHeight: 1.12 }}
+                                                    >
+                                                        <span className="flex items-center min-h-0">
                                                             <AnimatePresence>
                                                                 {(displayServer?.team === 2 && displayServer?.player === 1) && (
                                                                     <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
@@ -2076,10 +2081,9 @@ export default function FullScreenDisplay() {
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
-                                                            {processDisplayName(t2Live.p1) || t2Live.p1}
+                                                            <span className="truncate">{processDisplayName(t2Live.p1) || t2Live.p1}</span>
                                                         </span>
-                                                        <span className="text-white/30 mx-3">/</span>
-                                                        <span className="flex items-center">
+                                                        <span className="flex items-center min-h-0">
                                                             <AnimatePresence>
                                                                 {(displayServer?.team === 2 && displayServer?.player === 2) && (
                                                                     <motion.div initial={{ opacity: 0, scale: 0, x: -10 }} animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} transition={{ opacity: { duration: 1.5, repeat: Infinity }, scale: { duration: 1.5, repeat: Infinity } }} exit={{ opacity: 0, scale: 0 }}
@@ -2088,7 +2092,7 @@ export default function FullScreenDisplay() {
                                                                     </motion.div>
                                                                 )}
                                                             </AnimatePresence>
-                                                            {processDisplayName(t2Live.p2) || t2Live.p2}
+                                                            <span className="truncate">{processDisplayName(t2Live.p2) || t2Live.p2}</span>
                                                         </span>
                                                     </div>
                                                 </div>
@@ -2235,9 +2239,20 @@ export default function FullScreenDisplay() {
                     <motion.div key="ad" initial={{ opacity: 0, scale: 1.1 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
                         className="h-full w-full bg-black flex items-center justify-center relative">
                         {adMedia[currentAdIdx] && /\.(mp4|webm|mov|m4v)(\?|$)/i.test(adMedia[currentAdIdx]) ? (
-                            <video src={adMedia[currentAdIdx]} autoPlay muted loop playsInline className="w-full h-full object-cover" />
+                            <video
+                                src={adMedia[currentAdIdx]}
+                                autoPlay
+                                muted
+                                loop
+                                playsInline
+                                className="h-full w-full max-h-full max-w-full object-contain object-center"
+                            />
                         ) : adMedia[currentAdIdx] ? (
-                            <img src={adMedia[currentAdIdx]} className="w-full h-full object-contain p-12 lg:p-32" />
+                            <img
+                                src={adMedia[currentAdIdx]}
+                                alt=""
+                                className="h-full w-full max-h-full max-w-full object-contain object-center p-4 sm:p-8"
+                            />
                         ) : (
                             <div className="text-center space-y-12 relative z-10">
                                 <motion.div animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}

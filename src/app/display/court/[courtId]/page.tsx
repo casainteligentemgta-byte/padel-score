@@ -189,12 +189,12 @@ function DualPlaylistStrip({
     const hasImage = Boolean(currentImageUrl);
     return (
         <div className="grid w-full grid-cols-1 grid-rows-2 gap-px bg-white/10 min-h-[min(22vh,10rem)] sm:grid-cols-2 sm:grid-rows-1 sm:min-h-[min(26vh,12rem)] sm:[grid-template-columns:50%_50%]">
-            <div className="relative min-h-0 h-full w-full min-w-0 bg-black/80 overflow-hidden">
+            <div className="relative flex min-h-0 h-full w-full min-w-0 items-center justify-center overflow-hidden bg-black">
                 {hasVideo ? (
                     <CourtAdVideoOrIframe
                         url={currentVideoUrl!}
                         videoKey={videoKey}
-                        className="absolute inset-0 h-full w-full object-cover opacity-95"
+                        className="max-h-full max-w-full object-contain object-center opacity-95"
                         loop={singleVideoLoop}
                         onEnded={onVideoEnded}
                         onNativeVideoError={() => logDisplayVideoError(canchaId, currentVideoUrl!)}
@@ -203,13 +203,13 @@ function DualPlaylistStrip({
                     <span className="text-[10px] font-black uppercase text-white/25 tracking-widest">Sin vídeos</span>
                 )}
             </div>
-            <div className="relative min-h-0 h-full w-full min-w-0 bg-black/80 overflow-hidden">
+            <div className="relative flex min-h-0 h-full w-full min-w-0 items-center justify-center bg-black overflow-hidden">
                 {hasImage ? (
                     <img
                         key={imageKey}
                         src={currentImageUrl!}
                         alt=""
-                        className="absolute inset-0 h-full w-full object-cover object-center opacity-95"
+                        className="max-h-full max-w-full object-contain object-center opacity-95"
                     />
                 ) : (
                     <span className="text-[10px] font-black uppercase text-white/25 tracking-widest">Sin imágenes</span>
@@ -683,14 +683,20 @@ function TeamPanel({ nombre, color, sets, games, puntos, side }: {
     puntos: string;
     side: 'left' | 'right';
 }) {
+    const lineas = nombre
+        .split(/\s*\/\s*/)
+        .map((s) => s.trim())
+        .filter(Boolean);
     return (
         <div className={`flex flex-col items-center gap-4 ${side === 'right' ? 'text-right items-end' : 'text-left items-start'}`}>
-            {/* Nombre */}
+            {/* Jugadores en dos líneas (pareja) */}
             <div
-                className="font-black italic uppercase tracking-tighter text-2xl md:text-3xl max-w-full break-words whitespace-normal leading-tight"
+                className={`flex flex-col gap-1 max-w-full font-black italic uppercase tracking-tighter text-2xl md:text-3xl break-words whitespace-normal leading-tight ${side === 'right' ? 'items-end' : 'items-start'}`}
                 style={{ color }}
             >
-                {nombre}
+                {lineas.map((line, i) => (
+                    <span key={i}>{line}</span>
+                ))}
             </div>
 
             {/* Puntos grandes */}

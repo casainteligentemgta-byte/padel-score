@@ -18,6 +18,7 @@ import {
 import SponsorCarousel from './publicidad/SponsorCarousel';
 import { BouncingBall } from '@/components/BouncingBall';
 import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
+import { formatPlayerFichaName } from '@/lib/playerFichaName';
 
 interface TVScoreboardDisplayProps {
     playerA1?: string;
@@ -156,6 +157,17 @@ export default function TVScoreboardDisplay({
         });
     };
 
+    const finalPlayerA1 = String(playerA1).includes('/') ? String(playerA1).split('/')[0].trim() : playerA1;
+    const finalPlayerA2 = String(playerA1).includes('/') && String(playerA1).split('/').length > 1 ? String(playerA1).split('/')[1].trim() : playerA2;
+
+    const finalPlayerB1 = String(playerB1).includes('/') ? String(playerB1).split('/')[0].trim() : playerB1;
+    const finalPlayerB2 = String(playerB1).includes('/') && String(playerB1).split('/').length > 1 ? String(playerB1).split('/')[1].trim() : playerB2;
+
+    const displayA1 = formatPlayerFichaName(String(finalPlayerA1 ?? ''));
+    const displayA2 = formatPlayerFichaName(String(finalPlayerA2 ?? ''));
+    const displayB1 = formatPlayerFichaName(String(finalPlayerB1 ?? ''));
+    const displayB2 = formatPlayerFichaName(String(finalPlayerB2 ?? ''));
+
     return (
         <div className="fixed inset-0 bg-[#08080c] text-white font-outfit overflow-hidden select-none">
             <AnimatePresence mode="wait">
@@ -226,13 +238,13 @@ export default function TVScoreboardDisplay({
                                         {serverTeam === 'A' ? <div className="w-4 h-4 bg-[#ccff00] rounded-full shadow-[0_0_10px_#ccff00]" /> : null}
                                     </div>
                                     <h2 className="text-3xl lg:text-[2.2vw] font-black italic uppercase tracking-tighter leading-none text-white truncate">
-                                        {playerA1}
+                                        {displayA1 || finalPlayerA1}
                                     </h2>
                                 </div>
                                 <div className="flex items-center gap-3 opacity-40">
                                     <div className="w-8 h-8" />
                                     <h2 className="text-2xl lg:text-[1.8vw] font-black italic uppercase tracking-tighter leading-none text-white truncate">
-                                        {playerA2}
+                                        {displayA2 || finalPlayerA2}
                                     </h2>
                                 </div>
                             </div>
@@ -272,7 +284,7 @@ export default function TVScoreboardDisplay({
                             <div className="flex flex-col gap-2 items-end text-right">
                                 <div className="flex items-center gap-3">
                                     <h2 className="text-3xl lg:text-[2.2vw] font-black italic uppercase tracking-tighter leading-none text-white truncate">
-                                        {playerB1}
+                                        {displayB1 || finalPlayerB1}
                                     </h2>
                                     <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center bg-black/40">
                                         {serverTeam === 'B' ? <div className="w-4 h-4 bg-blue-600 rounded-full shadow-[0_0_10px_#2563eb]" /> : null}
@@ -280,7 +292,7 @@ export default function TVScoreboardDisplay({
                                 </div>
                                 <div className="flex items-center gap-3 opacity-40">
                                     <h2 className="text-2xl lg:text-[1.8vw] font-black italic uppercase tracking-tighter leading-none text-white truncate">
-                                        {playerB2}
+                                        {displayB2 || finalPlayerB2}
                                     </h2>
                                     <div className="w-8 h-8" />
                                 </div>
@@ -296,7 +308,7 @@ export default function TVScoreboardDisplay({
                                         key={`large-ad-${currentAdIdx}`}
                                         videoKey={`large-ad-${currentAdIdx}`}
                                         url={adsPlaylist[currentAdIdx]}
-                                        className="h-full w-full object-cover"
+                                        className="h-full w-full object-contain"
                                         loop={adsPlaylist.length === 1}
                                         onEnded={() => {
                                             if (adsPlaylist.length > 1) {
@@ -329,7 +341,7 @@ export default function TVScoreboardDisplay({
                                             animate={{ opacity: 1, scale: 1 }}
                                             exit={{ opacity: 0, scale: 0.9 }}
                                             transition={{ duration: 0.8 }}
-                                            className="absolute inset-0 h-full w-full object-cover object-center"
+                                            className="absolute inset-0 h-full w-full object-contain object-center"
                                         />
                                     ) : (
                                         <SponsorCarousel tournamentId={tournamentId} className="w-full h-full" />
@@ -396,7 +408,7 @@ export default function TVScoreboardDisplay({
                                 key={`full-ad-${currentAdIdx}`}
                                 videoKey={`full-ad-${currentAdIdx}`}
                                 url={adsPlaylist[currentAdIdx]}
-                                className="h-full w-full object-cover"
+                                className="h-full w-full object-contain"
                                 loop={adsPlaylist.length === 1}
                                 onEnded={() => {
                                     if (adsPlaylist.length > 1) {

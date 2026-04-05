@@ -1,7 +1,7 @@
 /**
- * Formato de ficha: primer nombre completo, segundo nombre solo inicial,
- * segundo apellido completo (patrón típico: Nombre1 Nombre2 Apellido1 Apellido2 → "Nombre1 N. Apellido2").
- * Con 3 tokens se asume Nombre + Apellido1 + Apellido2 → "Nombre A. Apellido2".
+ * Formato de ficha (pizarra / listados): primer nombre, inicial del segundo nombre,
+ * primer apellido. Ej.: "Juan Carlos García López" → "Juan C. García".
+ * Con 2 tokens: nombre + apellido tal cual.
  */
 
 export function formatPlayerFichaName(raw: string): string {
@@ -27,6 +27,6 @@ export function formatPlayerFichaName(raw: string): string {
     }
 
     const secondInitial = parts[1].charAt(0).toUpperCase();
-    const secondSurname = parts[parts.length - 1];
-    return `${first} ${secondInitial}. ${secondSurname}`;
+    const firstSurname = parts[2];
+    return `${first} ${secondInitial}. ${firstSurname}`;
 }

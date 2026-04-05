@@ -125,6 +125,52 @@ export async function saveTemplateAction(
   }
 }
 
+/** Solo `split_ratio` en BD (entero 0–100). Misma regla que el slider 0–1 del panel. */
+export async function updateTemplateSplitRatioAction(
+  templateId: string,
+  newRatio: number,
+): Promise<{ ok: true; stored: number } | { ok: false; error: string }> {
+  const supabase = getSupabaseServiceClient();
+  if (!supabase) {
+    return {
+      ok: false,
+      error:
+        'Servidor sin credenciales Supabase (service role). Configura SUPABASE_SERVICE_ROLE_KEY en el entorno de producción.',
+    };
+  }
+
+  const id = String(templateId ?? '').trim();
+  if (!id || id.startsWith('new-')) {
+    return { ok: false, error: 'Guarda el template primero para poder persistir el split.' };
+  }
+
+  const normalizedRatio = splitRatioToDatabase(newRatio);
+
+  try {
+    const { data: resData, error } = await supabase
+      .from('display_templates')
+      .update({
+        split_ratio: normalizedRatio,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      return { ok: false, error: error.message || 'No se pudo actualizar split_ratio.' };
+    }
+    if (!resData) {
+      return { ok: false, error: 'No se encontró el template.' };
+    }
+    revalidatePath('/admin/display/templates');
+    return { ok: true, stored: normalizedRatio };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Error inesperado al guardar el split.';
+    return { ok: false, error: msg };
+  }
+}
+
 export async function applyTemplateToCanchaAction(
   venueName: string,
   canchaStorageId: string,

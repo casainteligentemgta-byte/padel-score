@@ -442,3 +442,11 @@ nextjs-portal[style*="--nextjs-dev-tools-scale"] {
   left: auto !important;
   top: auto !important;
 }
+
+/* Transición larga para layout TV (p. ej. gridTemplateColumns en display).
+   Sobrescribe la duración por defecto de Tailwind en `.transition-all`. */
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 700ms;
+}

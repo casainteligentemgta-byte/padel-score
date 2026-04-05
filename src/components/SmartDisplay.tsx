@@ -242,11 +242,37 @@ export default function SmartDisplay({
       .single();
     if (error || !data) return;
     const d = (data as any).data ?? {};
+    let pa1 = d.team1?.p1?.name ?? '';
+    let pa2 = d.team1?.p2?.name ?? '';
+    if (!pa1 && d.team1Name && String(d.team1Name).includes('/')) {
+      const parts = String(d.team1Name).split('/');
+      pa1 = parts[0].trim();
+      pa2 = parts[1] ? parts[1].trim() : pa2;
+    } else if (!pa1) {
+      pa1 = d.team1Name ?? 'JUGADOR 1';
+      if (!pa2) pa2 = 'JUGADOR 2';
+    } else if (!pa2) {
+      pa2 = '';
+    }
+
+    let pb1 = d.team2?.p1?.name ?? '';
+    let pb2 = d.team2?.p2?.name ?? '';
+    if (!pb1 && d.team2Name && String(d.team2Name).includes('/')) {
+      const parts = String(d.team2Name).split('/');
+      pb1 = parts[0].trim();
+      pb2 = parts[1] ? parts[1].trim() : pb2;
+    } else if (!pb1) {
+      pb1 = d.team2Name ?? 'JUGADOR 3';
+      if (!pb2) pb2 = 'JUGADOR 4';
+    } else if (!pb2) {
+      pb2 = '';
+    }
+
     setMatch({
-      playerA1: d.team1?.p1?.name ?? d.team1Name ?? 'JUGADOR 1',
-      playerA2: d.team1?.p2?.name ?? 'JUGADOR 2',
-      playerB1: d.team2?.p1?.name ?? d.team2Name ?? 'JUGADOR 3',
-      playerB2: d.team2?.p2?.name ?? 'JUGADOR 4',
+      playerA1: pa1,
+      playerA2: pa2,
+      playerB1: pb1,
+      playerB2: pb2,
       currentPointsA: d.points?.local ?? d.currentPointsA ?? '0',
       currentPointsB: d.points?.visitante ?? d.currentPointsB ?? '0',
       setsA: d.sets?.local ?? d.sets?.t1 ?? 0,
@@ -676,7 +702,7 @@ export default function SmartDisplay({
                   key={`ad-${currentAdIdx}`}
                   videoKey={`ad-${currentAdIdx}`}
                   url={adsPlaylist[currentAdIdx]}
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-contain"
                   loop={adsPlaylist.length === 1}
                   onEnded={() => {
                     if (adsPlaylist.length > 1) {
@@ -730,7 +756,7 @@ export default function SmartDisplay({
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.97 }}
                     transition={{ duration: 0.7 }}
-                    className="absolute inset-0 h-full w-full object-cover object-center"
+                    className="absolute inset-0 h-full w-full object-contain object-center"
                   />
                 ) : (
                   <SponsorCarousel
