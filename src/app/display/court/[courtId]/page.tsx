@@ -133,7 +133,7 @@ function PizarraCenterChrono({
             <span className="text-[8px] font-black uppercase tracking-[0.35em] text-gray-500 sm:text-[9px]">
                 Tiempo partido
             </span>
-            <span className="font-mono text-[clamp(1.75rem,5vw,3rem)] font-black tabular-nums leading-none tracking-tight text-padel-primary drop-shadow-[0_0_20px_rgba(204,255,0,0.25)]">
+            <span className="font-mono text-[clamp(1.35rem,min(5vw,6vmin),3rem)] font-black tabular-nums leading-none tracking-tight text-padel-primary drop-shadow-[0_0_20px_rgba(204,255,0,0.25)]">
                 {display}
             </span>
         </div>
@@ -390,6 +390,9 @@ export default function CourtDisplayPage() {
     const effectiveCancha = pizarraData;
     const isEnVivo = effectiveCancha?.estado === 'en_vivo';
     const marcador = effectiveCancha?.marcador;
+    /** Marker escribe en `marcador.cronometro`; compat. si existiera clave suelta en `data`. */
+    const cronometroPartido =
+        marcador?.cronometro ?? (effectiveCancha && typeof effectiveCancha === 'object' ? (effectiveCancha as { cronometro?: unknown }).cronometro : undefined);
     const warmupEndsAt = parseCalentamientoEndsAt(effectiveCancha?.calentamiento);
     const SHOW_LEGACY_SET_PANEL = false;
 
@@ -530,11 +533,11 @@ export default function CourtDisplayPage() {
                 onOpenPremiumScoreboard={canTripleTapPremiumScoreboard ? openPremiumScoreboard : undefined}
             />
 
-            {/* Marcador principal */}
-            <div className="flex-1 flex flex-col items-center justify-center gap-6 px-8">
+            {/* Marcador principal (min-h-0 evita que overflow-y-hidden recorte la columna central / cronómetro) */}
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-4 py-2 sm:gap-6 sm:px-8">
                 {/* Equipos y puntos */}
-                <div className="w-full max-w-4xl">
-                    <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-6">
+                <div className="w-full min-h-0 max-w-4xl overflow-x-hidden">
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-3 sm:gap-6">
                         {/* Equipo 1 */}
                         <TeamPanel
                             nombre={teamDisplayFromRaw(marcador?.equipo_1?.nombre || '', 'EQUIPO 1')}
@@ -546,9 +549,9 @@ export default function CourtDisplayPage() {
                         />
 
                         {/* Centro: cronómetro del partido + VS */}
-                        <div className="flex min-w-[6.5rem] flex-col items-center justify-center gap-3 sm:min-w-[8rem]">
+                        <div className="relative z-10 flex min-w-[6.5rem] shrink-0 flex-col items-center justify-center gap-2 sm:min-w-[8rem] sm:gap-3">
                             <div className="h-px w-12 bg-gradient-to-r from-transparent via-white/25 to-transparent sm:w-16" />
-                            <PizarraCenterChrono cron={marcador?.cronometro} />
+                            <PizarraCenterChrono cron={cronometroPartido as Parameters<typeof PizarraCenterChrono>[0]['cron']} />
                             <span className="text-base font-black tracking-widest text-gray-600 sm:text-lg">VS</span>
                             <div className="h-px w-12 bg-gradient-to-r from-transparent via-white/25 to-transparent sm:w-16" />
                         </div>
@@ -704,7 +707,7 @@ function TeamPanel({ nombre, color, sets, games, puntos, side }: {
                 key={puntos}
                 initial={{ scale: 1.3, opacity: 0.6 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="font-black italic text-[8rem] leading-none tracking-tighter"
+                className="font-black italic leading-none tracking-tighter [font-size:clamp(2.75rem,min(18vw,22vmin),8rem)]"
                 style={{ color }}
             >
                 {puntos}
