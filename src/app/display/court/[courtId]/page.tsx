@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { dataService } from '@/lib/dataService';
 import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
 import { MonitorOff, Megaphone, Thermometer, Wifi, Zap } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 import { useTripleTap } from '@/lib/useTripleTap';
@@ -42,6 +41,22 @@ function formatMarcadorTeamNombre(nombre: string): string {
         return parts.length ? parts.join(' / ') : raw;
     }
     return formatPlayerFichaName(raw);
+}
+
+/** Una sola línea "A / B" para la pizarra tipo tabla. */
+function teamLineCompact(marcador: any, side: 'local' | 'visitante'): string {
+    const raw = side === 'local' ? marcador?.equipo_1?.nombre : marcador?.equipo_2?.nombre;
+    const fb = side === 'local' ? 'EQUIPO 1' : 'EQUIPO 2';
+    const rawStr = (raw || '').trim();
+    if (!rawStr) return fb;
+    if (rawStr.includes('/')) {
+        const parts = rawStr
+            .split(/\s*\/\s*/)
+            .map((p: string) => formatMarcadorTeamNombre(p.trim()))
+            .filter(Boolean);
+        return parts.length ? parts.join(' / ') : teamDisplayFromRaw(rawStr, fb);
+    }
+    return formatMarcadorTeamNombre(rawStr) || fb;
 }
 
 function teamDisplayFromRaw(rawName: string, fallbackId: string): string {
@@ -136,6 +151,138 @@ function PizarraCenterChrono({
             <span className="font-mono text-[clamp(1.35rem,min(5vw,6vmin),3rem)] font-black tabular-nums leading-none tracking-tight text-padel-primary drop-shadow-[0_0_20px_rgba(204,255,0,0.25)]">
                 {display}
             </span>
+        </div>
+    );
+}
+
+function BracketScore({ children, color }: { children: React.ReactNode; color: string }) {
+    return (
+        <span
+            className="inline-flex min-w-[2.75rem] items-center justify-center rounded-md border border-white/20 bg-black/50 px-2 py-1 font-mono text-sm font-black tabular-nums sm:min-w-[3rem] sm:px-2.5 sm:text-base"
+            style={{ color }}
+        >
+            {'[ '}
+            {children}
+            {' ]'}
+        </span>
+    );
+}
+
+/** Pizarra en filas: SET 1 / SET 2 / POINTS + saque 🎾 entre nombres y números. */
+function PizarraTableScoreboard({ marcador }: { marcador: any }) {
+    const setsL = Number(marcador.sets?.local ?? 0) || 0;
+    const setsV = Number(marcador.sets?.visitante ?? 0) || 0;
+    const currentSet = setsL + setsV + 1;
+    const fmt = String(marcador.match_format || '');
+    const twoPlusStb =
+        fmt === 'TWO_SHORT_SETS' || fmt === 'TWO_NORMAL_SETS' || fmt === '2SETS_STB';
+    const visibleBase = visibleSetNumbersForScoreboard({
+        matchFormat: fmt,
+        superTiebreak: marcador.super_tiebreak === true || marcador.modo_puntos === 'super_tiebreak',
+        tiebreak: marcador.modo_puntos === 'tiebreak',
+        setsT1: setsL,
+        setsT2: setsV,
+    });
+    const shouldForceSecondSetCol =
+        twoPlusStb &&
+        setsL + setsV === 0 &&
+        (Number(marcador.games?.local ?? 0) >= 6 || Number(marcador.games?.visitante ?? 0) >= 6);
+    const visible = shouldForceSecondSetCol ? [1, 2] : visibleBase;
+    const scoreboardCol3Tb =
+        fmt === 'TIEBREAK' || marcador.modo_puntos === 'tiebreak' || marcador.tiebreak === true;
+    const scoreboardCol3Stb =
+        !scoreboardCol3Tb &&
+        (fmt === 'SUPER_TIEBREAK' ||
+            marcador.super_tiebreak === true ||
+            marcador.modo_puntos === 'super_tiebreak' ||
+            fmt === 'SET_3_STB' ||
+            twoPlusStb ||
+            inferStbFromSetScoresOnly(matchStubFromMarcadorHistorico(marcador)));
+    const setColumnLabel = (col: number) => {
+        if (col === 3 && scoreboardCol3Tb) return 'TB';
+        if (col === 3 && scoreboardCol3Stb) return 'STB';
+        return `SET ${col}`;
+    };
+
+    const c1 = marcador?.equipo_1?.color || '#CCFF00';
+    const c2 = marcador?.equipo_2?.color || '#FF5500';
+    const ptsL = String(marcador.puntos?.local ?? '0');
+    const ptsV = String(marcador.puntos?.visitante ?? '0');
+    const saqueEq = Number(marcador?.saque?.equipo);
+
+    const gridTemplateColumns = [
+        'minmax(0,1fr)',
+        '2.25rem',
+        ...visible.map(() => 'minmax(2.75rem,1fr)'),
+        'minmax(3.25rem,1fr)',
+    ].join(' ');
+
+    return (
+        <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-black/45 px-3 py-3 shadow-[0_0_40px_rgba(0,0,0,0.5)] backdrop-blur-sm sm:px-5 sm:py-4">
+            <div
+                className="grid items-end gap-x-2 gap-y-1 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 sm:gap-x-3 sm:text-[10px] sm:tracking-[0.28em]"
+                style={{ gridTemplateColumns }}
+            >
+                <div className="min-w-0" />
+                <div aria-hidden className="text-center" />
+                {visible.map((s) => (
+                    <div key={`h-${s}`} className="text-center">
+                        {setColumnLabel(s)}
+                    </div>
+                ))}
+                <div className="text-center tracking-[0.25em] text-padel-primary">POINTS</div>
+            </div>
+
+            <div
+                className="mt-3 grid items-center gap-x-2 gap-y-2 border-b border-white/20 pb-3 sm:mt-4 sm:gap-x-3 sm:pb-3.5"
+                style={{ gridTemplateColumns }}
+            >
+                <div
+                    className="min-w-0 truncate text-left text-[11px] font-black italic uppercase leading-snug tracking-tight sm:text-xs md:text-sm"
+                    style={{ color: c1 }}
+                    title={teamLineCompact(marcador, 'local')}
+                >
+                    {teamLineCompact(marcador, 'local')}
+                </div>
+                <div className="flex justify-center text-xl leading-none sm:text-2xl" aria-hidden>
+                    {saqueEq === 1 ? '🎾' : ''}
+                </div>
+                {visible.map((s) => {
+                    const v = courtSetCell(s, 'local', marcador, currentSet);
+                    return (
+                        <div key={`t1-${s}`} className="flex justify-center">
+                            <BracketScore color={c1}>{v}</BracketScore>
+                        </div>
+                    );
+                })}
+                <div className="flex justify-center">
+                    <BracketScore color={c1}>{ptsL}</BracketScore>
+                </div>
+            </div>
+
+            <div className="mt-3 grid items-center gap-x-2 gap-y-2 sm:mt-3.5 sm:gap-x-3" style={{ gridTemplateColumns }}>
+                <div
+                    className="min-w-0 truncate text-left text-[11px] font-black italic uppercase leading-snug tracking-tight sm:text-xs md:text-sm"
+                    style={{ color: c2 }}
+                    title={teamLineCompact(marcador, 'visitante')}
+                >
+                    {teamLineCompact(marcador, 'visitante')}
+                </div>
+                <div className="flex justify-center text-xl leading-none sm:text-2xl" aria-hidden>
+                    {saqueEq === 2 ? '🎾' : ''}
+                </div>
+                {visible.map((s) => {
+                    const v = courtSetCell(s, 'visitante', marcador, currentSet);
+                    return (
+                        <div key={`t2-${s}`} className="flex justify-center">
+                            <BracketScore color={c2}>{v}</BracketScore>
+                        </div>
+                    );
+                })}
+                <div className="flex justify-center">
+                    <BracketScore color={c2}>{ptsV}</BracketScore>
+                </div>
+            </div>
         </div>
     );
 }
@@ -449,8 +596,6 @@ export default function CourtDisplayPage() {
     const cronometroPartido =
         marcador?.cronometro ?? (effectiveCancha && typeof effectiveCancha === 'object' ? (effectiveCancha as { cronometro?: unknown }).cronometro : undefined);
     const warmupEndsAt = parseCalentamientoEndsAt(effectiveCancha?.calentamiento);
-    const SHOW_LEGACY_SET_PANEL = false;
-
     const openPremiumScoreboard = useCallback(() => {
         const torneoId = String(effectiveCancha?.torneo_id || '').trim();
         const rawPid = String(effectiveCancha?.partido_id || '').trim();
@@ -589,119 +734,10 @@ export default function CourtDisplayPage() {
             />
 
             <PizarraScoreboardFit>
-                <div className="w-full min-h-0 overflow-x-hidden">
-                    <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-3 sm:gap-6">
-                        {/* Equipo 1 */}
-                        <TeamPanel
-                            nombre={teamDisplayFromRaw(marcador?.equipo_1?.nombre || '', 'EQUIPO 1')}
-                            color={marcador?.equipo_1?.color || '#CCFF00'}
-                            sets={marcador?.sets?.local ?? 0}
-                            games={marcador?.games?.local ?? 0}
-                            puntos={marcador?.puntos?.local ?? '0'}
-                            side="left"
-                        />
-
-                        {/* Centro: cronómetro del partido + VS */}
-                        <div className="relative z-10 flex min-w-[6.5rem] shrink-0 flex-col items-center justify-center gap-2 sm:min-w-[8rem] sm:gap-3">
-                            <div className="h-px w-12 bg-gradient-to-r from-transparent via-white/25 to-transparent sm:w-16" />
-                            <PizarraCenterChrono cron={cronometroPartido as Parameters<typeof PizarraCenterChrono>[0]['cron']} />
-                            <span className="text-base font-black tracking-widest text-gray-600 sm:text-lg">VS</span>
-                            <div className="h-px w-12 bg-gradient-to-r from-transparent via-white/25 to-transparent sm:w-16" />
-                        </div>
-
-                        {/* Equipo 2 */}
-                        <TeamPanel
-                            nombre={teamDisplayFromRaw(marcador?.equipo_2?.nombre || '', 'EQUIPO 2')}
-                            color={marcador?.equipo_2?.color || '#FF5500'}
-                            sets={marcador?.sets?.visitante ?? 0}
-                            games={marcador?.games?.visitante ?? 0}
-                            puntos={marcador?.puntos?.visitante ?? '0'}
-                            side="right"
-                        />
-                    </div>
+                <div className="flex w-full min-h-0 flex-col items-center gap-4 overflow-x-hidden px-1">
+                    <PizarraCenterChrono cron={cronometroPartido as Parameters<typeof PizarraCenterChrono>[0]['cron']} />
+                    {marcador ? <PizarraTableScoreboard marcador={marcador} /> : null}
                 </div>
-
-                {/* Sets por columnas: solo el 1.º en juego; al cerrarlo aparece el 2.º (y STB/TB si aplica) */}
-                {SHOW_LEGACY_SET_PANEL && marcador && (() => {
-                    const setsL = Number(marcador.sets?.local ?? 0) || 0;
-                    const setsV = Number(marcador.sets?.visitante ?? 0) || 0;
-                    const currentSet = setsL + setsV + 1;
-                    const fmt = String(marcador.match_format || '');
-                    const twoPlusStb =
-                        fmt === 'TWO_SHORT_SETS' || fmt === 'TWO_NORMAL_SETS' || fmt === '2SETS_STB';
-                    const visibleBase = visibleSetNumbersForScoreboard({
-                        matchFormat: fmt,
-                        superTiebreak: marcador.super_tiebreak === true || marcador.modo_puntos === 'super_tiebreak',
-                        tiebreak: marcador.modo_puntos === 'tiebreak',
-                        setsT1: setsL,
-                        setsT2: setsV,
-                    });
-                    const shouldForceSecondSetCol =
-                        twoPlusStb &&
-                        setsL + setsV === 0 &&
-                        (Number(marcador.games?.local ?? 0) >= 6 || Number(marcador.games?.visitante ?? 0) >= 6);
-                    const visible = shouldForceSecondSetCol ? [1, 2] : visibleBase;
-                    const scoreboardCol3Tb =
-                        fmt === 'TIEBREAK' || marcador.modo_puntos === 'tiebreak' || marcador.tiebreak === true;
-                    const scoreboardCol3Stb =
-                        !scoreboardCol3Tb &&
-                        (fmt === 'SUPER_TIEBREAK' ||
-                            marcador.super_tiebreak === true ||
-                            marcador.modo_puntos === 'super_tiebreak' ||
-                            fmt === 'SET_3_STB' ||
-                            twoPlusStb ||
-                            inferStbFromSetScoresOnly(matchStubFromMarcadorHistorico(marcador)));
-                    const setColumnLabel = (col: number) => {
-                        if (col === 3 && scoreboardCol3Tb) return 'TB';
-                        if (col === 3 && scoreboardCol3Stb) return 'STB';
-                        return `SET ${col}`;
-                    };
-                    const ptsL = marcador.puntos?.local ?? '0';
-                    const ptsV = marcador.puntos?.visitante ?? '0';
-                    return (
-                        <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-black/50 px-4 py-3">
-                            <div
-                                className="grid gap-2 text-center"
-                                style={{
-                                    gridTemplateColumns: `repeat(${visible.length}, minmax(0, 1fr)) minmax(4rem, 6rem)`,
-                                }}
-                            >
-                                {visible.map((s) => {
-                                    const isStbCol = s === 3 && scoreboardCol3Stb;
-                                    const label = setColumnLabel(s);
-                                    const v1 = courtSetCell(s, 'local', marcador, currentSet);
-                                    const v2 = courtSetCell(s, 'visitante', marcador, currentSet);
-                                    const cellCls = (v: string | number) => {
-                                        const str = String(v);
-                                        const wide = str !== '—' && str.length >= 2;
-                                        return `font-black tabular-nums leading-tight ${wide ? 'text-lg' : 'text-xl'}`;
-                                    };
-                                    return (
-                                        <div key={s} className="flex flex-col gap-1 border-l border-white/10 first:border-l-0 pl-2 min-w-0">
-                                            <span
-                                                className={`text-[8px] font-black uppercase tracking-widest ${isStbCol ? 'text-padel-primary/70' : 'text-gray-500'}`}
-                                            >
-                                                {label}
-                                            </span>
-                                            {isStbCol && (
-                                                <span className="text-[6px] font-black uppercase tracking-tighter text-gray-600 -mt-0.5">
-                                                    (a 10)
-                                                </span>
-                                            )}
-                                            <span className={cellCls(v1)} style={{ color: marcador?.equipo_1?.color || '#CCFF00' }}>{v1}</span>
-                                            <span className={cellCls(v2)} style={{ color: marcador?.equipo_2?.color || '#FF5500' }}>{v2}</span>
-                                        </div>
-                                    );
-                                })}
-                                <div className="flex flex-col gap-1 border-l border-padel-primary/40 pl-2 justify-center min-w-[3.25rem]">
-                                    <span className="text-[8px] font-black uppercase tracking-widest text-padel-primary">PTS</span>
-                                    <span className={`font-black tabular-nums text-padel-primary ${String(ptsL).length >= 2 ? 'text-xl' : 'text-2xl'}`}>{ptsL}</span>
-                                    <span className={`font-black tabular-nums text-orange-400 ${String(ptsV).length >= 2 ? 'text-xl' : 'text-2xl'}`}>{ptsV}</span>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })()}
             </PizarraScoreboardFit>
 
             {!minimalMode && (
@@ -726,58 +762,6 @@ export default function CourtDisplayPage() {
                 .font-outfit { font-family: 'Outfit', sans-serif; }
                 body { background: #050505; margin: 0; overflow: hidden; }
             `}</style>
-        </div>
-    );
-}
-
-// ── Panel de equipo en el marcador ─────────────────────────────────────────
-function TeamPanel({ nombre, color, sets, games, puntos, side }: {
-    nombre: string;
-    color: string;
-    sets: number;
-    games: number;
-    puntos: string;
-    side: 'left' | 'right';
-}) {
-    const lineas = nombre
-        .split(/\s*\/\s*/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-    return (
-        <div className={`flex flex-col items-center gap-4 ${side === 'right' ? 'text-right items-end' : 'text-left items-start'}`}>
-            {/* Jugadores en dos líneas (pareja) */}
-            <div
-                className={`flex flex-col gap-1 max-w-full font-black italic uppercase tracking-tighter text-2xl md:text-3xl break-words whitespace-normal leading-tight ${side === 'right' ? 'items-end' : 'items-start'}`}
-                style={{ color }}
-            >
-                {lineas.map((line, i) => (
-                    <span key={i}>{line}</span>
-                ))}
-            </div>
-
-            {/* Puntos grandes */}
-            <motion.div
-                key={puntos}
-                initial={{ scale: 1.3, opacity: 0.6 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="font-black italic leading-none tracking-tighter [font-size:clamp(2.75rem,min(18vw,22vmin),8rem)]"
-                style={{ color }}
-            >
-                {puntos}
-            </motion.div>
-
-            {/* Games y Sets */}
-            <div className="flex items-center gap-6">
-                <div className="text-center min-w-[2.5rem]">
-                    <p className="text-[8px] font-black uppercase tracking-[0.4em] text-gray-600">Sets</p>
-                    <p className={`font-black tabular-nums ${sets >= 10 ? 'text-2xl' : 'text-3xl'}`} style={{ color }}>{sets}</p>
-                </div>
-                <div className="w-px h-8 bg-white/10" />
-                <div className="text-center min-w-[2.5rem]">
-                    <p className="text-[8px] font-black uppercase tracking-[0.4em] text-gray-600">Games</p>
-                    <p className={`font-black tabular-nums text-white ${games >= 10 ? 'text-2xl' : 'text-3xl'}`}>{games}</p>
-                </div>
-            </div>
         </div>
     );
 }
