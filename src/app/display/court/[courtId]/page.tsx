@@ -188,13 +188,13 @@ function DualPlaylistStrip({
     const hasVideo = Boolean(currentVideoUrl);
     const hasImage = Boolean(currentImageUrl);
     return (
-        <div className="grid w-full grid-cols-1 grid-rows-2 gap-px bg-white/10 min-h-[min(11vh,5rem)] sm:grid-cols-2 sm:grid-rows-1 sm:min-h-[min(13vh,6rem)] sm:[grid-template-columns:50%_50%]">
-            <div className="relative flex min-h-0 h-full w-full min-w-0 items-center justify-center overflow-hidden bg-black">
+        <div className="grid h-[min(11vh,5rem)] w-full grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-px overflow-hidden bg-white/10 sm:h-[min(13vh,6rem)] sm:grid-cols-2 sm:grid-rows-1 sm:[grid-template-columns:50%_50%]">
+            <div className="relative flex min-h-0 min-w-0 h-full w-full items-center justify-center overflow-hidden bg-black">
                 {hasVideo ? (
                     <CourtAdVideoOrIframe
                         url={currentVideoUrl!}
                         videoKey={videoKey}
-                        className="max-h-full max-w-full object-contain object-center opacity-95"
+                        className="h-full w-full max-h-full max-w-full object-contain object-center opacity-95"
                         loop={singleVideoLoop}
                         onEnded={onVideoEnded}
                         onNativeVideoError={() => logDisplayVideoError(canchaId, currentVideoUrl!)}
@@ -203,13 +203,13 @@ function DualPlaylistStrip({
                     <span className="text-[10px] font-black uppercase text-white/25 tracking-widest">Sin vídeos</span>
                 )}
             </div>
-            <div className="relative flex min-h-0 h-full w-full min-w-0 items-center justify-center bg-black overflow-hidden">
+            <div className="relative flex min-h-0 min-w-0 h-full w-full items-center justify-center overflow-hidden bg-black">
                 {hasImage ? (
                     <img
                         key={imageKey}
                         src={currentImageUrl!}
                         alt=""
-                        className="max-h-full max-w-full object-contain object-center opacity-95"
+                        className="h-full w-full max-h-full max-w-full object-contain object-center opacity-95"
                     />
                 ) : (
                     <span className="text-[10px] font-black uppercase text-white/25 tracking-widest">Sin imágenes</span>
