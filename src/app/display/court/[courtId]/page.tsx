@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { dataService } from '@/lib/dataService';
 import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
@@ -163,6 +163,61 @@ function TickerMarquee({ messages }: { messages: { id: string; mensaje: string }
                     ))}
                 </div>
             </div>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Encaja el marcador en el alto disponible (flex-1) sin scroll: escala si el contenido
+ * intrínseco supera la celda (nombres largos + puntos grandes).
+ */
+function PizarraScoreboardFit({ children }: { children: React.ReactNode }) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const contentRef = useRef<HTMLDivElement>(null);
+    const [scale, setScale] = useState(1);
+
+    const updateScale = useCallback(() => {
+        const wrap = containerRef.current;
+        const inner = contentRef.current;
+        if (!wrap || !inner) return;
+        const cw = wrap.clientWidth;
+        const ch = wrap.clientHeight;
+        if (cw < 8 || ch < 8) return;
+        const mw = inner.scrollWidth;
+        const mh = inner.scrollHeight;
+        if (mw < 1 || mh < 1) return;
+        const s = Math.min(1, (cw - 4) / mw, (ch - 4) / mh);
+        setScale((prev) => (Math.abs(prev - s) < 0.002 ? prev : s));
+    }, []);
+
+    useLayoutEffect(() => {
+        updateScale();
+    }, [updateScale]);
+
+    useEffect(() => {
+        const wrap = containerRef.current;
+        if (!wrap || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(() => updateScale());
+        ro.observe(wrap);
+        const inner = contentRef.current;
+        if (inner) ro.observe(inner);
+        return () => ro.disconnect();
+    }, [updateScale]);
+
+    return (
+        <div
+            ref={containerRef}
+            className="flex min-h-0 w-full flex-1 flex-col items-stretch justify-center overflow-hidden px-3 py-1 sm:px-6"
+        >
+            <div
+                ref={contentRef}
+                className="mx-auto w-full max-w-4xl origin-center [contain:layout]"
+                style={{
+                    zoom: scale,
+                }}
+            >
+                {children}
             </div>
         </div>
     );
@@ -533,10 +588,8 @@ export default function CourtDisplayPage() {
                 onOpenPremiumScoreboard={canTripleTapPremiumScoreboard ? openPremiumScoreboard : undefined}
             />
 
-            {/* Marcador principal (min-h-0 evita que overflow-y-hidden recorte la columna central / cronómetro) */}
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-4 py-2 sm:gap-6 sm:px-8">
-                {/* Equipos y puntos */}
-                <div className="w-full min-h-0 max-w-4xl overflow-x-hidden">
+            <PizarraScoreboardFit>
+                <div className="w-full min-h-0 overflow-x-hidden">
                     <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-3 sm:gap-6">
                         {/* Equipo 1 */}
                         <TeamPanel
@@ -649,7 +702,7 @@ export default function CourtDisplayPage() {
                         </div>
                     );
                 })()}
-            </div>
+            </PizarraScoreboardFit>
 
             {!minimalMode && (
                 <>
