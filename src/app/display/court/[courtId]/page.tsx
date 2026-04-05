@@ -60,6 +60,127 @@ function teamLineCompact(marcador: any, side: 'local' | 'visitante'): string {
     return formatMarcadorTeamNombre(rawStr) || fb;
 }
 
+/** Pareja [jugador1, jugador2] formateada; si no hay "/" devuelve un solo nombre duplicado. */
+function pairPlayerNames(marcador: any, side: 'local' | 'visitante'): [string, string] | null {
+    const raw = side === 'local' ? marcador?.equipo_1?.nombre : marcador?.equipo_2?.nombre;
+    const rawStr = (raw || '').trim();
+    if (!rawStr) return null;
+    if (rawStr.includes('/')) {
+        const parts = rawStr
+            .split(/\s*\/\s*/)
+            .map((p: string) => formatMarcadorTeamNombre(p.trim()))
+            .filter(Boolean);
+        if (parts.length >= 2) return [parts[0], parts[1]];
+        if (parts.length === 1) return [parts[0], parts[0]];
+    }
+    const single = formatMarcadorTeamNombre(rawStr) || rawStr;
+    return [single, single];
+}
+
+const PIZARRA_SAQUE_BALL_PX = 12;
+
+function PlayerFirstLineWithServe({
+    name,
+    showBall,
+}: {
+    name: string;
+    showBall: boolean;
+}) {
+    const words = name.trim().split(/\s+/).filter(Boolean);
+    const first = words[0] ?? '';
+    const rest = words.slice(1).join(' ');
+    return (
+        <span className="inline-flex flex-wrap items-center gap-1">
+            {showBall ? <SmartPadelBallIcon size={PIZARRA_SAQUE_BALL_PX} title="Saque" /> : null}
+            <span>{first}</span>
+            {rest ? <span>{' '}{rest}</span> : null}
+        </span>
+    );
+}
+
+/** Pelota inmediatamente después de la última letra del apellido (última palabra del nombre). */
+function PlayerSecondLineWithServe({
+    name,
+    showBall,
+}: {
+    name: string;
+    showBall: boolean;
+}) {
+    const words = name.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return null;
+    const surname = words[words.length - 1];
+    const lastLetter = surname.slice(-1);
+    const surnameWithoutLast = surname.slice(0, -1);
+    const beforeSurname = words.slice(0, -1).join(' ');
+    return (
+        <span className="inline-flex flex-wrap items-baseline gap-0.5">
+            {beforeSurname ? <span>{beforeSurname} </span> : null}
+            <span>{surnameWithoutLast}</span>
+            <span>{lastLetter}</span>
+            {showBall ? <SmartPadelBallIcon size={PIZARRA_SAQUE_BALL_PX} title="Saque" /> : null}
+        </span>
+    );
+}
+
+function TeamNamesWithServe({
+    marcador,
+    side,
+    color,
+}: {
+    marcador: any;
+    side: 'local' | 'visitante';
+    color: string;
+}) {
+    const eqNum = side === 'local' ? 1 : 2;
+    const saqueEq = Number(marcador?.saque?.equipo);
+    const saqueJug = Number(marcador?.saque?.jugador);
+    const servingHere = Number.isFinite(saqueEq) && saqueEq === eqNum;
+    const j1 = servingHere && saqueJug === 1;
+    const j2 = servingHere && saqueJug === 2;
+
+    const pair = pairPlayerNames(marcador, side);
+    if (!pair) {
+        return (
+            <span
+                className="text-[11px] font-black italic uppercase leading-snug tracking-tight break-words [overflow-wrap:anywhere] sm:text-xs md:text-sm"
+                style={{ color }}
+            >
+                {teamLineCompact(marcador, side)}
+            </span>
+        );
+    }
+    const [p1, p2] = pair;
+    const same = p1 === p2;
+
+    const cls =
+        'text-[11px] font-black italic uppercase leading-snug tracking-tight break-words [overflow-wrap:anywhere] sm:text-xs md:text-sm';
+
+    if (same) {
+        return (
+            <div className={cls} style={{ color }}>
+                {j1 ? (
+                    <PlayerFirstLineWithServe name={p1} showBall />
+                ) : j2 ? (
+                    <PlayerSecondLineWithServe name={p1} showBall />
+                ) : (
+                    <span>{p1}</span>
+                )}
+            </div>
+        );
+    }
+
+    return (
+        <div className={`flex min-w-0 flex-1 flex-col gap-0.5 ${cls}`} style={{ color }}>
+            <div>
+                <PlayerFirstLineWithServe name={p1} showBall={j1} />
+            </div>
+            <div>
+                <PlayerSecondLineWithServe name={p2} showBall={j2} />
+            </div>
+        </div>
+    );
+}
+
 function teamDisplayFromRaw(rawName: string, fallbackId: string): string {
     const raw = (rawName || '').trim();
     const isGeneric =
@@ -232,7 +353,6 @@ function PizarraTableScoreboard({ marcador }: { marcador: any }) {
     const c2 = marcador?.equipo_2?.color || '#FF5500';
     const ptsL = String(marcador.puntos?.local ?? '0');
     const ptsV = String(marcador.puntos?.visitante ?? '0');
-    const saqueEq = Number(marcador?.saque?.equipo);
 
     /** Ancho fijo compacto para alinear cabeceras y celdas; el nombre usa todo el resto. */
     const colSet = 'w-[2.1rem] min-w-[2.1rem] max-w-[2.1rem] shrink-0 sm:w-[2.35rem] sm:min-w-[2.35rem] sm:max-w-[2.35rem]';
@@ -256,10 +376,9 @@ function PizarraTableScoreboard({ marcador }: { marcador: any }) {
 
     return (
         <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-black/45 px-3 py-3 shadow-[0_0_40px_rgba(0,0,0,0.5)] backdrop-blur-sm sm:px-5 sm:py-4">
-            {/* Cabecera: espacio nombres | saque | bloque SET + POINTS */}
+            {/* Cabecera: espacio nombres | bloque SET + POINTS */}
             <div className="flex w-full min-w-0 items-end gap-2 pb-2 sm:gap-3">
                 <div className="min-w-0 flex-1" />
-                <div className="flex w-9 shrink-0 justify-center sm:w-10" aria-hidden />
                 <div className="flex shrink-0 items-end gap-0.5 sm:gap-1">
                     {visible.map((s) => (
                         <div
@@ -278,27 +397,15 @@ function PizarraTableScoreboard({ marcador }: { marcador: any }) {
             </div>
 
             <div className="flex w-full min-w-0 items-start gap-2 border-b border-white/20 pb-3 sm:gap-3 sm:pb-3.5">
-                <div
-                    className="min-w-0 flex-1 text-left text-[11px] font-black italic uppercase leading-snug tracking-tight break-words [overflow-wrap:anywhere] sm:text-xs md:text-sm"
-                    style={{ color: c1 }}
-                >
-                    {teamLineCompact(marcador, 'local')}
-                </div>
-                <div className="flex min-h-[1.5rem] w-9 shrink-0 items-start justify-center pt-0.5 sm:w-10" aria-hidden>
-                    {saqueEq === 1 ? <SmartPadelBallIcon size={24} title="Saque" /> : null}
+                <div className="min-w-0 flex-1 text-left">
+                    <TeamNamesWithServe marcador={marcador} side="local" color={c1} />
                 </div>
                 {scoreBlock('local', c1, ptsL)}
             </div>
 
             <div className="mt-3 flex w-full min-w-0 items-start gap-2 sm:mt-3.5 sm:gap-3">
-                <div
-                    className="min-w-0 flex-1 text-left text-[11px] font-black italic uppercase leading-snug tracking-tight break-words [overflow-wrap:anywhere] sm:text-xs md:text-sm"
-                    style={{ color: c2 }}
-                >
-                    {teamLineCompact(marcador, 'visitante')}
-                </div>
-                <div className="flex min-h-[1.5rem] w-9 shrink-0 items-start justify-center pt-0.5 sm:w-10" aria-hidden>
-                    {saqueEq === 2 ? <SmartPadelBallIcon size={24} title="Saque" /> : null}
+                <div className="min-w-0 flex-1 text-left">
+                    <TeamNamesWithServe marcador={marcador} side="visitante" color={c2} />
                 </div>
                 {scoreBlock('visitante', c2, ptsV)}
             </div>
