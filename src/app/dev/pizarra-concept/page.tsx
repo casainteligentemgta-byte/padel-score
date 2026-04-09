@@ -337,15 +337,15 @@ export default function PizarraConceptPage() {
   }, [supabase, tournamentId, multiTournamentIds.length, matchIdParam, setters]);
 
   return (
-    <div className="min-h-screen w-screen bg-[#0f1115] text-white">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col px-8 pt-0 pb-4 lg:px-14 lg:pt-0 lg:pb-5">
+    <div className="h-dvh w-screen overflow-hidden bg-[#0f1115] text-white">
+      <div className="mx-auto flex h-full w-full max-w-[1800px] flex-col overflow-hidden px-4 pt-0 pb-2 sm:px-6 lg:px-10">
         {loadError && (
           <p className="mb-2 text-center text-xs font-bold uppercase tracking-widest text-amber-400/90">
             {loadError}
           </p>
         )}
-        <header className="-mt-1 mb-0 flex flex-col items-center gap-1 text-center lg:-mt-2">
-          <div className="mt-10 flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-[#d6b35a]/50 bg-[#0e2238] shadow-[0_0_22px_rgba(214,179,90,0.25)]">
+        <header className="mb-1 flex shrink-0 flex-col items-center gap-1 text-center">
+          <div className="mt-3 flex h-[clamp(2.3rem,4.4vh,3.5rem)] w-[clamp(2.3rem,4.4vh,3.5rem)] items-center justify-center overflow-hidden rounded-2xl border border-[#d6b35a]/50 bg-[#0e2238] shadow-[0_0_22px_rgba(214,179,90,0.25)]">
             {venueLogoUrl ? (
               <img
                 src={venueLogoUrl}
@@ -358,22 +358,22 @@ export default function PizarraConceptPage() {
               </div>
             )}
           </div>
-          <div className="-mt-3 flex flex-col items-center">
-            <h1 className="-mt-3 text-xl font-bold tracking-[0.03em] text-white/95 lg:text-2xl">
+          <div className="-mt-1 flex flex-col items-center">
+            <h1 className="text-[clamp(1rem,2.6vh,1.8rem)] font-bold tracking-[0.03em] text-white/95">
               {venueLabel}
             </h1>
-            <p className="-mt-3 text-base font-semibold tracking-[0.05em] text-white/85 lg:text-lg">
+            <p className="-mt-1 text-[clamp(0.85rem,1.9vh,1.25rem)] font-semibold tracking-[0.05em] text-white/85">
               {tournamentLabel}
             </p>
-            <p className="-mt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#90b6da] lg:text-xs">
+            <p className="-mt-1 text-[clamp(0.6rem,1.25vh,0.78rem)] font-semibold uppercase tracking-[0.12em] text-[#90b6da]">
               {categoryGenderLine}
             </p>
           </div>
         </header>
 
-        <main className="flex flex-1 min-h-0 items-start justify-center -mt-2 pt-0">
-          <aside className="w-full max-w-[980px] rounded-3xl border border-[#ccff00]/35 bg-[#0e1014] p-5 shadow-[0_0_40px_rgba(0,0,0,0.9),0_0_55px_rgba(204,255,0,0.14),inset_0_0_45px_rgba(255,255,255,0.03)]">
-            <div className="-mt-1 mb-3 grid grid-cols-[1fr_72px_72px_72px] gap-2 border-b border-[#ccff00]/30 pb-1 text-center text-xs font-extrabold uppercase tracking-[0.22em] text-[#ccff00] drop-shadow-[0_0_6px_rgba(204,255,0,0.28)]">
+        <main className="flex min-h-0 flex-1 items-start justify-center overflow-hidden">
+          <aside className="w-full max-w-[980px] overflow-hidden rounded-3xl border border-[#ccff00]/35 bg-[#0e1014] p-[clamp(0.55rem,1.6vh,1.25rem)] shadow-[0_0_40px_rgba(0,0,0,0.9),0_0_55px_rgba(204,255,0,0.14),inset_0_0_45px_rgba(255,255,255,0.03)]">
+            <div className="mb-2 grid grid-cols-[1fr_clamp(2.7rem,5.7vw,4.5rem)_clamp(2.7rem,5.7vw,4.5rem)_clamp(2.7rem,5.7vw,4.5rem)] gap-2 border-b border-[#ccff00]/30 pb-1 text-center text-[clamp(0.58rem,1.2vh,0.75rem)] font-extrabold uppercase tracking-[0.16em] text-[#ccff00] drop-shadow-[0_0_6px_rgba(204,255,0,0.28)]">
               <span className="text-left">Jugadores</span>
               <span>Set 1</span>
               <span>Set 2</span>
@@ -381,8 +381,8 @@ export default function PizarraConceptPage() {
             </div>
 
             <div className="space-y-2">
-              <div className="grid grid-cols-[1fr_72px_72px_72px] items-center gap-2 rounded-2xl border border-[#ccff00]/45 bg-gradient-to-r from-[#171a20] via-[#1a1e25] to-[#1d2129] p-3 shadow-[0_0_18px_rgba(204,255,0,0.18),inset_0_0_18px_rgba(204,255,0,0.04)]">
-                <div className="flex items-center gap-2">
+              <div className="grid grid-cols-[1fr_clamp(2.7rem,5.7vw,4.5rem)_clamp(2.7rem,5.7vw,4.5rem)_clamp(2.7rem,5.7vw,4.5rem)] items-center gap-2 rounded-2xl border border-[#ccff00]/45 bg-gradient-to-r from-[#171a20] via-[#1a1e25] to-[#1d2129] p-[clamp(0.45rem,1.3vh,0.85rem)] shadow-[0_0_18px_rgba(204,255,0,0.18),inset_0_0_18px_rgba(204,255,0,0.04)]">
+                <div className="flex min-w-0 items-center gap-2">
                   <div className="h-4 w-4 shrink-0">
                     {serverPlayer === 'A1' || serverPlayer === 'A2' ? (
                       <BouncingBall size={10} duration={850} bounceHeight={0.4} />
@@ -391,7 +391,7 @@ export default function PizarraConceptPage() {
                     )}
                   </div>
                   <span
-                    className={`text-sm font-semibold uppercase tracking-wide lg:text-base ${
+                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-semibold uppercase tracking-wide ${
                       serverPlayer === 'A1'
                         ? 'text-[#ccff00] drop-shadow-[0_0_12px_rgba(204,255,0,0.75)]'
                         : 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.22)]'
@@ -401,7 +401,7 @@ export default function PizarraConceptPage() {
                   </span>
                   <span className="text-white/70">/</span>
                   <span
-                    className={`text-sm font-semibold uppercase tracking-wide lg:text-base ${
+                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-semibold uppercase tracking-wide ${
                       serverPlayer === 'A2'
                         ? 'text-[#ccff00] drop-shadow-[0_0_12px_rgba(204,255,0,0.75)]'
                         : 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.22)]'
@@ -410,19 +410,19 @@ export default function PizarraConceptPage() {
                     {teamA[1]}
                   </span>
                 </div>
-                <span className="text-center text-3xl font-extrabold text-white drop-shadow-[0_0_12px_rgba(204,255,0,0.35)]">
+                <span className="text-center text-[clamp(1.25rem,4.1vh,2.35rem)] font-extrabold text-white drop-shadow-[0_0_12px_rgba(204,255,0,0.35)]">
                   {set1A}
                 </span>
-                <span className="text-center text-3xl font-extrabold text-white drop-shadow-[0_0_12px_rgba(204,255,0,0.35)]">
+                <span className="text-center text-[clamp(1.25rem,4.1vh,2.35rem)] font-extrabold text-white drop-shadow-[0_0_12px_rgba(204,255,0,0.35)]">
                   {set2A}
                 </span>
-                <span className="text-center text-4xl font-black text-white drop-shadow-[0_0_18px_rgba(204,255,0,0.5)]">
+                <span className="text-center text-[clamp(1.55rem,4.9vh,3rem)] font-black text-white drop-shadow-[0_0_18px_rgba(204,255,0,0.5)]">
                   {pointsA}
                 </span>
               </div>
 
-              <div className="grid grid-cols-[1fr_72px_72px_72px] items-center gap-2 rounded-2xl border border-white/25 bg-[#14171c] p-3 shadow-[inset_0_0_34px_rgba(255,255,255,0.03)]">
-                <div className="flex items-center gap-2">
+              <div className="grid grid-cols-[1fr_clamp(2.7rem,5.7vw,4.5rem)_clamp(2.7rem,5.7vw,4.5rem)_clamp(2.7rem,5.7vw,4.5rem)] items-center gap-2 rounded-2xl border border-white/25 bg-[#14171c] p-[clamp(0.45rem,1.3vh,0.85rem)] shadow-[inset_0_0_34px_rgba(255,255,255,0.03)]">
+                <div className="flex min-w-0 items-center gap-2">
                   <div className="h-4 w-4 shrink-0">
                     {serverPlayer === 'B1' || serverPlayer === 'B2' ? (
                       <BouncingBall size={10} duration={850} bounceHeight={0.4} />
@@ -431,7 +431,7 @@ export default function PizarraConceptPage() {
                     )}
                   </div>
                   <span
-                    className={`text-sm font-semibold uppercase tracking-wide lg:text-base ${
+                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-semibold uppercase tracking-wide ${
                       serverPlayer === 'B1'
                         ? 'text-[#ccff00] drop-shadow-[0_0_12px_rgba(204,255,0,0.75)]'
                         : 'text-white/90'
@@ -441,7 +441,7 @@ export default function PizarraConceptPage() {
                   </span>
                   <span className="text-white/70">/</span>
                   <span
-                    className={`text-sm font-semibold uppercase tracking-wide lg:text-base ${
+                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-semibold uppercase tracking-wide ${
                       serverPlayer === 'B2'
                         ? 'text-[#ccff00] drop-shadow-[0_0_12px_rgba(204,255,0,0.75)]'
                         : 'text-white/90'
@@ -450,13 +450,13 @@ export default function PizarraConceptPage() {
                     {teamB[1]}
                   </span>
                 </div>
-                <span className="text-center text-3xl font-extrabold text-white drop-shadow-[0_0_10px_rgba(204,255,0,0.22)]">
+                <span className="text-center text-[clamp(1.25rem,4.1vh,2.35rem)] font-extrabold text-white drop-shadow-[0_0_10px_rgba(204,255,0,0.22)]">
                   {set1B}
                 </span>
-                <span className="text-center text-3xl font-extrabold text-white drop-shadow-[0_0_10px_rgba(204,255,0,0.22)]">
+                <span className="text-center text-[clamp(1.25rem,4.1vh,2.35rem)] font-extrabold text-white drop-shadow-[0_0_10px_rgba(204,255,0,0.22)]">
                   {set2B}
                 </span>
-                <span className="text-center text-4xl font-black text-white drop-shadow-[0_0_14px_rgba(204,255,0,0.28)]">
+                <span className="text-center text-[clamp(1.55rem,4.9vh,3rem)] font-black text-white drop-shadow-[0_0_14px_rgba(204,255,0,0.28)]">
                   {pointsB}
                 </span>
               </div>
@@ -464,34 +464,34 @@ export default function PizarraConceptPage() {
           </aside>
         </main>
 
-        <section className="mt-3 grid w-full grid-cols-2 gap-4">
-          <div className="relative h-[160px] overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-[#10131a] shadow-[0_0_20px_rgba(204,255,0,0.12)]">
+        <section className="mt-2 grid w-full shrink-0 grid-cols-2 gap-3">
+          <div className="relative h-[clamp(98px,17vh,196px)] overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-[#10131a] shadow-[0_0_20px_rgba(204,255,0,0.12)]">
             <div className="flex h-full w-full items-center justify-center text-white/45">
-              <span className="px-3 text-center text-sm font-bold uppercase tracking-[0.18em]">
+              <span className="px-3 text-center text-[clamp(0.6rem,1.35vh,0.95rem)] font-bold uppercase tracking-[0.12em]">
                 ESPACIO PUBLICITARIO DISPONIBLE
               </span>
             </div>
           </div>
 
-          <div className="relative h-[160px] overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-[#10131a] shadow-[0_0_20px_rgba(204,255,0,0.12)]">
+          <div className="relative h-[clamp(98px,17vh,196px)] overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-[#10131a] shadow-[0_0_20px_rgba(204,255,0,0.12)]">
             <div className="flex h-full w-full items-center justify-center text-white/45">
-              <span className="px-3 text-center text-sm font-bold uppercase tracking-[0.18em]">
+              <span className="px-3 text-center text-[clamp(0.6rem,1.35vh,0.95rem)] font-bold uppercase tracking-[0.12em]">
                 ESPACIO PUBLICITARIO DISPONIBLE
               </span>
             </div>
           </div>
         </section>
 
-        <footer className="mt-3 w-full overflow-hidden rounded-2xl border border-[#ccff00]/25 bg-black/55 py-3 shadow-[0_0_20px_rgba(204,255,0,0.12)]">
+        <footer className="mt-2 w-full shrink-0 overflow-hidden rounded-2xl border border-[#ccff00]/25 bg-black/55 py-[clamp(0.3rem,1vh,0.75rem)] shadow-[0_0_20px_rgba(204,255,0,0.12)]">
           <div className="flex whitespace-nowrap animate-marquee">
             {[0, 1].map((half) => (
               <div key={half} className="flex shrink-0 items-center">
                 <span className="mx-8 inline-block h-2.5 w-2.5 rounded-full bg-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.7)]" />
-                <span className="mr-12 text-base font-black uppercase tracking-[0.2em] text-white/90">
+                <span className="mr-12 text-[clamp(0.72rem,1.55vh,1rem)] font-black uppercase tracking-[0.14em] text-white/90">
                   {tickerPrimary}
                 </span>
                 <span className="mx-8 inline-block h-2.5 w-2.5 rounded-full bg-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.7)]" />
-                <span className="mr-12 text-base font-black uppercase tracking-[0.2em] text-[#ccff00]">
+                <span className="mr-12 text-[clamp(0.72rem,1.55vh,1rem)] font-black uppercase tracking-[0.14em] text-[#ccff00]">
                   {tickerSecondary}
                 </span>
               </div>
