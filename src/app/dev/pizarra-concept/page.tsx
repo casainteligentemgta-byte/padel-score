@@ -391,7 +391,7 @@ export default function PizarraConceptPage() {
                     )}
                   </div>
                   <span
-                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-semibold uppercase tracking-wide ${
+                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-black uppercase tracking-tight antialiased ${
                       serverPlayer === 'A1'
                         ? 'text-[#ccff00] drop-shadow-[0_0_12px_rgba(204,255,0,0.75)]'
                         : 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.22)]'
@@ -401,7 +401,7 @@ export default function PizarraConceptPage() {
                   </span>
                   <span className="text-white/70">/</span>
                   <span
-                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-semibold uppercase tracking-wide ${
+                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-black uppercase tracking-tight antialiased ${
                       serverPlayer === 'A2'
                         ? 'text-[#ccff00] drop-shadow-[0_0_12px_rgba(204,255,0,0.75)]'
                         : 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.22)]'
@@ -431,7 +431,7 @@ export default function PizarraConceptPage() {
                     )}
                   </div>
                   <span
-                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-semibold uppercase tracking-wide ${
+                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-black uppercase tracking-tight antialiased ${
                       serverPlayer === 'B1'
                         ? 'text-[#ccff00] drop-shadow-[0_0_12px_rgba(204,255,0,0.75)]'
                         : 'text-white/90'
@@ -441,7 +441,7 @@ export default function PizarraConceptPage() {
                   </span>
                   <span className="text-white/70">/</span>
                   <span
-                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-semibold uppercase tracking-wide ${
+                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-black uppercase tracking-tight antialiased ${
                       serverPlayer === 'B2'
                         ? 'text-[#ccff00] drop-shadow-[0_0_12px_rgba(204,255,0,0.75)]'
                         : 'text-white/90'
