@@ -10,7 +10,9 @@
  *  • Firebase RTDB: `canchas/${canchaId}`   → marcador en tiempo real (canal rápido).
  *  • El layout CSS grid se recalcula desde los campos del DisplayTemplate:
  *    header_vh / score_vh / media_vh / ticker_vh.
- *  • La columna de media se parte con split_ratio en UI (0–1); en BD suele ser entero 0–100.
+ *  • orientation + split_ratio: en landscape columnas (vídeo|carousel); en portrait filas.
+ *  • font_scale + --pizarra-font-scale (en portrait ~0,85×) para la base tipográfica.
+ *  • split_ratio en UI (0–1); en BD suele ser entero 0–100.
  *  • SmartClock usa la fuente Orbitron cuando clock_style === 'classic' (digital).
  */
 
@@ -43,6 +45,10 @@ export interface DisplayTemplate {
   /** 'modern' = bold italic | 'classic' = Orbitron digital | 'minimal' = thin */
   clock_style: 'modern' | 'classic' | 'minimal';
   clock_color: string;
+  /** landscape = vídeo|carrusel en columnas; portrait = vídeo arriba, carrusel abajo (filas). */
+  orientation: 'landscape' | 'portrait';
+  /** Escala base; la UI aplica --pizarra-font-scale (en portrait suele reducirse ligeramente). */
+  font_scale: number;
 }
 
 interface MatchData {
@@ -94,7 +100,36 @@ const DEFAULT_TEMPLATE: DisplayTemplate = {
   split_ratio: 0.5,
   clock_style: 'modern',
   clock_color: '#ccff00',
+  orientation: 'landscape',
+  font_scale: 1,
 };
+
+function normalizeDisplayTemplateFromRow(row: Record<string, unknown>): DisplayTemplate {
+  const split_ratio = splitRatioFromDatabase(row.split_ratio);
+  const orientation: 'landscape' | 'portrait' =
+    row.orientation === 'portrait' ? 'portrait' : 'landscape';
+  let font_scale = Number(row.font_scale);
+  if (!Number.isFinite(font_scale) || font_scale <= 0) font_scale = 1;
+  font_scale = Math.min(4, Math.max(0.5, font_scale));
+
+  return {
+    id: String(row.id ?? DEFAULT_TEMPLATE.id),
+    name: String(row.name ?? DEFAULT_TEMPLATE.name),
+    header_vh: Number(row.header_vh) || DEFAULT_TEMPLATE.header_vh,
+    score_vh: Number(row.score_vh) || DEFAULT_TEMPLATE.score_vh,
+    media_vh: Number(row.media_vh) || DEFAULT_TEMPLATE.media_vh,
+    ticker_vh: Number(row.ticker_vh) || DEFAULT_TEMPLATE.ticker_vh,
+    split_ratio,
+    clock_style: (['modern', 'classic', 'minimal'] as const).includes(
+      row.clock_style as DisplayTemplate['clock_style'],
+    )
+      ? (row.clock_style as DisplayTemplate['clock_style'])
+      : 'modern',
+    clock_color: String(row.clock_color ?? DEFAULT_TEMPLATE.clock_color),
+    orientation,
+    font_scale,
+  };
+}
 
 // ─── SmartClock ───────────────────────────────────────────────────────────────
 
@@ -181,8 +216,11 @@ export default function SmartDisplay({
   const supabase = getSupabaseClient();
 
   // ── State ──────────────────────────────────────────────────────────────────
-  const [template, setTemplate] = useState<DisplayTemplate>(
-    defaultTemplate ?? DEFAULT_TEMPLATE,
+  const [template, setTemplate] = useState<DisplayTemplate>(() =>
+    normalizeDisplayTemplateFromRow({
+      ...DEFAULT_TEMPLATE,
+      ...(defaultTemplate ?? {}),
+    } as Record<string, unknown>),
   );
   const [match, setMatch] = useState<MatchData>(initialMatchData ?? {});
   const [adsPlaylist, setAdsPlaylist] = useState<string[]>([]);
@@ -205,11 +243,7 @@ export default function SmartDisplay({
         .single();
       if (!error && data) {
         templateIdRef.current = templateId;
-        const row = data as DisplayTemplate;
-        setTemplate({
-          ...row,
-          split_ratio: splitRatioFromDatabase((row as { split_ratio?: unknown }).split_ratio),
-        });
+        setTemplate(normalizeDisplayTemplateFromRow(data as Record<string, unknown>));
       }
     },
     [supabase],
@@ -380,11 +414,7 @@ export default function SmartDisplay({
           filter: `id=eq.${template.id}`,
         },
         (payload) => {
-          const row = payload.new as DisplayTemplate;
-          setTemplate({
-            ...row,
-            split_ratio: splitRatioFromDatabase((row as { split_ratio?: unknown }).split_ratio),
-          });
+          setTemplate(normalizeDisplayTemplateFromRow(payload.new as Record<string, unknown>));
           templateIdRef.current = (payload.new as { id?: string })?.id ?? null;
         },
       )
@@ -433,11 +463,14 @@ export default function SmartDisplay({
   // ── Derived grid string from template ─────────────────────────────────────
   const gridTemplateRows = `${template.header_vh}vh ${template.score_vh}vh ${template.media_vh}vh ${template.ticker_vh}vh`;
 
-  /** Entero 0–100 para la columna izquierda del bloque media (`${n}% 1fr`). */
+  /** Entero 0–100: en landscape = fracción del ancho del vídeo; en portrait = fracción del alto. */
   const splitRounded = Math.round(splitRatioFromDatabase(template.split_ratio) * 100);
   const splitPercent = Number.isFinite(splitRounded)
     ? Math.min(100, Math.max(0, splitRounded))
     : 50;
+
+  const isPortrait = template.orientation === 'portrait';
+  const pizarraFontScale = isPortrait ? template.font_scale * 0.85 : template.font_scale;
 
   const {
     playerA1 = 'JUGADOR 1',
@@ -485,7 +518,7 @@ export default function SmartDisplay({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.5, ease: 'easeInOut' }}
-        className="relative z-10 h-full w-full overflow-hidden"
+        className="relative z-10 h-full w-full overflow-hidden transition-all duration-700"
         style={{
           display: 'grid',
           gridTemplateRows,
@@ -493,6 +526,8 @@ export default function SmartDisplay({
           // uso de var(--neon-color) en el marcador. El Admin puede cambiarlo
           // guardando un color distinto en display_templates.clock_color (DB).
           '--neon-color': smartPadelColor,
+          ['--pizarra-font-scale' as string]: String(pizarraFontScale),
+          fontSize: 'calc(1rem * var(--pizarra-font-scale))',
         } as React.CSSProperties}
       >
         {/* ── ROW 1: HEADER ─────────────────────────────────────────────── */}
@@ -683,16 +718,13 @@ export default function SmartDisplay({
           </div>
         </motion.div>
 
-        {/* ── ROW 3: MEDIA — sub-grid dinamico por split_ratio ──────────── */}
-        <div className="relative min-h-0 overflow-hidden p-8">
-          {/*
-           * Sub-grid: primera columna en % (entero desde template), segunda `1fr` (resto).
-           * Transition en grid-template-columns (no animable bien con framer-motion).
-           */}
+        {/* ── ROW 3: MEDIA — sub-grid: columnas (horizontal) o filas (vertical) ─ */}
+        <div className="relative min-h-0 overflow-hidden p-4">
           <div
             className="grid h-full w-full gap-4 transition-all duration-700 ease-in-out"
             style={{
-              gridTemplateColumns: `${splitPercent}% 1fr`,
+              gridTemplateColumns: isPortrait ? '1fr' : `${splitPercent}% 1fr`,
+              gridTemplateRows: isPortrait ? `${splitPercent}% 1fr` : '1fr',
             }}
           >
             {/* LEFT: Video slot */}
@@ -766,7 +798,11 @@ export default function SmartDisplay({
                 )}
               </AnimatePresence>
               {/* Badge */}
-              <div className="absolute top-8 right-8 z-20 px-5 py-2 bg-black/80 rounded-full border border-blue-600/30 flex items-center gap-3">
+              <div
+                className={`absolute z-20 px-5 py-2 bg-black/80 rounded-full border border-blue-600/30 flex items-center gap-3 ${
+                  isPortrait ? 'bottom-8 right-8' : 'top-8 right-8'
+                }`}
+              >
                 <div className="w-3 h-3 rounded-full bg-blue-600 animate-pulse shadow-[0_0_10px_#2563eb]" />
                 <span className="text-[12px] font-black uppercase italic tracking-widest text-blue-400">
                   Sponsors

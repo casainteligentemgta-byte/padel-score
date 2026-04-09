@@ -16,6 +16,7 @@ import {
   applyTemplateToCanchaAction,
   updateTemplateSplitRatioAction,
 } from './actions';
+import { OrientationToggle } from '@/components/admin/OrientationToggle';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Layout,
@@ -48,6 +49,8 @@ interface DisplayTemplate {
   split_ratio: number;
   clock_style: 'modern' | 'classic' | 'minimal';
   clock_color: string;
+  orientation: 'landscape' | 'portrait';
+  font_scale: number;
 }
 
 interface Cancha {
@@ -81,10 +84,18 @@ export default function AdminDisplayTemplates() {
       .select('venue_name, cancha_id, current_template_id, last_seen, updated_at');
     if (tps) {
       setTemplates(
-        tps.map((row) => ({
-          ...row,
-          split_ratio: splitRatioFromDatabase((row as DisplayTemplate).split_ratio),
-        })) as DisplayTemplate[],
+        tps.map((row) => {
+          const r = row as DisplayTemplate & { orientation?: string; font_scale?: number };
+          let font_scale = Number(r.font_scale);
+          if (!Number.isFinite(font_scale) || font_scale <= 0) font_scale = 1;
+          font_scale = Math.min(4, Math.max(0.5, font_scale));
+          return {
+            ...r,
+            split_ratio: splitRatioFromDatabase(r.split_ratio),
+            orientation: r.orientation === 'portrait' ? 'portrait' : 'landscape',
+            font_scale,
+          };
+        }),
       );
     }
     if (cns) {
@@ -152,7 +163,9 @@ export default function AdminDisplayTemplates() {
       ticker_vh: 8,
       split_ratio: 0.5,
       clock_style: 'modern',
-      clock_color: '#ccff00'
+      clock_color: '#ccff00',
+      orientation: 'landscape',
+      font_scale: 1,
     };
     setSelectedTemplate(newTpl);
   };
@@ -209,6 +222,8 @@ export default function AdminDisplayTemplates() {
       split_ratio: splitRatioToDatabase(data.split_ratio ?? 0.5),
       clock_style: data.clock_style || 'modern',
       clock_color: data.clock_color || '#ccff00',
+      orientation: data.orientation === 'portrait' ? 'portrait' : 'landscape',
+      font_scale: Math.min(4, Math.max(0.5, Number(data.font_scale) || 1)),
     };
 
     try {
@@ -456,10 +471,49 @@ export default function AdminDisplayTemplates() {
                       </h3>
 
                       <div className="space-y-6">
+                        {selectedTemplate && (
+                          <OrientationToggle
+                            currentOrientation={selectedTemplate.orientation}
+                            onUpdate={(orientation) =>
+                              setSelectedTemplate({ ...selectedTemplate, orientation })
+                            }
+                          />
+                        )}
+
+                        <div className="space-y-3">
+                          <label className="text-sm font-bold uppercase tracking-widest text-white/50 italic">
+                            Escala tipográfica (pizarra)
+                          </label>
+                          <div className="flex items-center gap-4">
+                            <span className="text-xs font-mono text-white/60">
+                              {selectedTemplate.font_scale.toFixed(2)}×
+                            </span>
+                            <input
+                              type="range"
+                              min={0.5}
+                              max={2}
+                              step={0.05}
+                              value={selectedTemplate.font_scale}
+                              onChange={(e) =>
+                                setSelectedTemplate({
+                                  ...selectedTemplate,
+                                  font_scale: parseFloat(e.target.value),
+                                })
+                              }
+                              className="flex-1 h-3 bg-black/60 rounded-full appearance-none accent-padel-primary"
+                            />
+                          </div>
+                          <p className="text-[10px] text-white/40">
+                            En orientación vertical la TV aplica ~0,85× adicional sobre este valor.
+                          </p>
+                        </div>
+
                         <div className="space-y-3">
                           <label className="text-sm font-bold uppercase tracking-widest text-white/50 italic flex items-center gap-2">
                             <Columns className="w-4 h-4" />
-                            Split Ratio (Left Video vs Right Image)
+                            {selectedTemplate.orientation === 'portrait'
+                              ? 'Split (vídeo arriba vs imágenes abajo)'
+                              : 'Split (vídeo izquierda vs imágenes derecha)'}
                           </label>
                           <div className="flex items-center gap-4">
                             <span className="text-xs font-black italic text-blue-400">{Math.round(selectedTemplate.split_ratio * 100)}%</span>
@@ -543,30 +597,46 @@ export default function AdminDisplayTemplates() {
                       {/* Vídeo + imagen */}
                       <div
                         style={{ height: `${selectedTemplate.media_vh}%` }}
-                        className="w-full shrink-0 flex gap-1 p-1.5 bg-zinc-950/90 min-h-0 border-b border-white/10"
+                        className={`w-full shrink-0 gap-1 p-1.5 bg-zinc-950/90 min-h-0 border-b border-white/10 ${
+                          selectedTemplate.orientation === 'portrait'
+                            ? 'flex flex-col'
+                            : 'flex flex-row'
+                        }`}
                       >
                         <div
-                          style={{ width: `${selectedTemplate.split_ratio * 100}%` }}
-                          className="h-full min-w-0 rounded-xl border border-blue-500/35 bg-blue-950/50 flex flex-col items-center justify-center gap-1 px-1"
+                          style={
+                            selectedTemplate.orientation === 'portrait'
+                              ? { height: `${selectedTemplate.split_ratio * 100}%`, width: '100%' }
+                              : { width: `${selectedTemplate.split_ratio * 100}%` }
+                          }
+                          className="min-h-0 min-w-0 rounded-xl border border-blue-500/35 bg-blue-950/50 flex flex-col items-center justify-center gap-1 px-1"
                         >
                           <PlayCircle className="w-5 h-5 text-blue-400 shrink-0" aria-hidden />
                           <span className="text-[9px] font-black uppercase tracking-wider text-blue-100 text-center leading-tight">
                             Vídeo
                           </span>
                           <span className="text-[7px] font-mono text-blue-400/70">
-                            {Math.round(selectedTemplate.split_ratio * 100)}% ancho
+                            {selectedTemplate.orientation === 'portrait'
+                              ? `${Math.round(selectedTemplate.split_ratio * 100)}% alto`
+                              : `${Math.round(selectedTemplate.split_ratio * 100)}% ancho`}
                           </span>
                         </div>
                         <div
-                          style={{ width: `${(1 - selectedTemplate.split_ratio) * 100}%` }}
-                          className="h-full min-w-0 rounded-xl border border-padel-primary/40 bg-padel-primary/10 flex flex-col items-center justify-center gap-1 px-1"
+                          style={
+                            selectedTemplate.orientation === 'portrait'
+                              ? { height: `${(1 - selectedTemplate.split_ratio) * 100}%`, width: '100%' }
+                              : { width: `${(1 - selectedTemplate.split_ratio) * 100}%` }
+                          }
+                          className="min-h-0 min-w-0 rounded-xl border border-padel-primary/40 bg-padel-primary/10 flex flex-col items-center justify-center gap-1 px-1"
                         >
                           <ImageLucide className="w-5 h-5 text-padel-primary shrink-0" aria-hidden />
                           <span className="text-[9px] font-black uppercase tracking-wider text-white text-center leading-tight">
                             Imagen
                           </span>
                           <span className="text-[7px] font-mono text-padel-primary/80">
-                            {Math.round((1 - selectedTemplate.split_ratio) * 100)}% ancho
+                            {selectedTemplate.orientation === 'portrait'
+                              ? `${Math.round((1 - selectedTemplate.split_ratio) * 100)}% alto`
+                              : `${Math.round((1 - selectedTemplate.split_ratio) * 100)}% ancho`}
                           </span>
                         </div>
                       </div>

@@ -14,6 +14,8 @@ export type TemplateRow = {
   split_ratio: number;
   clock_style: string;
   clock_color: string;
+  orientation: 'landscape' | 'portrait';
+  font_scale: number;
   created_at?: string;
   updated_at?: string;
 };
@@ -27,10 +29,18 @@ type RawTemplatePayload = {
   split_ratio?: number;
   clock_style?: string;
   clock_color?: string;
+  orientation?: string;
+  font_scale?: number;
 };
 
 /** Solo primitivos serializables para el resultado de la Server Action (evita fallos de Flight). */
 function toPlainTemplateRow(row: Record<string, unknown>): TemplateRow {
+  const o = row.orientation;
+  const orientation: 'landscape' | 'portrait' =
+    o === 'portrait' ? 'portrait' : 'landscape';
+  let font_scale = Number(row.font_scale);
+  if (!Number.isFinite(font_scale) || font_scale <= 0) font_scale = 1;
+  font_scale = Math.min(4, Math.max(0.5, font_scale));
   return {
     id: String(row.id ?? ''),
     name: String(row.name ?? ''),
@@ -41,6 +51,8 @@ function toPlainTemplateRow(row: Record<string, unknown>): TemplateRow {
     split_ratio: splitRatioFromDatabase(row.split_ratio),
     clock_style: String(row.clock_style ?? 'modern'),
     clock_color: String(row.clock_color ?? '#ccff00'),
+    orientation,
+    font_scale,
     created_at: row.created_at != null ? String(row.created_at) : undefined,
     updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
   };
@@ -53,6 +65,14 @@ function normalizeTemplatePayload(input: RawTemplatePayload) {
   const cap = Math.max(0, 100 - h - s);
   m = Math.min(m, cap);
   const t = 100 - h - s - m;
+  const orientation =
+    String(input.orientation ?? 'landscape').trim() === 'portrait'
+      ? 'portrait'
+      : 'landscape';
+  let font_scale = Number(input.font_scale);
+  if (!Number.isFinite(font_scale) || font_scale <= 0) font_scale = 1;
+  font_scale = Math.min(4, Math.max(0.5, font_scale));
+
   return {
     name: (input.name || 'Sin Nombre').trim() || 'Sin Nombre',
     header_vh: h,
@@ -62,6 +82,8 @@ function normalizeTemplatePayload(input: RawTemplatePayload) {
     split_ratio: splitRatioToDatabase(input.split_ratio ?? 0.5),
     clock_style: input.clock_style || 'modern',
     clock_color: input.clock_color || '#ccff00',
+    orientation,
+    font_scale,
   };
 }
 
