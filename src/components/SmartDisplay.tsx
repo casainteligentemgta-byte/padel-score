@@ -602,13 +602,13 @@ export default function SmartDisplay({
                   />
                 )}
               </div>
-              <h2 className="text-3xl lg:text-[2.2vw] font-black italic uppercase tracking-tighter leading-none text-white truncate">
+              <h2 className="text-5xl lg:text-[3.1vw] font-black italic uppercase tracking-tighter leading-none text-white truncate">
                 {playerA1}
               </h2>
             </div>
             <div className="flex items-center gap-3 opacity-50">
               <div className="w-8 h-8 shrink-0" />
-              <h2 className="text-2xl lg:text-[1.8vw] font-black italic uppercase tracking-tighter leading-none text-white truncate">
+              <h2 className="text-4xl lg:text-[2.5vw] font-black italic uppercase tracking-tighter leading-none text-white truncate">
                 {playerA2}
               </h2>
             </div>
@@ -619,7 +619,7 @@ export default function SmartDisplay({
             {/* Points A */}
             <div className="flex flex-col items-center gap-2">
               {/* score-card como contenedor con --neon-color heredado */}
-              <div className="score-card w-[12vh] h-[12vh] flex items-center justify-center">
+              <div className="score-card w-[14vh] h-[14vh] flex items-center justify-center">
                 <AnimatePresence mode="popLayout">
                   <motion.span
                     key={`pa-${currentPointsA}`}
@@ -627,7 +627,7 @@ export default function SmartDisplay({
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.8, opacity: 0 }}
                     transition={{ duration: 0.25 }}
-                    className={`text-[8vh] font-black italic leading-none ${
+                    className={`text-[10vh] font-black italic leading-none ${
                       isGoldPoint || currentPointsA === '40'
                         ? 'glow-neon animate-pulse'
                         : 'text-white'
@@ -642,7 +642,7 @@ export default function SmartDisplay({
                 {prevSets.map((s, i) => (
                   <span
                     key={i}
-                    className="text-[1.2vh] font-black italic px-1.5 py-0.5 bg-white/5 rounded-md border border-white/5"
+                    className="text-[2vh] font-black italic px-2 py-1 bg-white/5 rounded-md border border-white/5"
                     style={{ color: 'color-mix(in srgb, var(--neon-color) 60%, transparent)' }}
                   >
                     {s.split('-')[0]}
@@ -660,7 +660,7 @@ export default function SmartDisplay({
 
             {/* Points B */}
             <div className="flex flex-col items-center gap-2">
-              <div className="score-card w-[12vh] h-[12vh] flex items-center justify-center">
+              <div className="score-card w-[14vh] h-[14vh] flex items-center justify-center">
                 <AnimatePresence mode="popLayout">
                   <motion.span
                     key={`pb-${currentPointsB}`}
@@ -668,7 +668,7 @@ export default function SmartDisplay({
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.8, opacity: 0 }}
                     transition={{ duration: 0.25 }}
-                    className={`text-[8vh] font-black italic leading-none ${
+                    className={`text-[10vh] font-black italic leading-none ${
                       isGoldPoint || currentPointsB === '40'
                         ? 'glow-neon animate-pulse'
                         : 'text-white'
@@ -683,7 +683,7 @@ export default function SmartDisplay({
                 {prevSets.map((s, i) => (
                   <span
                     key={i}
-                    className="text-[1.2vh] font-black italic px-1.5 py-0.5 bg-white/5 rounded-md border border-white/5"
+                    className="text-[2vh] font-black italic px-2 py-1 bg-white/5 rounded-md border border-white/5"
                     style={{ color: 'color-mix(in srgb, var(--neon-color) 60%, transparent)' }}
                   >
                     {s.split('-')[1]}
@@ -696,7 +696,7 @@ export default function SmartDisplay({
           {/* Team B */}
           <div className="score-card flex flex-col gap-3 items-end text-right px-5 py-4">
             <div className="flex items-center gap-3">
-              <h2 className="text-3xl lg:text-[2.2vw] font-black italic uppercase tracking-tighter leading-none text-white truncate">
+              <h2 className="text-5xl lg:text-[3.1vw] font-black italic uppercase tracking-tighter leading-none text-white truncate">
                 {playerB1}
               </h2>
               {/* Indicador de saque */}
@@ -710,7 +710,7 @@ export default function SmartDisplay({
               </div>
             </div>
             <div className="flex items-center gap-3 opacity-50">
-              <h2 className="text-2xl lg:text-[1.8vw] font-black italic uppercase tracking-tighter leading-none text-white truncate">
+              <h2 className="text-4xl lg:text-[2.5vw] font-black italic uppercase tracking-tighter leading-none text-white truncate">
                 {playerB2}
               </h2>
               <div className="w-8 h-8 shrink-0" />
