@@ -18,7 +18,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, Tv } from 'lucide-react';
+import { Tv } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
 import SponsorCarousel from '@/components/publicidad/SponsorCarousel';
@@ -68,6 +68,8 @@ interface MatchData {
   tournamentName?: string;
   tournamentCategory?: string;
   tournamentPhase?: string;
+  elapsedSeconds?: number;
+  temperatureC?: number | string;
   tickerMessages?: { id: string; mensaje: string }[];
 }
 
@@ -129,77 +131,6 @@ function normalizeDisplayTemplateFromRow(row: Record<string, unknown>): DisplayT
     orientation,
     font_scale,
   };
-}
-
-// ─── SmartClock ───────────────────────────────────────────────────────────────
-
-interface SmartClockProps {
-  clockStyle: DisplayTemplate['clock_style'];
-  clockColor: string;
-}
-
-function SmartClock({ clockStyle, clockColor }: SmartClockProps) {
-  const [now, setNow] = useState(new Date());
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const time = now.toLocaleTimeString('es-ES', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-
-  const date = now
-    .toLocaleDateString('es-ES', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-    })
-    .toUpperCase();
-
-  // Orbitron (digital) cargado via font-face en globals.css o via next/font en layout.
-  const isDigital = clockStyle === 'classic';
-  const isThin = clockStyle === 'minimal';
-
-  const fontClass = isDigital
-    ? 'font-orbitron tabular-nums'   // requiere @import de Orbitron en globals.css
-    : isThin
-    ? 'font-light tabular-nums'
-    : 'font-black italic tabular-nums';
-
-  const sizeClass = isDigital
-    ? 'text-3xl lg:text-4xl tracking-widest'
-    : isThin
-    ? 'text-3xl lg:text-4xl tracking-tight'
-    : 'text-4xl lg:text-5xl tracking-tighter';
-
-  return (
-    <div className="flex items-center gap-6 bg-white/5 backdrop-blur-3xl px-8 py-4 rounded-[2rem] border border-white/10 shadow-3xl">
-      <div className="flex flex-col items-end">
-        <div className="flex items-center gap-2 text-gray-400 font-bold text-[13px] tracking-widest uppercase mb-1 italic">
-          <Calendar className="w-3.5 h-3.5" />
-          {date}
-        </div>
-        <motion.div
-          key={time}
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className={`${fontClass} ${sizeClass} leading-none drop-shadow-[0_0_15px_rgba(0,0,0,0.3)]`}
-          style={{
-            color: clockColor,
-            textShadow: `0 0 20px ${clockColor}55`,
-            fontFamily: isDigital ? "'Orbitron', monospace" : undefined,
-          }}
-        >
-          {time}
-        </motion.div>
-      </div>
-    </div>
-  );
 }
 
 // ─── SmartDisplay ─────────────────────────────────────────────────────────────
@@ -489,8 +420,50 @@ export default function SmartDisplay({
     tournamentName = 'SMART PADEL',
     tournamentCategory = '',
     tournamentPhase = '',
+    elapsedSeconds,
+    temperatureC,
     tickerMessages = [],
   } = match;
+
+  const [headerNow, setHeaderNow] = useState(new Date());
+  const [elapsedSec, setElapsedSec] = useState<number>(Math.max(0, Number(elapsedSeconds) || 0));
+
+  useEffect(() => {
+    setElapsedSec(Math.max(0, Number(elapsedSeconds) || 0));
+  }, [elapsedSeconds, matchId]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setHeaderNow(new Date());
+      setElapsedSec((prev) => prev + 1);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const courtNumber = String(canchaId ?? '').match(/\d+/)?.[0] ?? String(canchaId ?? '').trim();
+  const courtLabel = courtNumber ? `PISTA ${courtNumber}` : 'PISTA';
+  const [categoryLabelRaw, genderLabelRaw] = String(tournamentCategory || '')
+    .split('/')
+    .map((v) => v.trim());
+  const categoryLabel = categoryLabelRaw || 'CATEGORIA';
+  const genderLabel = genderLabelRaw || tournamentPhase || 'GENERO';
+  const venueLabel = String(venueName || '').trim() || 'SEDE';
+  const tournamentLabel = String(tournamentName || '').trim() || 'TORNEO';
+  const dateLabel = headerNow
+    .toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'long' })
+    .toUpperCase();
+  const hourLabel = headerNow.toLocaleTimeString('es-ES', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const temperatureLabel = Number.isFinite(Number(temperatureC))
+    ? `${Math.round(Number(temperatureC))}°C`
+    : '--°C';
+  const elapsedLabel = `${String(Math.floor(elapsedSec / 60)).padStart(2, '0')}:${String(
+    elapsedSec % 60,
+  ).padStart(2, '0')}`;
 
   // ────────────────────────────────────────────────────────────────────────────
   return (
@@ -531,54 +504,48 @@ export default function SmartDisplay({
         } as React.CSSProperties}
       >
         {/* ── ROW 1: HEADER ─────────────────────────────────────────────── */}
-        <div className="flex justify-between items-center px-12 lg:px-24 border-b border-white/10 bg-black/50 backdrop-blur-2xl">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-4">
-              <div
-                className="flex items-center gap-3 px-4 py-1.5 rounded-full border"
-                style={{
-                  backgroundColor: `${smartPadelColor}18`,
-                  borderColor: `${smartPadelColor}40`,
-                }}
-              >
-                <div
-                  className="w-2.5 h-2.5 rounded-full animate-pulse shadow-[0_0_8px_currentColor]"
-                  style={{ backgroundColor: smartPadelColor }}
-                />
-                <span
-                  className="font-black uppercase tracking-[0.4em] text-[14px] italic"
-                  style={{ color: smartPadelColor }}
-                >
-                  {tournamentName}
-                </span>
-              </div>
-              <span className="text-white/40 font-bold uppercase tracking-[0.3em] text-[12px] italic">
-                {tournamentPhase}
-              </span>
-            </div>
-            <h1 className="text-3xl lg:text-5xl font-black italic uppercase tracking-tighter text-white leading-tight break-words max-w-[50vw]">
-              {tournamentCategory}
-            </h1>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-start px-8 lg:px-16 py-3 border-b border-white/10 bg-black/55 backdrop-blur-2xl gap-4">
+          {/* Izquierda: pista + categoria/genero */}
+          <div className="flex flex-col items-start gap-1 min-w-0">
+            <span
+              className="text-2xl lg:text-3xl font-black italic uppercase tracking-tight leading-none"
+              style={{ color: smartPadelColor }}
+            >
+              {courtLabel}
+            </span>
+            <span className="text-sm lg:text-base font-bold uppercase tracking-wide text-white/90 leading-tight truncate max-w-[32vw]">
+              {categoryLabel}
+            </span>
+            <span className="text-xs lg:text-sm font-bold uppercase tracking-[0.18em] text-white/65 leading-tight truncate max-w-[32vw]">
+              {genderLabel}
+            </span>
           </div>
 
-          {/* Right: PRO label + SmartClock */}
-          <div className="flex items-center gap-8">
-            <div className="hidden lg:flex flex-col items-end border-r border-white/10 pr-8">
-              <span
-                className="font-black uppercase tracking-[0.5em] text-[10px] italic mb-1"
-                style={{ color: smartPadelColor }}
-              >
-                PADEL SCORE
-              </span>
-              <span className="text-white font-black italic text-xl tracking-tighter">
-                PRO SYSTEM
-              </span>
-            </div>
+          {/* Centro: torneo + tiempo partido + sede */}
+          <div className="flex flex-col items-center justify-start">
+            <span className="text-sm lg:text-base font-black uppercase tracking-[0.14em] text-white/85 text-center max-w-[28vw] truncate">
+              {tournamentLabel}
+            </span>
+            <span className="text-[10px] lg:text-xs font-bold uppercase tracking-[0.25em] text-white/50">
+              TIEMPO PARTIDO
+            </span>
+            <span className="text-4xl lg:text-6xl font-black tabular-nums italic leading-none text-white">
+              {elapsedLabel}
+            </span>
+            <span className="text-xs lg:text-sm font-bold uppercase tracking-[0.18em] text-white/60 text-center max-w-[28vw] truncate">
+              {venueLabel}
+            </span>
+          </div>
 
-            <SmartClock
-              clockStyle={template.clock_style}
-              clockColor={template.clock_color}
-            />
+          {/* Derecha: fecha + hora/temperatura */}
+          <div className="flex flex-col items-end gap-0.5 min-w-0 text-right">
+            <span className="text-xs lg:text-sm font-bold uppercase tracking-[0.14em] text-white/65">
+              {dateLabel}
+            </span>
+            <span className="text-sm lg:text-base font-black tabular-nums italic tracking-wide">
+              <span style={{ color: template.clock_color }}>{hourLabel}</span>
+              <span className="text-white/50"> · {temperatureLabel}</span>
+            </span>
           </div>
         </div>
 

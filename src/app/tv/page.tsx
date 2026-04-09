@@ -22,7 +22,6 @@ function randomShortId(): number {
 
 function getIframeSrc(session: TvSession | null): string | null {
     if (!session) return null;
-    if (session.current_view === 'ads') return '/display/ads';
 
     if (session.current_view === 'bracket') {
         if (!session.tournament_id) return null;
@@ -82,7 +81,7 @@ export default function TVKioskPage() {
                             {
                                 short_id: candidate,
                                 status: 'waiting',
-                                current_view: 'ads',
+                                current_view: 'score',
                                 tournament_id: null,
                             },
                             { onConflict: 'short_id' }

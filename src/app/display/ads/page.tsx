@@ -12,7 +12,7 @@ export default function AdsDisplayPage() {
     useEffect(() => {
         const loadAds = async () => {
             try {
-                const fetchedAds = await dataService.getAds() as any[];
+                const fetchedAds = (await dataService.getAds()) as any[];
                 // We filter ads to only include active ones
                 setAds(fetchedAds.filter((ad: any) => ad.active));
             } catch (error) {
@@ -94,7 +94,7 @@ export default function AdsDisplayPage() {
     );
 }
 
-function AutoCycle({ onCycle, duration }: { onCycle: () => void, duration: number }) {
+function AutoCycle({ onCycle, duration }: { onCycle: () => void; duration: number }) {
     useEffect(() => {
         const timer = setTimeout(onCycle, duration * 1000);
         return () => clearTimeout(timer);

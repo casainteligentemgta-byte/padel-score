@@ -139,7 +139,7 @@ export function NextMatchCard({
         match._tournamentId && match.id
             ? `/tournaments/${match._tournamentId}/score/${encodeURIComponent(String(match.id))}`
             : `/marker/${encodeURIComponent(canchaId)}?${controlParams.toString()}`;
-    const pizarraHref = `/tournaments/${match._tournamentId}/display/${encodeURIComponent(match.id || matchKey)}`;
+    const pizarraHref = `/dev/pizarra-concept?tournamentId=${encodeURIComponent(String(match._tournamentId))}&matchId=${encodeURIComponent(String(match.id || matchKey))}`;
     const camasHref = `/tournaments/${match._tournamentId}/control/broadcasting`;
     const adsHref = `/admin/publicidad`;
 
