@@ -2,10 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { Barlow_Condensed } from 'next/font/google';
 import BouncingBall from '@/components/BouncingBall';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { dataService } from '@/lib/dataService';
 import { resolveMatchTeamLines } from '@/lib/resolveMatchTeamLines';
+
+/** Tipografía de nombres: mismo aspecto en TV (vh alto) y laptop (vw útil), con trazo compacto. */
+const pizarraPlayerNames = Barlow_Condensed({
+  weight: '900',
+  subsets: ['latin'],
+  display: 'swap',
+});
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -372,7 +380,9 @@ export default function PizarraConceptPage() {
         </header>
 
         <main className="flex min-h-0 flex-1 items-start justify-center overflow-hidden">
-          <aside className="w-full max-w-[980px] overflow-hidden rounded-3xl border border-[#ccff00]/35 bg-[#0e1014] p-[clamp(0.55rem,1.6vh,1.25rem)] shadow-[0_0_40px_rgba(0,0,0,0.9),0_0_55px_rgba(204,255,0,0.14),inset_0_0_45px_rgba(255,255,255,0.03)]">
+          <aside
+            className={`w-full max-w-[980px] overflow-hidden rounded-3xl border border-[#ccff00]/35 bg-[#0e1014] p-[clamp(0.55rem,1.6vh,1.25rem)] shadow-[0_0_40px_rgba(0,0,0,0.9),0_0_55px_rgba(204,255,0,0.14),inset_0_0_45px_rgba(255,255,255,0.03)] ${pizarraPlayerNames.className}`}
+          >
             <div className="mb-2 grid grid-cols-[1fr_clamp(2.7rem,5.7vw,4.5rem)_clamp(2.7rem,5.7vw,4.5rem)_clamp(2.7rem,5.7vw,4.5rem)] gap-2 border-b border-[#ccff00]/30 pb-1 text-center text-[clamp(0.58rem,1.2vh,0.75rem)] font-extrabold uppercase tracking-[0.16em] text-[#ccff00] drop-shadow-[0_0_6px_rgba(204,255,0,0.28)]">
               <span className="text-left">Jugadores</span>
               <span>Set 1</span>
@@ -391,7 +401,7 @@ export default function PizarraConceptPage() {
                     )}
                   </div>
                   <span
-                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-black uppercase tracking-tight antialiased ${
+                    className={`truncate text-[clamp(0.82rem,min(2.05vh,3.5vw),1.22rem)] font-black uppercase tracking-tight antialiased ${
                       serverPlayer === 'A1'
                         ? 'text-[#ccff00] drop-shadow-[0_0_12px_rgba(204,255,0,0.75)]'
                         : 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.22)]'
@@ -401,7 +411,7 @@ export default function PizarraConceptPage() {
                   </span>
                   <span className="text-white/70">/</span>
                   <span
-                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-black uppercase tracking-tight antialiased ${
+                    className={`truncate text-[clamp(0.82rem,min(2.05vh,3.5vw),1.22rem)] font-black uppercase tracking-tight antialiased ${
                       serverPlayer === 'A2'
                         ? 'text-[#ccff00] drop-shadow-[0_0_12px_rgba(204,255,0,0.75)]'
                         : 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.22)]'
@@ -431,7 +441,7 @@ export default function PizarraConceptPage() {
                     )}
                   </div>
                   <span
-                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-black uppercase tracking-tight antialiased ${
+                    className={`truncate text-[clamp(0.82rem,min(2.05vh,3.5vw),1.22rem)] font-black uppercase tracking-tight antialiased ${
                       serverPlayer === 'B1'
                         ? 'text-[#ccff00] drop-shadow-[0_0_12px_rgba(204,255,0,0.75)]'
                         : 'text-white/90'
@@ -441,7 +451,7 @@ export default function PizarraConceptPage() {
                   </span>
                   <span className="text-white/70">/</span>
                   <span
-                    className={`truncate text-[clamp(0.75rem,1.8vh,1.12rem)] font-black uppercase tracking-tight antialiased ${
+                    className={`truncate text-[clamp(0.82rem,min(2.05vh,3.5vw),1.22rem)] font-black uppercase tracking-tight antialiased ${
                       serverPlayer === 'B2'
                         ? 'text-[#ccff00] drop-shadow-[0_0_12px_rgba(204,255,0,0.75)]'
                         : 'text-white/90'
