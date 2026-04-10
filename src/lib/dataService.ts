@@ -164,6 +164,7 @@ export const dataService = {
         return (
             s === 'WARM_UP' ||
             s === 'IN_PROGRESS' ||
+            s === 'EN_CURSO' ||
             s === 'LIVE' ||
             s === 'PAUSED' ||
             s === 'STARTED'
@@ -378,6 +379,7 @@ export const dataService = {
             throwIfError(error);
             return (data || []).map((r: any) => ({
                 ...(r.data || {}),
+                tournament_id: r.tournament_id,
                 ownerId: r.owner_id,
                 createdAt: r.created_at,
                 updatedAt: r.updated_at,
@@ -404,6 +406,7 @@ export const dataService = {
             const r = data as any;
             return {
                 ...(r.data || {}),
+                tournament_id: r.tournament_id,
                 ownerId: r.owner_id,
                 createdAt: r.created_at,
                 updatedAt: r.updated_at,
@@ -430,10 +433,7 @@ export const dataService = {
 
     async getLiveMatchesByTournament(tournamentId: string) {
         const rows = await this.getMatches(tournamentId);
-        return rows.filter((m: any) => {
-            const s = this.normalizeMatchStatus(m?.status);
-            return s === 'WARM_UP' || s === 'IN_PROGRESS';
-        });
+        return rows.filter((m: any) => this.isMatchEnVivoStatus(m?.status));
     },
 
     async getFinishedMatches(tournamentId: string) {

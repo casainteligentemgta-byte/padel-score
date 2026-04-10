@@ -37,6 +37,7 @@ export async function GET(req: Request) {
   const r = data as Record<string, unknown> & { data?: Record<string, unknown>; id: string };
   const match = {
     ...(typeof r.data === 'object' && r.data ? r.data : {}),
+    tournament_id: (data as { tournament_id?: string }).tournament_id,
     ownerId: (r as { owner_id?: string }).owner_id,
     createdAt: (r as { created_at?: string }).created_at,
     updatedAt: (r as { updated_at?: string }).updated_at,

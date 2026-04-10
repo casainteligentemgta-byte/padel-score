@@ -27,9 +27,14 @@ interface ActiveMatch {
     status: MatchStatus;
 }
 
+function matchStatusRaw(m: any): unknown {
+    return m?.status ?? (m && typeof m === 'object' ? (m as { data?: { status?: unknown } }).data?.status : undefined);
+}
+
 function buildActiveMatches(t: any, ms: any[]): ActiveMatch[] {
-    if (!t) return [];
-    const numCanchas = Math.max(1, Number(t.totalCourts) || (t.courtNames?.length ?? 6));
+    const tSafe = t && typeof t === 'object' ? t : {};
+    if (!Array.isArray(ms) || ms.length === 0) return [];
+    const numCanchas = Math.max(1, Number(tSafe.totalCourts) || (tSafe.courtNames?.length ?? 6));
 
     const resolveTeamName = (mTeam: any, teamIdx: number) => {
         const PLACEHOLDER_RE = /pareja|jugador|placeholder/i;
@@ -42,16 +47,13 @@ function buildActiveMatches(t: any, ms: any[]): ActiveMatch[] {
             }
             if (mTeam.teamLabel) return mTeam.teamLabel;
         }
-        const foundTeam = teamIdx > 0 ? (Array.isArray(t.teams) ? t.teams[teamIdx - 1] : null) : null;
+        const foundTeam = teamIdx > 0 ? (Array.isArray(tSafe.teams) ? tSafe.teams[teamIdx - 1] : null) : null;
         if (!foundTeam) return `Pareja ${teamIdx || '?'}`;
         return [(foundTeam.p1?.name || '').trim(), (foundTeam.p2?.name || '').trim()].filter(Boolean).join(' · ') || `Pareja ${teamIdx}`;
     };
 
     return ms
-        .filter((m: any) => {
-            const s = String(m?.status || '').toUpperCase();
-            return s === 'WARM_UP' || s === 'IN_PROGRESS';
-        })
+        .filter((m: any) => dataService.isMatchEnVivoStatus(matchStatusRaw(m)))
         .map((m: any, idx: number) => ({
             id: m.id || `match_${idx}`,
             court: m.court ?? (m.courtIndex !== undefined ? m.courtIndex + 1 : idx + 1),
@@ -80,10 +82,9 @@ export default function MonitorCanchas() {
         try {
             const t = await dataService.getTournament(id);
             const ms = await dataService.getMatches(id);
-            if (t) {
-                setTournament(t);
-                setActiveMatches(buildActiveMatches(t, ms || []));
-            }
+            const tSafe = t && typeof t === 'object' ? t : {};
+            if (t) setTournament(t);
+            setActiveMatches(buildActiveMatches(tSafe, ms || []));
         } catch (e) {
             console.warn('[Monitor] refreshMonitorData:', e);
         }
@@ -172,22 +173,30 @@ export default function MonitorCanchas() {
             .subscribe();
 
         const updateData = (t: any, ms: any[]) => {
-            if (!t) return;
-            setTournament(t);
-            setActiveMatches(buildActiveMatches(t, ms));
+            const tSafe = t && typeof t === 'object' ? t : {};
+            if (t) setTournament(t);
+            setActiveMatches(buildActiveMatches(tSafe, ms));
             setLoading(false);
         };
 
         const unsubT = dataService.subscribeToTournament(id, (t) => {
-            if (!t) { setLoading(false); return; }
+            if (!t) {
+                setLoading(false);
+                if (currentMatches.length > 0) updateData(null, currentMatches);
+                return;
+            }
             currentTournament = t;
             if (currentMatches.length > 0) updateData(currentTournament, currentMatches);
+            else {
+                setTournament(t);
+                setLoading(false);
+            }
         });
 
         const unsubM = dataService.subscribeToMatches(id, (ms) => {
             currentMatches = ms || [];
             if (currentTournament) updateData(currentTournament, currentMatches);
-            else if (ms === null || ms?.length === 0) setLoading(false);
+            else updateData(null, currentMatches);
         });
 
         return () => {
@@ -196,6 +205,18 @@ export default function MonitorCanchas() {
             if (typeof unsubM === 'function') unsubM();
         };
     }, [id]);
+
+    useEffect(() => {
+        if (!id) return;
+        const iv = window.setInterval(() => void refreshMonitorData(), 12000);
+        return () => window.clearInterval(iv);
+    }, [id, refreshMonitorData]);
+
+    useEffect(() => {
+        const onFocus = () => void refreshMonitorData();
+        window.addEventListener('focus', onFocus);
+        return () => window.removeEventListener('focus', onFocus);
+    }, [refreshMonitorData]);
 
     useEffect(() => {
         const hasActiveHighlights = Object.keys(highlightedCourts).length > 0;
@@ -229,27 +250,6 @@ export default function MonitorCanchas() {
     );
 
     // ── Sin partidos activos ───────────────────────────────────────────────
-    if (noCourtsAssigned) return (
-        <div className="h-screen bg-[#050505] flex flex-col items-center justify-center gap-6 text-center">
-            <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-6 py-3 border-b border-white/[0.04]">
-                <div className="flex items-center gap-2">
-                    <Monitor className="w-4 h-4 text-[#ccff00]" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[#ccff00]">Monitor Canchas</span>
-                    <span className="text-[9px] text-gray-700 font-bold">— {tournament?.name || id}</span>
-                </div>
-                <button onClick={toggleFullscreen} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-all">
-                    <Maximize2 className="w-3.5 h-3.5 text-gray-500" />
-                </button>
-            </div>
-
-            <WifiOff className="w-16 h-16 text-gray-800" />
-            <p className="text-xl font-black italic uppercase tracking-tighter text-white/20">
-                No hay canchas asignadas a este torneo
-            </p>
-        </div>
-    );
-
-    // ── Sin partidos activos ───────────────────────────────────────────────
     if (count === 0) return (
         <div className="h-screen bg-[#050505] flex flex-col items-center justify-center gap-6 text-center">
             {/* Header mínimo */}
@@ -270,6 +270,12 @@ export default function MonitorCanchas() {
                 <p className="text-[11px] text-gray-700 font-bold mt-2 uppercase tracking-widest">
                     Las pizarras aparecerán automáticamente cuando se inicie un partido
                 </p>
+                {noCourtsAssigned && (
+                    <p className="text-[9px] text-white/25 mt-3 max-w-sm leading-relaxed">
+                        Asignación de canchas en hub sin filas para este torneo; no impide mostrar partidos en
+                        calentamiento o en curso.
+                    </p>
+                )}
             </div>
             <div className="flex items-center gap-2 mt-4 px-4 py-2 bg-white/[0.02] border border-white/[0.05] rounded-xl">
                 <span className="w-2 h-2 rounded-full bg-gray-700 animate-pulse" />
@@ -436,9 +442,12 @@ function CourtCell({
     isHighlighted: boolean;
     onEmergencyResetSuccess?: () => void;
 }) {
-    const displayUrl = minimalScreensMode
-        ? `/tournaments/${tournamentId}/display/${match.id}?minimal=1`
-        : `/tournaments/${tournamentId}/display/${match.id}`;
+    /** URL directa a la pizarra unificada (evita redirect `/display/...` → iframe sandbox a veces no carga bien). */
+    const courtNum = Number(match.court);
+    const courtQ =
+        Number.isFinite(courtNum) && courtNum >= 1 ? `&courtId=${encodeURIComponent(String(Math.floor(courtNum)))}` : '';
+    const minQ = minimalScreensMode ? '&minimal=1' : '';
+    const displayUrl = `/dev/pizarra-concept?tournamentId=${encodeURIComponent(tournamentId)}&matchId=${encodeURIComponent(match.id)}${courtQ}${minQ}`;
     const [assigning, setAssigning] = useState<number | null>(null);
     const [resetting, setResetting] = useState(false);
 
@@ -487,11 +496,12 @@ function CourtCell({
         >
             {/* Iframe de la pizarra completa */}
             <iframe
+                key={`${tournamentId}-${match.id}-${match.court}`}
                 src={displayUrl}
                 className="w-full h-full border-0 pointer-events-none"
                 title={`Pista ${match.court}`}
                 loading="lazy"
-                sandbox="allow-scripts allow-same-origin"
+                sandbox="allow-scripts allow-same-origin allow-forms"
             />
 
             {/* Overlay top: badge + direcciones cortas (cancha 1/2/3) + ampliar */}

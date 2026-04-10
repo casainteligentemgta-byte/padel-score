@@ -22,11 +22,25 @@ const CAT_LEVEL_LABELS: Record<string, string> = {
 
 export function formatPizarraGender(gender: string | undefined): string {
     if (!gender) return '';
-    const g = String(gender).toUpperCase();
-    if (g === 'MALE') return 'Masculino';
-    if (g === 'FEMALE') return 'Femenino';
-    if (g === 'MIXED') return 'Mixto';
-    return String(gender);
+    const s = String(gender).trim();
+    if (!s) return '';
+    const u = s.toUpperCase();
+    const n = s
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '');
+
+    if (u === 'MALE' || u === 'M' || n === 'masculine' || n === 'masculino' || n === 'male' || n === 'hombre' || n === 'masc')
+        return 'Masculino';
+    if (u === 'FEMALE' || u === 'F' || n === 'feminine' || n === 'femenino' || n === 'female' || n === 'mujer' || n === 'fem')
+        return 'Femenino';
+    if (u === 'MIXED' || n === 'mixed' || n === 'mixto' || n === 'mix' || n === 'mixta') return 'Mixto';
+
+    if (u === 'MASCULINO') return 'Masculino';
+    if (u === 'FEMENINO') return 'Femenino';
+    if (u === 'MIXTO' || u === 'MIXTA') return 'Mixto';
+
+    return s;
 }
 
 export function formatPizarraCategoryLevel(cat: string | undefined): string {

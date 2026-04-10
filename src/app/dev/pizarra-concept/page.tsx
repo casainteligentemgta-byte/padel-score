@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Barlow_Condensed } from 'next/font/google';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -16,6 +16,7 @@ import {
   partitionPlaylistRows,
 } from '@/lib/courtPlaylists';
 import { resolveMatchTeamLines } from '@/lib/resolveMatchTeamLines';
+import { formatPizarraGender } from '@/lib/pizarraHeaderLabels';
 
 /** Tipografía de nombres: mismo aspecto en TV (vh alto) y laptop (vw útil), con trazo compacto. */
 const pizarraPlayerNames = Barlow_Condensed({
@@ -66,6 +67,14 @@ function sameTournamentId(a: string, b: string): boolean {
       .replace(/-/g, '')
       .toLowerCase()
   );
+}
+
+function matchBelongsToTournamentRow(m: any, tournamentId: string): boolean {
+  const tid = String(tournamentId || '').trim();
+  if (!tid) return true;
+  const mt = String(m?.tournament_id ?? m?.tournamentId ?? '').trim();
+  if (!mt) return true;
+  return sameTournamentId(mt, tid);
 }
 
 /** El marker escribe el juego en vivo en `pizarra_cancha_state.data` (no siempre en tournament_matches). */
@@ -192,7 +201,7 @@ const DEFAULT_BOARD: BoardView = {
   serverPlayer: 'A2',
   tournamentLabel: 'COPA BUCHANNAS',
   venueLabel: 'EL BODEGUERO',
-  categoryGenderLine: '10:30 AM | 24°C | CATEGORIA: +40 | GENERO: MASCULINO',
+  categoryGenderLine: 'CASA INTELIGENTE',
   tickerPrimary: 'BIENVENIDOS A SMART PADEL TV',
   tickerSecondary: 'SMART PADEL TV',
 };
@@ -270,19 +279,15 @@ function computeBoardView(matchRaw: any, tournament: any | null): BoardView {
   const catRaw = String(match?.category ?? tournament?.category ?? '').trim();
   const [catPart, genPart] = catRaw.split('/').map((x) => x.trim());
   const cat = catPart || 'CATEGORIA';
-  const gen =
+  const genRaw =
     genPart ||
-    String(match?.phase ?? match?.tournamentPhase ?? tournament?.gender ?? 'GENERO').trim() ||
-    'GENERO';
-  const now = new Date();
-  const hhmm = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: true });
-  const temp = Number.isFinite(Number(match?.temperatureC))
-    ? `${Math.round(Number(match.temperatureC))}°C`
-    : '24°C';
-  const categoryGenderLine = `${hhmm.toUpperCase()} | ${temp} | CATEGORIA: ${cat.toUpperCase()} | GENERO: ${gen.toUpperCase()}`;
+    String(match?.phase ?? match?.tournamentPhase ?? tournament?.gender ?? '').trim();
+  const gen = formatPizarraGender(genRaw) || (genRaw ? genRaw : 'GÉNERO');
+  const genUpper = gen.toLocaleUpperCase('es');
+  const categoryGenderLine = 'CASA INTELIGENTE';
 
   const tickerPrimary = `PARTIDO EN CURSO · ${tName.toUpperCase()} · ${venue.toUpperCase() || 'SEDE'}`;
-  const tickerSecondary = `SMART PADEL TV · ${line1.toUpperCase()} VS ${line2.toUpperCase()} · ${cat.toUpperCase()} · ${gen.toUpperCase()}`;
+  const tickerSecondary = `SMART PADEL TV · ${line1.toUpperCase()} VS ${line2.toUpperCase()} · ${cat.toUpperCase()} · ${genUpper}`;
 
   return {
     teamA,
@@ -327,6 +332,7 @@ function pickMatchFromList(
     const mid = opts.matchId.trim();
     const hit = list.find((m) => String(m.id) === mid);
     if (hit) return hit;
+    return null;
   }
 
   if (opts.courtNum != null && Number.isFinite(opts.courtNum)) {
@@ -344,7 +350,7 @@ function pickMatchFromList(
   return list[0] ?? null;
 }
 
-export default function PizarraConceptPage() {
+function PizarraConceptPage() {
   const searchParams = useSearchParams();
   const supabase = useMemo(() => getSupabaseClient(), []);
 
@@ -499,6 +505,10 @@ export default function PizarraConceptPage() {
           setLoadError('No se encontró el partido o no hay acceso de lectura (id / RLS / API).');
           return;
         }
+        if (!matchBelongsToTournamentRow(m, tid)) {
+          setLoadError('El partido no corresponde al torneo de la URL.');
+          return;
+        }
         setLoadError(null);
         setTournamentSnapshot(tournament);
         setMatchSnapshot(m);
@@ -513,7 +523,15 @@ export default function PizarraConceptPage() {
         complexFilter: complexParam || null,
       });
       if (!picked) {
-        setLoadError('No hay partido para mostrar (revisa torneo, pista o ID).');
+        setLoadError(
+          matchIdParam.trim()
+            ? 'No se encontró ese partido en este torneo (revisa el enlace o el ID).'
+            : 'No hay partido para mostrar (revisa torneo, pista o ID).',
+        );
+        return;
+      }
+      if (!matchBelongsToTournamentRow(picked, tid)) {
+        setLoadError('El partido listado no corresponde al torneo de la URL.');
         return;
       }
       setLoadError(null);
@@ -526,6 +544,13 @@ export default function PizarraConceptPage() {
   useEffect(() => {
     tournamentCacheRef.current = null;
   }, [tournamentId]);
+
+  useEffect(() => {
+    setMatchSnapshot(null);
+    setTournamentSnapshot(null);
+    setLoadError(null);
+    setCanchaMarcador(null);
+  }, [tournamentId, matchIdParam, tournamentIdsParam]);
 
   // Marker: el juego en vivo vive en `pizarra_cancha_state`; fusionamos `marcador` si coincide torneo+partido+pista.
   useEffect(() => {
@@ -677,8 +702,8 @@ export default function PizarraConceptPage() {
   }, [supabase, tournamentId, multiTournamentIds.length, matchIdParam]);
 
   return (
-    <div className="h-dvh w-screen overflow-hidden bg-[#0f1115] text-white">
-      <div className="mx-auto flex h-full w-full max-w-[1800px] flex-col overflow-hidden px-4 pt-0 pb-2 sm:px-6 lg:px-10">
+    <div className="flex h-dvh w-screen flex-col overflow-hidden bg-[#0f1115] text-white">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1800px] flex-1 flex-col overflow-hidden px-4 pt-0 pb-2 sm:px-6 lg:px-10">
         {loadError && (
           <p className="mb-2 text-center text-xs font-bold uppercase tracking-widest text-amber-400/90">
             {loadError}
@@ -722,8 +747,8 @@ export default function PizarraConceptPage() {
           </div>
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-2">
-        <main className="flex min-h-0 max-h-[min(48vh,calc(100dvh-15rem))] shrink-0 items-start justify-center overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+        <main className="flex min-h-0 max-h-[min(42vh,calc(100dvh-13rem))] shrink-0 items-start justify-center overflow-hidden sm:max-h-[min(48vh,calc(100dvh-15rem))]">
           <aside
             className={`w-full max-w-[980px] overflow-hidden rounded-3xl border border-[#ccff00]/35 bg-[#0e1014] p-[clamp(0.55rem,1.6vh,1.25rem)] shadow-[0_0_40px_rgba(0,0,0,0.9),0_0_55px_rgba(204,255,0,0.14),inset_0_0_45px_rgba(255,255,255,0.03)] ${pizarraPlayerNames.className}`}
           >
@@ -818,8 +843,9 @@ export default function PizarraConceptPage() {
           </aside>
         </main>
 
-        <section className="grid min-h-0 w-full flex-1 grid-cols-2 gap-3">
-          <div className="relative h-[clamp(132px,28vh,320px)] overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-[#10131a] shadow-[0_0_20px_rgba(204,255,0,0.12)] sm:h-[clamp(152px,32vh,380px)]">
+        {/* Móvil: vídeo arriba, carrusel abajo · sm+: dos columnas (shrink-0: no empuja/oculta la tira) */}
+        <section className="flex w-full shrink-0 flex-col gap-3 sm:grid sm:grid-cols-2 sm:gap-3">
+          <div className="relative order-1 w-full min-w-0 aspect-video overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-black shadow-[0_0_20px_rgba(204,255,0,0.12)] sm:order-none">
             {adsPlaylist.length > 0 ? (
               <CourtAdVideoOrIframe
                 key={`ad-${currentAdIdx}`}
@@ -843,7 +869,7 @@ export default function PizarraConceptPage() {
             )}
           </div>
 
-          <div className="relative h-[clamp(132px,28vh,320px)] overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-[#10131a] shadow-[0_0_20px_rgba(204,255,0,0.12)] sm:h-[clamp(152px,32vh,380px)]">
+          <div className="relative order-2 w-full min-w-0 aspect-video overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-black shadow-[0_0_20px_rgba(204,255,0,0.12)] sm:order-none">
             {carouselPlaylist.length > 0 ? (
               <AnimatePresence mode="wait">
                 <motion.img
@@ -868,7 +894,7 @@ export default function PizarraConceptPage() {
         </section>
         </div>
 
-        <footer className="mt-2 w-full shrink-0 overflow-hidden rounded-2xl border border-[#ccff00]/25 bg-black/55 py-[clamp(0.3rem,1vh,0.75rem)] shadow-[0_0_20px_rgba(204,255,0,0.12)]">
+        <footer className="relative z-30 mt-2 w-full shrink-0 overflow-hidden rounded-2xl border border-[#ccff00]/25 bg-[#0a0c10]/95 py-[clamp(0.3rem,1vh,0.75rem)] shadow-[0_-10px_40px_rgba(0,0,0,0.75),0_0_20px_rgba(204,255,0,0.12)] backdrop-blur-sm">
           <div className="flex whitespace-nowrap animate-marquee">
             {[0, 1].map((half) => (
               <div key={half} className="flex shrink-0 items-center">
@@ -896,5 +922,19 @@ export default function PizarraConceptPage() {
         </footer>
       </div>
     </div>
+  );
+}
+
+export default function PizarraConceptPageWithSuspense() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-dvh w-screen flex-col items-center justify-center overflow-hidden bg-[#0f1115] text-[#ccff00]">
+          <p className="text-xs font-black uppercase tracking-widest">Cargando pizarra…</p>
+        </div>
+      }
+    >
+      <PizarraConceptPage />
+    </Suspense>
   );
 }
