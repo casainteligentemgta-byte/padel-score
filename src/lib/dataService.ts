@@ -376,11 +376,42 @@ export const dataService = {
                 .select('*')
                 .eq('tournament_id', tournamentId);
             throwIfError(error);
-            return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+            return (data || []).map((r: any) => ({
+                ...(r.data || {}),
+                ownerId: r.owner_id,
+                createdAt: r.created_at,
+                updatedAt: r.updated_at,
+                id: r.id,
+            }));
         } catch (e) {
             // Evita romper la UI cuando hay fallas transitorias de red/Supabase.
             console.warn('[dataService] getMatches fallback (fetch error):', e);
             return [];
+        }
+    },
+
+    /** Una fila de `tournament_matches` (mismo shape que `getMatches`). Útil para pizarra con matchId fijo. */
+    async getMatchById(tournamentId: string, matchId: string) {
+        try {
+            const { data, error } = await supabase()
+                .from('tournament_matches')
+                .select('*')
+                .eq('tournament_id', tournamentId)
+                .eq('id', matchId)
+                .maybeSingle();
+            throwIfError(error);
+            if (!data) return null;
+            const r = data as any;
+            return {
+                ...(r.data || {}),
+                ownerId: r.owner_id,
+                createdAt: r.created_at,
+                updatedAt: r.updated_at,
+                id: r.id,
+            };
+        } catch (e) {
+            console.warn('[dataService] getMatchById:', e);
+            return null;
         }
     },
 

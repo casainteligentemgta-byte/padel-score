@@ -25,6 +25,8 @@ interface TournamentHeaderProps {
     onEditSponsor: () => void;
     onEditRules: () => void;
     onShare: () => void;
+    /** Doble clic en la pastilla «En Vivo» → abrir sala marker del primer partido en curso. */
+    onDoubleClickLiveBadge?: () => void;
 }
 
 function SponsorLogoImage({ url, name }: { url?: string; name?: string }) {
@@ -75,7 +77,8 @@ export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
     canManageTournament,
     onEditSponsor,
     onEditRules,
-    onShare
+    onShare,
+    onDoubleClickLiveBadge,
 }) => {
     return (
         <div className="flex-shrink-0 bg-[#0a0a0a] border-b border-white/[0.08] px-3 sm:px-4 pt-5 pb-4 w-full">
@@ -168,7 +171,18 @@ export const TournamentHeader: React.FC<TournamentHeaderProps> = ({
 
             {/* Stat pills */}
             <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar mb-1 flex-nowrap">
-                <div className="flex-shrink-0 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2">
+                <div
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2 ${onDoubleClickLiveBadge && liveCnt > 0 ? 'cursor-pointer select-none' : ''}`}
+                    title={onDoubleClickLiveBadge && liveCnt > 0 ? 'Doble clic: abrir sala marker (primer partido en vivo)' : undefined}
+                    onDoubleClick={
+                        onDoubleClickLiveBadge && liveCnt > 0
+                            ? (e) => {
+                                  e.preventDefault();
+                                  onDoubleClickLiveBadge();
+                              }
+                            : undefined
+                    }
+                >
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_4px_#10b981]" />
                     <span className="text-emerald-400 text-[9px] font-black uppercase tracking-widest">
                         {liveCnt} En Vivo

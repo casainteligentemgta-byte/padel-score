@@ -37,6 +37,47 @@ function buildShortPath(complexName: string | undefined, court: number | string 
     return '';
 }
 
+/** Sala `/marker/cancha_N` con `t`, `m` y jugadores (misma lógica que el hub de evento). */
+export function buildMarkerRoomHref(match: any, rankFallback: number): string {
+    const [t1p1, t1p2] = resolveTeamNames(match.team1, match.team1Name);
+    const [t2p1, t2p2] = resolveTeamNames(match.team2, match.team2Name);
+    const p1Name = t1p1 !== '?' ? t1p1 : '';
+    const p2Name = t1p2 || '';
+    const p3Name = t2p1 !== '?' ? t2p1 : '';
+    const p4Name = t2p2 || '';
+
+    const controlParams = new URLSearchParams();
+    if (p1Name) controlParams.set('p1', p1Name);
+    if (p2Name) controlParams.set('p2', p2Name);
+    if (p3Name) controlParams.set('p3', p3Name);
+    if (p4Name) controlParams.set('p4', p4Name);
+    if (!p1Name && !p3Name) {
+        const t1Display = match.team1?.name ?? match.team1Name ?? '';
+        const t2Display = match.team2?.name ?? match.team2Name ?? '';
+        if (t1Display) controlParams.set('team1', t1Display);
+        if (t2Display) controlParams.set('team2', t2Display);
+    }
+    if (!p1Name && !p3Name && (match.t1Name || match.t2Name)) {
+        const splitPair = (s: string) =>
+            String(s || '')
+                .split(/\s*\/\s*/)
+                .map((x) => x.trim())
+                .filter(Boolean);
+        const a = splitPair(match.t1Name || '');
+        const b = splitPair(match.t2Name || '');
+        if (a[0]) controlParams.set('p1', a[0]);
+        if (a[1]) controlParams.set('p2', a[1]);
+        if (b[0]) controlParams.set('p3', b[0]);
+        if (b[1]) controlParams.set('p4', b[1]);
+    }
+    const tid = match._tournamentId ?? match.tournamentId;
+    if (tid) controlParams.set('t', String(tid));
+    if (match.id) controlParams.set('m', String(match.id));
+
+    const canchaId = `cancha_${match.court ?? (match.courtIndex != null ? match.courtIndex + 1 : rankFallback + 1)}`;
+    return `/marker/${encodeURIComponent(canchaId)}?${controlParams.toString()}`;
+}
+
 // ── Placeholder para pistas vacías ──────────────────────────────────────────
 export function PlaceholderMatchCard({ rank, mode = 'pending' }: { rank: number; mode?: 'pending' | 'live' }) {
     const rankLabel = ['1°', '2°', '3°', '4°', '5°', '6°'];
@@ -78,6 +119,11 @@ export function NextMatchCard({
     const [t1p1, t1p2] = resolveTeamNames(match.team1, match.team1Name);
     const [t2p1, t2p2] = resolveTeamNames(match.team2, match.team2Name);
     const isLive = match.status === MatchStatus.LIVE;
+    /** Mismo criterio amplio que el hub (`event/page`): LIVE / IN_PROGRESS / STARTED. */
+    const canOpenMarkerOnDblClick =
+        match.status === MatchStatus.LIVE ||
+        match.status === 'IN_PROGRESS' ||
+        match.status === 'STARTED';
 
     const rankColors = isLive
         ? ['text-emerald-400', 'text-emerald-400', 'text-emerald-400', 'text-emerald-400', 'text-emerald-400', 'text-emerald-400']
@@ -110,35 +156,13 @@ export function NextMatchCard({
 
     const matchKey = match.id || (match.court ? `court_${match.court}` : (match.courtIndex != null ? `court_${match.courtIndex + 1}` : `court_${rank + 1}`));
     const canchaId = `cancha_${match.court ?? (match.courtIndex != null ? match.courtIndex + 1 : rank + 1)}`;
-
-    // Usar los nombres ya resueltos por resolveTeamNames (soporta p1Name, p1.name, team.name, etc.)
-    // t1p1/t1p2 = jugadores del equipo 1, t2p1/t2p2 = jugadores del equipo 2
-    const p1Name = t1p1 !== '?' ? t1p1 : '';
-    const p2Name = t1p2 || '';
-    const p3Name = t2p1 !== '?' ? t2p1 : '';
-    const p4Name = t2p2 || '';
-
-    const controlParams = new URLSearchParams();
-    if (p1Name) controlParams.set('p1', p1Name);
-    if (p2Name) controlParams.set('p2', p2Name);
-    if (p3Name) controlParams.set('p3', p3Name);
-    if (p4Name) controlParams.set('p4', p4Name);
-    // Fallback cuando no hay jugadores individuales resueltos
-    if (!p1Name && !p3Name) {
-        const t1Display = match.team1?.name ?? match.team1Name ?? '';
-        const t2Display = match.team2?.name ?? match.team2Name ?? '';
-        if (t1Display) controlParams.set('team1', t1Display);
-        if (t2Display) controlParams.set('team2', t2Display);
-    }
-    // Fallback /marker: query t, m, jugadores (solo si falta torneo o id de partido).
-    if (match._tournamentId) controlParams.set('t', String(match._tournamentId));
-    if (match.id) controlParams.set('m', String(match.id));
+    const markerHref = buildMarkerRoomHref(match, rank);
 
     /** Con torneo + partido → sala de árbitro del torneo; si no, marker con query `t`/`m`/jugadores. */
     const controlHref =
         match._tournamentId && match.id
             ? `/tournaments/${match._tournamentId}/score/${encodeURIComponent(String(match.id))}`
-            : `/marker/${encodeURIComponent(canchaId)}?${controlParams.toString()}`;
+            : markerHref;
     const pizarraHref = `/dev/pizarra-concept?tournamentId=${encodeURIComponent(String(match._tournamentId))}&matchId=${encodeURIComponent(String(match.id || matchKey))}`;
     const camasHref = `/tournaments/${match._tournamentId}/control/broadcasting`;
     const adsHref = `/admin/publicidad`;
@@ -157,7 +181,16 @@ export function NextMatchCard({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ delay: rank * 0.06 }}
-                className={`rounded-2xl border overflow-hidden flex flex-col ${rankBg[safeRank]}`}
+                className={`rounded-2xl border overflow-hidden flex flex-col ${rankBg[safeRank]}${canOpenMarkerOnDblClick ? ' cursor-pointer' : ''}`}
+                title={canOpenMarkerOnDblClick ? 'Doble clic: abrir sala marker' : undefined}
+                onDoubleClick={
+                    canOpenMarkerOnDblClick
+                        ? (e) => {
+                              e.preventDefault();
+                              window.open(markerHref, '_blank', 'noopener,noreferrer');
+                          }
+                        : undefined
+                }
             >
                 {/* Franja superior */}
                 <div className="px-2 pt-2 pb-1.5 flex items-center justify-between gap-1 border-b-2 border-[#ccff00]/50 bg-[#ccff00]/10 flex-wrap">
@@ -286,7 +319,16 @@ export function NextMatchCard({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ delay: rank * 0.07 }}
-            className={`rounded-[1.75rem] border overflow-hidden ${rankBg[safeRank]}`}
+            className={`rounded-[1.75rem] border overflow-hidden ${rankBg[safeRank]}${canOpenMarkerOnDblClick ? ' cursor-pointer' : ''}`}
+            title={canOpenMarkerOnDblClick ? 'Doble clic: abrir sala marker' : undefined}
+            onDoubleClick={
+                canOpenMarkerOnDblClick
+                    ? (e) => {
+                          e.preventDefault();
+                          window.open(markerHref, '_blank', 'noopener,noreferrer');
+                      }
+                    : undefined
+            }
         >
             <div className="px-4 pt-3 pb-2.5 flex items-center justify-between gap-2 border-b-2 border-[#ccff00]/50 bg-[#ccff00]/10 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap min-w-0">

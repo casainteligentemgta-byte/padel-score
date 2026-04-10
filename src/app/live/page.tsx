@@ -8,6 +8,7 @@ import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import { MatchStatus } from '@/types/tournament';
 import { useSearchParams } from 'next/navigation';
+import { buildMarkerRoomHref } from '@/app/tournaments/event/components/MatchCards';
 
 export default function LiveBracketsPage() {
     const searchParams = useSearchParams();
@@ -103,7 +104,13 @@ export default function LiveBracketsPage() {
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: idx * 0.1 }}
                                     key={`${m.tournamentId}-${m.id}`}
-                                    className="glass group relative overflow-hidden border-white/10 hover:border-padel-primary/40 transition-all rounded-[2.5rem]"
+                                    className="glass group relative overflow-hidden border-white/10 hover:border-padel-primary/40 transition-all rounded-[2.5rem] cursor-pointer"
+                                    title="Doble clic: abrir sala marker"
+                                    onDoubleClick={(e) => {
+                                        e.preventDefault();
+                                        const url = buildMarkerRoomHref(m, idx);
+                                        window.open(url, '_blank', 'noopener,noreferrer');
+                                    }}
                                 >
                                     {/* Accent Background */}
                                     <div className="absolute top-0 right-0 w-32 h-32 blur-[60px] opacity-10 rounded-full pointer-events-none transition-opacity group-hover:opacity-30" style={{ backgroundColor: m.primaryColor }} />

@@ -16,6 +16,7 @@ import autoTable from 'jspdf-autotable';
 
 // Components
 import { TournamentHeader } from './components/TournamentHeader';
+import { buildMarkerRoomHref } from './components/MatchCards';
 import { GroupsView } from './components/GroupsView';
 import { RulesView } from './components/RulesView';
 import { MatchList } from './components/MatchList';
@@ -456,6 +457,14 @@ function EventView() {
                     setIsEventRulesEditOpen(true);
                 }}
                 onShare={() => setShowShareModal(true)}
+                onDoubleClickLiveBadge={
+                    effectiveLiveMatches.length > 0
+                        ? () => {
+                              const url = buildMarkerRoomHref(effectiveLiveMatches[0], 0);
+                              window.open(url, '_blank', 'noopener,noreferrer');
+                          }
+                        : undefined
+                }
             />
 
             <div className="flex-shrink-0 px-2 sm:px-3 py-3 flex gap-2 overflow-x-auto hide-scrollbar border-b border-[#ccff00]/10 w-full">
