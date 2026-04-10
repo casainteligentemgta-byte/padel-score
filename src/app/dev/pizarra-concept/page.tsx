@@ -914,7 +914,8 @@ function PizarraConceptPage() {
               {board.venueLabel}
             </h1>
             <p className="-mt-1 text-[clamp(0.85rem,1.9vh,1.25rem)] font-semibold tracking-[0.05em] text-white/85">
-              COPA PRUEBA - CANCHA: COCA COLA
+              {board.tournamentNameLine}
+              {board.courtHeaderLabel ? ` - CANCHA: ${board.courtHeaderLabel}` : ''}
             </p>
             <p className="-mt-1 text-[clamp(0.6rem,1.25vh,0.78rem)] font-semibold uppercase tracking-[0.12em] text-[#90b6da]">
               {boardHeaderMetaLine}

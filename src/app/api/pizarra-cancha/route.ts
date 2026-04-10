@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
+function parsePositiveCourtInteger(raw: unknown): number | null {
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1) return null;
+    return n;
+}
+
 export async function POST(req: Request) {
     const supabase = getSupabaseServiceClient();
     if (!supabase) {
@@ -13,8 +19,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'JSON inválido' }, { status: 400 });
     }
     const { courtNumber, tournamentId, matchId } = body;
-    const parsedCourt = Number(courtNumber);
-    if (!Number.isFinite(parsedCourt) || parsedCourt < 1) {
+    const parsedCourt = parsePositiveCourtInteger(courtNumber);
+    if (parsedCourt == null) {
         return NextResponse.json({ error: 'courtNumber debe ser un entero >= 1' }, { status: 400 });
     }
     if (!tournamentId?.trim() || !matchId?.trim()) {
@@ -24,7 +30,7 @@ export async function POST(req: Request) {
         .from('pizarra_cancha')
         .upsert(
             {
-                court_number: Math.floor(parsedCourt),
+                court_number: parsedCourt,
                 tournament_id: String(tournamentId).trim(),
                 match_id: String(matchId).trim(),
                 updated_at: new Date().toISOString(),
@@ -48,8 +54,8 @@ export async function DELETE(req: Request) {
     } catch {
         return NextResponse.json({ error: 'JSON inválido' }, { status: 400 });
     }
-    const num = Number(body?.courtNumber);
-    if (!Number.isFinite(num) || num < 1) {
+    const num = parsePositiveCourtInteger(body?.courtNumber);
+    if (num == null) {
         return NextResponse.json({ error: 'courtNumber debe ser un entero >= 1' }, { status: 400 });
     }
     const { error } = await supabase
