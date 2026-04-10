@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { courtAdVideoNeedsIframe, toCourtAdVideoIframeSrc } from '@/lib/courtDisplayAdVideo';
 
 type Props = {
@@ -24,7 +25,13 @@ export function CourtAdVideoOrIframe({
   onNativeVideoError,
   title = 'Publicidad vídeo',
 }: Props) {
-  if (courtAdVideoNeedsIframe(url)) {
+  const [forceIframe, setForceIframe] = useState(false);
+
+  useEffect(() => {
+    setForceIframe(false);
+  }, [url]);
+
+  if (courtAdVideoNeedsIframe(url) || forceIframe) {
     return (
       <iframe
         key={videoKey}
@@ -47,7 +54,10 @@ export function CourtAdVideoOrIframe({
       playsInline
       loop={loop}
       onEnded={onEnded}
-      onError={onNativeVideoError}
+      onError={() => {
+        setForceIframe(true);
+        onNativeVideoError?.();
+      }}
     />
   );
 }

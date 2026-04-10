@@ -76,7 +76,7 @@ export default function PizarraPage() {
                 </p>
                 <p className="text-center text-[10px] text-white/40">
                     Una por cancha (asigna desde el monitor):<br />
-                    <strong>www.smartpadel58.com/p/1</strong> · <strong>/p/2</strong> · <strong>/p/3</strong>
+                    <strong>www.smartpadel58.com/p/1</strong> · <strong>/p/2</strong> · <strong>/p/3</strong> · …
                 </p>
 
                 <div className="space-y-4">

@@ -5,10 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { Tv } from 'lucide-react';
 
 /**
- * Direcciones fijas por cancha:
- * www.smartpadel58.com/p/1 → pizarra cancha 1
- * www.smartpadel58.com/p/2 → pizarra cancha 2
- * www.smartpadel58.com/p/3 → pizarra cancha 3
+ * URL corta por cancha: /p/{n}
+ * El índice de cancha es dinámico (n >= 1) según cada sede/torneo.
  * Asignación desde el monitor del torneo ("Usar en cancha X").
  */
 export default function PizarraCanchaPage() {
@@ -16,7 +14,7 @@ export default function PizarraCanchaPage() {
     const router = useRouter();
     const court = String(params?.court ?? '');
     const num = parseInt(court, 10);
-    const valid = [1, 2, 3].includes(num);
+    const valid = Number.isFinite(num) && num >= 1;
 
     const [status, setStatus] = useState<'loading' | 'found' | 'empty' | 'error'>('loading');
 

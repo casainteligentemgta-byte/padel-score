@@ -13,8 +13,9 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'JSON inválido' }, { status: 400 });
     }
     const { courtNumber, tournamentId, matchId } = body;
-    if (![1, 2, 3].includes(Number(courtNumber))) {
-        return NextResponse.json({ error: 'courtNumber debe ser 1, 2 o 3' }, { status: 400 });
+    const parsedCourt = Number(courtNumber);
+    if (!Number.isFinite(parsedCourt) || parsedCourt < 1) {
+        return NextResponse.json({ error: 'courtNumber debe ser un entero >= 1' }, { status: 400 });
     }
     if (!tournamentId?.trim() || !matchId?.trim()) {
         return NextResponse.json({ error: 'tournamentId y matchId son obligatorios' }, { status: 400 });
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
         .from('pizarra_cancha')
         .upsert(
             {
-                court_number: Number(courtNumber),
+                court_number: Math.floor(parsedCourt),
                 tournament_id: String(tournamentId).trim(),
                 match_id: String(matchId).trim(),
                 updated_at: new Date().toISOString(),
@@ -48,8 +49,8 @@ export async function DELETE(req: Request) {
         return NextResponse.json({ error: 'JSON inválido' }, { status: 400 });
     }
     const num = Number(body?.courtNumber);
-    if (![1, 2, 3].includes(num)) {
-        return NextResponse.json({ error: 'courtNumber debe ser 1, 2 o 3' }, { status: 400 });
+    if (!Number.isFinite(num) || num < 1) {
+        return NextResponse.json({ error: 'courtNumber debe ser un entero >= 1' }, { status: 400 });
     }
     const { error } = await supabase
         .from('pizarra_cancha')

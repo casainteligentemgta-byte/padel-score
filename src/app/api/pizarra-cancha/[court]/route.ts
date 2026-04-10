@@ -11,8 +11,8 @@ export async function GET(
     }
     const { court } = await params;
     const num = parseInt(court, 10);
-    if (![1, 2, 3].includes(num)) {
-        return NextResponse.json({ error: 'Cancha debe ser 1, 2 o 3' }, { status: 400 });
+    if (!Number.isFinite(num) || num < 1) {
+        return NextResponse.json({ error: 'Cancha debe ser un entero >= 1' }, { status: 400 });
     }
     const { data, error } = await supabase
         .from('pizarra_cancha')

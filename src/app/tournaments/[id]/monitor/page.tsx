@@ -7,6 +7,7 @@ import { MatchStatus } from '@/types/tournament';
 import { Monitor, Wifi, WifiOff, Maximize2, Brush, EyeOff } from 'lucide-react';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { useAuth } from '@/lib/AuthContext';
 
 // ── Grid layouts según número de canchas activas ─────────────────────────────
 // Máximo 6 canchas (La Margarita)
@@ -31,7 +32,7 @@ function matchStatusRaw(m: any): unknown {
     return m?.status ?? (m && typeof m === 'object' ? (m as { data?: { status?: unknown } }).data?.status : undefined);
 }
 
-function buildActiveMatches(t: any, ms: any[]): ActiveMatch[] {
+function buildActiveMatches(t: any, ms: any[], markerLiveMatchIds?: Set<string>): ActiveMatch[] {
     const tSafe = t && typeof t === 'object' ? t : {};
     if (!Array.isArray(ms) || ms.length === 0) return [];
     const numCanchas = Math.max(1, Number(tSafe.totalCourts) || (tSafe.courtNames?.length ?? 6));
@@ -53,7 +54,11 @@ function buildActiveMatches(t: any, ms: any[]): ActiveMatch[] {
     };
 
     return ms
-        .filter((m: any) => dataService.isMatchEnVivoStatus(matchStatusRaw(m)))
+        .filter((m: any) => {
+            if (dataService.isMatchFinishedLike(m)) return false;
+            const mid = String(m?.id ?? '');
+            return dataService.isMatchEnVivoStatus(matchStatusRaw(m)) || (!!mid && markerLiveMatchIds?.has(mid));
+        })
         .map((m: any, idx: number) => ({
             id: m.id || `match_${idx}`,
             court: m.court ?? (m.courtIndex !== undefined ? m.courtIndex + 1 : idx + 1),
@@ -67,7 +72,10 @@ function buildActiveMatches(t: any, ms: any[]): ActiveMatch[] {
 
 export default function MonitorCanchas() {
     const id = useRouteSegment('id');
+    const { isAdmin } = useAuth();
     const [tournament, setTournament] = useState<any>(null);
+    const [matchesSnapshot, setMatchesSnapshot] = useState<any[]>([]);
+    const [markerLiveMatchIds, setMarkerLiveMatchIds] = useState<Set<string>>(new Set());
     const [activeMatches, setActiveMatches] = useState<ActiveMatch[]>([]);
     const [loading, setLoading] = useState(true);
     const [noCourtsAssigned, setNoCourtsAssigned] = useState(false);
@@ -82,9 +90,8 @@ export default function MonitorCanchas() {
         try {
             const t = await dataService.getTournament(id);
             const ms = await dataService.getMatches(id);
-            const tSafe = t && typeof t === 'object' ? t : {};
             if (t) setTournament(t);
-            setActiveMatches(buildActiveMatches(tSafe, ms || []));
+            setMatchesSnapshot(ms || []);
         } catch (e) {
             console.warn('[Monitor] refreshMonitorData:', e);
         }
@@ -173,9 +180,8 @@ export default function MonitorCanchas() {
             .subscribe();
 
         const updateData = (t: any, ms: any[]) => {
-            const tSafe = t && typeof t === 'object' ? t : {};
             if (t) setTournament(t);
-            setActiveMatches(buildActiveMatches(tSafe, ms));
+            setMatchesSnapshot(ms || []);
             setLoading(false);
         };
 
@@ -205,6 +211,69 @@ export default function MonitorCanchas() {
             if (typeof unsubM === 'function') unsubM();
         };
     }, [id]);
+
+    // En vivo real desde pizarra_cancha_state (mismo criterio que el hub).
+    useEffect(() => {
+        if (!id) return;
+        let cancelled = false;
+        const loadMarkerLiveIds = async () => {
+            try {
+                const totalCourts = Number((tournament as any)?.totalCourts ?? 0);
+                let maxFromMatches = 0;
+                matchesSnapshot.forEach((m: any) => {
+                    const c = Number(m?.court ?? (m?.courtIndex != null ? Number(m.courtIndex) + 1 : 0));
+                    if (Number.isFinite(c) && c > 0) maxFromMatches = Math.max(maxFromMatches, c);
+                });
+                const maxPoll = Math.min(16, Math.max(totalCourts, maxFromMatches, 4));
+                const courtNums: number[] = [];
+                for (let c = 1; c <= maxPoll; c++) courtNums.push(c);
+
+                const normTid = (s: string) => String(s || '').replace(/-/g, '').toLowerCase();
+                const sameTournament = (a: unknown, tid: string) => normTid(String(a ?? '')) === normTid(tid);
+
+                const liveIds = new Set<string>();
+                const checks = courtNums.map(async (courtNum) => {
+                    const state = await dataService.getPizarraCanchaState(`cancha_${courtNum}`);
+                    const data = state?.data || {};
+                    const est = String(data?.estado || '');
+                    if (est !== 'en_vivo' && est !== 'ready') return;
+                    if (!sameTournament(data?.torneo_id, String(id))) return;
+                    const pid = String(data?.partido_id || '').trim();
+                    if (!pid || pid.startsWith('live_')) return;
+                    liveIds.add(pid);
+                });
+                await Promise.all(checks);
+                if (!cancelled) {
+                    setMarkerLiveMatchIds((prev) => {
+                        if (prev.size === liveIds.size) {
+                            let same = true;
+                            for (const v of liveIds) {
+                                if (!prev.has(v)) {
+                                    same = false;
+                                    break;
+                                }
+                            }
+                            if (same) return prev;
+                        }
+                        return liveIds;
+                    });
+                }
+            } catch {
+                if (!cancelled) setMarkerLiveMatchIds(new Set());
+            }
+        };
+        void loadMarkerLiveIds();
+        const t = window.setInterval(loadMarkerLiveIds, 1500);
+        return () => {
+            cancelled = true;
+            window.clearInterval(t);
+        };
+    }, [id, matchesSnapshot, (tournament as any)?.totalCourts]);
+
+    useEffect(() => {
+        const tSafe = tournament && typeof tournament === 'object' ? tournament : {};
+        setActiveMatches(buildActiveMatches(tSafe, matchesSnapshot, markerLiveMatchIds));
+    }, [tournament, matchesSnapshot, markerLiveMatchIds]);
 
     useEffect(() => {
         if (!id) return;
@@ -237,6 +306,17 @@ export default function MonitorCanchas() {
     }, [highlightedCourts]);
 
     const count = activeMatches.length;
+    const parsePositiveInt = (v: unknown): number => {
+        const n = Number(v);
+        return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    };
+    const maxAssignableCourts = Math.max(
+        1,
+        parsePositiveInt(tournament?.totalCourts) ||
+            parsePositiveInt(tournament?.courtNames?.length) ||
+            parsePositiveInt(tournament?.numCourts) ||
+            3,
+    );
     const gridCfg = GRID_CONFIG[Math.max(1, Math.min(count, 6))];
 
     // ── Loading ────────────────────────────────────────────────────────────
@@ -380,6 +460,8 @@ export default function MonitorCanchas() {
                         <CourtCell
                             match={activeMatches[focusedIdx]}
                             tournamentId={id}
+                            isAdmin={isAdmin}
+                            maxAssignableCourts={maxAssignableCourts}
                             isFocused={true}
                             minimalScreensMode={minimalScreensMode}
                             onClick={() => setFocusedIdx(null)}
@@ -400,6 +482,8 @@ export default function MonitorCanchas() {
                                 key={match.id}
                                 match={match}
                                 tournamentId={id}
+                                isAdmin={isAdmin}
+                                maxAssignableCourts={maxAssignableCourts}
                                 isFocused={false}
                                 minimalScreensMode={minimalScreensMode}
                                 onClick={() => setFocusedIdx(idx)}
@@ -428,6 +512,8 @@ export default function MonitorCanchas() {
 function CourtCell({
     match,
     tournamentId,
+    isAdmin,
+    maxAssignableCourts,
     isFocused,
     minimalScreensMode,
     onClick,
@@ -436,6 +522,8 @@ function CourtCell({
 }: {
     match: ActiveMatch;
     tournamentId: string;
+    isAdmin: boolean;
+    maxAssignableCourts: number;
     isFocused: boolean;
     minimalScreensMode: boolean;
     onClick: () => void;
@@ -445,10 +533,23 @@ function CourtCell({
     /** URL directa a la pizarra unificada (evita redirect `/display/...` → iframe sandbox a veces no carga bien). */
     const courtNum = Number(match.court);
     const courtQ =
-        Number.isFinite(courtNum) && courtNum >= 1 ? `&courtId=${encodeURIComponent(String(Math.floor(courtNum)))}` : '';
+        Number.isFinite(courtNum) && courtNum >= 1
+            ? `&courtId=${encodeURIComponent(String(Math.floor(courtNum)))}`
+            : '';
     const minQ = minimalScreensMode ? '&minimal=1' : '';
-    const displayUrl = `/dev/pizarra-concept?tournamentId=${encodeURIComponent(tournamentId)}&matchId=${encodeURIComponent(match.id)}${courtQ}${minQ}`;
+    /**
+     * Resolver por cancha evita desajustes cuando `matchId` se queda desincronizado
+     * tras reasignaciones o cambios de estado en tiempo real.
+     */
+    const displayUrl = `/dev/pizarra-concept?tournamentId=${encodeURIComponent(
+        tournamentId,
+    )}${courtQ}${minQ}`;
     const [assigning, setAssigning] = useState<number | null>(null);
+    const assignableCourts = Array.from(
+        { length: Math.max(1, Math.floor(maxAssignableCourts)) },
+        (_, i) => i + 1,
+    );
+
     const [resetting, setResetting] = useState(false);
 
     const courtStr = String(match.court ?? '').trim();
@@ -489,6 +590,16 @@ function CourtCell({
         }
     };
 
+    const handleNameAreaClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!isAdmin) return;
+        if (e.detail < 3) return;
+        e.stopPropagation();
+        const controlUrl = `/tournaments/${encodeURIComponent(tournamentId)}/score/${encodeURIComponent(
+            String(match.id),
+        )}`;
+        window.open(controlUrl, '_blank', 'noopener,noreferrer');
+    };
+
     return (
         <div
             className={`relative w-full h-full bg-black overflow-hidden group cursor-pointer ${isHighlighted ? 'ring-2 ring-emerald-400/80 ring-inset' : ''}`}
@@ -504,7 +615,7 @@ function CourtCell({
                 sandbox="allow-scripts allow-same-origin allow-forms"
             />
 
-            {/* Overlay top: badge + direcciones cortas (cancha 1/2/3) + ampliar */}
+            {/* Overlay top: badge + accesos rápidos por cancha + ampliar */}
             <div className="absolute top-0 left-0 right-0 flex items-start justify-between gap-2 p-3 pointer-events-none">
                 <div className="pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/60 border border-white/10 backdrop-blur-md">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_6px_red]" />
@@ -523,7 +634,7 @@ function CourtCell({
                     >
                         <Brush className={`w-3.5 h-3.5 ${resetting ? 'animate-pulse' : ''}`} />
                     </button>
-                    {!isFocused && [1, 2, 3].map((n) => (
+                    {!isFocused && assignableCourts.map((n) => (
                         <button
                             key={n}
                             type="button"
@@ -547,7 +658,11 @@ function CourtCell({
 
             {/* Overlay bottom: nombres de equipos (siempre visible, pequeño) */}
             {!isFocused && (
-                <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 py-2 bg-gradient-to-t from-black/70 to-transparent pointer-events-none">
+                <div
+                    className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 py-2 bg-gradient-to-t from-black/70 to-transparent pointer-events-auto"
+                    onClick={handleNameAreaClick}
+                    title={isAdmin ? 'Triple click para abrir control del partido' : undefined}
+                >
                     <span className="text-[8px] font-black italic uppercase tracking-tight text-white/70 truncate max-w-[45%]">
                         {match.team1Name}
                     </span>

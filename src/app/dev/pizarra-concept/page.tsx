@@ -16,7 +16,8 @@ import {
   partitionPlaylistRows,
 } from '@/lib/courtPlaylists';
 import { resolveMatchTeamLines } from '@/lib/resolveMatchTeamLines';
-import { formatPizarraGender } from '@/lib/pizarraHeaderLabels';
+import { formatPizarraCategoryLevel, formatPizarraGender } from '@/lib/pizarraHeaderLabels';
+import { resolveMatchFromTournamentList } from '@/lib/resolveDisplayMatchId';
 
 /** Tipografía de nombres: mismo aspecto en TV (vh alto) y laptop (vw útil), con trazo compacto. */
 const pizarraPlayerNames = Barlow_Condensed({
@@ -24,13 +25,6 @@ const pizarraPlayerNames = Barlow_Condensed({
   subsets: ['latin'],
   display: 'swap',
 });
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function isUuid(s: string): boolean {
-  return UUID_RE.test(String(s).trim());
-}
 
 type ServerPlayer = 'A1' | 'A2' | 'B1' | 'B2';
 
@@ -182,9 +176,12 @@ type BoardView = {
   pointsA: string;
   pointsB: string;
   serverPlayer: ServerPlayer;
-  tournamentLabel: string;
+  tournamentNameLine: string;
+  courtHeaderLabel: string;
   venueLabel: string;
   categoryGenderLine: string;
+  categoryLine: string;
+  genderLine: string;
   tickerPrimary: string;
   tickerSecondary: string;
 };
@@ -199,9 +196,12 @@ const DEFAULT_BOARD: BoardView = {
   pointsA: '40',
   pointsB: '30',
   serverPlayer: 'A2',
-  tournamentLabel: 'COPA BUCHANNAS',
+  tournamentNameLine: 'COPA BUCHANNAS',
+  courtHeaderLabel: 'COCA COLA',
   venueLabel: 'EL BODEGUERO',
   categoryGenderLine: 'CASA INTELIGENTE',
+  categoryLine: '6ª',
+  genderLine: 'MASCULINO',
   tickerPrimary: 'BIENVENIDOS A SMART PADEL TV',
   tickerSecondary: 'SMART PADEL TV',
 };
@@ -264,7 +264,21 @@ function computeBoardView(matchRaw: any, tournament: any | null): BoardView {
   const tName = String(
     match?.tournamentName ?? tournament?.name ?? tournament?.title ?? 'TORNEO',
   ).trim();
-  const tournamentLabel = tName.toUpperCase() || 'TORNEO';
+  const courtNameRaw = String(match?.courtName ?? '').trim();
+  const courtNum =
+    Number.isFinite(Number(match?.court))
+      ? Number(match.court)
+      : Number.isFinite(Number(match?.courtIndex))
+        ? Number(match.courtIndex) + 1
+        : null;
+  const courtHeaderLabel = (
+    courtNameRaw
+      ? courtNameRaw.toUpperCase()
+      : courtNum != null && courtNum >= 1
+        ? `PISTA ${courtNum}`
+        : ''
+  ).trim();
+  const tournamentNameLine = (tName.toUpperCase() || 'TORNEO').trim();
 
   const venue = String(
     match?.venueName ??
@@ -279,15 +293,17 @@ function computeBoardView(matchRaw: any, tournament: any | null): BoardView {
   const catRaw = String(match?.category ?? tournament?.category ?? '').trim();
   const [catPart, genPart] = catRaw.split('/').map((x) => x.trim());
   const cat = catPart || 'CATEGORIA';
+  const catLabel = formatPizarraCategoryLevel(cat) || cat;
   const genRaw =
     genPart ||
     String(match?.phase ?? match?.tournamentPhase ?? tournament?.gender ?? '').trim();
   const gen = formatPizarraGender(genRaw) || (genRaw ? genRaw : 'GÉNERO');
   const genUpper = gen.toLocaleUpperCase('es');
-  const categoryGenderLine = 'CASA INTELIGENTE';
+  const categoryGenderLine = `${catLabel.toUpperCase()} · ${genUpper}`;
+  const categoryLine = catLabel.toUpperCase();
 
   const tickerPrimary = `PARTIDO EN CURSO · ${tName.toUpperCase()} · ${venue.toUpperCase() || 'SEDE'}`;
-  const tickerSecondary = `SMART PADEL TV · ${line1.toUpperCase()} VS ${line2.toUpperCase()} · ${cat.toUpperCase()} · ${genUpper}`;
+  const tickerSecondary = `SMART PADEL TV · ${line1.toUpperCase()} VS ${line2.toUpperCase()}`;
 
   return {
     teamA,
@@ -299,9 +315,12 @@ function computeBoardView(matchRaw: any, tournament: any | null): BoardView {
     pointsA: pt1,
     pointsB: pt2,
     serverPlayer: sp,
-    tournamentLabel,
+    tournamentNameLine,
+    courtHeaderLabel,
     venueLabel,
     categoryGenderLine,
+    categoryLine,
+    genderLine: genUpper,
     tickerPrimary,
     tickerSecondary,
   };
@@ -327,12 +346,10 @@ function pickMatchFromList(
 
   const list = complex ? matches.filter(filterComplex) : matches;
 
-  // IDs de partido pueden ser UUID o ids internos (p. ej. m-xxxxx-1-yyyyy); siempre priorizar matchId exacto.
+  // IDs: igual que display legacy (UUID, match_N, m_ts, court_N).
   if (opts.matchId?.trim()) {
     const mid = opts.matchId.trim();
-    const hit = list.find((m) => String(m.id) === mid);
-    if (hit) return hit;
-    return null;
+    return resolveMatchFromTournamentList(list, mid);
   }
 
   if (opts.courtNum != null && Number.isFinite(opts.courtNum)) {
@@ -348,6 +365,50 @@ function pickMatchFromList(
   }
 
   return list[0] ?? null;
+}
+
+function resolveWeatherZoneQuery(venueLabel: string): string {
+  const v = venueLabel.toLowerCase();
+  // Regla operativa local:
+  // - El Bodeguero pertenece a Arismendi.
+  // - Resto de sedes en la zona: Maneiro.
+  if (v.includes('bodeguero')) {
+    return 'Municipio Arismendi, Nueva Esparta, Venezuela';
+  }
+  return 'Municipio Maneiro, Nueva Esparta, Venezuela';
+}
+
+/** Temperatura actual por municipio de la sede (geocodificación + Open-Meteo). */
+async function fetchTemperatureForVenueName(venueLabel: string): Promise<string | null> {
+  const base = venueLabel.trim();
+  if (!base) return null;
+  const zoneQuery = resolveWeatherZoneQuery(base);
+  const tryNames = [zoneQuery, `${zoneQuery}, VE`, base, `${base}, Venezuela`];
+  for (const name of tryNames) {
+    try {
+      const geoRes = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=es`,
+        { cache: 'no-store' },
+      );
+      if (!geoRes.ok) continue;
+      const geo = await geoRes.json();
+      const r0 = geo?.results?.[0];
+      const lat = Number(r0?.latitude);
+      const lon = Number(r0?.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      const wRes = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m`,
+        { cache: 'no-store' },
+      );
+      if (!wRes.ok) continue;
+      const w = await wRes.json();
+      const v = Number(w?.current?.temperature_2m);
+      if (Number.isFinite(v)) return `${Math.round(v)}°C`;
+    } catch {
+      /* siguiente variante */
+    }
+  }
+  return null;
 }
 
 function PizarraConceptPage() {
@@ -376,6 +437,11 @@ function PizarraConceptPage() {
     [tournamentIdsParam],
   );
 
+  const noUrlParams = useMemo(
+    () => !tournamentId.trim() && !matchIdParam.trim() && multiTournamentIds.length === 0,
+    [tournamentId, matchIdParam, multiTournamentIds.length],
+  );
+
   const [venueLogoUrl] = useState('/logos/logo-bodeguero-oficial.png');
   const [matchSnapshot, setMatchSnapshot] = useState<any>(null);
   const [tournamentSnapshot, setTournamentSnapshot] = useState<any>(null);
@@ -392,6 +458,8 @@ function PizarraConceptPage() {
   const [currentCarouselIdx, setCurrentCarouselIdx] = useState(0);
   /** Mensajes de tira informativa (`cancha_tira` + `tira_informativa`), misma lógica que /display/court. */
   const [tiraMessages, setTiraMessages] = useState<{ id: string; mensaje: string }[]>([]);
+  const [now, setNow] = useState<Date>(new Date());
+  const [ambientTempC, setAmbientTempC] = useState<string>('--°C');
 
   const tournamentCacheRef = useRef<{ tid: string; data: any } | null>(null);
 
@@ -465,6 +533,28 @@ function PizarraConceptPage() {
     return computeBoardView(merged, tournamentSnapshot);
   }, [matchSnapshot, tournamentSnapshot, canchaMarcador]);
 
+  const boardHeaderMetaLine = useMemo(() => {
+    const timeStr = now.toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    return `${board.categoryLine} · ${board.genderLine} · ${timeStr} · TEMP ${ambientTempC}`;
+  }, [board.categoryLine, board.genderLine, now, ambientTempC]);
+
+  /** Texto para geoclima: sede del torneo/partido (no ubicación del dispositivo). */
+  const venueForWeather = useMemo(() => {
+    if (complexParam.trim()) return complexParam.trim();
+    if (publicidadVenueName.trim()) return publicidadVenueName.trim();
+    const m = matchSnapshot ? normalizeMatchForBoard(matchSnapshot) : null;
+    const fromMatch = String(m?.venueName ?? m?.complexName ?? '').trim();
+    if (fromMatch) return fromMatch;
+    const t = tournamentSnapshot;
+    return String(
+      t?.complexName ?? t?.venueName ?? t?.sede ?? t?.location ?? (t as any)?.complex?.name ?? '',
+    ).trim();
+  }, [complexParam, publicidadVenueName, matchSnapshot, tournamentSnapshot]);
+
   /** Texto del marquee inferior: prioriza tira de admin; si no hay, tickers derivados del partido. */
   const footerTickerSegments = useMemo(() => {
     const tiraParts = tiraMessages.map((m) => String(m.mensaje ?? '').trim()).filter(Boolean);
@@ -478,79 +568,134 @@ function PizarraConceptPage() {
 
   const refreshFromTournament = useCallback(
     async (tid: string, matchesFromSub: any[] | null) => {
-      let tournament =
-        tournamentCacheRef.current?.tid === tid ? tournamentCacheRef.current.data : null;
-      if (!tournament) {
-        tournament = await dataService.getTournament(tid);
-        tournamentCacheRef.current = { tid, data: tournament };
-      }
-
-      const mid = matchIdParam.trim();
-      if (mid) {
-        let m: any | null = null;
-        try {
-          const r = await fetch(
-            `/api/pizarra/match?tournamentId=${encodeURIComponent(tid)}&matchId=${encodeURIComponent(mid)}`,
-            { cache: 'no-store' },
+      try {
+        if (!getSupabaseClient()) {
+          setLoadError(
+            'Falta Supabase en el cliente: define NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY (.env.local) y reinicia el servidor.',
           );
-          if (r.ok) {
-            const j = await r.json();
-            m = j?.match ?? null;
-          }
-        } catch {
-          /* fallback cliente */
-        }
-        if (!m) m = await dataService.getMatchById(tid, mid);
-        if (!m) {
-          setLoadError('No se encontró el partido o no hay acceso de lectura (id / RLS / API).');
           return;
         }
-        if (!matchBelongsToTournamentRow(m, tid)) {
-          setLoadError('El partido no corresponde al torneo de la URL.');
+
+        let tournament =
+          tournamentCacheRef.current?.tid === tid ? tournamentCacheRef.current.data : null;
+        if (!tournament) {
+          tournament = await dataService.getTournament(tid);
+          tournamentCacheRef.current = { tid, data: tournament };
+        }
+
+        const mid = matchIdParam.trim();
+        if (mid) {
+          let m: any | null = null;
+          try {
+            const r = await fetch(
+              `/api/pizarra/match?tournamentId=${encodeURIComponent(tid)}&matchId=${encodeURIComponent(mid)}`,
+              { cache: 'no-store' },
+            );
+            if (r.ok) {
+              const j = await r.json();
+              m = j?.match ?? null;
+            }
+          } catch {
+            /* fallback cliente */
+          }
+          if (!m) m = await dataService.getMatchById(tid, mid);
+          if (!m) {
+            const list = await dataService.getMatches(tid);
+            m = resolveMatchFromTournamentList(list, mid);
+          }
+          if (!m) {
+            setLoadError('No se encontró el partido o no hay acceso de lectura (id / RLS / API).');
+            return;
+          }
+          if (!matchBelongsToTournamentRow(m, tid)) {
+            setLoadError('El partido no corresponde al torneo de la URL.');
+            return;
+          }
+          setLoadError(null);
+          setTournamentSnapshot(tournament);
+          setMatchSnapshot(m);
+          return;
+        }
+
+        const list = matchesFromSub ?? (await dataService.getMatches(tid));
+        // Si la vista viene por cancha, priorizar el partido activo que reporta pizarra_cancha_state.
+        if (courtNum != null && Number.isFinite(courtNum)) {
+          try {
+            const canchaState = await dataService.getPizarraCanchaState(`cancha_${Math.floor(courtNum)}`);
+            const stData = canchaState?.data || {};
+            const stMid = String(stData?.partido_id || stData?.active_match_id || '').trim();
+            const stTid = String(stData?.torneo_id || '').trim();
+            if (stMid && !stMid.startsWith('live_') && (!stTid || sameTournamentId(stTid, tid))) {
+              const byState = resolveMatchFromTournamentList(list, stMid);
+              if (byState && matchBelongsToTournamentRow(byState, tid)) {
+                setLoadError(null);
+                setTournamentSnapshot(tournament);
+                setMatchSnapshot(byState);
+                return;
+              }
+            }
+          } catch {
+            // fallback normal por lista/status/cancha
+          }
+        }
+        const picked = pickMatchFromList(list, {
+          matchId: matchIdParam,
+          courtNum,
+          viewBracket,
+          complexFilter: complexParam || null,
+        });
+        if (!picked) {
+          setLoadError('No hay partido para mostrar (revisa torneo, pista o ID).');
+          return;
+        }
+        if (!matchBelongsToTournamentRow(picked, tid)) {
+          setLoadError('El partido listado no corresponde al torneo de la URL.');
           return;
         }
         setLoadError(null);
         setTournamentSnapshot(tournament);
-        setMatchSnapshot(m);
-        return;
+        setMatchSnapshot(picked);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn('[pizarra-concept] refreshFromTournament', e);
+        if (msg.includes('Supabase no configurado') || msg.includes('Falta')) {
+          setLoadError(
+            'Supabase no está configurado. Revisa NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en .env.local.',
+          );
+        } else {
+          setLoadError(`Error al cargar: ${msg.slice(0, 120)}`);
+        }
       }
-
-      const list = matchesFromSub ?? (await dataService.getMatches(tid));
-      const picked = pickMatchFromList(list, {
-        matchId: matchIdParam,
-        courtNum,
-        viewBracket,
-        complexFilter: complexParam || null,
-      });
-      if (!picked) {
-        setLoadError(
-          matchIdParam.trim()
-            ? 'No se encontró ese partido en este torneo (revisa el enlace o el ID).'
-            : 'No hay partido para mostrar (revisa torneo, pista o ID).',
-        );
-        return;
-      }
-      if (!matchBelongsToTournamentRow(picked, tid)) {
-        setLoadError('El partido listado no corresponde al torneo de la URL.');
-        return;
-      }
-      setLoadError(null);
-      setTournamentSnapshot(tournament);
-      setMatchSnapshot(picked);
     },
     [matchIdParam, courtNum, viewBracket, complexParam],
   );
 
   useEffect(() => {
-    tournamentCacheRef.current = null;
-  }, [tournamentId]);
+    const t = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(t);
+  }, []);
 
   useEffect(() => {
-    setMatchSnapshot(null);
-    setTournamentSnapshot(null);
-    setLoadError(null);
-    setCanchaMarcador(null);
-  }, [tournamentId, matchIdParam, tournamentIdsParam]);
+    let cancelled = false;
+    const run = async () => {
+      if (!venueForWeather) {
+        if (!cancelled) setAmbientTempC('--°C');
+        return;
+      }
+      const temp = await fetchTemperatureForVenueName(venueForWeather);
+      if (!cancelled) setAmbientTempC(temp ?? '--°C');
+    };
+    void run();
+    const id = window.setInterval(run, 15 * 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [venueForWeather]);
+
+  useEffect(() => {
+    tournamentCacheRef.current = null;
+  }, [tournamentId]);
 
   // Marker: el juego en vivo vive en `pizarra_cancha_state`; fusionamos `marcador` si coincide torneo+partido+pista.
   useEffect(() => {
@@ -618,7 +763,7 @@ function PizarraConceptPage() {
     return () => window.clearTimeout(id);
   }, [carouselPlaylist, currentCarouselIdx, carouselDurations]);
 
-  // Un torneo: suscripción + polling. Con matchId, cada tick relee solo esa fila (getMatchById).
+  // Un torneo: suscripción + polling (3s como la pizarra legacy display).
   useEffect(() => {
     if (!tournamentId) return;
     let cancelled = false;
@@ -627,7 +772,7 @@ function PizarraConceptPage() {
       if (cancelled) return;
       void refreshFromTournament(tournamentId, null);
     });
-    const pollMs = matchIdParam.trim() ? 1200 : 2500;
+    const pollMs = 3000;
     const poll = window.setInterval(() => {
       if (cancelled) return;
       void refreshFromTournament(tournamentId, null);
@@ -671,28 +816,51 @@ function PizarraConceptPage() {
     };
   }, [tournamentId, multiTournamentIds]);
 
-  // Sin torneo: intento por matchId + Supabase (enlace directo)
+  // Sin tournamentId: cargar por id de partido (UUID o slug m-…).
   useEffect(() => {
-    if (tournamentId || multiTournamentIds.length > 0 || !matchIdParam || !isUuid(matchIdParam)) return;
-    if (!supabase) return;
+    const mid = matchIdParam.trim();
+    if (tournamentId || multiTournamentIds.length > 0 || !mid) return;
+    if (!supabase) {
+      setLoadError(
+        'Falta Supabase en el cliente: NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY.',
+      );
+      return;
+    }
     let cancelled = false;
 
     const load = async () => {
-      const { data: row } = await supabase
-        .from('tournament_matches')
-        .select('tournament_id, data')
-        .eq('id', matchIdParam)
-        .maybeSingle();
-      if (cancelled || !row) {
-        if (!cancelled) setLoadError('Partido no encontrado.');
-        return;
+      try {
+        const { data: row, error } = await supabase
+          .from('tournament_matches')
+          .select('tournament_id, data')
+          .eq('id', mid)
+          .maybeSingle();
+        if (cancelled) return;
+        if (error || !row) {
+          setLoadError(error ? `Partido: ${error.message}` : 'Partido no encontrado.');
+          return;
+        }
+        const tid = String((row as any).tournament_id || '');
+        const merged = {
+          id: mid,
+          ...((row as any).data || {}),
+          tournament_id: tid,
+        };
+        const tournament = await dataService.getTournament(tid);
+        setLoadError(null);
+        setTournamentSnapshot(tournament);
+        setMatchSnapshot(merged);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn('[pizarra-concept] load by matchId', e);
+        if (!cancelled) {
+          if (msg.includes('Supabase no configurado')) {
+            setLoadError('Supabase no configurado (.env.local).');
+          } else {
+            setLoadError(`No se pudo cargar el partido: ${msg.slice(0, 100)}`);
+          }
+        }
       }
-      const tid = String((row as any).tournament_id || '');
-      const merged = { id: matchIdParam, ...((row as any).data || {}) };
-      const tournament = await dataService.getTournament(tid);
-      setLoadError(null);
-      setTournamentSnapshot(tournament);
-      setMatchSnapshot(merged);
     };
 
     void load();
@@ -707,6 +875,13 @@ function PizarraConceptPage() {
         {loadError && (
           <p className="mb-2 text-center text-xs font-bold uppercase tracking-widest text-amber-400/90">
             {loadError}
+          </p>
+        )}
+        {noUrlParams && (
+          <p className="mb-2 px-3 text-center text-[11px] leading-relaxed text-white/45">
+            Añade en la URL{' '}
+            <span className="font-mono text-[#ccff00]/80">{'?tournamentId=…&matchId=…'}</span>{' '}
+            (o solo <span className="font-mono text-[#ccff00]/80">?matchId=…</span> con el id del partido).
           </p>
         )}
         {matchSnapshot &&
@@ -739,10 +914,10 @@ function PizarraConceptPage() {
               {board.venueLabel}
             </h1>
             <p className="-mt-1 text-[clamp(0.85rem,1.9vh,1.25rem)] font-semibold tracking-[0.05em] text-white/85">
-              {board.tournamentLabel}
+              COPA PRUEBA - CANCHA: COCA COLA
             </p>
             <p className="-mt-1 text-[clamp(0.6rem,1.25vh,0.78rem)] font-semibold uppercase tracking-[0.12em] text-[#90b6da]">
-              {board.categoryGenderLine}
+              {boardHeaderMetaLine}
             </p>
           </div>
         </header>
