@@ -252,13 +252,16 @@ export default function HubPage() {
                             </div>
                         </motion.div>
                         {/* 3. Código de 6 dígitos */}
-                        <div className="mt-1 sm:mt-3 flex flex-col items-center gap-1 w-full">
-                            <div className="flex items-center justify-center gap-2 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full pl-4 pr-2 py-1.5 min-w-[160px]">
+                        <div className="mt-1 sm:mt-3 flex w-full min-w-0 max-w-full flex-col items-center gap-1 px-1">
+                            <div className="flex w-full max-w-[min(100%,20rem)] items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 py-2 pl-3 pr-2 backdrop-blur-xl sm:min-w-[160px] sm:rounded-full sm:py-1.5">
                                 {profileLoading ? (
                                     <span className="text-sm text-white/60">Cargando código…</span>
                                 ) : profile?.uniqueCode ? (
                                     <>
-                                        <span className="text-lg font-black text-white tracking-[0.25em] font-mono tabular-nums" aria-label={`Código ${profile.uniqueCode}`}>
+                                        <span
+                                            className="min-w-0 max-w-full text-center text-[clamp(0.95rem,5vw,1.125rem)] font-black tracking-[0.12em] text-white font-mono tabular-nums sm:text-lg sm:tracking-[0.25em]"
+                                            aria-label={`Código ${profile.uniqueCode}`}
+                                        >
                                             {profile.uniqueCode}
                                         </span>
                                         <button

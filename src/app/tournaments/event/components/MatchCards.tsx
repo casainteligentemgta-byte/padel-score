@@ -197,49 +197,40 @@ export function NextMatchCard({
                         : undefined
                 }
             >
-                {/* Franja superior */}
-                <div className="px-2 pt-2 pb-1.5 flex items-center justify-between gap-1 border-b-2 border-[#ccff00]/50 bg-[#ccff00]/10 flex-wrap">
-                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                        {/* 1) Hora estimada / score si está en vivo */}
-                        <span className="text-[8px] font-bold text-[#ccff00]/90 italic flex-shrink-0">
-                            {isLive ? `${match.score1 ?? 0} - ${match.score2 ?? 0}` : formatHHMM(match.scheduledTime)}
-                        </span>
-
-                        {/* 2) Número de partido */}
-                        {matchNumber != null && (
-                            <>
-                                <span className="text-[#ccff00]/50 text-[8px]">·</span>
-                                <span className="text-[8px] font-black uppercase tracking-widest text-[#ccff00]/80 flex-shrink-0">
-                                    Partido {matchNumber}
-                                </span>
-                            </>
-                        )}
-
-                        {/* 3) Juego */}
-                        {!isLive && gameNumber != null && (
-                            <>
-                                <span className="text-[#ccff00]/50 text-[8px]">·</span>
-                                <span className="text-[8px] font-black text-[#ccff00]/90 italic">{gameNumber}º Juego</span>
-                            </>
-                        )}
-
-                        {/* 4) Nivel/Categoría */}
-                        {match._category && (
-                            <>
-                                <span className="text-[#ccff00]/50 text-[8px]">·</span>
-                                <span className="text-[8px] font-bold text-[#ccff00]/90 uppercase tracking-tight">
+                {/* Franja superior: en móvil dos bloques legibles; en sm+ una sola línea flexible */}
+                <div className="border-b-2 border-[#ccff00]/50 bg-[#ccff00]/10 px-2 pb-2 pt-2">
+                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1">
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="flex-shrink-0 text-[8px] font-bold italic text-[#ccff00]/90">
+                                {isLive ? `${match.score1 ?? 0} - ${match.score2 ?? 0}` : formatHHMM(match.scheduledTime)}
+                            </span>
+                            {matchNumber != null && (
+                                <>
+                                    <span className="text-[8px] text-[#ccff00]/50">·</span>
+                                    <span className="text-[8px] font-black uppercase tracking-widest text-[#ccff00]/80">
+                                        Partido {matchNumber}
+                                    </span>
+                                </>
+                            )}
+                            {!isLive && gameNumber != null && (
+                                <>
+                                    <span className="text-[8px] text-[#ccff00]/50">·</span>
+                                    <span className="text-[8px] font-black italic text-[#ccff00]/90">{gameNumber}º Juego</span>
+                                </>
+                            )}
+                        </div>
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                            {match._category && (
+                                <span className="text-[8px] font-bold uppercase tracking-tight text-[#ccff00]/90">
                                     {formatCategory(match._category)}
                                 </span>
-                            </>
-                        )}
-
-                        {/* 5) Género */}
-                        <span className="text-[#ccff00]/50 text-[8px]">·</span>
-                        <span
-                            className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${CAT_COLORS[match._gender] ?? 'bg-white/10 border-white/20 text-[#ccff00]/90'}`}
-                        >
-                            {formatGender(match._gender) || '—'}
-                        </span>
+                            )}
+                            <span
+                                className={`rounded border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${CAT_COLORS[match._gender] ?? 'border-white/20 bg-white/10 text-[#ccff00]/90'}`}
+                            >
+                                {formatGender(match._gender) || '—'}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
@@ -281,54 +272,64 @@ export function NextMatchCard({
                 {/* Action Dock — solo visible para admin/marker */}
                 {showControlDock && (
                     <div
-                        className={`grid gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40 overflow-hidden ${
+                        className={`grid gap-px overflow-hidden border-t-2 border-[#ccff00]/40 bg-white/[0.04] ${
                             canOpenMarkerOnDblClick
-                                ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
-                                : 'grid-cols-2 sm:grid-cols-4'
+                                ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
+                                : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
                         }`}
                     >
                         <Link
                             href={controlHref}
-                            className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                            className="flex min-h-[48px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-2.5 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1 sm:px-2 sm:py-2"
                         >
-                            <Gamepad2 className="w-3.5 h-3.5" />
-                            <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Control</span>
+                            <Gamepad2 className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
+                            <span className="text-left text-[10px] font-black uppercase tracking-wide sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
+                                Control
+                            </span>
                         </Link>
                         {canOpenMarkerOnDblClick && (
                             <Link
                                 href={markerHref}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                                 title="Sala de marcador (misma ventana que doble clic en la tarjeta)"
+                                className="flex min-h-[48px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-2.5 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1 sm:px-2 sm:py-2"
                             >
-                                <Crosshair className="w-3.5 h-3.5" />
-                                <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Marcador</span>
+                                <Crosshair className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
+                                <span className="text-left text-[10px] font-black uppercase tracking-wide sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
+                                    Marcador
+                                </span>
                             </Link>
                         )}
                         <Link
                             href={pizarraHref}
                             target="_blank"
-                            className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                            className="flex min-h-[48px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-2.5 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1 sm:px-2 sm:py-2"
                         >
-                            <Monitor className="w-3.5 h-3.5" />
-                            <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Pizarra</span>
+                            <Monitor className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
+                            <span className="text-left text-[10px] font-black uppercase tracking-wide sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
+                                Pizarra
+                            </span>
                         </Link>
                         <Link
                             href={camasHref}
                             target="_blank"
-                            className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                            className="flex min-h-[48px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-2.5 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1 sm:px-2 sm:py-2"
                         >
-                            <Camera className="w-3.5 h-3.5" />
-                            <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Cámaras</span>
+                            <Camera className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
+                            <span className="text-left text-[10px] font-black uppercase tracking-wide sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
+                                Cámaras
+                            </span>
                         </Link>
                         <Link
                             href={adsHref}
                             target="_blank"
-                            className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                            className="flex min-h-[48px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-2.5 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1 sm:px-2 sm:py-2"
                         >
-                            <Tv className="w-3.5 h-3.5" />
-                            <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Ads</span>
+                            <Tv className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
+                            <span className="text-left text-[10px] font-black uppercase tracking-wide sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
+                                Ads
+                            </span>
                         </Link>
                     </div>
                 )}
@@ -353,37 +354,39 @@ export function NextMatchCard({
                     : undefined
             }
         >
-            <div className="px-4 pt-3 pb-2.5 flex items-center justify-between gap-2 border-b-2 border-[#ccff00]/50 bg-[#ccff00]/10 flex-wrap">
-                <div className="flex items-center gap-2 flex-wrap min-w-0">
-                    {matchNumber != null && (
-                        <>
-                            <span className="text-[9px] font-black uppercase tracking-widest text-[#ccff00]/90">Partido {matchNumber}</span>
-                            <span className="text-[#ccff00]/50">·</span>
-                        </>
-                    )}
-                    <span className="text-[9px] font-bold text-[#ccff00]/90 italic">{formatHHMM(match.scheduledTime)}</span>
-                    <span className="text-[#ccff00]/50">·</span>
-                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#ccff00]">
-                        {rankLabelFull[safeRank] ?? 'Cancha'}
-                    </span>
-                    <span className="text-[#ccff00]/50">·</span>
-                    <span className="text-[9px] font-black uppercase tracking-[0.15em] text-[#ccff00]">
-                        {courtLabel}
-                    </span>
-                    <span className="text-[#ccff00]/50">·</span>
-                    <span className="text-[9px] font-bold text-[#ccff00]/90 uppercase tracking-tight">
-                        {formatCategory(match._category)}
-                    </span>
-                    <span className="text-[#ccff00]/50">·</span>
-                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${CAT_COLORS[match._gender] ?? 'bg-white/10 border-white/20 text-[#ccff00]/90'}`}>
-                        {formatGender(match._gender) || '—'}
-                    </span>
-                    {gameNumber != null && (
-                        <>
-                            <span className="text-[#ccff00]/50">·</span>
-                            <span className="text-[9px] font-black text-[#ccff00]/90 italic">{gameNumber}º juego</span>
-                        </>
-                    )}
+            <div className="border-b-2 border-[#ccff00]/50 bg-[#ccff00]/10 px-3 pb-2.5 pt-3 sm:px-4">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        {matchNumber != null && (
+                            <>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-[#ccff00]/90">Partido {matchNumber}</span>
+                                <span className="text-[9px] text-[#ccff00]/50">·</span>
+                            </>
+                        )}
+                        <span className="text-[9px] font-bold italic text-[#ccff00]/90">{formatHHMM(match.scheduledTime)}</span>
+                        <span className="text-[9px] text-[#ccff00]/50">·</span>
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#ccff00]">
+                            {rankLabelFull[safeRank] ?? 'Cancha'}
+                        </span>
+                        <span className="text-[9px] text-[#ccff00]/50">·</span>
+                        <span className="text-[9px] font-black uppercase tracking-[0.15em] text-[#ccff00]">{courtLabel}</span>
+                        {gameNumber != null && (
+                            <>
+                                <span className="text-[9px] text-[#ccff00]/50">·</span>
+                                <span className="text-[9px] font-black italic text-[#ccff00]/90">{gameNumber}º juego</span>
+                            </>
+                        )}
+                    </div>
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-[9px] font-bold uppercase tracking-tight text-[#ccff00]/90">
+                            {formatCategory(match._category)}
+                        </span>
+                        <span
+                            className={`rounded border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${CAT_COLORS[match._gender] ?? 'border-white/20 bg-white/10 text-[#ccff00]/90'}`}
+                        >
+                            {formatGender(match._gender) || '—'}
+                        </span>
+                    </div>
                 </div>
             </div>
 
@@ -419,54 +422,64 @@ export function NextMatchCard({
             {/* Action Dock full — solo visible para admin/marker */}
             {showControlDock && (
                 <div
-                    className={`grid gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40 ${
+                    className={`grid gap-px border-t-2 border-[#ccff00]/40 bg-white/[0.04] ${
                         canOpenMarkerOnDblClick
-                            ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
-                            : 'grid-cols-2 sm:grid-cols-4'
+                            ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
+                            : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
                     }`}
                 >
                     <Link
                         href={controlHref}
-                        className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                        className="flex min-h-[52px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-3 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1.5 sm:py-3.5"
                     >
-                        <Gamepad2 className="w-4 h-4" />
-                        <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Control</span>
+                        <Gamepad2 className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
+                        <span className="text-left text-[11px] font-black uppercase tracking-wide sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
+                            Control
+                        </span>
                     </Link>
                     {canOpenMarkerOnDblClick && (
                         <Link
                             href={markerHref}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
                             title="Sala de marcador (misma ventana que doble clic en la tarjeta)"
+                            className="flex min-h-[52px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-3 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1.5 sm:py-3.5"
                         >
-                            <Crosshair className="w-4 h-4" />
-                            <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Marcador</span>
+                            <Crosshair className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
+                            <span className="text-left text-[11px] font-black uppercase tracking-wide sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
+                                Marcador
+                            </span>
                         </Link>
                     )}
                     <Link
                         href={pizarraHref}
                         target="_blank"
-                        className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                        className="flex min-h-[52px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-3 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1.5 sm:py-3.5"
                     >
-                        <Monitor className="w-4 h-4" />
-                        <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Pizarra</span>
+                        <Monitor className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
+                        <span className="text-left text-[11px] font-black uppercase tracking-wide sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
+                            Pizarra
+                        </span>
                     </Link>
                     <Link
                         href={camasHref}
                         target="_blank"
-                        className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                        className="flex min-h-[52px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-3 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1.5 sm:py-3.5"
                     >
-                        <Camera className="w-4 h-4" />
-                        <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Cámaras</span>
+                        <Camera className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
+                        <span className="text-left text-[11px] font-black uppercase tracking-wide sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
+                            Cámaras
+                        </span>
                     </Link>
                     <Link
                         href={adsHref}
                         target="_blank"
-                        className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                        className="flex min-h-[52px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-3 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1.5 sm:py-3.5"
                     >
-                        <Tv className="w-4 h-4" />
-                        <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Publicidad</span>
+                        <Tv className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
+                        <span className="text-left text-[11px] font-black uppercase tracking-wide sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
+                            Publicidad
+                        </span>
                     </Link>
                 </div>
             )}

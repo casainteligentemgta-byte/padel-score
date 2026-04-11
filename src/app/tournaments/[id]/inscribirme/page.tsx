@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -29,7 +29,7 @@ import {
     Coins,
     Wallet,
     Bitcoin,
-    ArrowRightLeft,
+    ArrowRight,
     ChevronDown,
     ChevronUp,
     Search,
@@ -155,6 +155,9 @@ export default function InscribirmePage() {
     const [showPartnerConfirm, setShowPartnerConfirm] = useState(false);
     const [pendingInvitation, setPendingInvitation] = useState<any | null>(null);
     const [timeLeft, setTimeLeft] = useState<string>('');
+    /** Asistente por pasos antes de «Inscripción enviada». */
+    const [wizardStep, setWizardStep] = useState(0);
+    const wizardScrollRef = useRef<HTMLDivElement>(null);
 
     // Retorno de Mercado Pago (mp=success | failure | pending)
     useEffect(() => {
@@ -365,10 +368,10 @@ export default function InscribirmePage() {
         }
     };
 
-    const handlePartnerSearch = async () => {
+    const handlePartnerSearch = async (): Promise<boolean> => {
         if (partnerCode.length !== 6) {
             setPartnerError('El código debe ser de 6 dígitos.');
-            return;
+            return false;
         }
 
         // Llave maestra de pruebas: permite continuar el flujo sin validar jugador real
@@ -379,7 +382,7 @@ export default function InscribirmePage() {
                 email: 'demo@smartpadel.local',
             });
             setPartnerError(null);
-            return;
+            return true;
         }
 
         setSearchingPartner(true);
@@ -391,15 +394,17 @@ export default function InscribirmePage() {
             if (profile) {
                 if (profile.id === user?.uid) {
                     setPartnerError('No puedes invitarte a ti mismo.');
-                } else {
-                    setFoundPartner(profile);
+                    return false;
                 }
-            } else {
-                setPartnerError('Jugador no encontrado. Verifique el código.');
+                setFoundPartner(profile);
+                return true;
             }
+            setPartnerError('Jugador no encontrado. Verifique el código.');
+            return false;
         } catch (err) {
             setPartnerError('Error al buscar el jugador.');
             console.error(err);
+            return false;
         } finally {
             setSearchingPartner(false);
         }
@@ -409,6 +414,58 @@ export default function InscribirmePage() {
         const cat = categories.find(c => c.key === key);
         return acc + (cat?.price || 0);
     }, 0);
+
+    /** Paso final: términos + enviar (índice 3 si hay pago, 2 si es gratis). */
+    const termsStepIndex = totalPrice > 0 ? 3 : 2;
+
+    useEffect(() => {
+        setWizardStep((prev) => Math.min(prev, termsStepIndex));
+    }, [termsStepIndex]);
+
+    useEffect(() => {
+        wizardScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }, [wizardStep]);
+
+    useEffect(() => {
+        if (selectedCategories.size === 0) setWizardStep(0);
+    }, [selectedCategories.size]);
+
+    const handleWizardNext = async () => {
+        setError(null);
+        if (wizardStep === 0) {
+            if (selectedCategories.size === 0) {
+                setError('Selecciona al menos una categoría.');
+                return;
+            }
+            setWizardStep(1);
+            return;
+        }
+        if (wizardStep === 1) {
+            let ok = !!foundPartner;
+            if (!ok && partnerCode.length === 6) {
+                ok = await handlePartnerSearch();
+            }
+            if (!ok) {
+                setError('Debes buscar y confirmar a tu pareja usando su código de 6 dígitos.');
+                return;
+            }
+            setWizardStep(2);
+            return;
+        }
+        if (wizardStep === 2 && totalPrice > 0) {
+            setWizardStep(3);
+        }
+    };
+
+    const handleWizardPrev = () => {
+        setError(null);
+        setWizardStep((s) => Math.max(0, s - 1));
+    };
+
+    const showWizardNext =
+        wizardStep === 0 ||
+        wizardStep === 1 ||
+        (wizardStep === 2 && totalPrice > 0);
 
     const handleSubmit = async () => {
         if (!user?.uid || !tournament) return;
@@ -655,11 +712,11 @@ export default function InscribirmePage() {
     if (!user) return null;
 
     return (
-        <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
+        <div className="ipad-screen-container !max-w-none !px-0 !pt-2 !pb-0 sm:!px-4 sm:!pt-4 sm:!pb-0 md:!p-6 bg-[#0a0a0a] text-white font-outfit relative">
             <Sidebar />
-            <div className="ipad-scroll-area w-full min-w-0 pl-4 pr-4 pb-[max(6rem,env(safe-area-inset-bottom,0px))] md:pl-24 md:pr-4">
+            <div className="ipad-scroll-area flex min-h-0 w-full min-w-0 max-w-[100vw] flex-1 flex-col overflow-x-hidden overflow-y-auto pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] pb-[max(6rem,env(safe-area-inset-bottom,0px))] sm:pl-4 sm:pr-4 md:pl-24 md:pr-4">
                 <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0a]/90 backdrop-blur pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-4">
-                    <div className="mx-auto flex max-w-md items-center justify-between gap-2 px-0 sm:px-1">
+                    <div className="mx-auto flex w-full min-w-0 max-w-md items-center justify-between gap-2 px-3 sm:px-1">
                         <BackButton href={`/tournaments/${tournamentId}`} />
                         <h1 className="min-w-0 flex-1 text-center text-base font-black uppercase italic tracking-tighter sm:text-lg">
                             Inscribirme
@@ -668,7 +725,7 @@ export default function InscribirmePage() {
                     </div>
                 </header>
 
-                <main className="mx-auto max-w-md px-0 py-6 sm:px-1 sm:py-8">
+                <main className="mx-auto flex min-h-0 w-full min-w-0 max-w-md flex-1 flex-col overflow-hidden px-3 py-6 sm:px-4 sm:py-8">
                     {success ? (
                         <div className="rounded-3xl bg-[#ccff00]/10 border border-[#ccff00]/30 p-8 text-center space-y-4">
                             <CheckCircle2 className="w-16 h-16 text-[#ccff00] mx-auto" />
@@ -778,7 +835,21 @@ export default function InscribirmePage() {
                                     </Link>
                                 </div>
                             ) : (
-                                <>
+                                <div className="flex min-h-0 flex-1 flex-col gap-2">
+                                    <p className="mb-1 text-center text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                                        Paso {wizardStep + 1} de {termsStepIndex + 1}
+                                    </p>
+                                    <div
+                                        ref={wizardScrollRef}
+                                        className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pr-0.5 [-webkit-overflow-scrolling:touch]"
+                                    >
+                                    {error && (
+                                        <div className="mb-4 flex items-center gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
+                                            <AlertCircle className="h-5 w-5 shrink-0 text-red-500" />
+                                            <p className="text-sm text-red-200">{error}</p>
+                                        </div>
+                                    )}
+                                    {wizardStep === 0 && (
                                     <section className="mb-8">
                                         <h2 className="mb-3 text-xs font-black uppercase tracking-widest text-[#ccff00]">
                                             Elige una o varias categorías (según tu edad y sexo)
@@ -842,9 +913,10 @@ export default function InscribirmePage() {
                                             })}
                                         </div>
                                     </section>
+                                    )}
 
-                                    {selectedCategories.size > 0 && (
-                                        <section className="mb-8 space-y-4">
+                                    {wizardStep === 1 && (
+                                        <section className="mb-8 w-full min-w-0 max-w-full space-y-3 sm:space-y-4">
                                             <h2 className="mb-2 text-xs font-black uppercase tracking-widest text-[#ccff00]">
                                                 Datos del Compañero
                                             </h2>
@@ -852,14 +924,14 @@ export default function InscribirmePage() {
                                                 <AutoShrinkName
                                                     name="Ingresa el código de 6 dígitos de tu pareja para completar el equipo."
                                                     style={{ fontSize: '11px' }}
-                                                    className="text-gray-500 uppercase leading-relaxed"
+                                                    className="text-gray-500 uppercase leading-relaxed [text-wrap:balance]"
                                                 />
                                             </div>
 
-                                            <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                                            <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch">
                                                 <div className="relative min-w-0 flex-1">
-                                                    <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 sm:left-4">
-                                                        <Search className="h-5 w-5" />
+                                                    <div className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 sm:left-4">
+                                                        <Search className="h-4 w-4 sm:h-5 sm:w-5" />
                                                     </div>
                                                     <input
                                                         type="text"
@@ -867,6 +939,7 @@ export default function InscribirmePage() {
                                                         autoCapitalize="characters"
                                                         autoCorrect="off"
                                                         spellCheck={false}
+                                                        autoComplete="off"
                                                         value={partnerCode}
                                                         onChange={(e) => {
                                                             const val = e.target.value.replace(/\s/g, '').toUpperCase().slice(0, 6);
@@ -874,15 +947,15 @@ export default function InscribirmePage() {
                                                             if (foundPartner) setFoundPartner(null);
                                                             if (partnerError) setPartnerError(null);
                                                         }}
-                                                        placeholder="Código 6 caracteres"
-                                                        className="w-full min-h-[52px] rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-11 pr-3 text-base font-bold uppercase tracking-widest text-white outline-none transition-all focus:border-[#ccff00]/50 sm:min-h-0 sm:p-4 sm:pl-12 sm:text-sm"
+                                                        placeholder="Código (6)"
+                                                        className="box-border w-full max-w-full min-h-[52px] rounded-2xl border border-white/10 bg-white/5 py-3 pl-[2.35rem] pr-2.5 text-center text-[clamp(1rem,5.5vw,1.25rem)] font-bold uppercase tracking-[0.06em] text-white outline-none transition-all focus:border-[#ccff00]/50 min-[400px]:tracking-[0.12em] sm:min-h-0 sm:px-4 sm:py-4 sm:pl-12 sm:text-left sm:text-sm sm:tracking-widest"
                                                     />
                                                 </div>
                                                 <button
                                                     type="button"
                                                     onClick={handlePartnerSearch}
                                                     disabled={searchingPartner || partnerCode.length !== 6}
-                                                    className="min-h-[48px] shrink-0 rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 text-sm font-bold text-white transition-all hover:bg-white/10 disabled:opacity-50 sm:min-h-0 sm:min-w-[7rem] sm:px-6 sm:py-4"
+                                                    className="min-h-[48px] w-full shrink-0 rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 text-sm font-bold text-white transition-all hover:bg-white/10 disabled:opacity-50 sm:w-auto sm:min-h-0 sm:min-w-[7rem] sm:px-6 sm:py-4"
                                                 >
                                                     {searchingPartner ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : 'BUSCAR'}
                                                 </button>
@@ -922,12 +995,9 @@ export default function InscribirmePage() {
                                         </section>
                                     )}
 
-                                    {selectedCategories.size > 0 && (
+                                    {wizardStep === 2 && totalPrice > 0 && (
                                         <section className="mb-8 space-y-6">
-                                            {/* Sección: Maneras de Pago - Solo si hay monto que pagar */}
-                                            {totalPrice > 0 ? (
-                                                <>
-                                                    <div className="mb-8">
+                                            <div className="mb-8">
                                                         <PaymentInfo />
                                                     </div>
 
@@ -1093,59 +1163,89 @@ export default function InscribirmePage() {
                                                             )}
                                                         </div>
                                                     </div>
-                                                </>
-                                            ) : (
-                                                <div className="rounded-2xl bg-[#ccff00]/5 border border-[#ccff00]/20 p-6 flex items-center gap-4">
-                                                    <div className="w-12 h-12 rounded-full bg-[#ccff00]/10 flex items-center justify-center shrink-0">
-                                                        <CheckCircle2 className="w-6 h-6 text-[#ccff00]" />
-                                                    </div>
-                                                    <div>
-                                                        <h3 className="font-black uppercase text-sm">Inscripción Gratuita</h3>
-                                                        <p className="text-[10px] text-gray-500 uppercase tracking-widest">No se requiere información de pago para esta categoría.</p>
-                                                    </div>
-                                                </div>
-                                            )}
                                         </section>
                                     )}
 
-                                    <section className="mb-8">
-                                        <label className="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={acceptTerms}
-                                                onChange={(e) => setAcceptTerms(e.target.checked)}
-                                                className="mt-1 w-5 h-5 rounded border-2 border-[#ccff00] text-[#ccff00]"
-                                            />
-                                            <span className="text-sm text-gray-300">
-                                                Acepto los{' '}
-                                                <Link href="/terminos-inscripcion" target="_blank" className="text-[#ccff00] font-bold underline">
-                                                    Términos y Condiciones de Inscripción
-                                                </Link>
-                                                , incluida la veracidad del comprobante de pago si aplica.
-                                            </span>
-                                        </label>
-                                    </section>
-
-                                    {error && (
-                                        <div className="mb-6 flex items-center gap-3 p-4 rounded-2xl bg-red-500/10 border border-red-500/20">
-                                            <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
-                                            <p className="text-sm text-red-200">{error}</p>
-                                        </div>
+                                    {wizardStep === 2 && totalPrice === 0 && (
+                                        <section className="mb-8">
+                                            <div className="rounded-2xl bg-[#ccff00]/5 border border-[#ccff00]/20 p-6 flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-full bg-[#ccff00]/10 flex items-center justify-center shrink-0">
+                                                    <CheckCircle2 className="w-6 h-6 text-[#ccff00]" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-black uppercase text-sm">Inscripción gratuita</h3>
+                                                    <p className="text-[10px] text-gray-500 uppercase tracking-widest">No se requiere información de pago para esta categoría.</p>
+                                                </div>
+                                            </div>
+                                        </section>
                                     )}
 
-                                    <button
-                                        type="button"
-                                        onClick={handleSubmit}
-                                        disabled={submitting || selectedCategories.size === 0 || !acceptTerms}
-                                        className="w-full py-4 rounded-2xl bg-[#ccff00] text-black font-black uppercase text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                    >
-                                        {submitting ? (
-                                            <Loader2 className="w-5 h-5 animate-spin" />
-                                        ) : (
-                                            <>Inscribirme en {selectedCategories.size} categoría(s)</>
-                                        )}
-                                    </button>
-                                </>
+                                    {wizardStep === termsStepIndex && (
+                                        <>
+                                            <section className="mb-8">
+                                                <label className="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={acceptTerms}
+                                                        onChange={(e) => setAcceptTerms(e.target.checked)}
+                                                        className="mt-1 w-5 h-5 rounded border-2 border-[#ccff00] text-[#ccff00]"
+                                                    />
+                                                    <span className="text-sm text-gray-300">
+                                                        Acepto los{' '}
+                                                        <Link href="/terminos-inscripcion" target="_blank" className="text-[#ccff00] font-bold underline">
+                                                            Términos y Condiciones de Inscripción
+                                                        </Link>
+                                                        , incluida la veracidad del comprobante de pago si aplica.
+                                                    </span>
+                                                </label>
+                                            </section>
+                                        </>
+                                    )}
+                                    </div>
+
+                                    <div className="shrink-0 border-t border-white/10 bg-[#0a0a0a]/95 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                                            {wizardStep > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleWizardPrev}
+                                                    disabled={submitting}
+                                                    className="order-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/15 py-3.5 text-sm font-black uppercase text-white transition hover:bg-white/5 disabled:opacity-50 sm:order-1 sm:w-auto sm:min-w-[140px]"
+                                                >
+                                                    <ArrowLeft className="h-4 w-4" />
+                                                    Atrás
+                                                </button>
+                                            )}
+                                            <div className="order-1 flex w-full flex-col gap-2 sm:order-2 sm:ml-auto sm:flex-1 sm:flex-row sm:justify-end">
+                                                {showWizardNext && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleWizardNext()}
+                                                        disabled={submitting}
+                                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ccff00] py-3.5 text-sm font-black uppercase text-black transition hover:bg-[#b8e600] disabled:opacity-50 sm:w-auto sm:min-w-[180px]"
+                                                    >
+                                                        Siguiente
+                                                        <ArrowRight className="h-4 w-4" />
+                                                    </button>
+                                                )}
+                                                {wizardStep === termsStepIndex && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleSubmit()}
+                                                        disabled={submitting || selectedCategories.size === 0 || !acceptTerms}
+                                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ccff00] py-3.5 text-sm font-black uppercase text-black disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[220px]"
+                                                    >
+                                                        {submitting ? (
+                                                            <Loader2 className="h-5 w-5 animate-spin" />
+                                                        ) : (
+                                                            <>Inscribirme en {selectedCategories.size} categoría(s)</>
+                                                        )}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             )}
                         </>
                     )}

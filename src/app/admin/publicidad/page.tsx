@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
@@ -16,7 +17,7 @@ import {
   type CourtPlaylistRowDb,
 } from '@/lib/courtPlaylists';
 import { buildVenuesAndCourtsFromTournaments, type VenueWithCourts } from '@/lib/venuesFromTournaments';
-import { AlertCircle, ArrowLeft, Check, Download, Edit3, Eye, Layout, Loader2, Trash2, Upload, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Check, Download, Edit3, Eye, Layout, Loader2, Monitor, Trash2, Upload, X } from 'lucide-react';
 import type { MediaContent, TiraInformativa } from '@/lib/supabase/publicidad';
 import { 
   addMediaContentAction, 
@@ -115,6 +116,13 @@ export default function AdminPublicidadPage() {
     const want = String(selectedVenue || '').trim().toLowerCase();
     if (!want) return [];
     return venues.find((v) => v.name.trim().toLowerCase() === want)?.courts ?? [];
+  }, [venues, selectedVenue]);
+
+  const selectedVenueMonitorHref = useMemo(() => {
+    const want = String(selectedVenue || '').trim().toLowerCase();
+    if (!want) return null;
+    const tid = venues.find((v) => v.name.trim().toLowerCase() === want)?.tournamentId?.trim();
+    return tid ? `/tournaments/${tid}/monitor` : null;
   }, [venues, selectedVenue]);
 
   const courtKeySet = useMemo(() => new Set(selectedVenueCourts.map((c) => c.key)), [selectedVenueCourts]);
@@ -679,23 +687,49 @@ export default function AdminPublicidadPage() {
             <p className="text-xs text-white/50">
               Sedes y nombres de pista se obtienen de los torneos. Al elegir una sede solo ves las canchas de ese club.
             </p>
-            <div className="max-w-md">
-              <label className="text-[10px] uppercase text-white/60">Sede</label>
-              <select
-                value={selectedVenue}
-                onChange={(e) => setSelectedVenue(e.target.value)}
-                className="w-full mt-1 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-white/25"
-              >
-                {venues.length === 0 ? (
-                  <option value="" className="bg-zinc-950 text-white">— Sin sedes en torneos —</option>
+            <div className="flex flex-wrap items-end gap-2 max-w-xl">
+              <div className="min-w-0 flex-1 max-w-md">
+                <label className="text-[10px] uppercase text-white/60">Sede</label>
+                <select
+                  value={selectedVenue}
+                  onChange={(e) => setSelectedVenue(e.target.value)}
+                  className="w-full mt-1 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-white/25"
+                >
+                  {venues.length === 0 ? (
+                    <option value="" className="bg-zinc-950 text-white">— Sin sedes en torneos —</option>
+                  ) : (
+                    venues.map((v) => (
+                      <option key={v.name} value={v.name} className="bg-zinc-950 text-white">
+                        {v.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+              {selectedVenue &&
+                (selectedVenueMonitorHref ? (
+                  <Link
+                    href={selectedVenueMonitorHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Monitor de canchas / monitoreo de pantallas"
+                    className="inline-flex h-[42px] shrink-0 items-center justify-center gap-2 rounded-xl border border-padel-primary/40 bg-padel-primary/15 px-3 text-padel-primary transition hover:bg-padel-primary/25"
+                    aria-label="Abrir monitor de canchas"
+                  >
+                    <Monitor className="h-5 w-5" />
+                    <span className="hidden font-black text-[10px] uppercase tracking-wider sm:inline">Monitor</span>
+                  </Link>
                 ) : (
-                  venues.map((v) => (
-                    <option key={v.name} value={v.name} className="bg-zinc-950 text-white">
-                      {v.name}
-                    </option>
-                  ))
-                )}
-              </select>
+                  <button
+                    type="button"
+                    disabled
+                    title="Ningún torneo asociado a esta sede para abrir el monitor"
+                    className="inline-flex h-[42px] shrink-0 cursor-not-allowed items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 text-white/30"
+                    aria-label="Monitor no disponible"
+                  >
+                    <Monitor className="h-5 w-5" />
+                  </button>
+                ))}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">

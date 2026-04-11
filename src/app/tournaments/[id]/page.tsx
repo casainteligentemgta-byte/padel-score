@@ -135,6 +135,14 @@ export default function TournamentDashboard() {
         else if (tab === 'ranking') setActiveTab('Ranking');
     }, [searchParams]);
 
+    const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+    useEffect(() => {
+        const el = tabButtonRefs.current[activeTab];
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+    }, [activeTab]);
+
     // En Vivo visible para todos
     useEffect(() => {
         // No longer forcing redirect to 'Por Comenzar' for non-admins
@@ -1955,7 +1963,8 @@ export default function TournamentDashboard() {
 
             {/* Pizarra: cabecera con título y acciones */}
             <header className="sticky top-0 z-[60] bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5">
-                <div className="max-w-4xl mx-auto px-6 pt-6 pb-4 flex justify-between items-center">
+                <div className={`${activeTab === 'Grupos' ? 'max-w-md' : 'max-w-4xl'} mx-auto px-6 pt-6 pb-4 flex justify-between items-center`}
+                >
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-3 ml-12 md:ml-0">
                             <BackButton href="/tournaments" />
@@ -2040,16 +2049,22 @@ export default function TournamentDashboard() {
 
             {/* Tabs: siempre visibles (también en vista “En vivo” por pista) para poder cambiar de filtro sin ir a Cuadro */}
             <nav className="bg-[#0a0a0a]/60 backdrop-blur-md border-b border-white/5 py-3 sticky top-[4.5rem] z-50">
-                <div className={`mx-auto px-4 overflow-x-auto hide-scrollbar ${isLiveDashboard ? 'max-w-none' : 'max-w-4xl'}`}>
-                    <div className="flex flex-nowrap items-center gap-2">
+                <div
+                    className={`mx-auto touch-pan-x overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth [-webkit-overflow-scrolling:touch] px-4 pb-0.5 hide-scrollbar ${isLiveDashboard ? 'max-w-none' : activeTab === 'Grupos' ? 'max-w-md' : 'max-w-4xl'}`}
+                >
+                    <div className="flex flex-nowrap items-stretch justify-start gap-2">
                         {visibleTabs.map((tab, tabIdx) => {
                             const isLive = tab === 'En Vivo';
                             const isActive = activeTab === tab;
                             return (
                                 <button
                                     key={`tab-top-${tabIdx}-${tab}`}
+                                    ref={(el) => {
+                                        tabButtonRefs.current[tab] = el;
+                                    }}
+                                    type="button"
                                     onClick={() => setActiveTab(tab)}
-                                    className={`flex-1 min-w-[90px] px-4 py-2.5 rounded-xl text-[10px] font-black italic uppercase tracking-widest transition-all duration-300 transform active:scale-95 border
+                                    className={`shrink-0 min-w-[90px] px-4 py-2.5 rounded-xl text-[10px] font-black italic uppercase tracking-widest transition-all duration-300 transform active:scale-95 border
                                         ${isActive
                                             ? isLive
                                                 ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 border-red-500/50'
@@ -2072,7 +2087,7 @@ export default function TournamentDashboard() {
 
             {/* Content Area (pizarra / cuadro / listados) */}
             <div className={`ipad-scroll-area pb-20 ${mainScrollOverflowClass}`}>
-                <main className={`${isLiveDashboard ? 'max-w-none w-full min-h-0 p-3 py-5' : activeTab === 'Por Comenzar' ? 'max-w-4xl mx-auto w-full px-4 py-6 min-h-0 flex flex-col' : 'max-w-4xl mx-auto w-full px-4 py-10'} transition-all duration-500`}>
+                <main className={`${isLiveDashboard ? 'max-w-none w-full min-h-0 p-3 py-5' : activeTab === 'Por Comenzar' ? 'max-w-4xl mx-auto w-full px-4 py-6 min-h-0 flex flex-col' : activeTab === 'Grupos' ? 'max-w-md mx-auto w-full px-4 py-6' : 'max-w-4xl mx-auto w-full px-4 py-10'} transition-all duration-500`}>
                     <AnimatePresence mode="wait">
                         {activeTab === 'Grupos' ? (
                             <motion.div
