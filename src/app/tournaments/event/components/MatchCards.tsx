@@ -254,16 +254,20 @@ export function NextMatchCard({
 
                 {/* Dock para PLAYERS: solo botón Pizarra + dirección corta */}
                 {!showControlDock && match._tournamentId && (
-                    <div className="border-t-2 border-[#ccff00]/30">
+                    <div className="w-full min-w-0 border-t-2 border-[#ccff00]/30">
                         <Link
                             href={pizarraHref}
                             target="_blank"
-                            className="flex items-center justify-center gap-2 py-2.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95 w-full"
+                            className="flex w-full min-w-0 flex-col items-stretch gap-1 bg-[#ccff00]/10 px-2 py-2 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:flex-row sm:items-center sm:justify-center sm:gap-2 sm:py-2.5"
                         >
-                            <Monitor className="w-3.5 h-3.5 shrink-0" />
-                            <span className="text-[7px] font-black uppercase tracking-tight leading-none">Pizarra</span>
+                            <span className="flex min-w-0 items-center justify-center gap-2">
+                                <Monitor className="h-3.5 w-3.5 shrink-0" />
+                                <span className="text-[7px] font-black uppercase tracking-tight leading-none">Pizarra</span>
+                            </span>
                             {shortUrl && (
-                                <span className="text-[6px] font-mono text-[#ccff00]/60 ml-1 truncate">{shortUrl}</span>
+                                <span className="block w-full min-w-0 truncate text-center text-[6px] font-mono text-[#ccff00]/70 sm:ml-1 sm:inline sm:w-auto sm:max-w-[min(100%,12rem)] sm:text-left">
+                                    {shortUrl}
+                                </span>
                             )}
                         </Link>
                     </div>
@@ -404,16 +408,20 @@ export function NextMatchCard({
 
             {/* Dock para PLAYERS: solo botón Pizarra + dirección corta */}
             {!showControlDock && match._tournamentId && (
-                <div className="border-t-2 border-[#ccff00]/30">
+                <div className="w-full min-w-0 border-t-2 border-[#ccff00]/30">
                     <Link
                         href={pizarraHref}
                         target="_blank"
-                        className="flex items-center justify-center gap-2 py-3 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95 w-full"
+                        className="flex w-full min-w-0 flex-col items-stretch gap-1.5 bg-[#ccff00]/10 px-3 py-2.5 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:flex-row sm:items-center sm:justify-center sm:gap-2 sm:py-3"
                     >
-                        <Monitor className="w-4 h-4 shrink-0" />
-                        <span className="text-[8px] font-black uppercase tracking-widest leading-none">Pizarra</span>
+                        <span className="flex min-w-0 items-center justify-center gap-2">
+                            <Monitor className="h-4 w-4 shrink-0" />
+                            <span className="text-[8px] font-black uppercase leading-none tracking-widest">Pizarra</span>
+                        </span>
                         {shortUrl && (
-                            <span className="text-[7px] font-mono text-[#ccff00]/60 ml-1">{shortUrl}</span>
+                            <span className="block w-full min-w-0 truncate text-center text-[7px] font-mono text-[#ccff00]/70 sm:inline sm:w-auto sm:max-w-[min(100%,14rem)] sm:text-left">
+                                {shortUrl}
+                            </span>
                         )}
                     </Link>
                 </div>

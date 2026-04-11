@@ -64,8 +64,9 @@ import { buildPizarraConceptHref } from '@/app/tournaments/event/components/Matc
 
 /** Mismo diseño para Marcador (en vivo) y celdas del dock (Control, Pizarra, Cámaras, ADS) */
 const MATCH_CARD_ACTION_LINK =
-    'group flex flex-col items-center justify-center gap-1 min-h-[3.25rem] w-full rounded-xl border border-white/10 bg-white/[0.05] text-gray-400 hover:bg-white/[0.08] hover:border-padel-primary/40 hover:text-padel-primary transition-all active:scale-[0.98]';
-const MATCH_CARD_ACTION_LABEL = 'text-[7px] font-black uppercase tracking-widest leading-none';
+    'group flex min-h-[3.25rem] min-w-0 w-full flex-col items-center justify-center gap-0.5 rounded-xl border border-white/10 bg-white/[0.05] px-0.5 py-1.5 text-gray-400 transition-all hover:bg-white/[0.08] hover:border-padel-primary/40 hover:text-padel-primary active:scale-[0.98] sm:gap-1 sm:px-0 sm:py-0';
+const MATCH_CARD_ACTION_LABEL =
+    'max-w-full truncate text-center text-[7px] font-black uppercase leading-none tracking-widest';
 const MATCH_CARD_ACTION_ICON = 'h-3.5 w-3.5 shrink-0';
 
 export default function TournamentDashboard() {
@@ -2881,8 +2882,8 @@ export default function TournamentDashboard() {
 
                                                                 {/* Dock inferior solo en cola: en "En Vivo" el partido ya está en pista; evita barra duplicada */}
                                                                 {activeTab === 'Por Comenzar' && (
-                                                                    <div className="shrink-0 px-2 pb-2">
-                                                                        <nav className="grid grid-cols-4 gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] p-1.5 shadow-lg backdrop-blur-md">
+                                                                    <div className="w-full min-w-0 shrink-0 px-1 pb-2 sm:px-2">
+                                                                        <nav className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1 shadow-lg backdrop-blur-md sm:grid-cols-4 sm:gap-1.5 sm:p-1.5">
                                                                             <Link
                                                                                 href={match?.id ? `/tournaments/${id}/score/${match.id}` : `/tournaments/${id}/control`}
                                                                                 className={MATCH_CARD_ACTION_LINK}

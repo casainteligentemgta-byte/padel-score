@@ -35,6 +35,17 @@ export default function HubPage() {
     const [player, setPlayer] = useState<any | null>(null);
     const [playerStats, setPlayerStats] = useState<{ ranking?: string; titles?: number; played?: number; points?: number } | null>(null);
     const [recentPartners, setRecentPartners] = useState<{ userId: string; name: string; uniqueCode: string | null; photo: string | null }[]>([]);
+    /** Hub móvil: carta y espaciados compactos para caber en 100dvh sin scroll de página. */
+    const [hubCompactLayout, setHubCompactLayout] = useState(false);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const mq = window.matchMedia('(max-width: 639px)');
+        const apply = () => setHubCompactLayout(mq.matches);
+        apply();
+        mq.addEventListener('change', apply);
+        return () => mq.removeEventListener('change', apply);
+    }, []);
 
     useEffect(() => {
         if (!authLoading && isAdmin) {
@@ -220,40 +231,53 @@ export default function HubPage() {
     const photoUrl = player?.photo ?? user?.photoURL ?? null;
 
     return (
-        <div className="ipad-screen-container bg-[#080808] text-white font-outfit relative overflow-hidden flex flex-col items-center">
+        <div className="ipad-screen-container !max-w-none bg-[#080808] text-white font-outfit relative flex flex-col items-stretch overflow-hidden !p-2 sm:!p-4 max-sm:!pb-[max(0.25rem,env(safe-area-inset-bottom,0px))]">
             {/* Sidebar removed for minimalist view on Hub */}
 
             {/* Background Decorative Elements */}
             <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-padel-primary/5 rounded-full blur-[140px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
             <div className="absolute top-1/2 left-0 w-[400px] h-[400px] bg-purple-500/5 rounded-full blur-[120px] -translate-x-1/3 pointer-events-none" />
 
-            <div className="relative z-10 flex flex-col items-center w-full flex-1 min-h-0 ipad-scroll-area">
-                {/* Header: nombre, foto y código — compacto para caber en iPhone */}
-                <header className="w-full max-w-md px-4 sm:px-6 pt-4 sm:pt-10 pb-2 sm:pb-4 flex items-center justify-center min-h-0">
-                    <div className="flex flex-col items-center w-full">
+            <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col items-center overflow-hidden sm:ipad-scroll-area">
+                {/* Header: nombre, foto y código — en móvil cabe en viewport sin scroll de página */}
+                <header
+                    className={`flex w-full max-w-md min-h-0 shrink-0 items-center justify-center px-3 sm:px-6 ${hubCompactLayout ? 'pt-1 pb-0' : 'pt-4 pb-2 sm:pt-10 sm:pb-4'}`}
+                >
+                    <div className="flex w-full flex-col items-center">
                         {/* 1. HOLA, NOMBRE */}
-                        <h1 className="text-lg sm:text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white text-center mb-1 sm:mb-4">
+                        <h1
+                            className={`font-black italic uppercase tracking-tighter text-white text-center ${hubCompactLayout ? 'mb-0 text-[clamp(0.95rem,4.2vw,1.15rem)] leading-tight' : 'mb-1 text-lg sm:mb-4 sm:text-2xl md:text-3xl'}`}
+                        >
                             HOLA, <span className="text-padel-primary">CRACK</span>
                         </h1>
                         {/* 2. Foto circular */}
                         <motion.div
                             initial={{ opacity: 0, scale: 0.96 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            className="flex justify-center mb-1 sm:mb-4"
+                            className={`flex justify-center ${hubCompactLayout ? 'mb-0' : 'mb-1 sm:mb-4'}`}
                         >
-                            <div className="relative w-24 h-24 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-full overflow-hidden border-2 border-brand/40 shadow-[0_0_24px_rgba(204,255,0,0.15)] ring-2 ring-black/20 bg-zinc-800">
+                            <div
+                                className={`relative rounded-full overflow-hidden border-2 border-brand/40 shadow-[0_0_24px_rgba(204,255,0,0.15)] ring-2 ring-black/20 bg-zinc-800 ${hubCompactLayout ? 'h-[4.5rem] w-[4.5rem]' : 'h-24 w-24 sm:h-44 sm:w-44 md:h-48 md:w-48'}`}
+                            >
                                 {photoUrl ? (
                                     <img src={photoUrl} alt="" className="absolute w-full h-full object-cover object-center" />
                                 ) : (
                                     <div className="absolute inset-0 flex items-center justify-center">
-                                        <User className="w-8 h-8 sm:w-12 sm:h-12 md:w-14 md:h-14 text-zinc-600" strokeWidth={1.5} />
+                                        <User
+                                            className={`text-zinc-600 ${hubCompactLayout ? 'h-7 w-7' : 'h-8 w-8 sm:h-12 sm:w-12 md:h-14 md:w-14'}`}
+                                            strokeWidth={1.5}
+                                        />
                                     </div>
                                 )}
                             </div>
                         </motion.div>
                         {/* 3. Código de 6 dígitos */}
-                        <div className="mt-1 sm:mt-3 flex w-full min-w-0 max-w-full flex-col items-center gap-1 px-1">
-                            <div className="flex w-full max-w-[min(100%,20rem)] items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 py-2 pl-3 pr-2 backdrop-blur-xl sm:min-w-[160px] sm:rounded-full sm:py-1.5">
+                        <div
+                            className={`flex w-full min-w-0 max-w-full flex-col items-center gap-0 px-1 ${hubCompactLayout ? 'mt-0.5' : 'mt-1 sm:mt-3 gap-1'}`}
+                        >
+                            <div
+                                className={`flex w-full max-w-[min(100%,20rem)] items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 pl-3 pr-2 backdrop-blur-xl sm:min-w-[160px] sm:rounded-full ${hubCompactLayout ? 'py-1' : 'py-2 sm:py-1.5'}`}
+                            >
                                 {profileLoading ? (
                                     <span className="text-sm text-white/60">Cargando código…</span>
                                 ) : profile?.uniqueCode ? (
@@ -292,9 +316,10 @@ export default function HubPage() {
                             <motion.div
                                 initial={{ opacity: 0, y: 12 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="mt-2 sm:mt-4 w-full"
+                                className={hubCompactLayout ? 'mt-1 w-full' : 'mt-2 w-full sm:mt-4'}
                             >
                                 <PlayerCard
+                                    compact={hubCompactLayout}
                                     player={{
                                         id: player.id,
                                         name: player.name ?? '',
@@ -311,25 +336,37 @@ export default function HubPage() {
                     </div>
                 </header>
 
-                {/* Main Content — espaciado compacto para iPhone */}
-                <main className="w-full max-w-md px-4 sm:px-6 flex-1 min-h-0">
-                    <div className="w-full">
+                {/* Main — móvil: columna flexible sin scroll de página; invitaciones con tope si hay muchas */}
+                <main className="flex min-h-0 w-full max-w-md flex-1 flex-col overflow-hidden px-3 sm:px-6">
+                    <div className={`flex min-h-0 w-full flex-1 flex-col ${hubCompactLayout ? 'gap-1' : 'gap-0'}`}>
+                        {/* En móvil: región superior flexible para anclar la rejilla abajo con mt-auto */}
+                        <div
+                            className={
+                                hubCompactLayout
+                                    ? 'flex min-h-0 w-full min-w-0 flex-1 flex-col gap-1 overflow-hidden'
+                                    : 'contents'
+                            }
+                        >
                         {/* Compañeros recientes: burbujas de avatar para inscribirse rápido con su código */}
                         {recentPartners.length > 0 && (
-                            <div className="mb-3 sm:mb-6">
-                                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white/50 mb-1 sm:mb-2 text-center w-full">
+                            <div className={`shrink-0 ${hubCompactLayout ? 'mb-1' : 'mb-3 sm:mb-6'}`}>
+                                <p
+                                    className={`w-full text-center font-black uppercase tracking-widest text-white/50 ${hubCompactLayout ? 'mb-0 text-[8px]' : 'mb-1 text-[9px] sm:mb-2 sm:text-[10px]'}`}
+                                >
                                     Inscribirse con un compañero
                                 </p>
-                                <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                                <div className={`flex flex-wrap ${hubCompactLayout ? 'gap-1' : 'gap-1.5 sm:gap-2'}`}>
                                     {recentPartners.map((partner) => (
                                         <button
                                             key={partner.userId}
                                             type="button"
                                             onClick={() => router.push(`/tournaments?partnerCode=${encodeURIComponent(partner.uniqueCode || '')}&partnerName=${encodeURIComponent(partner.name)}`)}
-                                            className="flex flex-col items-center gap-0.5 p-0.5 sm:p-1 rounded-lg sm:rounded-xl border border-white/10 bg-white/5 hover:border-padel-primary/50 hover:bg-padel-primary/10 transition-all"
+                                            className={`flex flex-col items-center rounded-lg border border-white/10 bg-white/5 transition-all hover:border-padel-primary/50 hover:bg-padel-primary/10 ${hubCompactLayout ? 'gap-0 p-0.5' : 'gap-0.5 p-0.5 sm:p-1 sm:rounded-xl'}`}
                                             title={`Inscribirse con ${partner.name}`}
                                         >
-                                            <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-full overflow-hidden border-2 border-padel-primary/30 bg-zinc-800 flex items-center justify-center">
+                                            <div
+                                                className={`rounded-full overflow-hidden border-2 border-padel-primary/30 bg-zinc-800 flex items-center justify-center ${hubCompactLayout ? 'h-7 w-7' : 'h-9 w-9 sm:h-12 sm:w-12'}`}
+                                            >
                                                 {partner.photo ? (
                                                     <img src={partner.photo} alt="" className="w-full h-full object-cover" />
                                                 ) : (
@@ -338,15 +375,21 @@ export default function HubPage() {
                                                     </span>
                                                 )}
                                             </div>
-                                            <span className="text-[7px] sm:text-[8px] font-bold text-white/80 truncate max-w-[48px] sm:max-w-[56px]">{partner.name?.split(' ')[0]}</span>
+                                            <span
+                                                className={`truncate font-bold text-white/80 ${hubCompactLayout ? 'max-w-[40px] text-[6px]' : 'max-w-[48px] text-[7px] sm:max-w-[56px] sm:text-[8px]'}`}
+                                            >
+                                                {partner.name?.split(' ')[0]}
+                                            </span>
                                         </button>
                                     ))}
                                 </div>
                             </div>
                         )}
 
-                        {/* Invitaciones pendientes: visible primero para el jugador invitado */}
-                        <div className="mb-3 sm:mb-6">
+                        {/* Invitaciones: en móvil altura máxima + scroll interno para no desbordar el viewport */}
+                        <div
+                            className={`min-h-0 ${hubCompactLayout ? 'max-h-[min(22svh,11rem)] shrink-0 overflow-y-auto overscroll-y-contain no-scrollbar' : 'mb-3 shrink-0 sm:mb-6'}`}
+                        >
                             <InvitationManager />
                         </div>
 
@@ -355,22 +398,28 @@ export default function HubPage() {
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="mb-3 sm:mb-6 p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-padel-primary/30 bg-padel-primary/5 backdrop-blur-xl"
+                                className={`shrink-0 rounded-xl border border-padel-primary/30 bg-padel-primary/5 backdrop-blur-xl sm:rounded-2xl ${hubCompactLayout ? 'mb-1 p-2' : 'mb-3 p-3 sm:mb-6 sm:p-5'}`}
                             >
-                                <p className="flex items-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-widest text-padel-primary mb-2 sm:mb-3">
-                                    <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Próximo Partido
+                                <p
+                                    className={`flex items-center gap-1.5 font-black uppercase tracking-widest text-padel-primary ${hubCompactLayout ? 'mb-1 text-[9px]' : 'mb-2 text-[10px] sm:mb-3 sm:text-xs'}`}
+                                >
+                                    <Clock className={hubCompactLayout ? 'h-3 w-3' : 'h-3.5 w-3.5 sm:h-4 sm:w-4'} /> Próximo Partido
                                 </p>
-                                <p className="text-[9px] sm:text-[10px] text-white/60 mb-1 sm:mb-2">{nextMatch.tournamentName}</p>
-                                <div className="flex items-center justify-between gap-1.5 text-xs sm:text-sm font-bold text-white mb-2 sm:mb-3">
+                                <p className={`text-white/60 ${hubCompactLayout ? 'mb-0.5 text-[8px]' : 'mb-1 text-[9px] sm:mb-2 sm:text-[10px]'}`}>
+                                    {nextMatch.tournamentName}
+                                </p>
+                                <div
+                                    className={`flex items-center justify-between gap-1.5 font-bold text-white ${hubCompactLayout ? 'mb-1 text-[11px]' : 'mb-2 text-xs sm:mb-3 sm:text-sm'}`}
+                                >
                                     <span className="truncate">{nextMatch.team1Name ?? 'TBD'}</span>
                                     <span className="text-padel-primary shrink-0">vs</span>
                                     <span className="truncate">{nextMatch.team2Name ?? 'TBD'}</span>
                                 </div>
-                                <div className="flex gap-1.5 sm:gap-2">
+                                <div className={`flex gap-1.5 ${hubCompactLayout ? '' : 'sm:gap-2'}`}>
                                     <button
                                         type="button"
                                         onClick={() => router.push(`/tournaments/${nextMatch.tournamentId}`)}
-                                        className="flex-1 py-2 sm:py-2.5 rounded-lg sm:rounded-xl bg-white/5 border border-white/10 text-[9px] sm:text-[10px] font-bold uppercase text-white hover:bg-white/10 transition-colors"
+                                        className={`flex-1 rounded-lg border border-white/10 bg-white/5 font-bold uppercase text-white transition-colors hover:bg-white/10 ${hubCompactLayout ? 'py-1.5 text-[8px] sm:rounded-xl' : 'py-2 text-[9px] sm:rounded-xl sm:py-2.5 sm:text-[10px]'}`}
                                     >
                                         Ver torneo
                                     </button>
@@ -381,7 +430,7 @@ export default function HubPage() {
                                                 buildPizarraConceptHref(nextMatch.tournamentId, nextMatch.matchId),
                                             )
                                         }
-                                        className="flex-1 py-2 sm:py-2.5 rounded-lg sm:rounded-xl bg-padel-primary text-black text-[9px] sm:text-[10px] font-black uppercase hover:opacity-95 transition-opacity"
+                                        className={`flex-1 rounded-lg bg-padel-primary font-black uppercase text-black transition-opacity hover:opacity-95 ${hubCompactLayout ? 'py-1.5 text-[8px] sm:rounded-xl' : 'py-2 text-[9px] sm:rounded-xl sm:py-2.5 sm:text-[10px]'}`}
                                     >
                                         Ver pizarra
                                     </button>
@@ -394,7 +443,7 @@ export default function HubPage() {
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="mb-3 sm:mb-6 p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 border-[#ccff00]/40 bg-[#ccff00]/5"
+                                className={`shrink-0 rounded-xl border-2 border-[#ccff00]/40 bg-[#ccff00]/5 sm:rounded-2xl ${hubCompactLayout ? 'mb-1 p-2' : 'mb-3 p-3 sm:mb-6 sm:p-4'}`}
                             >
                                 <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-[#ccff00] mb-1 sm:mb-2">¡Partido finalizado!</p>
                                 <p className="text-[9px] sm:text-[10px] text-white/70 mb-2 sm:mb-3">Descarga tu tarjeta de victoria (1080×1080).</p>
@@ -415,9 +464,12 @@ export default function HubPage() {
                                 </button>
                             </motion.div>
                         )}
+                        </div>
 
-                        {/* Hub Grid — botones visibles pero no exagerados */}
-                        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 pb-4 sm:pb-8 w-full mt-1 sm:mt-2">
+                        {/* Hub Grid */}
+                        <div
+                            className={`grid w-full shrink-0 grid-cols-2 ${hubCompactLayout ? 'mt-auto gap-1.5 pb-1 pt-0' : 'mt-1 gap-2.5 pb-4 sm:mt-2 sm:gap-3 sm:pb-8'}`}
+                        >
                             {hubItems.map((item, index) => (
                                 <motion.button
                                     key={item.name}
@@ -430,11 +482,7 @@ export default function HubPage() {
                                         if (item.onClick) item.onClick();
                                         else if (item.href) router.push(item.href);
                                     }}
-                                    className={`relative group flex flex-col items-center justify-center gap-1.5 w-full
-                                        rounded-2xl p-3 sm:p-4 border-2 backdrop-blur-xl
-                                        transition-all duration-200 active:scale-[0.97]
-                                        min-h-[80px] sm:min-h-[100px]
-                                        shadow-md ${item.glow}
+                                    className={`relative group flex w-full flex-col items-center justify-center rounded-2xl border-2 backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'min-h-[4.25rem] gap-0.5 p-2' : 'min-h-[80px] gap-1.5 p-3 sm:min-h-[100px] sm:p-4'} ${item.glow}
                                         ${
                                             item.disabled
                                                 ? 'bg-white/3 border-white/10 opacity-40 cursor-not-allowed'
@@ -442,18 +490,25 @@ export default function HubPage() {
                                         }`}
                                 >
                                     {/* Icono */}
-                                    <div className={`rounded-xl p-2 sm:p-2.5 ${item.bg} ${item.color} transition-transform group-hover:scale-110`}>
-                                        <item.icon className="w-6 h-6 sm:w-7 sm:h-7" strokeWidth={1.8} />
+                                    <div
+                                        className={`rounded-xl transition-transform group-hover:scale-110 ${item.bg} ${item.color} ${hubCompactLayout ? 'p-1.5' : 'p-2 sm:p-2.5'}`}
+                                    >
+                                        <item.icon
+                                            className={hubCompactLayout ? 'h-5 w-5' : 'h-6 w-6 sm:h-7 sm:w-7'}
+                                            strokeWidth={1.8}
+                                        />
                                     </div>
 
                                     {/* Texto */}
                                     <div className="flex flex-col items-center gap-0">
-                                        <h3 className={`font-black uppercase italic tracking-tight text-white text-center leading-tight
-                                            text-[13px] sm:text-[15px]`}>
+                                        <h3
+                                            className={`text-center font-black italic leading-tight tracking-tight text-white ${hubCompactLayout ? 'text-[11px]' : 'text-[13px] sm:text-[15px]'}`}
+                                        >
                                             {item.name}
                                         </h3>
-                                        <p className={`font-bold uppercase tracking-widest text-center
-                                            text-[8px] sm:text-[10px] ${item.disabled ? 'text-zinc-600' : item.color} opacity-70`}>
+                                        <p
+                                            className={`text-center font-bold uppercase tracking-widest ${hubCompactLayout ? 'text-[7px]' : 'text-[8px] sm:text-[10px]'} ${item.disabled ? 'text-zinc-600' : item.color} opacity-70`}
+                                        >
                                             {item.subtitle}
                                         </p>
                                     </div>
@@ -467,12 +522,15 @@ export default function HubPage() {
                         </div>
 
                         {/* Logout Button */}
-                        <div className="w-full flex justify-center items-center mt-2 sm:mt-4 mb-6 sm:mb-12">
+                        <div
+                            className={`flex w-full shrink-0 items-center justify-center ${hubCompactLayout ? 'mt-1 pb-0' : 'mt-2 mb-6 sm:mt-4 sm:mb-12'}`}
+                        >
                             <button
+                                type="button"
                                 onClick={() => logout()}
-                                className="flex items-center justify-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-full bg-black text-[#FF2800] font-black uppercase italic tracking-[0.15em] sm:tracking-[0.2em] text-[9px] sm:text-[10px] hover:scale-105 transition-all border border-[#FF2800]/40"
+                                className={`flex items-center justify-center rounded-full border border-[#FF2800]/40 bg-black font-black uppercase italic text-[#FF2800] transition-all hover:scale-105 ${hubCompactLayout ? 'gap-1 px-3 py-1.5 text-[8px] tracking-[0.12em]' : 'gap-1.5 px-4 py-2.5 text-[9px] tracking-[0.15em] sm:gap-2 sm:px-6 sm:py-3 sm:text-[10px] sm:tracking-[0.2em]'}`}
                             >
-                                <LogOut className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#FF2800]" />
+                                <LogOut className={`text-[#FF2800] ${hubCompactLayout ? 'h-2.5 w-2.5' : 'h-3 w-3 sm:h-3.5 sm:w-3.5'}`} />
                                 FINALIZAR SESIÓN
                             </button>
                         </div>
