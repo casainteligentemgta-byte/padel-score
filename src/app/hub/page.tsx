@@ -13,9 +13,7 @@ import {
     Copy,
     Check,
     Clock,
-    Award,
     Activity,
-    TrendingUp,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
@@ -147,28 +145,18 @@ export default function HubPage() {
 
     const playerProfileHref = player?.id ? `/players/${player.id}` : '/players/register';
 
-    const hubStatsItems = [
+    /** Columna derecha: Torneos → Partidos → Ranking (debajo del botón Perfil). */
+    const hubNavColumnItems = [
         {
-            name: 'Ranking',
-            subtitle: 'GLOBAL',
-            icon: Medal,
-            color: 'text-sky-400',
-            glow: 'shadow-sky-400/20',
-            bg: 'bg-sky-400/15',
-            border: 'border-sky-400/40',
-            hoverBorder: 'hover:border-sky-400/70',
-            href: '/ranking',
-        },
-        {
-            name: 'Victorias',
-            subtitle: 'TÍTULOS',
-            icon: Award,
-            color: 'text-amber-300',
-            glow: 'shadow-amber-300/20',
-            bg: 'bg-amber-400/15',
-            border: 'border-amber-400/35',
-            hoverBorder: 'hover:border-amber-400/70',
-            href: playerProfileHref,
+            name: 'Torneos',
+            subtitle: 'EXPLORAR EVENTOS',
+            icon: Trophy,
+            color: 'text-padel-primary',
+            glow: 'shadow-padel-primary/20',
+            bg: 'bg-padel-primary/15',
+            border: 'border-padel-primary/40',
+            hoverBorder: 'hover:border-padel-primary/70',
+            href: '/tournaments',
         },
         {
             name: 'Partidos',
@@ -182,41 +170,31 @@ export default function HubPage() {
             href: playerProfileHref,
         },
         {
-            name: 'Puntos',
-            subtitle: 'PTS',
-            icon: TrendingUp,
-            color: 'text-fuchsia-400',
-            glow: 'shadow-fuchsia-400/20',
-            bg: 'bg-fuchsia-400/15',
-            border: 'border-fuchsia-400/40',
-            hoverBorder: 'hover:border-fuchsia-400/70',
-            href: playerProfileHref,
+            name: 'Ranking',
+            subtitle: 'GLOBAL',
+            icon: Medal,
+            color: 'text-sky-400',
+            glow: 'shadow-sky-400/20',
+            bg: 'bg-sky-400/15',
+            border: 'border-sky-400/40',
+            hoverBorder: 'hover:border-sky-400/70',
+            href: '/ranking',
         },
-    ];
+    ] as const;
 
-    const hubItems = [
-        {
-            name: 'Mi Perfil',
-            subtitle: 'VER MI FICHA',
-            icon: User,
-            color: 'text-purple-400',
-            glow: 'shadow-purple-400/20',
-            bg: 'bg-purple-400/15',
-            border: 'border-purple-400/40',
-            hoverBorder: 'hover:border-purple-400/70',
-            onClick: handlePlayerClick
-        },
-        {
-            name: 'Torneos',
-            subtitle: 'EXPLORAR EVENTOS',
-            icon: Trophy,
-            color: 'text-padel-primary',
-            glow: 'shadow-padel-primary/20',
-            bg: 'bg-padel-primary/15',
-            border: 'border-padel-primary/40',
-            hoverBorder: 'hover:border-padel-primary/70',
-            href: '/tournaments'
-        },
+    const hubProfileItem = {
+        name: 'Mi Perfil',
+        subtitle: 'VER MI FICHA',
+        icon: User,
+        color: 'text-purple-400',
+        glow: 'shadow-purple-400/20',
+        bg: 'bg-purple-400/15',
+        border: 'border-purple-400/40',
+        hoverBorder: 'hover:border-purple-400/70',
+        onClick: handlePlayerClick,
+    };
+
+    const hubBottomItems = [
         {
             name: 'Tarjeta de victoria',
             subtitle: 'DESCARGAR IMAGEN',
@@ -226,7 +204,7 @@ export default function HubPage() {
             bg: 'bg-amber-400/15',
             border: 'border-amber-400/40',
             hoverBorder: 'hover:border-amber-400/70',
-            href: '/hub/victory-card'
+            href: '/hub/victory-card',
         },
         {
             name: 'Wallet',
@@ -237,9 +215,11 @@ export default function HubPage() {
             bg: 'bg-emerald-400/15',
             border: 'border-emerald-400/40',
             hoverBorder: 'hover:border-emerald-400/40',
-            disabled: true
-        }
+            disabled: true,
+        },
     ];
+
+    const HubProfileIcon = hubProfileItem.icon;
 
     const handleDownloadVictoryCard = async () => {
         if (!tournamentId || !matchId) return;
@@ -537,7 +517,7 @@ export default function HubPage() {
                         )}
                         </div>
 
-                        {/* Rejillas 4+4: en móvil van arriba (order-1); en desktop debajo del bloque central (order-2) */}
+                        {/* Perfil (1ª columna) + Torneos / Partidos / Ranking (2ª columna); luego tarjeta de victoria y wallet */}
                         <section
                             aria-label="Acciones del hub"
                             className={
@@ -546,54 +526,92 @@ export default function HubPage() {
                                     : 'order-2 mt-1 flex w-full min-w-0 shrink-0 flex-col gap-2 pb-4 mb-6 sm:mt-2 sm:gap-3 sm:pb-8 sm:mb-12'
                             }
                         >
-                            <p
-                                className={`text-center font-black uppercase tracking-widest text-white/40 ${hubCompactLayout ? 'sr-only' : 'mb-0.5 text-[9px] sm:text-[10px]'}`}
+                            <div
+                                className={`grid w-full min-w-0 grid-cols-2 items-stretch ${hubCompactLayout ? 'gap-0.5' : 'gap-1.5 sm:gap-2'}`}
                             >
-                                Estadísticas
-                            </p>
-                            <div className={`grid w-full grid-cols-4 ${hubCompactLayout ? 'gap-0.5' : 'gap-1.5 sm:gap-2'}`}>
-                                {hubStatsItems.map((item, index) => (
-                                    <motion.button
-                                        key={item.name}
-                                        type="button"
-                                        initial={{ opacity: 0, y: 12 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: index * 0.04 }}
-                                        onClick={() => router.push(item.href)}
-                                        className={`relative group flex w-full flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'min-h-[2.65rem] gap-0 rounded-lg border p-0.5' : 'min-h-[56px] gap-0.5 rounded-xl border-2 p-1.5 sm:min-h-[72px] sm:p-2'} ${item.glow} bg-[#111] ${item.border} ${item.hoverBorder} hover:bg-[#181818]`}
+                                <motion.button
+                                    type="button"
+                                    initial={{ opacity: 0, y: 12 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0 }}
+                                    onClick={hubProfileItem.onClick}
+                                    className={`relative group flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'gap-0 rounded-lg border p-0.5' : 'gap-0.5 rounded-xl border-2 p-1.5 sm:p-2'} ${hubProfileItem.glow} bg-[#111] ${hubProfileItem.border} ${hubProfileItem.hoverBorder} hover:bg-[#181818]`}
+                                >
+                                    <div
+                                        className={`rounded-md transition-transform group-hover:scale-110 ${hubProfileItem.bg} ${hubProfileItem.color} ${hubCompactLayout ? 'p-0.5' : 'p-1 sm:p-1.5'}`}
                                     >
-                                        <div className={`rounded-md transition-transform group-hover:scale-110 ${item.bg} ${item.color} ${hubCompactLayout ? 'p-0.5' : 'p-1 sm:p-1.5'}`}>
-                                            <item.icon className={hubCompactLayout ? 'h-3 w-3' : 'h-4 w-4 sm:h-5 sm:w-5'} strokeWidth={1.8} />
-                                        </div>
-                                        <div className="flex flex-col items-center gap-0">
-                                            <h3 className={`text-center font-black italic leading-tight tracking-tight text-white ${hubCompactLayout ? 'text-[8px] leading-tight' : 'text-[10px] sm:text-[12px]'}`}>
-                                                {item.name}
-                                            </h3>
-                                            <p className={`text-center font-bold uppercase tracking-widest ${hubCompactLayout ? 'text-[5px]' : 'text-[6px] sm:text-[7px]'} ${item.color} opacity-70`}>
-                                                {item.subtitle}
-                                            </p>
-                                        </div>
-                                        <div className={`absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none ${item.bg} rounded-lg`} />
-                                    </motion.button>
-                                ))}
+                                        <HubProfileIcon
+                                            className={hubCompactLayout ? 'h-3 w-3' : 'h-4 w-4 sm:h-5 sm:w-5'}
+                                            strokeWidth={1.8}
+                                        />
+                                    </div>
+                                    <div className="flex flex-col items-center gap-0 px-0.5">
+                                        <h3
+                                            className={`text-center font-black italic leading-tight tracking-tight text-white ${hubCompactLayout ? 'text-[8px] leading-tight' : 'text-[10px] sm:text-[12px]'}`}
+                                        >
+                                            {hubProfileItem.name}
+                                        </h3>
+                                        <p
+                                            className={`text-center font-bold uppercase tracking-widest ${hubCompactLayout ? 'text-[5px]' : 'text-[6px] sm:text-[7px]'} ${hubProfileItem.color} opacity-70`}
+                                        >
+                                            {hubProfileItem.subtitle}
+                                        </p>
+                                    </div>
+                                    <div
+                                        className={`absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none ${hubProfileItem.bg} ${hubCompactLayout ? 'rounded-lg' : 'rounded-xl'}`}
+                                    />
+                                </motion.button>
+                                <div
+                                    className={`flex min-h-0 min-w-0 flex-1 flex-col ${hubCompactLayout ? 'gap-0.5' : 'gap-1.5 sm:gap-2'}`}
+                                >
+                                    {hubNavColumnItems.map((item, index) => (
+                                        <motion.button
+                                            key={item.name}
+                                            type="button"
+                                            initial={{ opacity: 0, y: 12 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: 0.04 + index * 0.04 }}
+                                            onClick={() => router.push(item.href)}
+                                            className={`relative group flex min-h-0 flex-1 flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'min-h-[2.65rem] gap-0 rounded-lg border p-0.5' : 'min-h-[56px] gap-0.5 rounded-xl border-2 p-1.5 sm:min-h-0 sm:flex-1 sm:p-2'} ${item.glow} bg-[#111] ${item.border} ${item.hoverBorder} hover:bg-[#181818]`}
+                                        >
+                                            <div
+                                                className={`rounded-md transition-transform group-hover:scale-110 ${item.bg} ${item.color} ${hubCompactLayout ? 'p-0.5' : 'p-1 sm:p-1.5'}`}
+                                            >
+                                                <item.icon
+                                                    className={hubCompactLayout ? 'h-3 w-3' : 'h-4 w-4 sm:h-5 sm:w-5'}
+                                                    strokeWidth={1.8}
+                                                />
+                                            </div>
+                                            <div className="flex flex-col items-center gap-0">
+                                                <h3
+                                                    className={`text-center font-black italic leading-tight tracking-tight text-white ${hubCompactLayout ? 'text-[8px] leading-tight' : 'text-[10px] sm:text-[12px]'}`}
+                                                >
+                                                    {item.name}
+                                                </h3>
+                                                <p
+                                                    className={`text-center font-bold uppercase tracking-widest ${hubCompactLayout ? 'text-[5px]' : 'text-[6px] sm:text-[7px]'} ${item.color} opacity-70`}
+                                                >
+                                                    {item.subtitle}
+                                                </p>
+                                            </div>
+                                            <div
+                                                className={`absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none ${item.bg} ${hubCompactLayout ? 'rounded-lg' : 'rounded-xl'}`}
+                                            />
+                                        </motion.button>
+                                    ))}
+                                </div>
                             </div>
-                            <p
-                                className={`text-center font-black uppercase tracking-widest text-white/40 ${hubCompactLayout ? 'sr-only' : 'mb-0.5 text-[9px] sm:text-[10px]'}`}
-                            >
-                                Accesos
-                            </p>
-                            <div className={`grid w-full grid-cols-4 ${hubCompactLayout ? 'gap-0.5' : 'gap-1.5 sm:gap-2'}`}>
-                                {hubItems.map((item, index) => (
+                            <div className={`flex w-full flex-col ${hubCompactLayout ? 'gap-0.5' : 'gap-1.5 sm:gap-2'}`}>
+                                {hubBottomItems.map((item, index) => (
                                     <motion.button
                                         key={item.name}
                                         type="button"
                                         initial={{ opacity: 0, y: 12 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: 0.12 + index * 0.04 }}
+                                        transition={{ delay: 0.16 + index * 0.04 }}
                                         onClick={() => {
                                             if (item.disabled) return;
-                                            if (item.onClick) item.onClick();
-                                            else if (item.href) router.push(item.href);
+                                            if (item.href) router.push(item.href);
                                         }}
                                         className={`relative group flex w-full flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'min-h-[2.65rem] gap-0 rounded-lg border p-0.5' : 'min-h-[56px] gap-0.5 rounded-xl border-2 p-1.5 sm:min-h-[72px] sm:p-2'} ${item.glow}
                                         ${
