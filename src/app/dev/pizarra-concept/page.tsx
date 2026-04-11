@@ -1192,7 +1192,7 @@ function PizarraConceptPage() {
             )}
           </div>
 
-          <div className="relative order-2 flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-black shadow-[0_0_20px_rgba(204,255,0,0.12)] sm:order-none">
+          <div className="relative order-2 flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-transparent shadow-[0_0_20px_rgba(204,255,0,0.12)] sm:order-none">
             {carouselPlaylist.length > 0 ? (
               <AnimatePresence mode="wait">
                 <motion.img
@@ -1203,7 +1203,7 @@ function PizarraConceptPage() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.98 }}
                   transition={{ duration: 0.45 }}
-                  className="absolute inset-0 box-border h-full w-full min-h-0 object-contain object-center bg-black"
+                  className="absolute inset-0 box-border h-full w-full min-h-0 object-contain object-center bg-transparent"
                 />
               </AnimatePresence>
             ) : (
@@ -1215,20 +1215,21 @@ function PizarraConceptPage() {
             )}
           </div>
         </section>
+
+        {shortMonitorLink && (
+          <div className="mt-1 flex shrink-0 justify-center px-2">
+            <a
+              href={shortMonitorLink.href}
+              className="text-[clamp(0.58rem,1.1vh,0.72rem)] font-bold uppercase tracking-[0.12em] text-[#ccff00]/85 underline-offset-2 hover:text-[#ccff00] hover:underline"
+              title="Misma pizarra; URL corta con torneo y partido"
+            >
+              Monitor URL corta: {shortMonitorLink.path} (este partido)
+            </a>
+          </div>
+        )}
         </div>
 
         <footer className="relative z-30 mt-2 w-full shrink-0 overflow-hidden rounded-2xl border border-[#ccff00]/25 bg-[#0a0c10]/95 py-[clamp(0.3rem,1vh,0.75rem)] shadow-[0_-10px_40px_rgba(0,0,0,0.75),0_0_20px_rgba(204,255,0,0.12)] backdrop-blur-sm">
-          {shortMonitorLink && (
-            <div className="mb-1.5 flex justify-center px-2">
-              <a
-                href={shortMonitorLink.href}
-                className="text-[clamp(0.58rem,1.1vh,0.72rem)] font-bold uppercase tracking-[0.12em] text-[#ccff00]/85 underline-offset-2 hover:text-[#ccff00] hover:underline"
-                title="Misma pizarra; URL corta con torneo y partido"
-              >
-                Monitor URL corta: {shortMonitorLink.path} (este partido)
-              </a>
-            </div>
-          )}
           <div className="flex whitespace-nowrap animate-marquee">
             {[0, 1].map((half) => (
               <div key={half} className="flex shrink-0 items-center">
