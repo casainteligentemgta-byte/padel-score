@@ -112,6 +112,8 @@ export function NextMatchCard({
     gameNumber,
     matchNumber,
     showControlDock = false,
+    showDockAds = true,
+    showPlayerPizarraDock = true,
 }: {
     match: any;
     rank: number;
@@ -120,6 +122,10 @@ export function NextMatchCard({
     matchNumber?: number;
     /** Admin / dueño de evento / marcador: dock con enlace a control del partido (`/tournaments/.../score/...` o `/marker/...` si falta id). */
     showControlDock?: boolean;
+    /** Dueño / admin del torneo: mostrar enlace a publicidad en el dock. */
+    showDockAds?: boolean;
+    /** Si es false, no se muestra el bloque Pizarra + URL (rol jugador sin acceso staff en el hub). */
+    showPlayerPizarraDock?: boolean;
 }) {
     const [t1p1, t1p2] = resolveTeamNames(match.team1, match.team1Name);
     const [t2p1, t2p2] = resolveTeamNames(match.team2, match.team2Name);
@@ -171,6 +177,24 @@ export function NextMatchCard({
     const pizarraHref = buildPizarraConceptHref(String(match._tournamentId ?? ''), String(match.id || matchKey));
     const camasHref = `/tournaments/${match._tournamentId}/control/broadcasting`;
     const adsHref = `/admin/publicidad`;
+
+    const dockItemCount =
+        showControlDock
+            ? 3 + (canOpenMarkerOnDblClick ? 1 : 0) + (showDockAds ? 1 : 0)
+            : 0;
+    const dockMobileGridClass =
+        showControlDock && dockItemCount === 5
+            ? 'max-sm:grid-cols-2'
+            : showControlDock && dockItemCount === 4
+              ? 'max-sm:grid-cols-4'
+              : showControlDock && dockItemCount === 3
+                ? 'max-sm:grid-cols-3'
+                : '';
+
+    const dockLinkCompact =
+        'flex min-h-[48px] w-full min-w-0 max-w-full flex-row items-center justify-center gap-2 bg-[#ccff00]/10 px-2 py-2.5 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] max-sm:min-h-[2.4rem] max-sm:gap-1 max-sm:px-1 max-sm:py-1 sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1 sm:px-2 sm:py-2';
+    const dockLinkFull =
+        'flex min-h-[52px] w-full min-w-0 max-w-full flex-row items-center justify-center gap-2 bg-[#ccff00]/10 px-2 py-3 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] max-sm:min-h-[2.5rem] max-sm:gap-1 max-sm:px-1.5 max-sm:py-1.5 sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1.5 sm:px-4 sm:py-3.5';
 
     // URL corta para la pizarra: www.smartpadel58.com/S1/C1
     const courtNum = match.court ?? (match.courtIndex != null ? match.courtIndex + 1 : rank + 1);
@@ -253,7 +277,7 @@ export function NextMatchCard({
 
 
                 {/* Dock para PLAYERS: solo botón Pizarra + dirección corta */}
-                {!showControlDock && match._tournamentId && (
+                {!showControlDock && match._tournamentId && showPlayerPizarraDock && (
                     <div className="w-full min-w-0 border-t-2 border-[#ccff00]/30">
                         <Link
                             href={pizarraHref}
@@ -276,18 +300,15 @@ export function NextMatchCard({
                 {/* Action Dock — solo visible para admin/marker */}
                 {showControlDock && (
                     <div
-                        className={`grid gap-px overflow-hidden border-t-2 border-[#ccff00]/40 bg-white/[0.04] ${
+                        className={`grid gap-px overflow-hidden border-t-2 border-[#ccff00]/40 bg-white/[0.04] ${dockMobileGridClass} ${
                             canOpenMarkerOnDblClick
-                                ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
-                                : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+                                ? 'sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
+                                : 'sm:grid-cols-2 lg:grid-cols-4'
                         }`}
                     >
-                        <Link
-                            href={controlHref}
-                            className="flex min-h-[48px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-2.5 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1 sm:px-2 sm:py-2"
-                        >
-                            <Gamepad2 className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
-                            <span className="text-left text-[10px] font-black uppercase tracking-wide sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
+                        <Link href={controlHref} className={dockLinkCompact}>
+                            <Gamepad2 className="h-4 w-4 shrink-0 max-sm:h-3 max-sm:w-3 sm:h-3.5 sm:w-3.5" />
+                            <span className="text-center text-[10px] font-black uppercase tracking-wide max-sm:text-[6px] max-sm:leading-tight sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
                                 Control
                             </span>
                         </Link>
@@ -297,44 +318,34 @@ export function NextMatchCard({
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 title="Sala de marcador (misma ventana que doble clic en la tarjeta)"
-                                className="flex min-h-[48px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-2.5 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1 sm:px-2 sm:py-2"
+                                className={dockLinkCompact}
                             >
-                                <Crosshair className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
-                                <span className="text-left text-[10px] font-black uppercase tracking-wide sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
+                                <Crosshair className="h-4 w-4 shrink-0 max-sm:h-3 max-sm:w-3 sm:h-3.5 sm:w-3.5" />
+                                <span className="text-center text-[10px] font-black uppercase tracking-wide max-sm:text-[6px] max-sm:leading-tight sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
                                     Marcador
                                 </span>
                             </Link>
                         )}
-                        <Link
-                            href={pizarraHref}
-                            target="_blank"
-                            className="flex min-h-[48px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-2.5 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1 sm:px-2 sm:py-2"
-                        >
-                            <Monitor className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
-                            <span className="text-left text-[10px] font-black uppercase tracking-wide sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
+                        <Link href={pizarraHref} target="_blank" className={dockLinkCompact}>
+                            <Monitor className="h-4 w-4 shrink-0 max-sm:h-3 max-sm:w-3 sm:h-3.5 sm:w-3.5" />
+                            <span className="text-center text-[10px] font-black uppercase tracking-wide max-sm:text-[6px] max-sm:leading-tight sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
                                 Pizarra
                             </span>
                         </Link>
-                        <Link
-                            href={camasHref}
-                            target="_blank"
-                            className="flex min-h-[48px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-2.5 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1 sm:px-2 sm:py-2"
-                        >
-                            <Camera className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
-                            <span className="text-left text-[10px] font-black uppercase tracking-wide sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
+                        <Link href={camasHref} target="_blank" className={dockLinkCompact}>
+                            <Camera className="h-4 w-4 shrink-0 max-sm:h-3 max-sm:w-3 sm:h-3.5 sm:w-3.5" />
+                            <span className="text-center text-[10px] font-black uppercase tracking-wide max-sm:text-[6px] max-sm:leading-tight sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
                                 Cámaras
                             </span>
                         </Link>
-                        <Link
-                            href={adsHref}
-                            target="_blank"
-                            className="flex min-h-[48px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-2.5 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1 sm:px-2 sm:py-2"
-                        >
-                            <Tv className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
-                            <span className="text-left text-[10px] font-black uppercase tracking-wide sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
-                                Ads
-                            </span>
-                        </Link>
+                        {showDockAds && (
+                            <Link href={adsHref} target="_blank" className={dockLinkCompact}>
+                                <Tv className="h-4 w-4 shrink-0 max-sm:h-3 max-sm:w-3 sm:h-3.5 sm:w-3.5" />
+                                <span className="text-center text-[10px] font-black uppercase tracking-wide max-sm:text-[6px] max-sm:leading-tight sm:text-center sm:text-[6px] sm:leading-none sm:tracking-tight">
+                                    Ads
+                                </span>
+                            </Link>
+                        )}
                     </div>
                 )}
             </motion.div>
@@ -407,7 +418,7 @@ export function NextMatchCard({
             </div>
 
             {/* Dock para PLAYERS: solo botón Pizarra + dirección corta */}
-            {!showControlDock && match._tournamentId && (
+            {!showControlDock && match._tournamentId && showPlayerPizarraDock && (
                 <div className="w-full min-w-0 border-t-2 border-[#ccff00]/30">
                     <Link
                         href={pizarraHref}
@@ -430,18 +441,15 @@ export function NextMatchCard({
             {/* Action Dock full — solo visible para admin/marker */}
             {showControlDock && (
                 <div
-                    className={`grid gap-px border-t-2 border-[#ccff00]/40 bg-white/[0.04] ${
+                    className={`grid gap-px border-t-2 border-[#ccff00]/40 bg-white/[0.04] ${dockMobileGridClass} ${
                         canOpenMarkerOnDblClick
-                            ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
-                            : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+                            ? 'sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
+                            : 'sm:grid-cols-2 lg:grid-cols-4'
                     }`}
                 >
-                    <Link
-                        href={controlHref}
-                        className="flex min-h-[52px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-3 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1.5 sm:py-3.5"
-                    >
-                        <Gamepad2 className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
-                        <span className="text-left text-[11px] font-black uppercase tracking-wide sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
+                    <Link href={controlHref} className={dockLinkFull}>
+                        <Gamepad2 className="h-5 w-5 shrink-0 max-sm:h-3.5 max-sm:w-3.5 sm:h-4 sm:w-4" />
+                        <span className="text-center text-[11px] font-black uppercase tracking-wide max-sm:text-[6px] max-sm:leading-tight sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
                             Control
                         </span>
                     </Link>
@@ -451,44 +459,34 @@ export function NextMatchCard({
                             target="_blank"
                             rel="noopener noreferrer"
                             title="Sala de marcador (misma ventana que doble clic en la tarjeta)"
-                            className="flex min-h-[52px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-3 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1.5 sm:py-3.5"
+                            className={dockLinkFull}
                         >
-                            <Crosshair className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
-                            <span className="text-left text-[11px] font-black uppercase tracking-wide sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
+                            <Crosshair className="h-5 w-5 shrink-0 max-sm:h-3.5 max-sm:w-3.5 sm:h-4 sm:w-4" />
+                            <span className="text-center text-[11px] font-black uppercase tracking-wide max-sm:text-[6px] max-sm:leading-tight sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
                                 Marcador
                             </span>
                         </Link>
                     )}
-                    <Link
-                        href={pizarraHref}
-                        target="_blank"
-                        className="flex min-h-[52px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-3 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1.5 sm:py-3.5"
-                    >
-                        <Monitor className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
-                        <span className="text-left text-[11px] font-black uppercase tracking-wide sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
+                    <Link href={pizarraHref} target="_blank" className={dockLinkFull}>
+                        <Monitor className="h-5 w-5 shrink-0 max-sm:h-3.5 max-sm:w-3.5 sm:h-4 sm:w-4" />
+                        <span className="text-center text-[11px] font-black uppercase tracking-wide max-sm:text-[6px] max-sm:leading-tight sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
                             Pizarra
                         </span>
                     </Link>
-                    <Link
-                        href={camasHref}
-                        target="_blank"
-                        className="flex min-h-[52px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-3 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1.5 sm:py-3.5"
-                    >
-                        <Camera className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
-                        <span className="text-left text-[11px] font-black uppercase tracking-wide sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
+                    <Link href={camasHref} target="_blank" className={dockLinkFull}>
+                        <Camera className="h-5 w-5 shrink-0 max-sm:h-3.5 max-sm:w-3.5 sm:h-4 sm:w-4" />
+                        <span className="text-center text-[11px] font-black uppercase tracking-wide max-sm:text-[6px] max-sm:leading-tight sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
                             Cámaras
                         </span>
                     </Link>
-                    <Link
-                        href={adsHref}
-                        target="_blank"
-                        className="flex min-h-[52px] w-full flex-row items-center justify-start gap-3 bg-[#ccff00]/10 px-4 py-3 text-[#ccff00] transition-all hover:bg-[#ccff00]/20 active:scale-[0.99] sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-1.5 sm:py-3.5"
-                    >
-                        <Tv className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
-                        <span className="text-left text-[11px] font-black uppercase tracking-wide sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
-                            Publicidad
-                        </span>
-                    </Link>
+                    {showDockAds && (
+                        <Link href={adsHref} target="_blank" className={dockLinkFull}>
+                            <Tv className="h-5 w-5 shrink-0 max-sm:h-3.5 max-sm:w-3.5 sm:h-4 sm:w-4" />
+                            <span className="text-center text-[11px] font-black uppercase tracking-wide max-sm:text-[6px] max-sm:leading-tight sm:text-center sm:text-[8px] sm:leading-none sm:tracking-widest">
+                                Publicidad
+                            </span>
+                        </Link>
+                    )}
                 </div>
             )}
         </motion.div>

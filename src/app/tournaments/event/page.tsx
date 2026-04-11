@@ -60,7 +60,7 @@ function EventView() {
         }
     }, [idsParam]);
 
-    const { user, isAdmin, isMarker } = useAuth();
+    const { user, isAdmin, isMarker, isPlayer } = useAuth();
     const [tournaments, setTournaments] = useState<Record<string, any>>({});
     const canManageTournament = isAdmin || (user && Object.values(tournaments).some((t: any) => t.owners?.includes(user.email)));
     /** Hub: marcadores ven el dock Control (enlace a `/tournaments/.../score/...`), no solo jugadores con Pizarra. */
@@ -571,7 +571,7 @@ function EventView() {
                 ) : null}
             </div>
 
-            <div className="app-flex-scroll-main px-2 sm:px-3 py-4 pb-24 relative w-full">
+            <div className="app-flex-scroll-main relative w-full px-2 py-4 pb-24 pl-[max(0.5rem,env(safe-area-inset-left,0px))] pr-[max(0.5rem,env(safe-area-inset-right,0px))] sm:px-3">
                 {activeTab === 'groups' ? (
                     <GroupsView tournaments={tournaments} />
                 ) : activeTab === 'ranking' ? (
@@ -592,6 +592,7 @@ function EventView() {
                         tournaments={tournaments}
                         canManageTournament={!!canManageTournament}
                         canUseMatchControl={!!canUseMatchControl}
+                        showPlayerPizarraDock={!isPlayer || !!canUseMatchControl}
                         availableDates={availableDates}
                         selectedDate={selectedDate}
                         onSelectDate={setSelectedDate}

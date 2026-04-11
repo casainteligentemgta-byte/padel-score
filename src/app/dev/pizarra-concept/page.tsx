@@ -632,8 +632,8 @@ function PizarraConceptPage() {
       minute: '2-digit',
       hour12: true,
     });
-    return `${board.categoryLine} · ${board.genderLine} · ${timeStr} · TEMP ${ambientTempC}`;
-  }, [board.categoryLine, board.genderLine, now, ambientTempC]);
+    return `${timeStr} · TEMP ${ambientTempC}`;
+  }, [now, ambientTempC]);
 
   /** Pista/cancha debajo de la sede: mismo criterio que el marcador o `?courtId=` en la URL. */
   const headerCourtLine = useMemo(() => {

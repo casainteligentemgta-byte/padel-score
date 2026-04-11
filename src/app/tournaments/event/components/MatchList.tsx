@@ -33,6 +33,8 @@ interface MatchListProps {
     canManageTournament: boolean;
     /** Mostrar Control / Pizarra / Cámaras / Ads en tarjetas del hub (admin, dueño de evento o rol marcador). */
     canUseMatchControl: boolean;
+    /** Rol jugador sin staff: ocultar bloque Pizarra + URL en tarjetas (invitados y otros roles siguen viéndolo). */
+    showPlayerPizarraDock?: boolean;
     availableDates?: string[];
     selectedDate?: string;
     onSelectDate?: (date: string) => void;
@@ -52,6 +54,7 @@ export const MatchList: React.FC<MatchListProps> = ({
     tournaments,
     canManageTournament,
     canUseMatchControl,
+    showPlayerPizarraDock = true,
     availableDates = [],
     selectedDate = '',
     onSelectDate,
@@ -109,7 +112,7 @@ export const MatchList: React.FC<MatchListProps> = ({
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pb-4">
                         {nextUpMatches.map((match, rank) => (
-                            <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact gameNumber={rank + 1} matchNumber={allMatches.indexOf(match) + 1} showControlDock={canUseMatchControl} />
+                            <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact gameNumber={rank + 1} matchNumber={allMatches.indexOf(match) + 1} showControlDock={canUseMatchControl} showDockAds={canManageTournament} showPlayerPizarraDock={showPlayerPizarraDock} />
                         ))}
                         {nextUpMatches.length === 0 && (
                             <div className="col-span-full py-10 text-center border border-dashed border-white/5 rounded-[2rem] opacity-20">
@@ -165,7 +168,7 @@ export const MatchList: React.FC<MatchListProps> = ({
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                         {effectiveLiveMatches.map((match, rank) => (
-                            <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact matchNumber={allMatches.indexOf(match) + 1} showControlDock={canUseMatchControl} />
+                            <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact matchNumber={allMatches.indexOf(match) + 1} showControlDock={canUseMatchControl} showDockAds={canManageTournament} showPlayerPizarraDock={showPlayerPizarraDock} />
                         ))}
                         {effectiveLiveMatches.length < numCanchas && (
                             Array.from({ length: Math.min(6, numCanchas - effectiveLiveMatches.length) }).map((_, i) => (
@@ -254,7 +257,7 @@ export const MatchList: React.FC<MatchListProps> = ({
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             {dateFilteredLive.map((m, idx) => (
-                                <NextMatchCard key={m.id} match={m} rank={idx} compact matchNumber={allMatches.indexOf(m) + 1} showControlDock={canUseMatchControl} />
+                                <NextMatchCard key={m.id} match={m} rank={idx} compact matchNumber={allMatches.indexOf(m) + 1} showControlDock={canUseMatchControl} showDockAds={canManageTournament} showPlayerPizarraDock={showPlayerPizarraDock} />
                             ))}
                             {dateFilteredLive.length === 0 && (
                                 <div className="py-10 text-center border border-dashed border-white/5 rounded-[2rem] opacity-20">
@@ -279,7 +282,7 @@ export const MatchList: React.FC<MatchListProps> = ({
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             {todosNextUp.map((m, idx) => (
-                                <NextMatchCard key={m.id} match={m} rank={idx} compact gameNumber={idx + 1} matchNumber={allMatches.indexOf(m) + 1} showControlDock={canUseMatchControl} />
+                                <NextMatchCard key={m.id} match={m} rank={idx} compact gameNumber={idx + 1} matchNumber={allMatches.indexOf(m) + 1} showControlDock={canUseMatchControl} showDockAds={canManageTournament} showPlayerPizarraDock={showPlayerPizarraDock} />
                             ))}
                             {todosNextUp.length === 0 && (
                                 <div className="py-10 text-center border border-dashed border-white/5 rounded-[2rem] opacity-20">

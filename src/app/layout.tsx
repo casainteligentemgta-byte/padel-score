@@ -33,12 +33,16 @@ export default function RootLayout({
     children,
 }: Readonly<{ children: React.ReactNode }>) {
     return (
-        <html lang="es" suppressHydrationWarning style={{ background: "#0a0a0a" }}>
-            <body suppressHydrationWarning style={{ margin: 0, backgroundColor: "#0a0a0a", color: "#fff", fontFamily: "system-ui, sans-serif", minHeight: "100vh" }}>
+        <html lang="es" suppressHydrationWarning className="h-full min-h-0" style={{ background: "#0a0a0a" }}>
+            <body
+                suppressHydrationWarning
+                className="flex min-h-dvh min-h-0 flex-col"
+                style={{ margin: 0, backgroundColor: "#0a0a0a", color: "#fff", fontFamily: "system-ui, sans-serif" }}
+            >
                 <RootErrorBoundary>
                     <AuthProvider>
                         <AppSettingsProvider>
-                            <main className="min-h-screen w-full flex flex-col" style={{ minHeight: "100vh" }}>
+                            <main className="flex min-h-0 w-full flex-1 flex-col">
                                 {children}
                             </main>
                             <InstallAppBanner />

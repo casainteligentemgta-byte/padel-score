@@ -54,8 +54,8 @@ export function getFinishedMatchScoreLines(match: any): string[] {
     if (useStbLayout && setScores.length >= 2) {
         const s1 = normSetRow(setScores[0]);
         const s2 = normSetRow(setScores[1]);
-        if (s1) lines.push(`1.er set ${s1.t1}-${s1.t2}`);
-        if (s2) lines.push(`2.º set ${s2.t1}-${s2.t2}`);
+        if (s1) lines.push(`SET 1 · ${s1.t1}-${s1.t2}`);
+        if (s2) lines.push(`SET 2 · ${s2.t1}-${s2.t2}`);
 
         let stbT1 = Number(stbObj?.t1 ?? 0);
         let stbT2 = Number(stbObj?.t2 ?? 0);
@@ -67,17 +67,13 @@ export function getFinishedMatchScoreLines(match: any): string[] {
             }
         }
 
-        if (stbT1 > 0 || stbT2 > 0) {
-            lines.push(`1 set a 1 · STB (a 10): ${stbT1}-${stbT2}`);
-        } else {
-            lines.push('1 set a 1 · Desempate STB (a 10)');
-        }
+        lines.push(`STB · ${stbT1}-${stbT2}`);
         return lines;
     }
 
     for (let i = 0; i < setScores.length; i++) {
         const r = normSetRow(setScores[i]);
-        if (r) lines.push(`S${i + 1}: ${r.t1}-${r.t2}`);
+        if (r) lines.push(`SET ${i + 1} · ${r.t1}-${r.t2}`);
     }
 
     if (lines.length === 0) {

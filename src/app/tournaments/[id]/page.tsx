@@ -62,19 +62,22 @@ import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { getFinishedMatchScoreLines } from '@/lib/matchFinishedScoreDisplay';
 import { buildPizarraConceptHref } from '@/app/tournaments/event/components/MatchCards';
 
-/** Mismo diseño para Marcador (en vivo) y celdas del dock (Control, Pizarra, Cámaras, ADS) */
+/** Mismo diseño para Marcador (en vivo) y celdas del dock — en móvil más compacto (~mitad de ancho por celda en rejilla 4 col) */
 const MATCH_CARD_ACTION_LINK =
-    'group flex min-h-[3.25rem] min-w-0 w-full flex-col items-center justify-center gap-0.5 rounded-xl border border-white/10 bg-white/[0.05] px-0.5 py-1.5 text-gray-400 transition-all hover:bg-white/[0.08] hover:border-padel-primary/40 hover:text-padel-primary active:scale-[0.98] sm:gap-1 sm:px-0 sm:py-0';
+    'group box-border flex min-h-[3.25rem] min-w-0 max-w-full w-full flex-col items-center justify-center gap-0.5 rounded-xl border border-white/10 bg-white/[0.05] px-1 py-1.5 text-gray-400 transition-all hover:bg-white/[0.08] hover:border-padel-primary/40 hover:text-padel-primary active:scale-[0.98] sm:gap-1 sm:px-0 sm:py-0 max-sm:min-h-[2.4rem] max-sm:gap-0 max-sm:px-0.5 max-sm:py-1';
+/** Misma rejilla que el dock normal; tonos rojos para partidos finalizados */
+const MATCH_CARD_ACTION_LINK_FINISHED =
+    'group box-border flex min-h-[3.25rem] min-w-0 max-w-full w-full flex-col items-center justify-center gap-0.5 rounded-xl border border-red-500/30 bg-red-950/35 px-1 py-1.5 text-red-200/90 transition-all hover:bg-red-900/40 hover:border-red-400/50 hover:text-red-100 active:scale-[0.98] sm:gap-1 sm:px-0 sm:py-0 max-sm:min-h-[2.4rem] max-sm:gap-0 max-sm:px-0.5 max-sm:py-1';
 const MATCH_CARD_ACTION_LABEL =
-    'max-w-full truncate text-center text-[7px] font-black uppercase leading-none tracking-widest';
-const MATCH_CARD_ACTION_ICON = 'h-3.5 w-3.5 shrink-0';
+    'max-w-full truncate text-center text-[7px] font-black uppercase leading-none tracking-widest max-sm:text-[6px] max-sm:leading-tight';
+const MATCH_CARD_ACTION_ICON = 'h-3.5 w-3.5 shrink-0 max-sm:h-3 max-sm:w-3';
 
 export default function TournamentDashboard() {
     type ParticipantOption = { id: string; name?: string; lastName?: string; email?: string; phone?: string };
     const id = useRouteSegment('id');
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { user, profile, isAdmin, markerCanchas, loading: authLoading } = useAuth();
+    const { user, profile, isAdmin, isPlayer, markerCanchas, loading: authLoading } = useAuth();
     const [tournament, setTournament] = useState<any>(null);
     const tournamentRef = useRef<any>(null);
     tournamentRef.current = tournament;
@@ -126,6 +129,8 @@ export default function TournamentDashboard() {
     );
     const canManageMatches = isOwner || isAdmin || (profile?.role === 'marker' && (markerCanchas?.length ?? 0) > 0);
     const canManageTournament = isOwner || isAdmin;
+    /** Rol jugador sin permisos de staff: no mostrar dock de acciones (Control, Pizarra, Cámaras, ADS). */
+    const isPurePlayerViewer = isPlayer && !canManageMatches && !canManageTournament;
 
     // Sincronizar pestaña con query ?tab= (marcador / enlaces externos)
     useEffect(() => {
@@ -1043,6 +1048,13 @@ export default function TournamentDashboard() {
     const deduped = [...new Set(tabs)];
     const uniqueTabs = deduped;
     const visibleTabs = uniqueTabs;
+    /** Fila 1: Grupos, Todos, fases del cuadro · Fila 2: En Vivo, Por comenzar, Finalizados, Ranking */
+    const [tabsRow1, tabsRow2] = (() => {
+        const i = visibleTabs.indexOf('En Vivo');
+        if (i >= 1) return [visibleTabs.slice(0, i), visibleTabs.slice(i)] as const;
+        const mid = Math.ceil(visibleTabs.length / 2);
+        return [visibleTabs.slice(0, mid), visibleTabs.slice(mid)] as const;
+    })();
 
     // ── Pre-compute "Por Comenzar" data ONCE (fuera del .filter) ─────────────
     const _toMsT = (v: any): number => {
@@ -1964,7 +1976,8 @@ export default function TournamentDashboard() {
 
             {/* Pizarra: cabecera con título y acciones */}
             <header className="sticky top-0 z-[60] bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5">
-                <div className={`${activeTab === 'Grupos' ? 'max-w-md' : 'max-w-4xl'} mx-auto px-6 pt-6 pb-4 flex justify-between items-center`}
+                <div
+                    className={`${isLiveDashboard ? 'max-w-4xl' : 'max-w-md'} mx-auto px-6 pt-6 pb-4 flex justify-between items-center`}
                 >
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-3 ml-12 md:ml-0">
@@ -2029,11 +2042,10 @@ export default function TournamentDashboard() {
 
                         <Link
                             href={`/tournaments/${id}/podium`}
-                            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-padel-primary hover:bg-white/10 transition-all"
+                            className="hidden sm:inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/5 border border-white/10 text-padel-primary hover:bg-white/10 transition-all"
                             title="Campeón y subcampeón de esta categoría"
                         >
                             <Trophy className="w-3.5 h-3.5" />
-                            Podio
                         </Link>
 
                         <button
@@ -2051,44 +2063,90 @@ export default function TournamentDashboard() {
             {/* Tabs: siempre visibles (también en vista “En vivo” por pista) para poder cambiar de filtro sin ir a Cuadro */}
             <nav className="bg-[#0a0a0a]/60 backdrop-blur-md border-b border-white/5 py-3 sticky top-[4.5rem] z-50">
                 <div
-                    className={`mx-auto touch-pan-x overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth [-webkit-overflow-scrolling:touch] px-4 pb-0.5 hide-scrollbar ${isLiveDashboard ? 'max-w-none' : activeTab === 'Grupos' ? 'max-w-md' : 'max-w-4xl'}`}
+                    className={`mx-auto w-full min-w-0 touch-pan-x overflow-x-auto overscroll-x-contain scroll-smooth [-webkit-overflow-scrolling:touch] pb-0.5 hide-scrollbar pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] ${isLiveDashboard ? 'max-w-none' : 'max-w-md'}`}
                 >
-                    <div className="flex flex-nowrap items-stretch justify-start gap-2">
-                        {visibleTabs.map((tab, tabIdx) => {
-                            const isLive = tab === 'En Vivo';
-                            const isActive = activeTab === tab;
-                            return (
-                                <button
-                                    key={`tab-top-${tabIdx}-${tab}`}
-                                    ref={(el) => {
-                                        tabButtonRefs.current[tab] = el;
-                                    }}
-                                    type="button"
-                                    onClick={() => setActiveTab(tab)}
-                                    className={`shrink-0 min-w-[90px] px-4 py-2.5 rounded-xl text-[10px] font-black italic uppercase tracking-widest transition-all duration-300 transform active:scale-95 border
-                                        ${isActive
-                                            ? isLive
-                                                ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 border-red-500/50'
-                                                : 'bg-padel-primary text-black shadow-lg shadow-padel-primary/20 border-padel-primary/50'
-                                            : 'bg-white/5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300 border-white/5'
-                                        }`}
-                                >
-                                    {isLive ? (
-                                        <span className="flex items-center justify-center gap-1.5">
-                                            <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : 'bg-red-500'} animate-pulse`} />
-                                            {tab}
-                                        </span>
-                                    ) : tab}
-                                </button>
-                            );
-                        })}
+                    <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap items-stretch justify-center gap-2">
+                            {tabsRow1.map((tab, tabIdx) => {
+                                const isLive = tab === 'En Vivo';
+                                const isFinalizadosTab = tab === 'Finalizados';
+                                const redAccentActive = isLive || isFinalizadosTab;
+                                const isActive = activeTab === tab;
+                                return (
+                                    <button
+                                        key={`tab-r1-${tabIdx}-${tab}`}
+                                        ref={(el) => {
+                                            tabButtonRefs.current[tab] = el;
+                                        }}
+                                        type="button"
+                                        onClick={() => setActiveTab(tab)}
+                                        className={`inline-flex shrink-0 min-w-[90px] items-center justify-center px-4 py-2.5 text-center rounded-xl text-[10px] font-black italic uppercase tracking-widest transition-all duration-300 transform active:scale-95 border
+                                            ${isActive
+                                                ? redAccentActive
+                                                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 border-red-500/50'
+                                                    : 'bg-padel-primary text-black shadow-lg shadow-padel-primary/20 border-padel-primary/50'
+                                                : 'bg-white/5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300 border-white/5'
+                                            }`}
+                                    >
+                                        {isLive ? (
+                                            <span className="flex items-center justify-center gap-1.5">
+                                                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : 'bg-red-500'} animate-pulse`} />
+                                                {tab}
+                                            </span>
+                                        ) : (
+                                            tab
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <div className="flex flex-wrap items-stretch justify-center gap-2">
+                            {tabsRow2.map((tab, tabIdx) => {
+                                const isLive = tab === 'En Vivo';
+                                const isFinalizadosTab = tab === 'Finalizados';
+                                const redAccentActive = isLive || isFinalizadosTab;
+                                const isActive = activeTab === tab;
+                                return (
+                                    <button
+                                        key={`tab-r2-${tabIdx}-${tab}`}
+                                        ref={(el) => {
+                                            tabButtonRefs.current[tab] = el;
+                                        }}
+                                        type="button"
+                                        onClick={() => setActiveTab(tab)}
+                                        className={`inline-flex shrink-0 min-w-[90px] items-center justify-center px-4 py-2.5 text-center rounded-xl text-[10px] font-black italic uppercase tracking-widest transition-all duration-300 transform active:scale-95 border
+                                            ${isActive
+                                                ? redAccentActive
+                                                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 border-red-500/50'
+                                                    : 'bg-padel-primary text-black shadow-lg shadow-padel-primary/20 border-padel-primary/50'
+                                                : 'bg-white/5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300 border-white/5'
+                                            }`}
+                                    >
+                                        {isLive ? (
+                                            <span className="flex items-center justify-center gap-1.5">
+                                                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : 'bg-red-500'} animate-pulse`} />
+                                                {tab}
+                                            </span>
+                                        ) : (
+                                            tab
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             </nav>
 
             {/* Content Area (pizarra / cuadro / listados) */}
             <div className={`ipad-scroll-area pb-20 ${mainScrollOverflowClass}`}>
-                <main className={`${isLiveDashboard ? 'max-w-none w-full min-h-0 p-3 py-5' : activeTab === 'Por Comenzar' ? 'max-w-4xl mx-auto w-full px-4 py-6 min-h-0 flex flex-col' : activeTab === 'Grupos' ? 'max-w-md mx-auto w-full px-4 py-6' : 'max-w-4xl mx-auto w-full px-4 py-10'} transition-all duration-500`}>
+                <main
+                    className={`${
+                        isLiveDashboard
+                            ? 'max-w-none w-full min-h-0 p-3 py-5'
+                            : 'mx-auto flex min-h-0 w-full min-w-0 max-w-md flex-col px-4 py-6 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]'
+                    } transition-all duration-500`}
+                >
                     <AnimatePresence mode="wait">
                         {activeTab === 'Grupos' ? (
                             <motion.div
@@ -2245,7 +2303,8 @@ export default function TournamentDashboard() {
                                                     <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1">
                                                         Podio · categoría
                                                     </h3>
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                    {/* 1.er arriba, 2.º debajo (mejor lectura de nombres largos); luego la tabla general */}
+                                                    <div className="flex max-w-full flex-col gap-4">
                                                         <div className="rounded-[2rem] border border-padel-primary/35 bg-padel-primary/[0.08] p-6 shadow-lg shadow-padel-primary/5">
                                                             <span className="text-[9px] font-black uppercase tracking-widest text-padel-primary">
                                                                 1.er lugar
@@ -2500,110 +2559,111 @@ export default function TournamentDashboard() {
                                                     exit={{ opacity: 0, scale: 0.95 }}
                                                     className={`w-full ${activeTab === 'Por Comenzar' ? 'h-full flex flex-col' : ''}`}
                                                 >
-                                                    <div className={`rounded-[2rem] shadow-[0_20px_60px_-8px_rgba(0,0,0,0.5),0_8px_24px_-4px_rgba(0,0,0,0.35),0_0_0_1px_rgba(0,0,0,0.2)] hover:shadow-[0_28px_70px_-10px_rgba(0,0,0,0.55),0_12px_28px_-4px_rgba(0,0,0,0.4),0_0_0_1px_rgba(0,0,0,0.25)] transition-all ${activeTab === 'Por Comenzar' ? 'h-full' : isLiveDashboard ? 'h-auto' : ''}`}>
-                                                        <div className={`rounded-[2rem] overflow-hidden border flex flex-col hover:border-white/25 transition-all ${activeTab === 'Por Comenzar' ? 'h-full' : isLiveDashboard ? 'h-auto min-h-0' : 'h-full'} ${cardBg}`}>
+                                                    <div className={`min-w-0 max-w-full rounded-[2rem] shadow-[0_20px_60px_-8px_rgba(0,0,0,0.5),0_8px_24px_-4px_rgba(0,0,0,0.35),0_0_0_1px_rgba(0,0,0,0.2)] transition-all hover:shadow-[0_28px_70px_-10px_rgba(0,0,0,0.55),0_12px_28px_-4px_rgba(0,0,0,0.4),0_0_0_1px_rgba(0,0,0,0.25)] ${activeTab === 'Por Comenzar' ? 'h-full' : isLiveDashboard ? 'h-auto' : ''}`}>
+                                                        <div className={`min-w-0 max-w-full rounded-[2rem] overflow-hidden border flex flex-col hover:border-white/25 transition-all ${activeTab === 'Por Comenzar' ? 'h-full' : isLiveDashboard ? 'h-auto min-h-0' : 'h-full'} ${cardBg}`}>
 
-                                                            {/* ── Franja superior: Nº partido · Hora · Pista · Categoría · Género ─────────────────── */}
-                                                            <div className={`px-4 pt-3 pb-2.5 border-b border-white/[0.10] flex flex-col gap-2 ${isLive ? 'bg-[#39ff14]/15' : isPorComenzar ? 'bg-[#ff9500]/15' : isEnCola ? 'bg-red-500/10' : 'bg-white/[0.07]'}`}>
-                                                                <div className="flex items-start justify-between gap-3">
-                                                                    <div className="flex min-w-0 flex-1 flex-col gap-1.5 text-left">
-                                                                        {/* Línea 1: partido · fecha · hora */}
-                                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                                                            {matchNumber >= 1 && (
-                                                                                <>
-                                                                                    <div className="min-w-0 max-w-[140px]">
-                                                                                        <AutoShrinkName
-                                                                                            name={`Partido ${matchNumber}`}
-                                                                                            style={{ fontSize: '10px' }}
-                                                                                            className="font-black uppercase tracking-widest text-gray-400"
-                                                                                        />
-                                                                                    </div>
-                                                                                    <span className="text-white/30 flex-shrink-0">·</span>
-                                                                                </>
-                                                                            )}
-                                                                            {(() => {
-                                                                                const raw = match.time || match.scheduledTime;
-                                                                                if (delayInfo) {
-                                                                                    const est = new Date(delayInfo.estimatedStartMs);
-                                                                                    return (
-                                                                                        <span className="text-[10px] font-bold tracking-wider text-orange-400">
-                                                                                            {est.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })} · {est.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                                                                                        </span>
-                                                                                    );
-                                                                                }
-                                                                                if (!raw) {
-                                                                                    return <span className="text-[10px] font-bold text-gray-400">—</span>;
-                                                                                }
-                                                                                const d = raw?.toDate ? raw.toDate() : new Date(raw);
-                                                                                if (isNaN(d.getTime())) {
-                                                                                    return <span className="text-[10px] font-bold text-gray-400">—</span>;
-                                                                                }
-                                                                                const dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
-                                                                                const timeStr = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
-                                                                                return (
-                                                                                    <span className="text-[10px] font-bold tracking-wider text-gray-400">
-                                                                                        <span className="font-black uppercase tracking-tighter text-padel-primary/60">{dateStr}</span>
-                                                                                        <span className="px-1 text-white/30">·</span>
-                                                                                        {timeStr}
-                                                                                    </span>
-                                                                                );
-                                                                            })()}
-                                                                        </div>
-                                                                        {/* Línea 2: pista centrada; debajo categoría y género */}
-                                                                        <div className="flex w-full min-w-0 flex-col items-center gap-1.5 text-[8px] sm:text-[9px]">
-                                                                            <p className={`w-full truncate text-center font-black uppercase italic tracking-tight ${isLive ? 'text-padel-primary' : 'text-gray-500'}`}>
-                                                                                {match.courtName ?? (match.court != null ? `Pista ${match.court}` : (match.courtIndex != null ? `Pista ${match.courtIndex + 1}` : 'Pista –'))}
-                                                                            </p>
-                                                                            {(tournament?.category || tournament?.gender) && (
-                                                                                <div className="flex w-full flex-wrap items-center justify-center gap-x-2 gap-y-1">
-                                                                                    {tournament?.category && (
-                                                                                        <span className="max-w-[min(100%,12rem)] truncate rounded border border-white/[0.15] bg-white/[0.10] px-1.5 py-0.5 text-center font-black uppercase tracking-tight text-gray-400">
-                                                                                            {formatCat(tournament.category)}
-                                                                                        </span>
-                                                                                    )}
-                                                                                    {tournament?.gender && (
-                                                                                        <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 font-black uppercase tracking-tight ${tournament.gender === 'MALE' ? 'border-blue-500/20 bg-blue-500/10 text-blue-400' : tournament.gender === 'FEMALE' ? 'border-pink-500/20 bg-pink-500/10 text-pink-400' : 'border-purple-500/20 bg-purple-500/10 text-purple-400'}`}>
-                                                                                            {tournament.gender === 'MALE' ? '♂ Masc' : tournament.gender === 'FEMALE' ? '♀ Fem' : '⚥ Mix'}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    </div>
-                                                                    {/* Badge derecho: prioridad EN VIVO > Finalizado > DEMORADO > fase */}
+                                                            {/* ── Franja superior: partido · fecha · hora · fase (centrado) · pista · categoría/género ── */}
+                                                            <div className={`px-4 pt-3 pb-2.5 border-b border-white/[0.10] flex flex-col items-center gap-2 text-center ${isLive ? 'bg-[#39ff14]/15' : isPorComenzar ? 'bg-[#ff9500]/15' : isEnCola ? 'bg-red-500/10' : 'bg-white/[0.07]'}`}>
+                                                                {/* Línea 1: partido · fecha · hora · estado / fase */}
+                                                                <div className="flex w-full min-w-0 flex-wrap items-center justify-center gap-x-2 gap-y-1">
+                                                                    {matchNumber >= 1 && (
+                                                                        <>
+                                                                            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                                                                Partido {matchNumber}
+                                                                            </span>
+                                                                            <span className="text-white/30 flex-shrink-0">·</span>
+                                                                        </>
+                                                                    )}
+                                                                    {(() => {
+                                                                        const raw = match.time || match.scheduledTime;
+                                                                        if (delayInfo) {
+                                                                            const est = new Date(delayInfo.estimatedStartMs);
+                                                                            return (
+                                                                                <span className="text-[10px] font-bold tracking-wider text-orange-400">
+                                                                                    {est.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })} · {est.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                                                                                </span>
+                                                                            );
+                                                                        }
+                                                                        if (!raw) {
+                                                                            return <span className="text-[10px] font-bold text-gray-400">—</span>;
+                                                                        }
+                                                                        const d = raw?.toDate ? raw.toDate() : new Date(raw);
+                                                                        if (isNaN(d.getTime())) {
+                                                                            return <span className="text-[10px] font-bold text-gray-400">—</span>;
+                                                                        }
+                                                                        const dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+                                                                        const timeStr = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+                                                                        return (
+                                                                            <span className="text-[10px] font-bold tracking-wider text-gray-400">
+                                                                                <span className="font-black uppercase tracking-tighter text-padel-primary/60">{dateStr}</span>
+                                                                                <span className="px-1 text-white/30">·</span>
+                                                                                {timeStr}
+                                                                            </span>
+                                                                        );
+                                                                    })()}
+                                                                    {(isLive ||
+                                                                        isFinishedCard ||
+                                                                        delayInfo ||
+                                                                        match.stage === 'GROUP_STAGE' ||
+                                                                        match.roundName === 'Fase de Grupos' ||
+                                                                        match.roundName === 'Fase de Grupo' ||
+                                                                        match.roundName) && (
+                                                                        <span className="text-white/30 flex-shrink-0">·</span>
+                                                                    )}
                                                                     {isLive ? (
-                                                                        <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
-                                                                            <span className="text-[9px] font-black uppercase italic tracking-widest text-red-500 animate-pulse rounded-full border border-red-500/30 bg-red-500/5 px-2 py-1">● En Vivo</span>
-                                                                            {match?.id && id && (
-                                                                                <Link
-                                                                                    href={`/tournaments/${id}/score/${match.id}`}
-                                                                                    className={`${MATCH_CARD_ACTION_LINK} max-w-[7rem]`}
-                                                                                >
-                                                                                    <Zap className={MATCH_CARD_ACTION_ICON} />
-                                                                                    <span className={MATCH_CARD_ACTION_LABEL}>Marcador</span>
-                                                                                </Link>
-                                                                            )}
-                                                                        </div>
+                                                                        <span className="text-[9px] font-black uppercase italic tracking-widest text-red-500 animate-pulse rounded-full border border-red-500/30 bg-red-500/5 px-2 py-1">
+                                                                            ● En Vivo
+                                                                        </span>
                                                                     ) : isFinishedCard ? (
-                                                                        <span className="text-[9px] font-black text-white/30 uppercase italic tracking-widest border border-white/10 px-2 py-1 rounded-full bg-white/5 flex-shrink-0">Finalizado</span>
+                                                                        <span className="text-[9px] font-black text-white/30 uppercase italic tracking-widest border border-white/10 px-2 py-1 rounded-full bg-white/5">
+                                                                            Finalizado
+                                                                        </span>
                                                                     ) : delayInfo ? (
-                                                                        <span className="text-[9px] font-black text-orange-400 bg-orange-500/10 border border-orange-500/30 px-2 py-1 rounded-full italic uppercase tracking-widest animate-pulse flex-shrink-0">
+                                                                        <span className="text-[9px] font-black text-orange-400 bg-orange-500/10 border border-orange-500/30 px-2 py-1 rounded-full italic uppercase tracking-widest animate-pulse">
                                                                             ⚠ ~{delayInfo.delayMins}m
                                                                         </span>
                                                                     ) : match.stage === 'GROUP_STAGE' ||
                                                                       match.roundName === 'Fase de Grupos' ||
                                                                       match.roundName === 'Fase de Grupo' ? (
-                                                                        <span className="text-[9px] font-black text-padel-primary/40 uppercase tracking-widest italic border border-padel-primary/10 px-2 py-1 rounded-full bg-padel-primary/5 flex-shrink-0 whitespace-nowrap">
+                                                                        <span className="text-[9px] font-black text-padel-primary/40 uppercase tracking-widest italic border border-padel-primary/10 px-2 py-1 rounded-full bg-padel-primary/5 whitespace-nowrap">
                                                                             F. Grupo
                                                                         </span>
                                                                     ) : match.roundName ? (
-                                                                        <span className="text-[9px] font-black text-padel-primary/40 uppercase tracking-widest italic border border-padel-primary/10 px-2 py-1 rounded-full bg-padel-primary/5 flex-shrink-0 max-w-[min(100%,10rem)] truncate">
+                                                                        <span className="text-[9px] font-black text-padel-primary/40 uppercase tracking-widest italic border border-padel-primary/10 px-2 py-1 rounded-full bg-padel-primary/5 max-w-[min(100%,12rem)] truncate">
                                                                             {match.roundName}
                                                                         </span>
                                                                     ) : null}
                                                                 </div>
+                                                                {isLive && match?.id && id && canManageMatches && (
+                                                                    <Link
+                                                                        href={`/tournaments/${id}/score/${match.id}`}
+                                                                        className={MATCH_CARD_ACTION_LINK}
+                                                                    >
+                                                                        <Zap className={MATCH_CARD_ACTION_ICON} />
+                                                                        <span className={MATCH_CARD_ACTION_LABEL}>Marcador</span>
+                                                                    </Link>
+                                                                )}
+                                                                {/* Pista */}
+                                                                <p className={`w-full max-w-full truncate px-1 text-[8px] font-black uppercase italic tracking-tight sm:text-[9px] ${isLive ? 'text-padel-primary' : 'text-gray-500'}`}>
+                                                                    {match.courtName ?? (match.court != null ? `Pista ${match.court}` : (match.courtIndex != null ? `Pista ${match.courtIndex + 1}` : 'Pista –'))}
+                                                                </p>
+                                                                {/* Categoría y género */}
+                                                                {(tournament?.category || tournament?.gender) && (
+                                                                    <div className="flex w-full flex-wrap items-center justify-center gap-x-2 gap-y-1">
+                                                                        {tournament?.category && (
+                                                                            <span className="max-w-[min(100%,12rem)] truncate rounded border border-white/[0.15] bg-white/[0.10] px-1.5 py-0.5 text-center text-[8px] font-black uppercase tracking-tight text-gray-400 sm:text-[9px]">
+                                                                                {formatCat(tournament.category)}
+                                                                            </span>
+                                                                        )}
+                                                                        {tournament?.gender && (
+                                                                            <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-tight sm:text-[9px] ${tournament.gender === 'MALE' ? 'border-blue-500/20 bg-blue-500/10 text-blue-400' : tournament.gender === 'FEMALE' ? 'border-pink-500/20 bg-pink-500/10 text-pink-400' : 'border-purple-500/20 bg-purple-500/10 text-purple-400'}`}>
+                                                                                {tournament.gender === 'MALE' ? '♂ Masc' : tournament.gender === 'FEMALE' ? '♀ Fem' : '⚥ Mix'}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                                 {match.groupName && (
-                                                                    <div className="flex items-center gap-2">
+                                                                    <div className="flex w-full justify-center">
                                                                         <span className="text-[8px] font-black bg-padel-primary text-black px-2 py-0.5 rounded italic uppercase tracking-wider">
                                                                             Grupo {match.groupName}
                                                                         </span>
@@ -2619,31 +2679,13 @@ export default function TournamentDashboard() {
                                                                         // Partido finalizado: mostrar solo score del Set 1, Set 2 y STB (si hubo)
                                                                         if (isFinishedCard) {
                                                                             const scoreLines = getFinishedMatchScoreLines(match);
-                                                                            const finishedTeam1 =
-                                                                                [
-                                                                                    formatPlayerFichaName(t1p1),
-                                                                                    t1p2 ? formatPlayerFichaName(t1p2) : '',
-                                                                                ]
-                                                                                    .filter(Boolean)
-                                                                                    .join(' · ') ||
-                                                                                match.team1?.name ||
-                                                                                '–';
-                                                                            const finishedTeam2 =
-                                                                                [
-                                                                                    formatPlayerFichaName(t2p1),
-                                                                                    t2p2 ? formatPlayerFichaName(t2p2) : '',
-                                                                                ]
-                                                                                    .filter(Boolean)
-                                                                                    .join(' · ') ||
-                                                                                match.team2?.name ||
-                                                                                '–';
                                                                             return (
                                                                                 <div className="flex flex-col shrink-0 py-2 px-3 gap-2">
-                                                                                    <div className="flex flex-col gap-1">
+                                                                                    <div className="flex w-full flex-col items-center gap-1 text-center">
                                                                                         {scoreLines.map((line, li) => (
                                                                                             <div
                                                                                                 key={li}
-                                                                                                className={`text-[10px] sm:text-[11px] font-black uppercase tracking-wider leading-snug ${
+                                                                                                className={`w-full text-center text-[10px] sm:text-[11px] font-black uppercase tracking-wider leading-snug tabular-nums ${
                                                                                                     line.includes('STB')
                                                                                                         ? 'text-padel-primary/95'
                                                                                                         : 'text-white/70'
@@ -2653,21 +2695,45 @@ export default function TournamentDashboard() {
                                                                                             </div>
                                                                                         ))}
                                                                                     </div>
-                                                                                    <div className="flex justify-between items-center gap-2 text-white/90 min-h-[2.25rem] border-t border-white/10 pt-2">
-                                                                                        <div className="min-w-0 flex-1">
+                                                                                    <div className="flex flex-col items-stretch gap-1.5 border-t border-white/10 pt-2 text-white/90">
+                                                                                        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-center">
                                                                                             <AutoShrinkName
-                                                                                                name={finishedTeam1}
+                                                                                                name={formatPlayerFichaName(t1p1)}
                                                                                                 style={{ fontSize: '11px' }}
-                                                                                                className="font-black italic uppercase tracking-tight leading-tight text-left"
+                                                                                                className="font-black italic uppercase tracking-tight leading-tight min-w-0"
                                                                                             />
+                                                                                            {t1p2 ? (
+                                                                                                <AutoShrinkName
+                                                                                                    name={formatPlayerFichaName(t1p2)}
+                                                                                                    style={{ fontSize: '11px' }}
+                                                                                                    className="font-black italic uppercase tracking-tight leading-tight min-w-0"
+                                                                                                />
+                                                                                            ) : (
+                                                                                                <span className="text-[10px] font-black uppercase tracking-widest text-white/25 self-center">
+                                                                                                    —
+                                                                                                </span>
+                                                                                            )}
                                                                                         </div>
-                                                                                        <span className="text-[10px] text-white/40 flex-shrink-0 px-1">vs</span>
-                                                                                        <div className="min-w-0 flex-1">
+                                                                                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/40 text-center">
+                                                                                            VS
+                                                                                        </span>
+                                                                                        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-center">
                                                                                             <AutoShrinkName
-                                                                                                name={finishedTeam2}
+                                                                                                name={formatPlayerFichaName(t2p1)}
                                                                                                 style={{ fontSize: '11px' }}
-                                                                                                className="font-black italic uppercase tracking-tight leading-tight text-right"
+                                                                                                className="font-black italic uppercase tracking-tight leading-tight min-w-0"
                                                                                             />
+                                                                                            {t2p2 ? (
+                                                                                                <AutoShrinkName
+                                                                                                    name={formatPlayerFichaName(t2p2)}
+                                                                                                    style={{ fontSize: '11px' }}
+                                                                                                    className="font-black italic uppercase tracking-tight leading-tight min-w-0"
+                                                                                                />
+                                                                                            ) : (
+                                                                                                <span className="text-[10px] font-black uppercase tracking-widest text-white/25 self-center">
+                                                                                                    —
+                                                                                                </span>
+                                                                                            )}
                                                                                         </div>
                                                                                     </div>
                                                                                 </div>
@@ -2693,18 +2759,30 @@ export default function TournamentDashboard() {
 
                                                                         const isT1Serving = isActive && (liveMarker?.saque?.equipo === 1 || match.server?.team === 1);
                                                                         const isT2Serving = isActive && (liveMarker?.saque?.equipo === 2 || match.server?.team === 2);
+                                                                        const srvTeam = match.server?.team as 1 | 2 | undefined;
+                                                                        const srvPlayer = match.server?.player as 1 | 2 | undefined;
+                                                                        const t1ServeP1 =
+                                                                            isT1Serving && (srvTeam ?? 1) === 1 && (srvPlayer ?? 1) === 1;
+                                                                        const t1ServeP2 = isT1Serving && srvTeam === 1 && srvPlayer === 2;
+                                                                        const t2ServeP1 =
+                                                                            isT2Serving && srvTeam === 2 && (srvPlayer ?? 1) === 1;
+                                                                        const t2ServeP2 = isT2Serving && srvTeam === 2 && srvPlayer === 2;
 
                                                                         const ROW_H = 'h-8';
                                                                         const COL_W_SCORE = 'w-8';
                                                                         const COL_W_POINTS = 'w-9';
-                                                                        const team1Label =
-                                                                            [formatPlayerFichaName(t1p1), t1p2 ? formatPlayerFichaName(t1p2) : '']
-                                                                                .filter(Boolean)
-                                                                                .join(' · ') || 'Equipo 1';
-                                                                        const team2Label =
-                                                                            [formatPlayerFichaName(t2p1), t2p2 ? formatPlayerFichaName(t2p2) : '']
-                                                                                .filter(Boolean)
-                                                                                .join(' · ') || 'Equipo 2';
+                                                                        /** Dos columnas de nombres + P/G/S (+ TB opcional) */
+                                                                        const liveGridCols = showExtra
+                                                                            ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem_2rem_2rem_2rem]'
+                                                                            : 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem_2rem_2rem]';
+                                                                        const fsNameSize = (nm: string) => {
+                                                                            const len = nm.length;
+                                                                            return len <= 8 ? '14px' : len <= 13 ? '12px' : len <= 18 ? '10px' : len <= 24 ? '9px' : '8px';
+                                                                        };
+                                                                        const fs1a = fsNameSize(formatPlayerFichaName(t1p1));
+                                                                        const fs1b = t1p2 ? fsNameSize(formatPlayerFichaName(t1p2)) : fs1a;
+                                                                        const fs2a = fsNameSize(formatPlayerFichaName(t2p1));
+                                                                        const fs2b = t2p2 ? fsNameSize(formatPlayerFichaName(t2p2)) : fs2a;
                                                                         const showPgsCols =
                                                                             activeTab === 'En Vivo' ||
                                                                             (activeTab !== 'Por Comenzar' &&
@@ -2723,19 +2801,23 @@ export default function TournamentDashboard() {
                                                                         return (
                                                                             <div className="flex flex-col shrink-0">
                                                                                 {showPgsCols && (
-                                                                                    <div className="flex h-4 border-b border-white/[0.12] bg-white/[0.05] shrink-0">
-                                                                                        <div className="flex-1" />
-                                                                                        <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center`}>
+                                                                                    <div className={`grid ${liveGridCols} h-4 shrink-0 border-b border-white/[0.12] bg-white/[0.05]`}>
+                                                                                        <div className="col-span-2 flex items-center justify-center px-2">
+                                                                                            <span className="text-[8px] font-black uppercase tracking-widest text-white/25">
+                                                                                                Jugadores
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <div className={`${COL_W_POINTS} flex items-center justify-center border-l border-white/[0.06]`}>
                                                                                             <span className="text-[8px] font-black uppercase tracking-widest text-white/25">P</span>
                                                                                         </div>
-                                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
+                                                                                        <div className={`${COL_W_SCORE} flex items-center justify-center border-l border-white/[0.06] bg-black`}>
                                                                                             <span className="text-[8px] font-black uppercase tracking-widest text-white/60">G</span>
                                                                                         </div>
-                                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
+                                                                                        <div className={`${COL_W_SCORE} flex items-center justify-center border-l border-white/[0.06] bg-black`}>
                                                                                             <span className="text-[8px] font-black uppercase tracking-widest text-white/60">S</span>
                                                                                         </div>
                                                                                         {showExtra && (
-                                                                                            <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
+                                                                                            <div className={`${COL_W_SCORE} flex items-center justify-center border-l border-white/[0.06] bg-black`}>
                                                                                                 <span className="text-[8px] font-black uppercase tracking-widest text-white/60">{extraLabel}</span>
                                                                                             </div>
                                                                                         )}
@@ -2743,134 +2825,176 @@ export default function TournamentDashboard() {
                                                                                 )}
 
                                                                                 {!showPgsCols ? (
-                                                                                    <div className="h-16 border-b border-white/[0.12] flex items-center px-3 gap-2">
-                                                                                        <div className="min-w-0 flex-1">
-                                                                                            <AutoShrinkName name={team1Label} style={{ fontSize: '12px' }} className="font-black italic uppercase tracking-tight leading-none text-white/85" />
+                                                                                    <div className="min-h-[4rem] border-b border-white/[0.12] flex flex-col items-stretch justify-center gap-1.5 px-3 py-2">
+                                                                                        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-center">
+                                                                                            <AutoShrinkName
+                                                                                                name={formatPlayerFichaName(t1p1)}
+                                                                                                style={{ fontSize: '12px' }}
+                                                                                                className="font-black italic uppercase tracking-tight leading-tight text-white/85 min-w-0"
+                                                                                            />
+                                                                                            {t1p2 ? (
+                                                                                                <AutoShrinkName
+                                                                                                    name={formatPlayerFichaName(t1p2)}
+                                                                                                    style={{ fontSize: '12px' }}
+                                                                                                    className="font-black italic uppercase tracking-tight leading-tight text-white/85 min-w-0"
+                                                                                                />
+                                                                                            ) : (
+                                                                                                <span className="text-[10px] font-black uppercase tracking-widest text-white/25 self-center">
+                                                                                                    —
+                                                                                                </span>
+                                                                                            )}
                                                                                         </div>
-                                                                                        <span className="text-[10px] font-black uppercase tracking-widest text-white/45 flex-shrink-0">VS</span>
-                                                                                        <div className="min-w-0 flex-1 text-right">
-                                                                                            <AutoShrinkName name={team2Label} style={{ fontSize: '12px' }} className="font-black italic uppercase tracking-tight leading-none text-white/85" />
+                                                                                        <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white/40 text-center">
+                                                                                            VS
+                                                                                        </span>
+                                                                                        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-center">
+                                                                                            <AutoShrinkName
+                                                                                                name={formatPlayerFichaName(t2p1)}
+                                                                                                style={{ fontSize: '12px' }}
+                                                                                                className="font-black italic uppercase tracking-tight leading-tight text-white/85 min-w-0"
+                                                                                            />
+                                                                                            {t2p2 ? (
+                                                                                                <AutoShrinkName
+                                                                                                    name={formatPlayerFichaName(t2p2)}
+                                                                                                    style={{ fontSize: '12px' }}
+                                                                                                    className="font-black italic uppercase tracking-tight leading-tight text-white/85 min-w-0"
+                                                                                                />
+                                                                                            ) : (
+                                                                                                <span className="text-[10px] font-black uppercase tracking-widest text-white/25 self-center">
+                                                                                                    —
+                                                                                                </span>
+                                                                                            )}
                                                                                         </div>
                                                                                     </div>
                                                                                 ) : (
                                                                                     <>
-                                                                                        {/* Team 1 */}
-                                                                                        <div className={`flex ${ROW_H} items-stretch border-b border-white/[0.12]`}>
-                                                                                            {/* Nombres */}
-                                                                                            {(() => {
-                                                                                                const t1total =
-                                                                                                    (formatPlayerFichaName(t1p1) + (t1p2 ? formatPlayerFichaName(t1p2) : ''))
-                                                                                                        .length;
-                                                                                                const fs1 = t1total <= 8 ? '14px' : t1total <= 13 ? '12px' : t1total <= 18 ? '10px' : t1total <= 24 ? '9px' : '8px';
-                                                                                                return (
-                                                                                                    <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
-                                                                                                        <div className="w-3 flex-shrink-0 flex items-center justify-center">
-                                                                                                            {isT1Serving && <ServingBall />}
-                                                                                                        </div>
-                                                                                                        <div className="flex items-center gap-1 min-w-0 overflow-hidden">
-                                                                                                            <div className="min-w-0 flex-1">
-                                                                                                                <AutoShrinkName name={formatPlayerFichaName(t1p1)} style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white' : 'text-white/65'}`} />
-                                                                                                            </div>
-                                                                                                            {t1p2 && (
-                                                                                                                <>
-                                                                                                                    <span className="text-white/20 text-xs flex-shrink-0">·</span>
-                                                                                                                    <div className="min-w-0 flex-1">
-                                                                                                                        <AutoShrinkName name={formatPlayerFichaName(t1p2)} style={{ fontSize: fs1 }} className={`font-black italic uppercase tracking-tight leading-none ${isT1Serving ? 'text-white/70' : 'text-white/40'}`} />
-                                                                                                                    </div>
-                                                                                                                </>
-                                                                                                            )}
-                                                                                                        </div>
-                                                                                                    </div>
-                                                                                                );
-                                                                                            })()}
-                                                                                            {showPgsCols && (
-                                                                                                <>
-                                                                                                    {/* G — puntos */}
-                                                                                                    <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
-                                                                                                        <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                            {isActive ? toTennisScore(gp1) : '–'}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                    {/* JG — games */}
-                                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                                        <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                            {isActive ? (liveMarker ? (liveMarker?.games?.local ?? 0) : (match.games?.t1 ?? 0)) : '–'}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                    {/* ST — sets */}
-                                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                                        <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                            {isActive ? (liveMarker ? (liveMarker?.sets?.local ?? 0) : (match.sets?.t1 ?? 0)) : '–'}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                    {showExtra && (
-                                                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                                            <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                                {isActive ? (isSTB ? (liveMarker ? Number(liveMarker?.puntos?.local ?? 0) : (match.superTiebreakScore?.t1 ?? 0)) : (liveMarker ? Number(liveMarker?.puntos?.local ?? 0) : (match.tiebreakScore?.t1 ?? 0))) : '–'}
-                                                                                                            </span>
-                                                                                                        </div>
+                                                                                        {/* Equipo 1: dos jugadores en fila + P/G/S */}
+                                                                                        <div className={`grid ${liveGridCols} border-b border-white/[0.12]`}>
+                                                                                            <div className={`flex ${ROW_H} items-center gap-1 border-r border-white/[0.08] px-1.5 min-w-0`}>
+                                                                                                <div className="flex w-3 flex-shrink-0 items-center justify-center">
+                                                                                                    {t1ServeP1 && <ServingBall />}
+                                                                                                </div>
+                                                                                                <div className="min-w-0 flex-1">
+                                                                                                    <AutoShrinkName
+                                                                                                        name={formatPlayerFichaName(t1p1)}
+                                                                                                        style={{ fontSize: fs1a }}
+                                                                                                        className={`font-black italic uppercase tracking-tight leading-none ${t1ServeP1 ? 'text-white' : 'text-white/65'}`}
+                                                                                                    />
+                                                                                                </div>
+                                                                                            </div>
+                                                                                            <div className={`flex ${ROW_H} items-center gap-1 px-1.5 min-w-0`}>
+                                                                                                <div className="flex w-3 flex-shrink-0 items-center justify-center">
+                                                                                                    {t1ServeP2 && <ServingBall />}
+                                                                                                </div>
+                                                                                                <div className="min-w-0 flex-1">
+                                                                                                    {t1p2 ? (
+                                                                                                        <AutoShrinkName
+                                                                                                            name={formatPlayerFichaName(t1p2)}
+                                                                                                            style={{ fontSize: fs1b }}
+                                                                                                            className={`font-black italic uppercase tracking-tight leading-none ${t1ServeP2 ? 'text-white' : 'text-white/40'}`}
+                                                                                                        />
+                                                                                                    ) : (
+                                                                                                        <span className="text-[10px] font-black uppercase tracking-widest text-white/25">—</span>
                                                                                                     )}
-                                                                                                </>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                            <div className={`${COL_W_POINTS} flex items-center justify-center border-l border-white/[0.06] bg-black`}>
+                                                                                                <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive ? toTennisScore(gp1) : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            <div className={`${COL_W_SCORE} flex items-center justify-center border-l border-white/[0.06] bg-white`}>
+                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive ? (liveMarker ? (liveMarker?.games?.local ?? 0) : (match.games?.t1 ?? 0)) : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            <div className={`${COL_W_SCORE} flex items-center justify-center border-l border-white/[0.06] bg-white`}>
+                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive ? (liveMarker ? (liveMarker?.sets?.local ?? 0) : (match.sets?.t1 ?? 0)) : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            {showExtra && (
+                                                                                                <div className={`${COL_W_SCORE} flex items-center justify-center border-l border-white/[0.06] bg-white`}>
+                                                                                                    <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                        {isActive
+                                                                                                            ? isSTB
+                                                                                                                ? liveMarker
+                                                                                                                    ? Number(liveMarker?.puntos?.local ?? 0)
+                                                                                                                    : (match.superTiebreakScore?.t1 ?? 0)
+                                                                                                                : liveMarker
+                                                                                                                  ? Number(liveMarker?.puntos?.local ?? 0)
+                                                                                                                  : (match.tiebreakScore?.t1 ?? 0)
+                                                                                                            : '–'}
+                                                                                                    </span>
+                                                                                                </div>
                                                                                             )}
                                                                                         </div>
 
-                                                                                        {/* Team 2 */}
-                                                                                        <div className={`flex ${ROW_H} items-stretch`}>
-                                                                                            {/* Nombres */}
-                                                                                            {(() => {
-                                                                                                const t2total =
-                                                                                                    (formatPlayerFichaName(t2p1) + (t2p2 ? formatPlayerFichaName(t2p2) : ''))
-                                                                                                        .length;
-                                                                                                const fs2 = t2total <= 8 ? '14px' : t2total <= 13 ? '12px' : t2total <= 18 ? '10px' : t2total <= 24 ? '9px' : '8px';
-                                                                                                return (
-                                                                                                    <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
-                                                                                                        <div className="w-3 flex-shrink-0 flex items-center justify-center">
-                                                                                                            {isT2Serving && <ServingBall />}
-                                                                                                        </div>
-                                                                                                        <div className="flex items-center gap-1 min-w-0 overflow-hidden">
-                                                                                                            <div className="min-w-0 flex-1">
-                                                                                                                <AutoShrinkName name={formatPlayerFichaName(t2p1)} style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white' : 'text-white/65'}`} />
-                                                                                                            </div>
-                                                                                                            {t2p2 && (
-                                                                                                                <>
-                                                                                                                    <span className="text-white/20 text-xs flex-shrink-0">·</span>
-                                                                                                                    <div className="min-w-0 flex-1">
-                                                                                                                        <AutoShrinkName name={formatPlayerFichaName(t2p2)} style={{ fontSize: fs2 }} className={`font-black italic uppercase tracking-tight leading-none ${isT2Serving ? 'text-white/70' : 'text-white/40'}`} />
-                                                                                                                    </div>
-                                                                                                                </>
-                                                                                                            )}
-                                                                                                        </div>
-                                                                                                    </div>
-                                                                                                );
-                                                                                            })()}
-                                                                                            {showPgsCols && (
-                                                                                                <>
-                                                                                                    {/* G */}
-                                                                                                    <div className={`${COL_W_POINTS} border-l border-white/[0.06] flex items-center justify-center bg-black`}>
-                                                                                                        <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                            {isActive ? toTennisScore(gp2) : '–'}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                    {/* JG */}
-                                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                                        <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                            {isActive ? (liveMarker ? (liveMarker?.games?.visitante ?? 0) : (match.games?.t2 ?? 0)) : '–'}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                    {/* ST */}
-                                                                                                    <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                                        <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                            {isActive ? (liveMarker ? (liveMarker?.sets?.visitante ?? 0) : (match.sets?.t2 ?? 0)) : '–'}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                    {showExtra && (
-                                                                                                        <div className={`${COL_W_SCORE} border-l border-white/[0.06] flex items-center justify-center bg-white`}>
-                                                                                                            <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
-                                                                                                                {isActive ? (isSTB ? (liveMarker ? Number(liveMarker?.puntos?.visitante ?? 0) : (match.superTiebreakScore?.t2 ?? 0)) : (liveMarker ? Number(liveMarker?.puntos?.visitante ?? 0) : (match.tiebreakScore?.t2 ?? 0))) : '–'}
-                                                                                                            </span>
-                                                                                                        </div>
+                                                                                        <div className="flex justify-center border-b border-white/[0.08] bg-white/[0.02] py-0.5">
+                                                                                            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/35">
+                                                                                                VS
+                                                                                            </span>
+                                                                                        </div>
+
+                                                                                        {/* Equipo 2: dos jugadores en fila + P/G/S */}
+                                                                                        <div className={`grid ${liveGridCols}`}>
+                                                                                            <div className={`flex ${ROW_H} items-center gap-1 border-r border-white/[0.08] px-1.5 min-w-0`}>
+                                                                                                <div className="flex w-3 flex-shrink-0 items-center justify-center">
+                                                                                                    {t2ServeP1 && <ServingBall />}
+                                                                                                </div>
+                                                                                                <div className="min-w-0 flex-1">
+                                                                                                    <AutoShrinkName
+                                                                                                        name={formatPlayerFichaName(t2p1)}
+                                                                                                        style={{ fontSize: fs2a }}
+                                                                                                        className={`font-black italic uppercase tracking-tight leading-none ${t2ServeP1 ? 'text-white' : 'text-white/65'}`}
+                                                                                                    />
+                                                                                                </div>
+                                                                                            </div>
+                                                                                            <div className={`flex ${ROW_H} items-center gap-1 px-1.5 min-w-0`}>
+                                                                                                <div className="flex w-3 flex-shrink-0 items-center justify-center">
+                                                                                                    {t2ServeP2 && <ServingBall />}
+                                                                                                </div>
+                                                                                                <div className="min-w-0 flex-1">
+                                                                                                    {t2p2 ? (
+                                                                                                        <AutoShrinkName
+                                                                                                            name={formatPlayerFichaName(t2p2)}
+                                                                                                            style={{ fontSize: fs2b }}
+                                                                                                            className={`font-black italic uppercase tracking-tight leading-none ${t2ServeP2 ? 'text-white' : 'text-white/40'}`}
+                                                                                                        />
+                                                                                                    ) : (
+                                                                                                        <span className="text-[10px] font-black uppercase tracking-widest text-white/25">—</span>
                                                                                                     )}
-                                                                                                </>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                            <div className={`${COL_W_POINTS} flex items-center justify-center border-l border-white/[0.06] bg-black`}>
+                                                                                                <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive ? toTennisScore(gp2) : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            <div className={`${COL_W_SCORE} flex items-center justify-center border-l border-white/[0.06] bg-white`}>
+                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive ? (liveMarker ? (liveMarker?.games?.visitante ?? 0) : (match.games?.t2 ?? 0)) : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            <div className={`${COL_W_SCORE} flex items-center justify-center border-l border-white/[0.06] bg-white`}>
+                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive ? (liveMarker ? (liveMarker?.sets?.visitante ?? 0) : (match.sets?.t2 ?? 0)) : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            {showExtra && (
+                                                                                                <div className={`${COL_W_SCORE} flex items-center justify-center border-l border-white/[0.06] bg-white`}>
+                                                                                                    <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                        {isActive
+                                                                                                            ? isSTB
+                                                                                                                ? liveMarker
+                                                                                                                    ? Number(liveMarker?.puntos?.visitante ?? 0)
+                                                                                                                    : (match.superTiebreakScore?.t2 ?? 0)
+                                                                                                                : liveMarker
+                                                                                                                  ? Number(liveMarker?.puntos?.visitante ?? 0)
+                                                                                                                  : (match.tiebreakScore?.t2 ?? 0)
+                                                                                                            : '–'}
+                                                                                                    </span>
+                                                                                                </div>
                                                                                             )}
                                                                                         </div>
                                                                                     </>
@@ -2880,17 +3004,35 @@ export default function TournamentDashboard() {
                                                                     })()}
                                                                 </div>
 
-                                                                {/* Dock inferior solo en cola: en "En Vivo" el partido ya está en pista; evita barra duplicada */}
-                                                                {activeTab === 'Por Comenzar' && (
-                                                                    <div className="w-full min-w-0 shrink-0 px-1 pb-2 sm:px-2">
-                                                                        <nav className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1 shadow-lg backdrop-blur-md sm:grid-cols-4 sm:gap-1.5 sm:p-1.5">
-                                                                            <Link
-                                                                                href={match?.id ? `/tournaments/${id}/score/${match.id}` : `/tournaments/${id}/control`}
-                                                                                className={MATCH_CARD_ACTION_LINK}
-                                                                            >
-                                                                                <Zap className={MATCH_CARD_ACTION_ICON} />
-                                                                                <span className={MATCH_CARD_ACTION_LABEL}>Control</span>
-                                                                            </Link>
+                                                                {/* Dock inferior: cola (Por comenzar) o partidos finalizados — tonos rojos en Finalizados */}
+                                                                {(activeTab === 'Por Comenzar' || activeTab === 'Finalizados') && !isPurePlayerViewer && (
+                                                                    <div className="box-border w-full min-w-0 max-w-full shrink-0 px-0 pb-2 pt-1 sm:px-1">
+                                                                        <nav
+                                                                            className={`box-border grid w-full min-w-0 max-w-full gap-1 rounded-xl border p-1 shadow-lg backdrop-blur-md sm:gap-1.5 sm:p-1.5 ${
+                                                                                activeTab === 'Finalizados'
+                                                                                    ? 'border-red-500/25 bg-red-950/20 shadow-red-950/20'
+                                                                                    : 'border-white/10 bg-white/[0.04]'
+                                                                            } ${
+                                                                                !canManageMatches && !canManageTournament
+                                                                                    ? 'grid-cols-2 max-sm:grid-cols-2 sm:grid-cols-2'
+                                                                                    : canManageMatches && canManageTournament
+                                                                                      ? 'grid-cols-2 max-sm:grid-cols-4 sm:grid-cols-4'
+                                                                                      : 'grid-cols-2 max-sm:grid-cols-3 sm:grid-cols-3'
+                                                                            }`}
+                                                                        >
+                                                                            {canManageMatches && (
+                                                                                <Link
+                                                                                    href={match?.id ? `/tournaments/${id}/score/${match.id}` : `/tournaments/${id}/control`}
+                                                                                    className={
+                                                                                        activeTab === 'Finalizados'
+                                                                                            ? MATCH_CARD_ACTION_LINK_FINISHED
+                                                                                            : MATCH_CARD_ACTION_LINK
+                                                                                    }
+                                                                                >
+                                                                                    <Zap className={MATCH_CARD_ACTION_ICON} />
+                                                                                    <span className={MATCH_CARD_ACTION_LABEL}>Control</span>
+                                                                                </Link>
+                                                                            )}
                                                                             <Link
                                                                                 href={
                                                                                     id && match?.id
@@ -2899,22 +3041,39 @@ export default function TournamentDashboard() {
                                                                                 }
                                                                                 target={id && match?.id ? '_blank' : undefined}
                                                                                 rel={id && match?.id ? 'noopener noreferrer' : undefined}
-                                                                                className={MATCH_CARD_ACTION_LINK}
+                                                                                className={
+                                                                                    activeTab === 'Finalizados'
+                                                                                        ? MATCH_CARD_ACTION_LINK_FINISHED
+                                                                                        : MATCH_CARD_ACTION_LINK
+                                                                                }
                                                                             >
                                                                                 <Monitor className={MATCH_CARD_ACTION_ICON} />
                                                                                 <span className={MATCH_CARD_ACTION_LABEL}>Pizarra</span>
                                                                             </Link>
                                                                             <Link
                                                                                 href={id ? `/tournaments/${id}/control/broadcasting` : '#'}
-                                                                                className={MATCH_CARD_ACTION_LINK}
+                                                                                className={
+                                                                                    activeTab === 'Finalizados'
+                                                                                        ? MATCH_CARD_ACTION_LINK_FINISHED
+                                                                                        : MATCH_CARD_ACTION_LINK
+                                                                                }
                                                                             >
                                                                                 <Camera className={MATCH_CARD_ACTION_ICON} />
                                                                                 <span className={MATCH_CARD_ACTION_LABEL}>Cámaras</span>
                                                                             </Link>
-                                                                            <Link href="/admin/publicidad" className={MATCH_CARD_ACTION_LINK}>
-                                                                                <Tv className={MATCH_CARD_ACTION_ICON} />
-                                                                                <span className={MATCH_CARD_ACTION_LABEL}>ADS</span>
-                                                                            </Link>
+                                                                            {canManageTournament && (
+                                                                                <Link
+                                                                                    href="/admin/publicidad"
+                                                                                    className={
+                                                                                        activeTab === 'Finalizados'
+                                                                                            ? MATCH_CARD_ACTION_LINK_FINISHED
+                                                                                            : MATCH_CARD_ACTION_LINK
+                                                                                    }
+                                                                                >
+                                                                                    <Tv className={MATCH_CARD_ACTION_ICON} />
+                                                                                    <span className={MATCH_CARD_ACTION_LABEL}>ADS</span>
+                                                                                </Link>
+                                                                            )}
                                                                         </nav>
                                                                     </div>
                                                                 )}

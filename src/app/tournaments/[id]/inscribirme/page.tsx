@@ -157,7 +157,8 @@ export default function InscribirmePage() {
     const [timeLeft, setTimeLeft] = useState<string>('');
     /** Asistente por pasos antes de «Inscripción enviada». */
     const [wizardStep, setWizardStep] = useState(0);
-    const wizardScrollRef = useRef<HTMLDivElement>(null);
+    /** Un solo scroll (contenedor principal); no hay región interna fija + scroll. */
+    const inscribirmeScrollRef = useRef<HTMLDivElement>(null);
 
     // Retorno de Mercado Pago (mp=success | failure | pending)
     useEffect(() => {
@@ -423,7 +424,7 @@ export default function InscribirmePage() {
     }, [termsStepIndex]);
 
     useEffect(() => {
-        wizardScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        inscribirmeScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     }, [wizardStep]);
 
     useEffect(() => {
@@ -714,8 +715,11 @@ export default function InscribirmePage() {
     return (
         <div className="ipad-screen-container !max-w-none !px-0 !pt-2 !pb-0 sm:!px-4 sm:!pt-4 sm:!pb-0 md:!p-6 bg-[#0a0a0a] text-white font-outfit relative">
             <Sidebar menuOpensUserHub={!!pendingInvitation} />
-            <div className="ipad-scroll-area flex min-h-0 w-full min-w-0 max-w-[100vw] flex-1 flex-col overflow-x-hidden overflow-y-auto pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] pb-[max(6rem,env(safe-area-inset-bottom,0px))] sm:pl-4 sm:pr-4 md:pl-24 md:pr-4">
-                <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0a]/90 backdrop-blur pb-4 pt-[max(5.25rem,calc(env(safe-area-inset-top,0px)+4.25rem))] sm:pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
+            <div
+                ref={inscribirmeScrollRef}
+                className="ipad-scroll-area flex min-h-0 w-full min-w-0 max-w-[100vw] flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:pl-4 sm:pr-4 md:pl-24 md:pr-4"
+            >
+                <header className="z-10 shrink-0 border-b border-white/10 bg-[#0a0a0a]/95 pb-3 pt-[max(5.25rem,calc(env(safe-area-inset-top,0px)+4.25rem))] backdrop-blur sm:pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
                     {/* Móvil: debajo del menú hamburguesa fijo; sm+: una sola fila */}
                     <div className="mx-auto flex w-full min-w-0 max-w-md flex-col gap-2 px-3 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:px-1 sm:pt-0">
                         <BackButton href={`/tournaments/${tournamentId}`} className="shrink-0 self-start sm:self-center" />
@@ -726,7 +730,7 @@ export default function InscribirmePage() {
                     </div>
                 </header>
 
-                <main className="mx-auto flex min-h-0 w-full min-w-0 max-w-md flex-1 flex-col overflow-hidden px-3 py-6 sm:px-4 sm:py-8">
+                <main className="mx-auto flex w-full min-w-0 max-w-md shrink-0 flex-col px-3 py-4 sm:px-4 sm:py-6">
                     {success ? (
                         <div className="rounded-3xl bg-[#ccff00]/10 border border-[#ccff00]/30 p-8 text-center space-y-4">
                             <CheckCircle2 className="w-16 h-16 text-[#ccff00] mx-auto" />
@@ -836,14 +840,11 @@ export default function InscribirmePage() {
                                     </Link>
                                 </div>
                             ) : (
-                                <div className="flex min-h-0 flex-1 flex-col gap-2">
-                                    <p className="mb-1 text-center text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                                <div className="flex flex-col gap-3">
+                                    <p className="text-center text-[10px] font-bold uppercase tracking-widest text-gray-500">
                                         Paso {wizardStep + 1} de {termsStepIndex + 1}
                                     </p>
-                                    <div
-                                        ref={wizardScrollRef}
-                                        className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pr-0.5 [-webkit-overflow-scrolling:touch]"
-                                    >
+                                    <div className="flex flex-col pr-0.5">
                                     {error && (
                                         <div className="mb-4 flex items-center gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
                                             <AlertCircle className="h-5 w-5 shrink-0 text-red-500" />
@@ -1204,7 +1205,7 @@ export default function InscribirmePage() {
                                     )}
                                     </div>
 
-                                    <div className="shrink-0 border-t border-white/10 bg-[#0a0a0a]/95 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+                                    <div className="mt-2 border-t border-white/10 bg-[#0a0a0a]/95 pt-3 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
                                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                                             {wizardStep > 0 && (
                                                 <button
