@@ -77,7 +77,7 @@ export default function TournamentDashboard() {
     const id = useRouteSegment('id');
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { user, profile, isAdmin, isPlayer, markerCanchas, loading: authLoading } = useAuth();
+    const { user, profile, isAdmin, isPlayer, isMarker, markerCanchas, loading: authLoading } = useAuth();
     const [tournament, setTournament] = useState<any>(null);
     const tournamentRef = useRef<any>(null);
     tournamentRef.current = tournament;
@@ -131,6 +131,9 @@ export default function TournamentDashboard() {
     const canManageTournament = isOwner || isAdmin;
     /** Rol jugador sin permisos de staff: no mostrar dock de acciones (Control, Pizarra, Cámaras, ADS). */
     const isPurePlayerViewer = isPlayer && !canManageMatches && !canManageTournament;
+
+    /** Marco tipo tablet (ipad-screen-container): solo admin y marker; jugador/user mantiene vista móvil fluida. */
+    const useIpadTournamentShell = isAdmin || isMarker;
 
     // Sincronizar pestaña con query ?tab= (marcador / enlaces externos)
     useEffect(() => {
@@ -1971,29 +1974,42 @@ export default function TournamentDashboard() {
         );
     })();
 
+    const headerMaxW = isLiveDashboard ? 'max-w-4xl' : useIpadTournamentShell ? 'max-w-4xl' : 'max-w-md';
+    const tabsNavMaxW = isLiveDashboard ? 'max-w-none' : useIpadTournamentShell ? 'max-w-4xl' : 'max-w-md';
+    const mainMaxWNonLive = useIpadTournamentShell ? 'max-w-4xl' : 'max-w-md';
+
     return (
-        <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit">
+        <div
+            className={
+                useIpadTournamentShell
+                    ? 'ipad-screen-container bg-[#0a0a0a] text-white font-outfit'
+                    : 'flex min-h-[100dvh] w-full flex-col overflow-x-hidden bg-[#0a0a0a] text-white font-outfit'
+            }
+        >
 
             {/* Pizarra: cabecera con título y acciones */}
             <header className="sticky top-0 z-[60] bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5">
                 <div
-                    className={`${isLiveDashboard ? 'max-w-4xl' : 'max-w-md'} mx-auto px-6 pt-6 pb-4 flex justify-between items-center`}
+                    className={`${headerMaxW} mx-auto px-4 pt-6 pb-4 sm:px-6 flex justify-between items-center`}
                 >
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-3 ml-12 md:ml-0">
-                            <BackButton href="/tournaments" />
-                            <div>
-                                <h1 className="text-lg font-black uppercase italic tracking-tighter leading-tight">
-                                    {tournament.name}
-                                </h1>
-                                {(tournament.category || tournament.gender) && (
-                                    <div className="flex items-center gap-1.5 mt-0.5 text-[11px] font-black uppercase italic tracking-widest text-padel-primary/90">
-                                        {tournament.category && <span>{formatCat(tournament.category)}</span>}
-                                        {tournament.category && tournament.gender && <span className="text-white/30">•</span>}
-                                        {tournament.gender && <span>{formatGender(tournament.gender)}</span>}
+                    <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+                        <BackButton href="/tournaments" className="shrink-0" />
+                        <div className="min-w-0">
+                            <h1 className="text-lg font-black uppercase italic tracking-tighter leading-tight text-white">
+                                {tournament.name}
+                            </h1>
+                            {(() => {
+                                const catStr = tournament.category ? formatCat(tournament.category).trim() : '';
+                                const genStr = tournament.gender ? formatGender(tournament.gender) : '';
+                                if (!catStr && !genStr) return null;
+                                return (
+                                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] font-black uppercase italic tracking-widest text-padel-primary">
+                                        {catStr ? <span>{catStr}</span> : null}
+                                        {catStr && genStr ? <span className="text-padel-primary/50">·</span> : null}
+                                        {genStr ? <span>{genStr}</span> : null}
                                     </div>
-                                )}
-                            </div>
+                                );
+                            })()}
                         </div>
                     </div>
                     <div className="flex items-center gap-1.5 md:gap-2">
@@ -2063,7 +2079,7 @@ export default function TournamentDashboard() {
             {/* Tabs: siempre visibles (también en vista “En vivo” por pista) para poder cambiar de filtro sin ir a Cuadro */}
             <nav className="bg-[#0a0a0a]/60 backdrop-blur-md border-b border-white/5 py-3 sticky top-[4.5rem] z-50">
                 <div
-                    className={`mx-auto w-full min-w-0 touch-pan-x overflow-x-auto overscroll-x-contain scroll-smooth [-webkit-overflow-scrolling:touch] pb-0.5 hide-scrollbar pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] ${isLiveDashboard ? 'max-w-none' : 'max-w-md'}`}
+                    className={`mx-auto w-full min-w-0 touch-pan-x overflow-x-auto overscroll-x-contain scroll-smooth [-webkit-overflow-scrolling:touch] pb-0.5 hide-scrollbar pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] ${tabsNavMaxW}`}
                 >
                     <div className="flex flex-col gap-2">
                         <div className="flex flex-wrap items-stretch justify-center gap-2">
@@ -2139,12 +2155,18 @@ export default function TournamentDashboard() {
             </nav>
 
             {/* Content Area (pizarra / cuadro / listados) */}
-            <div className={`ipad-scroll-area pb-20 ${mainScrollOverflowClass}`}>
+            <div
+                className={
+                    useIpadTournamentShell
+                        ? `ipad-scroll-area pb-20 ${mainScrollOverflowClass}`
+                        : `flex min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-20 [-webkit-overflow-scrolling:touch] ${mainScrollOverflowClass} touch-pan-y`
+                }
+            >
                 <main
                     className={`${
                         isLiveDashboard
                             ? 'max-w-none w-full min-h-0 p-3 py-5'
-                            : 'mx-auto flex min-h-0 w-full min-w-0 max-w-md flex-col px-4 py-6 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]'
+                            : `mx-auto flex min-h-0 w-full min-w-0 ${mainMaxWNonLive} flex-col px-4 py-6 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]`
                     } transition-all duration-500`}
                 >
                     <AnimatePresence mode="wait">

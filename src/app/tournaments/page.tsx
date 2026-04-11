@@ -11,6 +11,7 @@ import LoginButton from '@/components/LoginButton';
 
 import { BouncingBall } from '@/components/BouncingBall';
 import { formatDate } from '@/lib/formatters';
+import { formatCategory, formatGender } from '@/app/tournaments/event/utils';
 
 export default function MyTournamentsPage() {
     const searchParams = useSearchParams();
@@ -174,7 +175,7 @@ export default function MyTournamentsPage() {
 
                                                 {/* Título */}
                                                 <h3
-                                                    className="text-base font-black italic uppercase tracking-tighter mb-3 group-hover:text-padel-primary transition-colors leading-tight"
+                                                    className="text-base font-black italic uppercase tracking-tighter mb-3 leading-tight text-white"
                                                     style={{ textShadow: 'none' }}
                                                 >
                                                     {isGrouped
@@ -188,12 +189,18 @@ export default function MyTournamentsPage() {
                                                         <div className="text-gray-400 text-[11px] font-black uppercase tracking-wider leading-tight" style={{ textShadow: 'none' }}>
                                                             {first.complexName || 'Margarita Padel'}
                                                         </div>
-                                                        <div className="text-gray-500 text-[11px] font-black uppercase tracking-wider leading-tight" style={{ textShadow: 'none' }}>
-                                                            {first.category}
-                                                            {first.gender && (
-                                                                <> {first.gender === 'MALE' ? 'Masculino' : first.gender === 'FEMALE' ? 'Femenino' : 'Mixto'}</>
-                                                            )}
-                                                        </div>
+                                                        {(() => {
+                                                            const catStr = formatCategory(first.category).trim();
+                                                            const genStr = formatGender(first.gender || '');
+                                                            if (!catStr && !genStr) return null;
+                                                            return (
+                                                                <div className="text-[11px] font-black uppercase tracking-wider leading-tight text-padel-primary" style={{ textShadow: 'none' }}>
+                                                                    {catStr}
+                                                                    {catStr && genStr ? <span className="text-padel-primary/60"> · </span> : null}
+                                                                    {genStr || null}
+                                                                </div>
+                                                            );
+                                                        })()}
                                                         <div className="text-gray-500 text-[11px] font-black uppercase tracking-wider leading-tight" style={{ textShadow: 'none' }}>
                                                             {formatTournamentDate(first.startDate)}
                                                         </div>
@@ -261,11 +268,13 @@ export default function MyTournamentsPage() {
                                                             <div key={t.id} className="flex items-center justify-between gap-2 px-3 py-2 bg-white/5 hover:bg-padel-primary/10 rounded-xl border border-white/5 hover:border-padel-primary/30 transition-all group/btn">
                                                                 <Link href={`/tournaments/${t.id}`} className="flex items-center gap-2 min-w-0 flex-1">
                                                                     <div className="w-1.5 h-1.5 rounded-full bg-padel-primary flex-shrink-0" />
-                                                                    <span className="text-[10px] font-black uppercase italic tracking-wider text-gray-300 group-hover/btn:text-padel-primary">
-                                                                        Categoría {t.category}
-                                                                        {t.gender && (
-                                                                            <> {t.gender === 'MALE' ? 'Masculino' : t.gender === 'FEMALE' ? 'Femenino' : 'Mixto'}</>
-                                                                        )}
+                                                                    <span className="text-[10px] font-black uppercase italic tracking-wider text-padel-primary group-hover/btn:text-padel-primary">
+                                                                        {(() => {
+                                                                            const c = formatCategory(t.category).trim();
+                                                                            const g = formatGender(t.gender || '');
+                                                                            if (c && g) return `${c} · ${g}`;
+                                                                            return c || g || 'Categoría';
+                                                                        })()}
                                                                     </span>
                                                                     <ChevronRight className="w-3.5 h-3.5 text-padel-primary flex-shrink-0" />
                                                                 </Link>
