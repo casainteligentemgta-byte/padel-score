@@ -139,6 +139,67 @@ function inferSetWinsFromMarks(m: any, need: number): { w1: number; w2: number }
     return { w1, w2 };
 }
 
+function pickFirstNonEmptyString(r: Record<string, unknown>, keys: string[]): string | undefined {
+    for (const k of keys) {
+        const v = r[k];
+        if (v != null && String(v).trim() !== '') return String(v);
+    }
+    return undefined;
+}
+
+/** Fila considerada activa si no hay columna booleana o viene verdadero. */
+function isPaymentMethodRowActive(row: Record<string, unknown>): boolean {
+    const r = row as Record<string, unknown>;
+    const v = r.is_active ?? r.active ?? r.enabled;
+    if (v === undefined || v === null) return true;
+    if (typeof v === 'boolean') return v;
+    if (typeof v === 'number') return v !== 0;
+    const s = String(v).toLowerCase();
+    return s !== 'false' && s !== '0' && s !== 'no';
+}
+
+/**
+ * `payment_methods` puede tener columnas distintas según el proyecto (sin `name`/`created_at`).
+ * Unificamos lo que usa la UI: id, name, iban, instructions, is_active.
+ */
+function normalizePaymentMethodRow(row: Record<string, unknown>, index: number) {
+    const r = row as Record<string, unknown>;
+    const id = r.id != null ? String(r.id) : `payment-method-${index}`;
+    const nameRaw = pickFirstNonEmptyString(r, [
+        'name',
+        'title',
+        'label',
+        'method_name',
+        'display_name',
+        'method',
+        'tipo',
+        'type',
+        'descripcion_corta',
+    ]);
+    const iban = pickFirstNonEmptyString(r, [
+        'iban',
+        'account_number',
+        'cuenta',
+        'numero_cuenta',
+        'account',
+        'numero',
+    ]);
+    const instructions = pickFirstNonEmptyString(r, [
+        'instructions',
+        'notas',
+        'description',
+        'descripcion',
+        'instrucciones',
+    ]);
+    return {
+        id,
+        name: (nameRaw || 'Método de pago').trim(),
+        iban,
+        instructions,
+        is_active: isPaymentMethodRowActive(row),
+    };
+}
+
 /**
  * Hub del torneo — ciclo de vida (una sección excluye a las otras salvo datos incoherentes en BD):
  * 1. Por comenzar: aún no han empezado (PENDING/SCHEDULED), no en pista activa en pizarra.
@@ -2206,13 +2267,13 @@ export const dataService = {
     },
 
     async getPaymentMethods() {
-        const { data, error } = await supabase()
-            .from('payment_methods')
-            .select('*')
-            .eq('is_active', true)
-            .order('created_at', { ascending: true });
+        const { data, error } = await supabase().from('payment_methods').select('*');
         throwIfError(error);
-        return data || [];
+        const rows = (data || []) as Record<string, unknown>[];
+        return rows
+            .filter(isPaymentMethodRowActive)
+            .map((row, i) => normalizePaymentMethodRow(row, i))
+            .sort((a, b) => a.name.localeCompare(b.name, 'es'));
     },
 
     // ─── Pizarra / Cancha (reemplazo RTDB) ─────────────────────────────────────

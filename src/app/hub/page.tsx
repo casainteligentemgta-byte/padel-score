@@ -232,10 +232,10 @@ export default function HubPage() {
 
     return (
         <div
-            className="relative flex w-full flex-1 flex-col items-stretch overflow-hidden bg-[#080808] font-outfit text-white min-h-0
+            className="relative flex min-h-dvh w-full flex-1 flex-col items-stretch overflow-x-hidden overflow-y-hidden bg-[#080808] font-outfit text-white sm:min-h-0
             pl-[max(0.375rem,env(safe-area-inset-left))] pr-[max(0.375rem,env(safe-area-inset-right))]
             pt-[max(0.25rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]
-            sm:pl-4 sm:pr-4 sm:pt-4 sm:pb-4"
+            sm:overflow-hidden sm:pl-4 sm:pr-4 sm:pt-4 sm:pb-4"
         >
             {/* Sidebar removed for minimalist view on Hub */}
 
@@ -371,7 +371,7 @@ export default function HubPage() {
                                     Inscribirse con un compañero
                                 </p>
                                 <div
-                                    className={`flex flex-wrap ${hubCompactLayout ? 'max-h-7 justify-center gap-0.5 overflow-hidden' : 'gap-1.5 sm:gap-2'}`}
+                                    className={`${hubCompactLayout ? 'flex flex-nowrap justify-start gap-1 overflow-x-auto overflow-y-hidden pb-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden' : 'flex flex-wrap gap-1.5 sm:gap-2'}`}
                                 >
                                     {recentPartners.map((partner) => (
                                         <button
@@ -403,11 +403,9 @@ export default function HubPage() {
                             </div>
                         )}
 
-                        {/* Invitaciones: en móvil sin scroll — altura limitada y recorte si hay muchas */}
-                        <div
-                            className={`min-h-0 ${hubCompactLayout ? 'max-h-[min(12svh,3rem)] shrink-0 overflow-hidden' : 'mb-3 shrink-0 sm:mb-6'}`}
-                        >
-                            <InvitationManager />
+                        {/* Invitaciones: en móvil compacta pero legible; el scroll va en la zona central */}
+                        <div className={`min-h-0 shrink-0 ${hubCompactLayout ? 'mb-1' : 'mb-3 sm:mb-6'}`}>
+                            <InvitationManager compact={hubCompactLayout} />
                         </div>
 
                         {/* Próximo Partido (prioritario si el usuario tiene partido hoy) */}
@@ -511,7 +509,7 @@ export default function HubPage() {
                                             if (item.onClick) item.onClick();
                                             else if (item.href) router.push(item.href);
                                         }}
-                                        className={`relative group flex w-full flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'min-h-[2.25rem] gap-0 rounded-lg border p-0.5' : 'min-h-[64px] gap-1 rounded-xl border-2 p-2 sm:min-h-[80px] sm:p-3'} ${item.glow}
+                                        className={`relative group flex w-full flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'min-h-[2.75rem] gap-0 rounded-lg border p-1' : 'min-h-[64px] gap-1 rounded-xl border-2 p-2 sm:min-h-[80px] sm:p-3'} ${item.glow}
                                         ${
                                             item.disabled
                                                 ? 'bg-white/3 border-white/10 opacity-40 cursor-not-allowed'
@@ -528,12 +526,12 @@ export default function HubPage() {
                                         </div>
                                         <div className="flex flex-col items-center gap-0">
                                             <h3
-                                                className={`text-center font-black italic leading-tight tracking-tight text-white ${hubCompactLayout ? 'text-[8px] leading-tight' : 'text-[11px] sm:text-[13px]'}`}
+                                                className={`text-center font-black italic leading-tight tracking-tight text-white ${hubCompactLayout ? 'text-[9px] leading-tight' : 'text-[11px] sm:text-[13px]'}`}
                                             >
                                                 {item.name}
                                             </h3>
                                             <p
-                                                className={`text-center font-bold uppercase tracking-widest ${hubCompactLayout ? 'text-[5px]' : 'text-[7px] sm:text-[8px]'} ${item.disabled ? 'text-zinc-600' : item.color} opacity-70`}
+                                                className={`text-center font-bold uppercase tracking-widest ${hubCompactLayout ? 'text-[6px]' : 'text-[7px] sm:text-[8px]'} ${item.disabled ? 'text-zinc-600' : item.color} opacity-70`}
                                             >
                                                 {item.subtitle}
                                             </p>
