@@ -232,10 +232,10 @@ export default function HubPage() {
 
     return (
         <div
-            className="relative flex min-h-dvh w-full flex-1 flex-col items-stretch overflow-x-hidden overflow-y-hidden bg-[#080808] font-outfit text-white sm:min-h-0
+            className="relative flex w-full flex-1 flex-col items-stretch overflow-x-hidden bg-[#080808] font-outfit text-white max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:overflow-y-hidden max-sm:overscroll-none sm:min-h-0 sm:overflow-hidden
             pl-[max(0.375rem,env(safe-area-inset-left))] pr-[max(0.375rem,env(safe-area-inset-right))]
             pt-[max(0.25rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]
-            sm:overflow-hidden sm:pl-4 sm:pr-4 sm:pt-4 sm:pb-4"
+            sm:pl-4 sm:pr-4 sm:pt-4 sm:pb-4"
         >
             {/* Sidebar removed for minimalist view on Hub */}
 
@@ -243,7 +243,7 @@ export default function HubPage() {
             <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-padel-primary/5 rounded-full blur-[140px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
             <div className="absolute top-1/2 left-0 w-[400px] h-[400px] bg-purple-500/5 rounded-full blur-[120px] -translate-x-1/3 pointer-events-none" />
 
-            <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col items-center overflow-hidden max-sm:min-h-0">
+            <div className="relative z-10 flex min-h-0 w-full min-w-0 flex-1 flex-col items-center overflow-hidden max-sm:h-full">
                 {/* Header: nombre, foto y código — en móvil cabe en viewport sin scroll de página */}
                 <header
                     className={`flex w-full max-w-md min-h-0 shrink-0 items-center justify-center px-2 sm:px-6 ${hubCompactLayout ? 'pt-0.5 pb-0' : 'pt-4 pb-2 sm:pt-10 sm:pb-4'}`}
@@ -262,14 +262,14 @@ export default function HubPage() {
                             className={`flex justify-center ${hubCompactLayout ? 'mb-1 mt-0.5' : 'mb-1 sm:mb-4'}`}
                         >
                             <div
-                                className={`relative rounded-full overflow-hidden border-2 border-brand/40 shadow-[0_0_24px_rgba(204,255,0,0.15)] ring-2 ring-black/20 bg-zinc-800 ${hubCompactLayout ? 'h-12 w-12' : 'h-24 w-24 sm:h-44 sm:w-44 md:h-48 md:w-48'}`}
+                                className={`relative rounded-full overflow-hidden border-2 border-brand/40 shadow-[0_0_24px_rgba(204,255,0,0.15)] ring-2 ring-black/20 bg-zinc-800 ${hubCompactLayout ? 'h-10 w-10' : 'h-24 w-24 sm:h-44 sm:w-44 md:h-48 md:w-48'}`}
                             >
                                 {photoUrl ? (
                                     <img src={photoUrl} alt="" className="absolute w-full h-full object-cover object-center" />
                                 ) : (
                                     <div className="absolute inset-0 flex items-center justify-center">
                                         <User
-                                            className={`text-zinc-600 ${hubCompactLayout ? 'h-6 w-6' : 'h-8 w-8 sm:h-12 sm:w-12 md:h-14 md:w-14'}`}
+                                            className={`text-zinc-600 ${hubCompactLayout ? 'h-5 w-5' : 'h-8 w-8 sm:h-12 sm:w-12 md:h-14 md:w-14'}`}
                                             strokeWidth={1.5}
                                         />
                                     </div>
@@ -357,10 +357,10 @@ export default function HubPage() {
 
                 {/* Main — móvil: columna flexible sin scroll de página; invitaciones con tope si hay muchas */}
                 <main className="flex min-h-0 w-full max-w-md flex-1 flex-col overflow-hidden px-2 pb-0.5 sm:px-6 sm:pb-0">
-                    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-                        {/* Contenido central: ocupa el espacio sobrante y hace scroll si hace falta; los 4 botones + sesión quedan siempre debajo (shrink-0) */}
+                    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
+                        {/* Móvil: sin scroll vertical en la página; el detalle de invitaciones va al modal */}
                         <div
-                            className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden overscroll-y-contain [-webkit-overflow-scrolling:touch]"
+                            className={`flex min-h-0 w-full min-w-0 flex-1 flex-col gap-0.5 overflow-x-hidden ${hubCompactLayout ? 'overflow-y-hidden' : 'overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]'}`}
                         >
                         {/* Compañeros recientes: burbujas de avatar para inscribirse rápido con su código */}
                         {recentPartners.length > 0 && (
@@ -382,7 +382,7 @@ export default function HubPage() {
                                             title={`Inscribirse con ${partner.name}`}
                                         >
                                             <div
-                                                className={`rounded-full overflow-hidden border border-padel-primary/30 bg-zinc-800 flex items-center justify-center ${hubCompactLayout ? 'h-6 w-6' : 'h-9 w-9 sm:h-12 sm:w-12'}`}
+                                                className={`rounded-full overflow-hidden border border-padel-primary/30 bg-zinc-800 flex items-center justify-center ${hubCompactLayout ? 'h-5 w-5' : 'h-9 w-9 sm:h-12 sm:w-12'}`}
                                             >
                                                 {partner.photo ? (
                                                     <img src={partner.photo} alt="" className="w-full h-full object-cover" />
@@ -403,9 +403,9 @@ export default function HubPage() {
                             </div>
                         )}
 
-                        {/* Invitaciones: en móvil compacta pero legible; el scroll va en la zona central */}
-                        <div className={`min-h-0 shrink-0 ${hubCompactLayout ? 'mb-1' : 'mb-3 sm:mb-6'}`}>
-                            <InvitationManager compact={hubCompactLayout} />
+                        {/* Invitaciones: móvil = franja + modal (sin scroll en hub) */}
+                        <div className={`min-h-0 shrink-0 ${hubCompactLayout ? 'mb-0.5' : 'mb-3 sm:mb-6'}`}>
+                            <InvitationManager compact={hubCompactLayout} singlePageStrip={hubCompactLayout} />
                         </div>
 
                         {/* Próximo Partido (prioritario si el usuario tiene partido hoy) */}
@@ -413,7 +413,7 @@ export default function HubPage() {
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className={`shrink-0 rounded-xl border border-padel-primary/30 bg-padel-primary/5 backdrop-blur-xl sm:rounded-2xl ${hubCompactLayout ? 'mb-0.5 p-1.5' : 'mb-3 p-3 sm:mb-6 sm:p-5'}`}
+                                className={`min-h-0 shrink-0 rounded-xl border border-padel-primary/30 bg-padel-primary/5 backdrop-blur-xl sm:rounded-2xl ${hubCompactLayout ? 'mb-0.5 p-1' : 'mb-3 p-3 sm:mb-6 sm:p-5'}`}
                             >
                                 <p
                                     className={`flex items-center gap-1 font-black uppercase tracking-widest text-padel-primary ${hubCompactLayout ? 'mb-0.5 text-[8px]' : 'mb-2 text-[10px] sm:mb-3 sm:text-xs'}`}
@@ -458,7 +458,7 @@ export default function HubPage() {
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className={`shrink-0 rounded-xl border-2 border-[#ccff00]/40 bg-[#ccff00]/5 sm:rounded-2xl ${hubCompactLayout ? 'mb-0.5 p-1.5' : 'mb-3 p-3 sm:mb-6 sm:p-4'}`}
+                                className={`min-h-0 shrink-0 rounded-xl border-2 border-[#ccff00]/40 bg-[#ccff00]/5 sm:rounded-2xl ${hubCompactLayout ? 'mb-0.5 p-1' : 'mb-3 p-3 sm:mb-6 sm:p-4'}`}
                             >
                                 <p className={`font-black uppercase tracking-widest text-[#ccff00] ${hubCompactLayout ? 'mb-0.5 text-[8px]' : 'mb-1 text-[10px] sm:mb-2 sm:text-xs'}`}>
                                     ¡Partido finalizado!
@@ -490,7 +490,7 @@ export default function HubPage() {
                             aria-label="Acciones del hub"
                             className={
                                 hubCompactLayout
-                                    ? 'mt-auto flex w-full min-w-0 shrink-0 flex-col gap-1 pb-0.5'
+                                    ? 'mt-auto flex w-full min-w-0 shrink-0 flex-col gap-0.5 pb-[max(0.25rem,env(safe-area-inset-bottom))]'
                                     : 'mt-1 flex w-full min-w-0 shrink-0 flex-col gap-2 pb-4 mb-6 sm:mt-2 sm:gap-3 sm:pb-8 sm:mb-12'
                             }
                         >
@@ -509,7 +509,7 @@ export default function HubPage() {
                                             if (item.onClick) item.onClick();
                                             else if (item.href) router.push(item.href);
                                         }}
-                                        className={`relative group flex w-full flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'min-h-[2.75rem] gap-0 rounded-lg border p-1' : 'min-h-[64px] gap-1 rounded-xl border-2 p-2 sm:min-h-[80px] sm:p-3'} ${item.glow}
+                                        className={`relative group flex w-full flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'min-h-[2.5rem] gap-0 rounded-lg border p-0.5' : 'min-h-[64px] gap-1 rounded-xl border-2 p-2 sm:min-h-[80px] sm:p-3'} ${item.glow}
                                         ${
                                             item.disabled
                                                 ? 'bg-white/3 border-white/10 opacity-40 cursor-not-allowed'
