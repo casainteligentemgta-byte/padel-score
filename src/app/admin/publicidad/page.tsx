@@ -83,6 +83,10 @@ export default function AdminPublicidadPage() {
       }
     >
   >({});
+  /** Partido asignado en `pizarra_cancha_state` por cancha (misma fuente que la pizarra en TV). */
+  const [previewMatchByCourt, setPreviewMatchByCourt] = useState<
+    Record<string, { tournamentId: string; matchId: string } | null>
+  >({});
 
   useEffect(() => {
     if (!authLoading && !isAdmin) router.push('/');
@@ -226,6 +230,43 @@ export default function AdminPublicidadPage() {
   useEffect(() => {
     fetchAssignments();
   }, [selectedVenue, selectedVenueCourts, fetchAssignments]);
+
+  useEffect(() => {
+    const courts = selectedVenueCourts;
+    if (courts.length === 0) {
+      setPreviewMatchByCourt({});
+      return;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      const next: Record<string, { tournamentId: string; matchId: string } | null> = {};
+      await Promise.all(
+        courts.map(async (court) => {
+          const canchaId = `cancha_${court.displayNum}`;
+          try {
+            const row = await dataService.getPizarraCanchaState(canchaId);
+            const d = row?.data || {};
+            const mid = String(d.partido_id || d.active_match_id || '').trim();
+            const tid = String(d.torneo_id || '').trim();
+            if (!mid || mid.startsWith('live_')) {
+              next[court.key] = null;
+              return;
+            }
+            next[court.key] = { tournamentId: tid, matchId: mid };
+          } catch {
+            next[court.key] = null;
+          }
+        }),
+      );
+      if (!cancelled) setPreviewMatchByCourt(next);
+    };
+    void tick();
+    const id = window.setInterval(tick, 8000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [selectedVenueCourts]);
 
   const videos = useMemo(() => mediaList.filter((m) => String(m.tipo).includes('video')), [mediaList]);
   const carrusel = useMemo(() => mediaList.filter((m) => m.tipo === 'imagen'), [mediaList]);
@@ -691,6 +732,8 @@ export default function AdminPublicidadPage() {
                       saveImagePlaylistForCourt(court.key, ids, min, loop, pausa)
                     }
                     onSaveTiraPlaylist={(ids, min) => saveTiraPlaylistForCourt(court.key, ids, min)}
+                    linkTournamentId={previewMatchByCourt[court.key]?.tournamentId ?? null}
+                    linkMatchId={previewMatchByCourt[court.key]?.matchId ?? null}
                   />
                 );
               })}

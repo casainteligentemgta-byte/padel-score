@@ -323,16 +323,16 @@ export default function AdminUsersPage() {
                     </div>
                 </div>
 
-                {/* Users List Grid - Updated Table Header */}
-                <div className="grid grid-cols-1 gap-2">
-                    <div className="hidden lg:grid grid-cols-12 px-10 py-4 text-[8px] font-black uppercase tracking-[0.3em] text-gray-600 italic">
-                        <div className="col-span-1">FOTO</div>
-                        <div className="col-span-1">CÓDIGO</div>
-                        <div className="col-span-2">NOMBRES</div>
-                        <div className="col-span-2">APELLIDOS</div>
-                        <div className="col-span-2">WHATSAPP</div>
-                        <div className="col-span-1 text-center">NIVEL</div>
-                        <div className="col-span-3 text-right">ACCIONES</div>
+                {/* Users List: foto, código, nombres, apellidos, teléfono y nivel en una sola línea (flex-nowrap + scroll si hace falta) */}
+                <div className="flex flex-col gap-2">
+                    <div className="hidden sm:flex flex-nowrap items-center gap-2 px-4 sm:px-6 lg:px-10 py-3 text-[8px] font-black uppercase tracking-[0.3em] text-gray-600 italic min-w-0">
+                        <div className="w-11 shrink-0">FOTO</div>
+                        <div className="w-[4.5rem] shrink-0">CÓDIGO</div>
+                        <div className="min-w-[5.5rem] flex-1 basis-0">NOMBRES</div>
+                        <div className="min-w-[5.5rem] flex-1 basis-0">APELLIDOS</div>
+                        <div className="min-w-[6rem] flex-[1.15] basis-0">WHATSAPP</div>
+                        <div className="w-[4.25rem] shrink-0 text-center">NIVEL</div>
+                        <div className="ml-auto flex w-[13.5rem] shrink-0 justify-end">ACCIONES</div>
                     </div>
 
                     <AnimatePresence>
@@ -342,37 +342,37 @@ export default function AdminUsersPage() {
                                 initial={{ opacity: 0, y: 6 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.18, delay: Math.min(idx, 12) * 0.015 }}
-                                className="group relative bg-white/[0.02] hover:bg-white/[0.04] backdrop-blur-3xl border border-white/5 hover:border-padel-primary/20 rounded-2xl transition-all duration-300"
+                                className="group relative bg-white/[0.02] hover:bg-white/[0.04] backdrop-blur-3xl border border-white/5 hover:border-padel-primary/20 rounded-2xl transition-all duration-300 min-w-0"
                             >
-                                <div className="px-10 py-3 grid grid-cols-1 lg:grid-cols-12 items-center gap-2">
-                                    {/* Foto: abre la ficha del jugador */}
-                                    <div className="lg:col-span-1">
+                                <div className="flex min-h-[56px] min-w-0 flex-nowrap items-center gap-2 overflow-x-auto px-4 py-3 sm:px-6 lg:px-10 [scrollbar-width:thin]">
+                                    {/* Foto */}
+                                    <div className="flex shrink-0 items-center">
                                         <button
                                             type="button"
                                             onClick={() => setFichaModalUser(u)}
-                                            className="block w-[52px] h-[52px] rounded-full overflow-hidden border-2 border-white/10 bg-white/5 hover:border-padel-primary/50 transition-all hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-padel-primary/50"
+                                            className="block h-11 w-11 shrink-0 overflow-hidden rounded-full border-2 border-white/10 bg-white/5 hover:border-padel-primary/50 focus:outline-none focus:ring-2 focus:ring-padel-primary/50 active:scale-95 lg:h-[52px] lg:w-[52px]"
                                             title="Ver ficha"
                                         >
                                             {u.photo ? (
-                                                <img src={u.photo} alt={u.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                                                <img src={u.photo} alt={u.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
                                             ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-gray-700">
-                                                    <User size={26} />
+                                                <div className="flex h-full w-full items-center justify-center text-gray-700">
+                                                    <User size={22} className="lg:h-[26px] lg:w-[26px]" />
                                                 </div>
                                             )}
                                         </button>
                                     </div>
 
-                                    {/* Código: copiar sin caja blanca ni sombra */}
-                                    <div className="lg:col-span-1 flex items-center min-w-0">
+                                    {/* Código */}
+                                    <div className="flex w-[4.5rem] shrink-0 items-center">
                                         {u.uniqueCode ? (
                                             <button
                                                 type="button"
                                                 onClick={() => handleCopyUniqueCode(String(u.id || u.uid), u.uniqueCode)}
-                                                className="inline-flex items-center gap-1.5 min-w-0 text-left bg-transparent border-0 shadow-none p-0 cursor-pointer hover:opacity-90 active:opacity-80"
+                                                className="inline-flex min-w-0 cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-left shadow-none hover:opacity-90 active:opacity-80"
                                                 title="Copiar código"
                                             >
-                                                <span className="text-sm font-mono font-black text-padel-primary tracking-[0.2em] whitespace-nowrap tabular-nums min-w-[6ch]">
+                                                <span className="min-w-0 font-mono text-xs font-black tabular-nums tracking-[0.15em] text-padel-primary sm:text-sm">
                                                     {u.uniqueCode}
                                                 </span>
                                             </button>
@@ -381,63 +381,63 @@ export default function AdminUsersPage() {
                                         )}
                                     </div>
 
-                                    {/* Names */}
-                                    <div className="lg:col-span-2">
-                                        <h3 className="text-sm font-black uppercase italic tracking-tighter text-white group-hover:text-padel-primary transition-colors truncate">
+                                    {/* Nombres */}
+                                    <div className="min-w-[5.5rem] flex-1 basis-0">
+                                        <h3 className="truncate text-sm font-black uppercase italic tracking-tighter text-white transition-colors group-hover:text-padel-primary">
                                             {u.name || (u.fullName?.split(' ')[0]) || 'S/N'}
                                         </h3>
                                     </div>
 
-                                    {/* Surnames */}
-                                    <div className="lg:col-span-2">
-                                        <h3 className="text-sm font-black uppercase italic tracking-tighter text-gray-400 truncate">
+                                    {/* Apellidos */}
+                                    <div className="min-w-[5.5rem] flex-1 basis-0">
+                                        <h3 className="truncate text-sm font-black uppercase italic tracking-tighter text-gray-400">
                                             {u.lastName || (u.fullName?.split(' ').slice(1).join(' ')) || '—'}
                                         </h3>
                                     </div>
 
-                                    {/* WhatsApp */}
-                                    <div className="lg:col-span-2">
+                                    {/* Teléfono */}
+                                    <div className="min-w-[6rem] flex-[1.15] basis-0">
                                         <a
                                             href={u.phone ? `https://wa.me/${u.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola ${(u.name || u.fullName || '').split(' ')[0]}, te escribimos de Smart Padel! 🎾🚀`)}` : '#'}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-sm font-bold text-gray-400 hover:text-green-500 uppercase flex items-center gap-2 transition-colors group/wa"
+                                            className="group/wa flex min-w-0 items-center gap-1.5 text-sm font-bold uppercase text-gray-400 transition-colors hover:text-green-500"
                                         >
-                                            <Phone size={14} className="text-padel-primary/40 group-hover/wa:text-green-500 transition-colors flex-shrink-0" />
-                                            <span className="truncate">{u.phone || u.whatsapp || '—'}</span>
+                                            <Phone size={14} className="shrink-0 text-padel-primary/40 transition-colors group-hover/wa:text-green-500" />
+                                            <span className="min-w-0 truncate">{u.phone || u.whatsapp || '—'}</span>
                                         </a>
                                     </div>
 
                                     {/* Nivel */}
-                                    <div className="lg:col-span-1 flex justify-center">
-                                        <div className="bg-padel-primary/10 border border-padel-primary/20 px-3 py-1.5 rounded-xl max-w-full">
-                                            <span className="text-xs font-black text-padel-primary italic whitespace-nowrap">NIVEL {u.level || '—'}</span>
+                                    <div className="flex w-[4.25rem] shrink-0 items-center justify-center">
+                                        <div className="max-w-full rounded-xl border border-padel-primary/20 bg-padel-primary/10 px-2 py-1.5">
+                                            <span className="whitespace-nowrap text-[10px] font-black italic text-padel-primary sm:text-xs">NIVEL {u.level || '—'}</span>
                                         </div>
                                     </div>
 
-                                    {/* Borrar + Modificar */}
-                                    <div className="lg:col-span-3 flex flex-wrap justify-end gap-2">
+                                    {/* Acciones */}
+                                    <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-1.5 sm:gap-2">
                                         <button
                                             type="button"
                                             disabled={!u.id || updating === u.id}
                                             onClick={() => handleDeleteParticipant(u.id)}
-                                            className="h-10 w-28 flex items-center justify-center gap-1.5 rounded-xl bg-red-500/15 text-red-400 hover:bg-red-500/25 hover:text-red-300 transition-all font-black text-[10px] uppercase tracking-widest border border-red-500/30 disabled:opacity-40 disabled:pointer-events-none"
+                                            className="flex h-10 w-[6.25rem] shrink-0 items-center justify-center gap-1 rounded-xl border border-red-500/30 bg-red-500/15 px-2 font-black uppercase tracking-wider text-red-400 transition-all hover:bg-red-500/25 hover:text-red-300 disabled:pointer-events-none disabled:opacity-40 sm:w-28 sm:text-[10px] sm:tracking-widest"
                                             title="Se elimina al tercer clic"
                                         >
                                             {updating === u.id ? (
-                                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                                <RefreshCw className="h-4 w-4 shrink-0 animate-spin" />
                                             ) : (
-                                                <Trash2 size={16} />
+                                                <Trash2 size={16} className="shrink-0" />
                                             )}
-                                            <span>Borrar</span>
+                                            <span className="truncate">Borrar</span>
                                         </button>
                                         <Link
                                             href={u.id ? `/players/register?edit=${u.id}` : '#'}
-                                            className="h-10 w-28 flex items-center justify-center gap-1.5 rounded-xl bg-padel-primary/10 text-padel-primary hover:bg-padel-primary hover:text-black transition-all font-black text-[10px] uppercase tracking-widest border border-padel-primary/20"
+                                            className="flex h-10 w-[6.25rem] shrink-0 items-center justify-center gap-1 rounded-xl border border-padel-primary/20 bg-padel-primary/10 px-2 font-black uppercase tracking-wider text-padel-primary transition-all hover:bg-padel-primary hover:text-black sm:w-28 sm:text-[10px] sm:tracking-widest"
                                             title="Modificar ficha"
                                         >
-                                            <Edit2 size={16} />
-                                            <span>Modificar</span>
+                                            <Edit2 size={16} className="shrink-0" />
+                                            <span className="truncate">Modificar</span>
                                         </Link>
                                     </div>
                                 </div>

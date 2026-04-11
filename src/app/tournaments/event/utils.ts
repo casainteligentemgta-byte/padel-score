@@ -15,6 +15,14 @@ export const formatHHMM = (v: any) => {
     return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
 };
 
+/** Fecha corta dd/mm para cabeceras de partido */
+export const formatDateDDMM = (v: any) => {
+    if (!v) return '—';
+    const d = v?.toDate ? v.toDate() : new Date(v);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+};
+
 export const toMinute = (v: any): number => Math.floor(toMs(v) / 60000);
 
 /**

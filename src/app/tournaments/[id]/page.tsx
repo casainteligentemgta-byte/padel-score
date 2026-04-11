@@ -62,6 +62,12 @@ import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { getFinishedMatchScoreLines } from '@/lib/matchFinishedScoreDisplay';
 import { buildPizarraConceptHref } from '@/app/tournaments/event/components/MatchCards';
 
+/** Mismo diseño para Marcador (en vivo) y celdas del dock (Control, Pizarra, Cámaras, ADS) */
+const MATCH_CARD_ACTION_LINK =
+    'group flex flex-col items-center justify-center gap-1 min-h-[3.25rem] w-full rounded-xl border border-white/10 bg-white/[0.05] text-gray-400 hover:bg-white/[0.08] hover:border-padel-primary/40 hover:text-padel-primary transition-all active:scale-[0.98]';
+const MATCH_CARD_ACTION_LABEL = 'text-[7px] font-black uppercase tracking-widest leading-none';
+const MATCH_CARD_ACTION_ICON = 'h-3.5 w-3.5 shrink-0';
+
 export default function TournamentDashboard() {
     type ParticipantOption = { id: string; name?: string; lastName?: string; email?: string; phone?: string };
     const id = useRouteSegment('id');
@@ -2420,9 +2426,9 @@ export default function TournamentDashboard() {
                                         const cols = _numCanchas <= 1 ? 1 : _numCanchas <= 2 ? 2 : 3;
                                         const gridCols = cols === 1 ? 'grid-cols-1' : cols === 2 ? 'grid-cols-2' : 'grid-cols-3';
                                         if (isLiveDashboard) return `grid ${gridCols} gap-4 items-start content-start w-full`;
-                                        if (activeTab === 'Por Comenzar') return `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 flex-1 min-h-0 items-start`;
+                                        if (activeTab === 'Por Comenzar') return `grid grid-cols-1 md:grid-cols-3 gap-3 flex-1 min-h-0 items-start`;
 
-                                        return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start';
+                                        return 'grid grid-cols-1 md:grid-cols-3 gap-4 items-start';
                                     })()}>
                                         {displayMatches.filter((match: any) => match && match.team1 && match.team2).map((match: any, idx: number) => {
                                             const mi = matches.findIndex((m: any) => m?.id && match?.id && m.id === match.id);
@@ -2483,87 +2489,99 @@ export default function TournamentDashboard() {
 
                                                             {/* ── Franja superior: Nº partido · Hora · Pista · Categoría · Género ─────────────────── */}
                                                             <div className={`px-4 pt-3 pb-2.5 border-b border-white/[0.10] flex flex-col gap-2 ${isLive ? 'bg-[#39ff14]/15' : isPorComenzar ? 'bg-[#ff9500]/15' : isEnCola ? 'bg-red-500/10' : 'bg-white/[0.07]'}`}>
-                                                                <div className="flex items-center justify-between gap-3 flex-wrap">
-                                                                    <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-                                                                        {matchNumber >= 1 && (
-                                                                            <>
-                                                                                <div className="min-w-0 max-w-[140px]">
-                                                                                    <AutoShrinkName
-                                                                                        name={`Partido ${matchNumber}`}
-                                                                                        style={{ fontSize: '11px' }}
-                                                                                        className="font-black uppercase tracking-widest text-gray-400"
-                                                                                    />
-                                                                                </div>
-                                                                                <span className="text-white/30 flex-shrink-0">·</span>
-                                                                            </>
-                                                                        )}
-                                                                        {/* Hora */}
-                                                                        {(() => {
-                                                                            const raw = match.time || match.scheduledTime;
-                                                                            if (!raw) return null;
-                                                                            if (delayInfo) {
-                                                                                const estTime = new Date(delayInfo.estimatedStartMs);
-                                                                                return <span className="text-[11px] font-bold text-orange-400 tracking-wider flex-shrink-0">{estTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>;
-                                                                            }
-                                                                            const d = raw?.toDate ? raw.toDate() : new Date(raw);
-                                                                            if (isNaN(d.getTime())) return <span className="text-[11px] font-bold text-gray-400 tracking-wider flex-shrink-0">—</span>;
-                                                                            const dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
-                                                                            const timeStr = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
-                                                                            return (
-                                                                                <div className="flex flex-col items-start gap-0.5 flex-shrink-0">
-                                                                                    <span className="text-[10px] font-black text-padel-primary/60 tracking-tighter uppercase">{dateStr}</span>
-                                                                                    <span className="text-[11px] font-bold text-gray-400 tracking-wider">{timeStr}</span>
-                                                                                </div>
-                                                                            );
-                                                                        })()}
-                                                                        <span className="text-white/30 flex-shrink-0">·</span>
-                                                                        <div className="min-w-0 max-w-[110px]">
-                                                                            <AutoShrinkName
-                                                                                name={match.courtName ?? (match.court != null ? `Pista ${match.court}` : (match.courtIndex != null ? `Pista ${match.courtIndex + 1}` : 'Pista –'))}
-                                                                                style={{ fontSize: '11px' }}
-                                                                                className={`font-black uppercase tracking-widest italic ${isLive ? 'text-padel-primary' : 'text-gray-500'}`}
-                                                                            />
+                                                                <div className="flex items-start justify-between gap-3">
+                                                                    <div className="flex min-w-0 flex-1 flex-col gap-1.5 text-left">
+                                                                        {/* Línea 1: partido · fecha · hora */}
+                                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                                            {matchNumber >= 1 && (
+                                                                                <>
+                                                                                    <div className="min-w-0 max-w-[140px]">
+                                                                                        <AutoShrinkName
+                                                                                            name={`Partido ${matchNumber}`}
+                                                                                            style={{ fontSize: '10px' }}
+                                                                                            className="font-black uppercase tracking-widest text-gray-400"
+                                                                                        />
+                                                                                    </div>
+                                                                                    <span className="text-white/30 flex-shrink-0">·</span>
+                                                                                </>
+                                                                            )}
+                                                                            {(() => {
+                                                                                const raw = match.time || match.scheduledTime;
+                                                                                if (delayInfo) {
+                                                                                    const est = new Date(delayInfo.estimatedStartMs);
+                                                                                    return (
+                                                                                        <span className="text-[10px] font-bold tracking-wider text-orange-400">
+                                                                                            {est.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })} · {est.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                                                                                        </span>
+                                                                                    );
+                                                                                }
+                                                                                if (!raw) {
+                                                                                    return <span className="text-[10px] font-bold text-gray-400">—</span>;
+                                                                                }
+                                                                                const d = raw?.toDate ? raw.toDate() : new Date(raw);
+                                                                                if (isNaN(d.getTime())) {
+                                                                                    return <span className="text-[10px] font-bold text-gray-400">—</span>;
+                                                                                }
+                                                                                const dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+                                                                                const timeStr = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+                                                                                return (
+                                                                                    <span className="text-[10px] font-bold tracking-wider text-gray-400">
+                                                                                        <span className="font-black uppercase tracking-tighter text-padel-primary/60">{dateStr}</span>
+                                                                                        <span className="px-1 text-white/30">·</span>
+                                                                                        {timeStr}
+                                                                                    </span>
+                                                                                );
+                                                                            })()}
                                                                         </div>
-                                                                        {tournament?.category && (
-                                                                            <>
-                                                                                <span className="text-white/30 flex-shrink-0">·</span>
-                                                                                <div className="min-w-0 max-w-[120px] bg-white/[0.10] border border-white/[0.15] px-1.5 py-0.5 rounded">
-                                                                                    <AutoShrinkName
-                                                                                        name={formatCat(tournament.category)}
-                                                                                        style={{ fontSize: '10px' }}
-                                                                                        className="font-black uppercase tracking-widest text-gray-400"
-                                                                                    />
+                                                                        {/* Línea 2: pista centrada; debajo categoría y género */}
+                                                                        <div className="flex w-full min-w-0 flex-col items-center gap-1.5 text-[8px] sm:text-[9px]">
+                                                                            <p className={`w-full truncate text-center font-black uppercase italic tracking-tight ${isLive ? 'text-padel-primary' : 'text-gray-500'}`}>
+                                                                                {match.courtName ?? (match.court != null ? `Pista ${match.court}` : (match.courtIndex != null ? `Pista ${match.courtIndex + 1}` : 'Pista –'))}
+                                                                            </p>
+                                                                            {(tournament?.category || tournament?.gender) && (
+                                                                                <div className="flex w-full flex-wrap items-center justify-center gap-x-2 gap-y-1">
+                                                                                    {tournament?.category && (
+                                                                                        <span className="max-w-[min(100%,12rem)] truncate rounded border border-white/[0.15] bg-white/[0.10] px-1.5 py-0.5 text-center font-black uppercase tracking-tight text-gray-400">
+                                                                                            {formatCat(tournament.category)}
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {tournament?.gender && (
+                                                                                        <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 font-black uppercase tracking-tight ${tournament.gender === 'MALE' ? 'border-blue-500/20 bg-blue-500/10 text-blue-400' : tournament.gender === 'FEMALE' ? 'border-pink-500/20 bg-pink-500/10 text-pink-400' : 'border-purple-500/20 bg-purple-500/10 text-purple-400'}`}>
+                                                                                            {tournament.gender === 'MALE' ? '♂ Masc' : tournament.gender === 'FEMALE' ? '♀ Fem' : '⚥ Mix'}
+                                                                                        </span>
+                                                                                    )}
                                                                                 </div>
-                                                                            </>
-                                                                        )}
-                                                                        {tournament?.gender && (
-                                                                            <>
-                                                                                <span className="text-white/30 flex-shrink-0">·</span>
-                                                                                <div className={`min-w-0 max-w-[95px] px-1.5 py-0.5 rounded border ${tournament.gender === 'MALE' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' : tournament.gender === 'FEMALE' ? 'text-pink-400 bg-pink-500/10 border-pink-500/20' : 'text-purple-400 bg-purple-500/10 border-purple-500/20'}`}>
-                                                                                    <AutoShrinkName
-                                                                                        name={tournament.gender === 'MALE' ? '♂ Masc' : tournament.gender === 'FEMALE' ? '♀ Fem' : '⚥ Mix'}
-                                                                                        style={{ fontSize: '10px' }}
-                                                                                        className="font-black uppercase tracking-widest"
-                                                                                    />
-                                                                                </div>
-                                                                            </>
-                                                                        )}
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                     {/* Badge derecho: prioridad EN VIVO > Finalizado > DEMORADO > fase */}
                                                                     {isLive ? (
-                                                                        <span className="text-[9px] font-black text-red-500 uppercase italic tracking-widest animate-pulse border border-red-500/30 px-2 py-1 rounded-full bg-red-500/5 flex-shrink-0">● En Vivo</span>
+                                                                        <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
+                                                                            <span className="text-[9px] font-black uppercase italic tracking-widest text-red-500 animate-pulse rounded-full border border-red-500/30 bg-red-500/5 px-2 py-1">● En Vivo</span>
+                                                                            {match?.id && id && (
+                                                                                <Link
+                                                                                    href={`/tournaments/${id}/score/${match.id}`}
+                                                                                    className={`${MATCH_CARD_ACTION_LINK} max-w-[7rem]`}
+                                                                                >
+                                                                                    <Zap className={MATCH_CARD_ACTION_ICON} />
+                                                                                    <span className={MATCH_CARD_ACTION_LABEL}>Marcador</span>
+                                                                                </Link>
+                                                                            )}
+                                                                        </div>
                                                                     ) : isFinishedCard ? (
                                                                         <span className="text-[9px] font-black text-white/30 uppercase italic tracking-widest border border-white/10 px-2 py-1 rounded-full bg-white/5 flex-shrink-0">Finalizado</span>
                                                                     ) : delayInfo ? (
                                                                         <span className="text-[9px] font-black text-orange-400 bg-orange-500/10 border border-orange-500/30 px-2 py-1 rounded-full italic uppercase tracking-widest animate-pulse flex-shrink-0">
                                                                             ⚠ ~{delayInfo.delayMins}m
                                                                         </span>
-                                                                    ) : match.groupName && match.roundName === 'Fase de Grupos' ? (
-                                                                        <span className="text-[9px] font-black text-padel-primary/40 uppercase tracking-widest italic border border-padel-primary/10 px-2 py-1 rounded-full bg-padel-primary/5 flex-shrink-0">
-                                                                            Grupo {match.groupName}
+                                                                    ) : match.stage === 'GROUP_STAGE' ||
+                                                                      match.roundName === 'Fase de Grupos' ||
+                                                                      match.roundName === 'Fase de Grupo' ? (
+                                                                        <span className="text-[9px] font-black text-padel-primary/40 uppercase tracking-widest italic border border-padel-primary/10 px-2 py-1 rounded-full bg-padel-primary/5 flex-shrink-0 whitespace-nowrap">
+                                                                            F. Grupo
                                                                         </span>
                                                                     ) : match.roundName ? (
-                                                                        <span className="text-[9px] font-black text-padel-primary/40 uppercase tracking-widest italic border border-padel-primary/10 px-2 py-1 rounded-full bg-padel-primary/5 flex-shrink-0">
+                                                                        <span className="text-[9px] font-black text-padel-primary/40 uppercase tracking-widest italic border border-padel-primary/10 px-2 py-1 rounded-full bg-padel-primary/5 flex-shrink-0 max-w-[min(100%,10rem)] truncate">
                                                                             {match.roundName}
                                                                         </span>
                                                                     ) : null}
@@ -2848,14 +2866,14 @@ export default function TournamentDashboard() {
 
                                                                 {/* Dock inferior solo en cola: en "En Vivo" el partido ya está en pista; evita barra duplicada */}
                                                                 {activeTab === 'Por Comenzar' && (
-                                                                    <div className="px-2 pb-2 shrink-0">
-                                                                        <nav className="grid grid-cols-4 border border-white/5 bg-white/5 backdrop-blur-md py-1.5 rounded-xl shadow-lg">
+                                                                    <div className="shrink-0 px-2 pb-2">
+                                                                        <nav className="grid grid-cols-4 gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] p-1.5 shadow-lg backdrop-blur-md">
                                                                             <Link
                                                                                 href={match?.id ? `/tournaments/${id}/score/${match.id}` : `/tournaments/${id}/control`}
-                                                                                className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-padel-primary transition-all active:scale-90 border-r border-white/5"
+                                                                                className={MATCH_CARD_ACTION_LINK}
                                                                             >
-                                                                                <Zap className="w-3.5 h-3.5" />
-                                                                                <span className="text-[7px] font-black uppercase tracking-widest leading-none">Control</span>
+                                                                                <Zap className={MATCH_CARD_ACTION_ICON} />
+                                                                                <span className={MATCH_CARD_ACTION_LABEL}>Control</span>
                                                                             </Link>
                                                                             <Link
                                                                                 href={
@@ -2865,24 +2883,21 @@ export default function TournamentDashboard() {
                                                                                 }
                                                                                 target={id && match?.id ? '_blank' : undefined}
                                                                                 rel={id && match?.id ? 'noopener noreferrer' : undefined}
-                                                                                className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-white transition-all active:scale-90 border-r border-white/5"
+                                                                                className={MATCH_CARD_ACTION_LINK}
                                                                             >
-                                                                                <Monitor className="w-3.5 h-3.5" />
-                                                                                <span className="text-[7px] font-black uppercase tracking-widest leading-none">Pizarra</span>
+                                                                                <Monitor className={MATCH_CARD_ACTION_ICON} />
+                                                                                <span className={MATCH_CARD_ACTION_LABEL}>Pizarra</span>
                                                                             </Link>
                                                                             <Link
                                                                                 href={id ? `/tournaments/${id}/control/broadcasting` : '#'}
-                                                                                className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-orange-400 transition-all active:scale-90 border-r border-white/5"
+                                                                                className={MATCH_CARD_ACTION_LINK}
                                                                             >
-                                                                                <Camera className="w-3.5 h-3.5" />
-                                                                                <span className="text-[7px] font-black uppercase tracking-widest leading-none">Cámaras</span>
+                                                                                <Camera className={MATCH_CARD_ACTION_ICON} />
+                                                                                <span className={MATCH_CARD_ACTION_LABEL}>Cámaras</span>
                                                                             </Link>
-                                                                            <Link
-                                                                                href={`/admin/publicidad`}
-                                                                                className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-yellow-400 transition-all active:scale-90"
-                                                                            >
-                                                                                <Tv className="w-3.5 h-3.5" />
-                                                                                <span className="text-[7px] font-black uppercase tracking-widest leading-none">ADS</span>
+                                                                            <Link href="/admin/publicidad" className={MATCH_CARD_ACTION_LINK}>
+                                                                                <Tv className={MATCH_CARD_ACTION_ICON} />
+                                                                                <span className={MATCH_CARD_ACTION_LABEL}>ADS</span>
                                                                             </Link>
                                                                         </nav>
                                                                     </div>

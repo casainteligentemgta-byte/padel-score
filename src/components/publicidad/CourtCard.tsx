@@ -2,6 +2,7 @@
 
 import type { MediaContent } from '@/lib/supabase/publicidad';
 import { healthStatusFromLastSeen, type CourtHealthStatus } from '@/lib/courtHealth';
+import { buildPizarraShortPath, sedeIndexFromVenueName } from '@/lib/pizarraShortUrl';
 import {
   ChevronDown,
   ChevronUp,
@@ -16,28 +17,7 @@ import {
   Wifi,
   X,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-
-const SEDE_INDEX: Record<string, number> = {
-  'El Bodeguero': 1,
-  Elite: 2,
-  'Food Kart': 3,
-  'Margarita Padel': 4,
-  'Playa el Agua': 5,
-  'Sun Sol Costa Azul': 6,
-  'Sun Sol Pedro Gonzalez': 7,
-  Tibisay: 8,
-};
-
-function sedeIndexFromVenueName(venueName: string): number | null {
-  const v = venueName.trim().toLowerCase();
-  const matchKey = Object.keys(SEDE_INDEX).find((k) => k.toLowerCase() === v);
-  return matchKey ? SEDE_INDEX[matchKey] : null;
-}
-
-function buildPizarraShortPath(sedeIndex: number, courtNum: number): string {
-  return `s${sedeIndex}/c${courtNum}`;
-}
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export type CourtPlaylistRow = {
   id: string;
@@ -75,6 +55,9 @@ type CourtCardProps = {
   onSaveTiraPlaylist: (orderedTiraIds: string[], cambioMin: number) => void | Promise<void>;
   lastSeenIso?: string | null;
   isSaving?: boolean;
+  /** Si hay partido/torneo, la URL corta conserva contexto al abrir /s1/c1 */
+  linkTournamentId?: string | null;
+  linkMatchId?: string | null;
 };
 
 function statusStyle(status: CourtHealthStatus): { wifi: string } {
@@ -118,6 +101,8 @@ export default function CourtCard({
   onSaveTiraPlaylist,
   lastSeenIso,
   isSaving,
+  linkTournamentId,
+  linkMatchId,
 }: CourtCardProps) {
   const status = healthStatusFromLastSeen(lastSeenIso ?? null);
   const { wifi } = statusStyle(status);
@@ -181,14 +166,33 @@ export default function CourtCard({
   const pizarraShortPath = sedeIndex ? buildPizarraShortPath(sedeIndex, displayCourtNum) : null;
 
   /**
-   * Misma ruta que la pizarra real; el escalado va centrado (no top-left) para que el marcador
-   * o el estado «en espera» no queden fuera del recorte.
+   * Misma URL que la pizarra en TV: con torneo+partido desde `pizarra_cancha_state` en admin;
+   * si no hay partido en la cancha, solo complex+courtId (sin pasar por /display → redirect incompleto).
    */
-  const previewIframeSrc =
-    venueName.trim().length > 0
-      ? `/display/court/${displayCourtNum}?complex=${encodeURIComponent(venueName)}${minimalMode ? '&minimal=1' : ''}`
-      : `/display/court/${displayCourtNum}${minimalMode ? '?minimal=1' : ''}`;
-  const shortHref = pizarraShortPath ? `/${pizarraShortPath}${minimalMode ? '?minimal=1' : ''}` : null;
+  const previewIframeSrc = useMemo(() => {
+    const venue = venueName.trim();
+    const tid = String(linkTournamentId ?? '').trim();
+    const mid = String(linkMatchId ?? '').trim();
+    const q = new URLSearchParams();
+    if (tid) q.set('tournamentId', tid);
+    if (mid) q.set('matchId', mid);
+    if (venue) q.set('complex', venue);
+    q.set('courtId', String(displayCourtNum));
+    if (minimalMode) q.set('minimal', '1');
+    return `/dev/pizarra-concept?${q.toString()}`;
+  }, [venueName, displayCourtNum, minimalMode, linkTournamentId, linkMatchId]);
+  const shortHref = pizarraShortPath
+    ? (() => {
+        const q = new URLSearchParams();
+        if (minimalMode) q.set('minimal', '1');
+        const tid = String(linkTournamentId ?? '').trim();
+        const mid = String(linkMatchId ?? '').trim();
+        if (tid) q.set('tournamentId', tid);
+        if (mid) q.set('matchId', mid);
+        const qs = q.toString();
+        return `/${pizarraShortPath}${qs ? `?${qs}` : ''}`;
+      })()
+    : null;
 
   const videoById = (id: string) => libraryVideos.find((m) => m.id === id);
   const imageById = (id: string) => libraryImages.find((m) => m.id === id);
@@ -227,6 +231,7 @@ export default function CourtCard({
 
       <div className="relative h-40 w-full overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shrink-0">
         <iframe
+          key={previewIframeSrc}
           src={previewIframeSrc}
           title={`Vista previa pizarra ${courtKey}`}
           loading="eager"

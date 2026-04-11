@@ -3,18 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Monitor, MapPin, Loader2, AlertCircle } from 'lucide-react';
-
-/** Mapa sede → nombre (orden alfabético = mismo que en el generador) */
-const SEDE_MAP: Record<string, string> = {
-    S1: 'El Bodeguero',
-    S2: 'Elite',
-    S3: 'Food Kart',
-    S4: 'Margarita Padel',
-    S5: 'Playa el Agua',
-    S6: 'Sun Sol Costa Azul',
-    S7: 'Sun Sol Pedro Gonzalez',
-    S8: 'Tibisay',
-};
+import { SEDE_CODE_TO_VENUE } from '@/lib/pizarraShortUrl';
 
 type State = 'loading' | 'redirecting' | 'not_found' | 'invalid';
 
@@ -27,7 +16,7 @@ export default function ShortUrlPage() {
 
     const sedeMatch = sedeRaw.match(/^S(\d+)$/);
     const canchaMatch = canchaRaw.match(/^C(\d+)$/);
-    const complexName = sedeMatch ? SEDE_MAP[sedeRaw] : null;
+    const complexName = sedeMatch ? SEDE_CODE_TO_VENUE[sedeRaw] : null;
     const courtNumber = canchaMatch ? parseInt(canchaMatch[1], 10) : null;
     const courtOk =
         complexName != null &&
@@ -48,7 +37,9 @@ export default function ShortUrlPage() {
         setState('redirecting');
         const qp = new URLSearchParams(searchParams?.toString() || '');
         qp.set('complex', complexName);
-        router.replace(`/display/court/${courtNumber}?${qp.toString()}`);
+        qp.set('courtId', String(courtNumber));
+        /** Evita /display/court → redirect en next.config sin torneo/partido; misma vista que ?tournamentId&matchId */
+        router.replace(`/dev/pizarra-concept?${qp.toString()}`);
     }, [courtOk, complexName, courtNumber, router, searchParams]);
 
     /* ─── UI ─────────────────────────────────────────── */

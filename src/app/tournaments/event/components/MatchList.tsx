@@ -107,7 +107,7 @@ export const MatchList: React.FC<MatchListProps> = ({
                         </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pb-4">
                         {nextUpMatches.map((match, rank) => (
                             <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact gameNumber={rank + 1} matchNumber={allMatches.indexOf(match) + 1} showControlDock={canUseMatchControl} />
                         ))}
@@ -163,7 +163,7 @@ export const MatchList: React.FC<MatchListProps> = ({
                         </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                         {effectiveLiveMatches.map((match, rank) => (
                             <NextMatchCard key={match.id ?? rank} match={match} rank={rank} compact matchNumber={allMatches.indexOf(match) + 1} showControlDock={canUseMatchControl} />
                         ))}
@@ -252,7 +252,7 @@ export const MatchList: React.FC<MatchListProps> = ({
                                 {todosLive.length} en acción
                             </span>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             {dateFilteredLive.map((m, idx) => (
                                 <NextMatchCard key={m.id} match={m} rank={idx} compact matchNumber={allMatches.indexOf(m) + 1} showControlDock={canUseMatchControl} />
                             ))}
@@ -277,7 +277,7 @@ export const MatchList: React.FC<MatchListProps> = ({
                             </span>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             {todosNextUp.map((m, idx) => (
                                 <NextMatchCard key={m.id} match={m} rank={idx} compact gameNumber={idx + 1} matchNumber={allMatches.indexOf(m) + 1} showControlDock={canUseMatchControl} />
                             ))}

@@ -537,13 +537,13 @@ function CourtCell({
             ? `&courtId=${encodeURIComponent(String(Math.floor(courtNum)))}`
             : '';
     const minQ = minimalScreensMode ? '&minimal=1' : '';
+    const matchQ = `&matchId=${encodeURIComponent(String(match.id))}`;
     /**
-     * Resolver por cancha evita desajustes cuando `matchId` se queda desincronizado
-     * tras reasignaciones o cambios de estado en tiempo real.
+     * Incluye matchId para la misma URL que el hub / torneo; courtId refuerza la pista en RTDB.
      */
     const displayUrl = `/dev/pizarra-concept?tournamentId=${encodeURIComponent(
         tournamentId,
-    )}${courtQ}${minQ}`;
+    )}${matchQ}${courtQ}${minQ}`;
     const [assigning, setAssigning] = useState<number | null>(null);
     const assignableCourts = Array.from(
         { length: Math.max(1, Math.floor(maxAssignableCourts)) },

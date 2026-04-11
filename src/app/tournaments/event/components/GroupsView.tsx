@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    LayoutGrid, Users, Award, TrendingUp, Calendar, Trophy
+    LayoutGrid, Users, Award, TrendingUp, Calendar, Trophy, Zap
 } from 'lucide-react';
 import { MatchStatus } from '@/types/tournament';
 import {
-    formatCategory, formatHHMM, resolveTeamNames, calcGroupStanding, formatDisplayName
+    formatCategory, formatHHMM, formatDateDDMM, resolveTeamNames, calcGroupStanding, formatDisplayName
 } from '../utils';
 import { TeamPairDisplay } from '@/components/TeamPairDisplay';
 
@@ -261,33 +262,63 @@ const GroupMatches = ({ gName, groupAssignments, activeTournament, allMatches }:
                 const [t2p1, t2p2] = resolveTeamNames(m.team2, m.team2Name);
 
                 return (
-                    <div key={m.id || idx} className="bg-white/[0.03] border border-white/[0.06] rounded-2xl overflow-hidden flex flex-col">
-                        <div className="p-3 flex items-center justify-between gap-4">
-                            <div className="flex-1 min-w-0 space-y-2">
+                    <div key={m.id || idx} className="flex flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03]">
+                        <div className="space-y-1.5 border-b border-white/[0.06] px-3 pt-2.5 pb-2 text-center">
+                            <p className="text-left text-[10px] font-black uppercase tracking-tight text-gray-400">
+                                <span>Partido {idx + 1}</span>
+                                <span className="text-white/25"> · </span>
+                                <span className="font-bold text-gray-300">{formatDateDDMM(m.scheduledTime ?? m.time)} · {formatHHMM(m.scheduledTime ?? m.time)}</span>
+                            </p>
+                            <p className="truncate text-[9px] font-black uppercase tracking-tight text-gray-400 sm:text-[10px]">
+                                Pista {m.court ?? '–'}
+                            </p>
+                            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[8px] font-bold uppercase tracking-wide text-gray-500 sm:text-[9px]">
+                                {activeTournament?.category && (
+                                    <span className="max-w-[min(100%,11rem)] truncate rounded border border-white/10 bg-white/[0.05] px-1.5 py-0.5">
+                                        {formatCategory(activeTournament.category)}
+                                    </span>
+                                )}
+                                {activeTournament?.gender && (
+                                    <span className="whitespace-nowrap rounded border border-white/10 bg-white/[0.05] px-1.5 py-0.5 font-black text-gray-400">
+                                        {activeTournament.gender === 'MALE' ? 'Masc' : activeTournament.gender === 'FEMALE' ? 'Fem' : 'Mix'}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-4 p-3">
+                            <div className="min-w-0 flex-1 space-y-2">
                                 <div className="flex items-center justify-between gap-2">
                                     <div className="min-w-0">
                                         <p className={`text-[10px] font-black uppercase truncate ${isDone && (m.score1 > m.score2) ? 'text-[#ccff00]' : 'text-gray-300'}`}>{t1p1}</p>
-                                        {t1p2 && <p className="text-[8px] font-bold text-gray-500 uppercase truncate -mt-0.5">{t1p2}</p>}
+                                        {t1p2 && <p className="-mt-0.5 text-[8px] font-bold uppercase text-gray-500 truncate">{t1p2}</p>}
                                     </div>
-                                    {isDone && <span className="text-xs font-black text-white px-1">{m.score1 ?? 0}</span>}
+                                    {isDone && <span className="px-1 text-xs font-black text-white">{m.score1 ?? 0}</span>}
                                 </div>
                                 <div className="flex items-center justify-between gap-2">
                                     <div className="min-w-0">
                                         <p className={`text-[10px] font-black uppercase truncate ${isDone && (m.score2 > m.score1) ? 'text-[#ccff00]' : 'text-gray-300'}`}>{t2p1}</p>
-                                        {t2p2 && <p className="text-[8px] font-bold text-gray-500 uppercase truncate -mt-0.5">{t2p2}</p>}
+                                        {t2p2 && <p className="-mt-0.5 text-[8px] font-bold uppercase text-gray-500 truncate">{t2p2}</p>}
                                     </div>
-                                    {isDone && <span className="text-xs font-black text-white px-1">{m.score2 ?? 0}</span>}
+                                    {isDone && <span className="px-1 text-xs font-black text-white">{m.score2 ?? 0}</span>}
                                 </div>
                             </div>
-                            <div className="flex flex-col items-end gap-1 flex-shrink-0 border-l border-white/10 pl-4 py-1">
+                            <div className="flex shrink-0 flex-col items-end gap-1.5 border-l border-white/10 py-1 pl-4">
                                 {isDone ? (
-                                    <span className="text-[8px] font-black text-gray-600 uppercase tracking-widest">Finalizado</span>
+                                    <span className="text-[8px] font-black uppercase tracking-widest text-gray-600">Finalizado</span>
                                 ) : isLive ? (
-                                    <span className="text-[8px] font-black text-[#ccff00] uppercase tracking-widest animate-pulse">En Vivo</span>
-                                ) : (
-                                    <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">{formatHHMM(m.scheduledTime)}</span>
-                                )}
-                                <span className="text-[9px] font-bold text-gray-700 uppercase">Pista {m.court ?? '-'}</span>
+                                    <>
+                                        <span className="text-[8px] font-black uppercase tracking-widest text-[#ccff00] animate-pulse">En Vivo</span>
+                                        {activeTournament?.id && m.id && (
+                                            <Link
+                                                href={`/tournaments/${activeTournament.id}/score/${m.id}`}
+                                                className="inline-flex items-center justify-center gap-0.5 rounded-md border border-[#ccff00]/40 bg-[#ccff00]/10 px-2 py-1 text-[7px] font-black uppercase tracking-widest text-[#ccff00] transition-colors hover:bg-[#ccff00]/20"
+                                            >
+                                                <Zap className="h-2.5 w-2.5 shrink-0" />
+                                                Marcador
+                                            </Link>
+                                        )}
+                                    </>
+                                ) : null}
                             </div>
                         </div>
                     </div>

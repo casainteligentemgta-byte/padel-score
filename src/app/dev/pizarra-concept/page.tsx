@@ -18,6 +18,8 @@ import {
 import { resolveMatchTeamLines } from '@/lib/resolveMatchTeamLines';
 import { formatPizarraCategoryLevel, formatPizarraGender } from '@/lib/pizarraHeaderLabels';
 import { resolveMatchFromTournamentList } from '@/lib/resolveDisplayMatchId';
+import { inferMatchOrderFromId } from '@/lib/matchOrderMeta';
+import { buildPizarraShortPath, sedeIndexFromVenueName } from '@/lib/pizarraShortUrl';
 
 /** Tipografía de nombres: mismo aspecto en TV (vh alto) y laptop (vw útil), con trazo compacto. */
 const pizarraPlayerNames = Barlow_Condensed({
@@ -187,24 +189,65 @@ type BoardView = {
 };
 
 const DEFAULT_BOARD: BoardView = {
-  teamA: ['LUIS V. M.', 'HECTOR L. M.'],
-  teamB: ['JAVIER V. L.', 'CARLOS G. H.'],
-  set1A: '6',
-  set1B: '4',
-  set2A: '2',
-  set2B: '6',
-  pointsA: '40',
-  pointsB: '30',
-  serverPlayer: 'A2',
-  tournamentNameLine: 'COPA BUCHANNAS',
-  courtHeaderLabel: 'COCA COLA',
-  venueLabel: 'EL BODEGUERO',
-  categoryGenderLine: 'CASA INTELIGENTE',
-  categoryLine: '6ª',
-  genderLine: 'MASCULINO',
-  tickerPrimary: 'BIENVENIDOS A SMART PADEL TV',
+  teamA: ['JUGADOR 1', 'JUGADOR 2'],
+  teamB: ['JUGADOR 3', 'JUGADOR 4'],
+  set1A: '0',
+  set1B: '0',
+  set2A: '0',
+  set2B: '0',
+  pointsA: '0',
+  pointsB: '0',
+  serverPlayer: 'A1',
+  tournamentNameLine: '—',
+  courtHeaderLabel: '',
+  venueLabel: '—',
+  categoryGenderLine: '— · —',
+  categoryLine: '—',
+  genderLine: '—',
+  tickerPrimary: 'SMART PADEL TV · MARCADOR EN VIVO',
   tickerSecondary: 'SMART PADEL TV',
 };
+
+/** Marcador neutro si falla la carga del partido (RLS / API / id). */
+const FALLBACK_EMPTY_BOARD: BoardView = {
+  teamA: ['JUGADOR 1', 'JUGADOR 2'],
+  teamB: ['JUGADOR 3', 'JUGADOR 4'],
+  set1A: '0',
+  set1B: '0',
+  set2A: '0',
+  set2B: '0',
+  pointsA: '0',
+  pointsB: '0',
+  serverPlayer: 'A1',
+  tournamentNameLine: '—',
+  courtHeaderLabel: '',
+  venueLabel: '—',
+  categoryGenderLine: '— · —',
+  categoryLine: '—',
+  genderLine: '—',
+  tickerPrimary: 'PARTIDO NO DISPONIBLE · REVISA ID / PERMISOS / CONEXIÓN',
+  tickerSecondary: 'SMART PADEL TV',
+};
+
+function boardOnLoadError(
+  complex: string,
+  courtNum: number | null,
+  courtIdParam: string,
+): BoardView {
+  const cn =
+    courtNum != null && Number.isFinite(courtNum) && courtNum >= 1
+      ? Math.floor(courtNum)
+      : (() => {
+          const n = Number(String(courtIdParam || '').trim());
+          return Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
+        })();
+  const venue = String(complex || '').trim();
+  return {
+    ...FALLBACK_EMPTY_BOARD,
+    courtHeaderLabel: cn != null ? `PISTA ${cn}` : '',
+    venueLabel: (venue || 'SEDE').toUpperCase(),
+  };
+}
 
 function computeBoardView(matchRaw: any, tournament: any | null): BoardView {
   const match = normalizeMatchForBoard(matchRaw);
@@ -528,10 +571,37 @@ function PizarraConceptPage() {
   }, [tournamentId, matchSnapshot]);
 
   const board = useMemo(() => {
+    if (loadError) {
+      return boardOnLoadError(complexParam, courtNum, courtIdParam);
+    }
     if (!matchSnapshot) return DEFAULT_BOARD;
     const merged = mergeCanchaMarcadorIntoMatch(matchSnapshot, canchaMarcador);
     return computeBoardView(merged, tournamentSnapshot);
-  }, [matchSnapshot, tournamentSnapshot, canchaMarcador]);
+  }, [
+    loadError,
+    complexParam,
+    courtNum,
+    courtIdParam,
+    matchSnapshot,
+    tournamentSnapshot,
+    canchaMarcador,
+  ]);
+
+  /** Nº de partido (orden en planilla); solo informativo en esquina. */
+  const matchOrderNumber = useMemo(() => {
+    const m = matchSnapshot ? normalizeMatchForBoard(matchSnapshot) : null;
+    if (!m) return null;
+    const raw =
+      (m as any).match_number ??
+      (m as any).matchNumber ??
+      (m as any).order ??
+      (m as any).orden;
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 1) return Math.floor(n);
+    const fromId = inferMatchOrderFromId((m as any).id);
+    if (fromId != null && fromId >= 1) return fromId;
+    return null;
+  }, [matchSnapshot]);
 
   const boardHeaderMetaLine = useMemo(() => {
     const timeStr = now.toLocaleTimeString('es-ES', {
@@ -554,6 +624,29 @@ function PizarraConceptPage() {
       t?.complexName ?? t?.venueName ?? t?.sede ?? t?.location ?? (t as any)?.complex?.name ?? '',
     ).trim();
   }, [complexParam, publicidadVenueName, matchSnapshot, tournamentSnapshot]);
+
+  /** Enlace tipo /s1/c1?tournamentId&matchId para compartir el mismo partido por URL corta. */
+  const shortMonitorLink = useMemo(() => {
+    const tid = effectiveTournamentIdForCancha.trim();
+    const mid = effectiveMatchIdForCancha.trim();
+    const v = (publicidadVenueName || venueForWeather || '').trim();
+    const n = courtNum ?? getCourtNum(matchSnapshot);
+    if (!tid || !mid || !v || n == null) return null;
+    const idx = sedeIndexFromVenueName(v);
+    if (!idx) return null;
+    const path = buildPizarraShortPath(idx, n);
+    return {
+      href: `/${path}?tournamentId=${encodeURIComponent(tid)}&matchId=${encodeURIComponent(mid)}`,
+      path,
+    };
+  }, [
+    effectiveTournamentIdForCancha,
+    effectiveMatchIdForCancha,
+    publicidadVenueName,
+    venueForWeather,
+    courtNum,
+    matchSnapshot,
+  ]);
 
   /** Texto del marquee inferior: prioriza tira de admin; si no hay, tickers derivados del partido. */
   const footerTickerSegments = useMemo(() => {
@@ -870,7 +963,17 @@ function PizarraConceptPage() {
   }, [supabase, tournamentId, multiTournamentIds.length, matchIdParam]);
 
   return (
-    <div className="flex h-dvh w-screen flex-col overflow-hidden bg-[#0f1115] text-white">
+    <div className="relative flex h-dvh w-screen flex-col overflow-hidden bg-[#0f1115] text-white">
+      {matchOrderNumber != null && (
+        <div
+          className="pointer-events-none absolute left-0 top-0 z-[100] select-none px-[0.22rem] pt-[0.15rem] sm:px-1 sm:pt-0.5"
+          aria-hidden
+        >
+          <span className="text-[clamp(0.42rem,0.85vh,0.55rem)] font-semibold tabular-nums tracking-[0.2em] text-white/[0.14]">
+            P.{matchOrderNumber}
+          </span>
+        </div>
+      )}
       <div className="mx-auto flex min-h-0 w-full max-w-[1800px] flex-1 flex-col overflow-hidden px-4 pt-0 pb-2 sm:px-6 lg:px-10">
         {loadError && (
           <p className="mb-2 text-center text-xs font-bold uppercase tracking-widest text-amber-400/90">
@@ -895,8 +998,18 @@ function PizarraConceptPage() {
               sincronizar el estado en la base de datos.
             </p>
           )}
-        <header className="mb-1 flex shrink-0 flex-col items-center gap-1 text-center">
-          <div className="mt-3 flex h-[clamp(2.3rem,4.4vh,3.5rem)] w-[clamp(2.3rem,4.4vh,3.5rem)] items-center justify-center overflow-hidden rounded-2xl border border-[#d6b35a]/50 bg-[#0e2238] shadow-[0_0_22px_rgba(214,179,90,0.25)]">
+        <header className="mb-1 flex shrink-0 flex-col items-center gap-0.5 text-center pt-0">
+          {board.courtHeaderLabel ? (
+            <div className="flex w-full max-w-[min(100%,42rem)] flex-col items-center gap-0 text-center">
+              <span className="text-[clamp(0.55rem,1.1vh,0.72rem)] font-semibold uppercase tracking-[0.14em] text-white/55 leading-none">
+                Cancha
+              </span>
+              <span className="text-[clamp(0.78rem,1.65vh,1.08rem)] font-bold tracking-[0.05em] text-white/90 leading-tight">
+                {board.courtHeaderLabel}
+              </span>
+            </div>
+          ) : null}
+          <div className={`flex h-[clamp(2.3rem,4.4vh,3.5rem)] w-[clamp(2.3rem,4.4vh,3.5rem)] items-center justify-center overflow-hidden rounded-2xl border border-[#d6b35a]/50 bg-[#0e2238] shadow-[0_0_22px_rgba(214,179,90,0.25)] ${board.courtHeaderLabel ? 'mt-1.5' : 'mt-2'}`}>
             {venueLogoUrl ? (
               <img
                 src={venueLogoUrl}
@@ -909,13 +1022,12 @@ function PizarraConceptPage() {
               </div>
             )}
           </div>
-          <div className="-mt-1 flex flex-col items-center">
+          <div className="-mt-0.5 flex flex-col items-center">
             <h1 className="text-[clamp(1rem,2.6vh,1.8rem)] font-bold tracking-[0.03em] text-white/95">
               {board.venueLabel}
             </h1>
             <p className="-mt-1 text-[clamp(0.85rem,1.9vh,1.25rem)] font-semibold tracking-[0.05em] text-white/85">
               {board.tournamentNameLine}
-              {board.courtHeaderLabel ? ` - CANCHA: ${board.courtHeaderLabel}` : ''}
             </p>
             <p className="-mt-1 text-[clamp(0.6rem,1.25vh,0.78rem)] font-semibold uppercase tracking-[0.12em] text-[#90b6da]">
               {boardHeaderMetaLine}
@@ -1071,6 +1183,17 @@ function PizarraConceptPage() {
         </div>
 
         <footer className="relative z-30 mt-2 w-full shrink-0 overflow-hidden rounded-2xl border border-[#ccff00]/25 bg-[#0a0c10]/95 py-[clamp(0.3rem,1vh,0.75rem)] shadow-[0_-10px_40px_rgba(0,0,0,0.75),0_0_20px_rgba(204,255,0,0.12)] backdrop-blur-sm">
+          {shortMonitorLink && (
+            <div className="mb-1.5 flex justify-center px-2">
+              <a
+                href={shortMonitorLink.href}
+                className="text-[clamp(0.58rem,1.1vh,0.72rem)] font-bold uppercase tracking-[0.12em] text-[#ccff00]/85 underline-offset-2 hover:text-[#ccff00] hover:underline"
+                title="Misma pizarra; URL corta con torneo y partido"
+              >
+                Monitor URL corta: {shortMonitorLink.path} (este partido)
+              </a>
+            </div>
+          )}
           <div className="flex whitespace-nowrap animate-marquee">
             {[0, 1].map((half) => (
               <div key={half} className="flex shrink-0 items-center">

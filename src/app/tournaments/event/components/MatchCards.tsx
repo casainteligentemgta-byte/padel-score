@@ -4,13 +4,13 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
-    Trophy, Gamepad2, Monitor, Camera, Tv, Crosshair
+    Trophy, Gamepad2, Monitor, Camera, Tv, Crosshair, Zap
 } from 'lucide-react';
 import { dataService } from '@/lib/dataService';
 import { getFinishedMatchScoreLines } from '@/lib/matchFinishedScoreDisplay';
 import { MatchStatus } from '@/types/tournament';
 import {
-    resolveTeamNames, formatHHMM, formatCategory, formatGender,
+    resolveTeamNames, formatHHMM, formatDateDDMM, formatCategory, formatGender,
     STATUS_COLORS, PENDING_NEXT_COLORS, PENDING_LATER_COLORS, CAT_COLORS
 } from '../utils';
 
@@ -541,30 +541,48 @@ export function MatchCard({ match, idx, isNextUp, isEffectivelyLive, matchNumber
                             : PENDING_LATER_COLORS
                 }`}
         >
-            <div className="px-4 pt-2.5 pb-2 border-b border-white/[0.07] bg-white/[0.04] flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2 flex-wrap min-w-0">
-                    {matchNumber != null && (
+            <div className="px-4 pt-2.5 pb-2 border-b border-white/[0.07] bg-white/[0.04] flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-1 flex-col gap-1 text-left">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        {matchNumber != null && (
+                            <>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Partido {matchNumber}</span>
+                                <span className="text-white/30">·</span>
+                            </>
+                        )}
+                        <span className={`text-[10px] font-bold ${isEffectivelyLive ? 'text-emerald-300/95' : 'italic text-gray-400'}`}>
+                            {formatDateDDMM(match.scheduledTime ?? match.time)} · {formatHHMM(match.scheduledTime ?? match.time)}
+                        </span>
+                    </div>
+                    <div className="flex w-full min-w-0 flex-col items-center gap-1.5 text-[8px] sm:text-[9px]">
+                        <p className={`w-full truncate text-center font-black uppercase italic tracking-tight ${isEffectivelyLive ? 'text-emerald-400' : isDone ? 'text-gray-600' : (isLive || isNextUp) ? 'text-yellow-300' : 'text-red-400/70'}`}>
+                            {match.courtName ?? (match.court != null ? `Pista ${match.court}` : 'Pista –')}
+                        </p>
+                        <div className="flex w-full flex-wrap items-center justify-center gap-x-2 gap-y-1">
+                            <span className="max-w-[min(100%,12rem)] truncate rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-center font-bold uppercase tracking-tight text-gray-400">
+                                {formatCategory(match._category)}
+                            </span>
+                            <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 font-black uppercase tracking-tight ${CAT_COLORS[match._gender] ?? 'border-white/10 bg-white/5 text-gray-500'}`}>
+                                {match._gender === 'MALE' ? '♂ Masc' : match._gender === 'FEMALE' ? '♀ Fem' : match._gender === 'MIXED' ? '⚥ Mix' : formatGender(match._gender) || '—'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
+                    {isEffectivelyLive && (
                         <>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Partido {matchNumber}</span>
-                            <span className="text-white/30">·</span>
+                            <span className="text-[9px] font-black uppercase italic tracking-widest text-emerald-400 animate-pulse">● En Vivo</span>
+                            {match._tournamentId && match.id && (
+                                <Link
+                                    href={`/tournaments/${match._tournamentId}/score/${match.id}`}
+                                    className="inline-flex items-center justify-center gap-0.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[7px] font-black uppercase tracking-widest text-emerald-300 transition-colors hover:bg-emerald-500/20"
+                                >
+                                    <Zap className="h-2.5 w-2.5 shrink-0" />
+                                    Marcador
+                                </Link>
+                            )}
                         </>
                     )}
-                    <span className="text-[10px] font-bold text-gray-400 italic">{formatHHMM(match.scheduledTime)}</span>
-                    <span className="text-white/30">·</span>
-                    <span className={`text-[10px] font-black uppercase tracking-widest italic truncate ${isEffectivelyLive ? 'text-emerald-400' : isDone ? 'text-gray-600' : (isLive || isNextUp) ? 'text-yellow-300' : 'text-red-400/70'}`}>
-                        {match.courtName ?? (match.court != null ? `Pista ${match.court}` : 'Pista –')}
-                    </span>
-                    <span className="text-white/30">·</span>
-                    <span className="text-[9px] font-bold uppercase tracking-tight text-gray-400">
-                        {formatCategory(match._category)}
-                    </span>
-                    <span className="text-white/30">·</span>
-                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${CAT_COLORS[match._gender] ?? 'bg-white/5 border-white/10 text-gray-500'}`}>
-                        {match._gender === 'MALE' ? '♂ Masculino' : match._gender === 'FEMALE' ? '♀ Femenino' : match._gender === 'MIXED' ? '⚥ Mixto' : formatGender(match._gender) || '—'}
-                    </span>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                    {isEffectivelyLive && <span className="text-[9px] font-black text-emerald-400 uppercase italic tracking-widest animate-pulse">● En Vivo</span>}
                     {isLive && !isEffectivelyLive && <span className="text-[9px] font-black text-yellow-400 uppercase italic tracking-widest">⏱ Próximo</span>}
                     {!isLive && isPending && isNextUp && <span className="text-[9px] font-black text-yellow-400 uppercase italic tracking-widest">⏱ Próximo</span>}
                     {!isLive && isPending && !isNextUp && <span className="text-[9px] font-black text-red-400/60 uppercase italic tracking-widest">En Cola</span>}

@@ -101,36 +101,35 @@ export default function MyTournamentsPage() {
     };
 
     return (
-        <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
-            <div className="pt-8 px-6 md:px-12 flex items-center justify-between gap-3 mb-2 flex-shrink-0">
-                <div className="flex items-center gap-2">
-                    <Link
-                        href="/admin"
-                        className="text-gray-500 hover:text-padel-primary transition-colors mr-1"
-                    >
-                        <ChevronLeft className="w-7 h-7" />
-                    </Link>
-                    <BouncingBall size={28} />
-                    <div className="ml-1">
-                        <h1 className="title-page leading-none">
-                            <span className="text-padel-primary">Torneos</span>
-                        </h1>
-                        <p className="subtitle-page text-gray-600 mt-0.5">Gestiona tus competencias</p>
+        <div className="min-h-screen bg-[#0a0a0a] text-white font-outfit relative">
+            <main className="relative z-10 mx-auto max-w-7xl px-6 py-12">
+                <header className="mb-12 flex flex-shrink-0 items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                        <Link
+                            href="/admin"
+                            className="mr-1 text-gray-500 transition-colors hover:text-padel-primary"
+                        >
+                            <ChevronLeft className="h-7 w-7" />
+                        </Link>
+                        <BouncingBall size={28} />
+                        <div className="ml-1">
+                            <h1 className="title-page leading-none">
+                                <span className="text-padel-primary">Torneos</span>
+                            </h1>
+                            <p className="subtitle-page mt-0.5 text-gray-600">Gestiona tus competencias</p>
+                        </div>
                     </div>
-                </div>
-            </div>
+                </header>
 
-            {/* Banner: inscripción con compañero desde Hub */}
-            {partnerCode && partnerCode.length === 6 && (
-                <div className="mx-6 mb-4 p-3 rounded-xl bg-padel-primary/10 border border-padel-primary/30">
-                    <p className="text-[11px] font-bold text-padel-primary">
-                    </p>
-                </div>
-            )}
+                {/* Banner: inscripción con compañero desde Hub */}
+                {partnerCode && partnerCode.length === 6 && (
+                    <div className="mb-6 rounded-xl border border-padel-primary/30 bg-padel-primary/10 p-3">
+                        <p className="text-[11px] font-bold text-padel-primary">
+                        </p>
+                    </div>
+                )}
 
-            {/* ── Lista scrollable ── */}
-            <div className="ipad-scroll-area pb-2">
-                <div className="max-w-6xl mx-auto">
+                <div className="pb-2">
                     {tournaments.length === 0 ? (
                         <div className="glass p-8 text-center border-dashed border-2 border-white/5 space-y-6">
                             <div className="inline-flex p-4 rounded-full bg-white/5 text-gray-600">
@@ -303,7 +302,7 @@ export default function MyTournamentsPage() {
                         </div>
                     )}
                 </div>
-            </div>
+            </main>
         </div>
     );
 }
