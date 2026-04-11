@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Trophy, Zap, Clock, Users, ChevronRight, Play, LayoutDashboard, Radio } from 'lucide-react';
+import { Trophy, Zap, Users, ChevronRight, Radio, Crosshair } from 'lucide-react';
 import { dataService } from '@/lib/dataService';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -189,7 +189,7 @@ export default function LiveBracketsPage() {
                                             </div>
                                         </div>
 
-                                        <div className="mt-8 flex justify-between items-center bg-white/5 -mx-8 -mb-8 px-8 py-6 group-hover:bg-white/[0.08] transition-colors">
+                                        <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center bg-white/5 -mx-8 -mb-8 px-8 py-6 group-hover:bg-white/[0.08] transition-colors">
                                             <div className="flex items-center gap-6 text-[9px] font-black text-gray-500 uppercase tracking-[0.2em] italic">
                                                 <div className="flex items-center gap-2">
                                                     <Users className="w-3 h-3 text-padel-primary/40" />
@@ -200,12 +200,27 @@ export default function LiveBracketsPage() {
                                                     <span>Streaming HD</span>
                                                 </div>
                                             </div>
-                                            <Link
-                                                href={`/tournaments/${m.tournamentId}/display/${m.id}`}
-                                                className="bg-white/5 hover:bg-padel-primary text-white hover:text-black py-3 px-6 rounded-2xl border border-white/10 hover:border-transparent transition-all flex items-center gap-3 font-black uppercase text-[10px] tracking-widest italic"
-                                            >
-                                                Ver Brackets <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                                            </Link>
+                                            <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        window.open(buildMarkerRoomHref(m, idx), '_blank', 'noopener,noreferrer');
+                                                    }}
+                                                    className="bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 hover:text-white py-3 px-5 rounded-2xl border border-emerald-500/40 hover:border-emerald-400/60 transition-all flex items-center gap-2 font-black uppercase text-[10px] tracking-widest italic"
+                                                    title="Abrir la sala de marcador (misma URL que doble clic en la tarjeta)"
+                                                >
+                                                    <Crosshair className="w-4 h-4 shrink-0" />
+                                                    Marcador
+                                                </button>
+                                                <Link
+                                                    href={`/tournaments/${m.tournamentId}/display/${m.id}`}
+                                                    className="bg-white/5 hover:bg-padel-primary text-white hover:text-black py-3 px-6 rounded-2xl border border-white/10 hover:border-transparent transition-all flex items-center gap-3 font-black uppercase text-[10px] tracking-widest italic"
+                                                >
+                                                    Ver Brackets <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                                </Link>
+                                            </div>
                                         </div>
                                     </div>
                                 </motion.div>

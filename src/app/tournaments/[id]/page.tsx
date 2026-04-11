@@ -60,8 +60,7 @@ import { getAuthHeaders } from '@/lib/apiAuth';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { getFinishedMatchScoreLines } from '@/lib/matchFinishedScoreDisplay';
-
-
+import { buildPizarraConceptHref } from '@/app/tournaments/event/components/MatchCards';
 
 export default function TournamentDashboard() {
     type ParticipantOption = { id: string; name?: string; lastName?: string; email?: string; phone?: string };
@@ -2860,18 +2859,12 @@ export default function TournamentDashboard() {
                                                                             </Link>
                                                                             <Link
                                                                                 href={
-                                                                                    id &&
-                                                                                    match?.id &&
-                                                                                    (
-                                                                                        markerLiveMatchIds.has(String(match.id)) ||
-                                                                                        dataService.isMatchEnVivoStatus(match?.status)
-                                                                                    )
-                                                                                        ? `/tournaments/${id}/display/${match.id}`
-                                                                                        : id
-                                                                                        ? `/tournaments/${id}/monitor`
+                                                                                    id && match?.id
+                                                                                        ? buildPizarraConceptHref(String(id), String(match.id))
                                                                                         : '#'
                                                                                 }
-                                                                                target={id ? '_blank' : undefined}
+                                                                                target={id && match?.id ? '_blank' : undefined}
+                                                                                rel={id && match?.id ? 'noopener noreferrer' : undefined}
                                                                                 className="flex flex-col items-center justify-center gap-1 py-0.5 text-gray-400 hover:text-white transition-all active:scale-90 border-r border-white/5"
                                                                             >
                                                                                 <Monitor className="w-3.5 h-3.5" />

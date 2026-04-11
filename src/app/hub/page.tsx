@@ -21,6 +21,7 @@ import { getAuthHeaders } from '@/lib/apiAuth';
 import BouncingBall from '@/components/BouncingBall';
 import InvitationManager from '@/components/InvitationManager';
 import PlayerCard from '@/components/PlayerCard';
+import { buildPizarraConceptHref } from '@/app/tournaments/event/components/MatchCards';
 
 export default function HubPage() {
     const { user, profile, logout, loading: authLoading, isAdmin, profileLoading, refreshProfile } = useAuth();
@@ -372,7 +373,11 @@ export default function HubPage() {
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => router.push(`/tournaments/${nextMatch.tournamentId}/display/${nextMatch.matchId}`)}
+                                        onClick={() =>
+                                            router.push(
+                                                buildPizarraConceptHref(nextMatch.tournamentId, nextMatch.matchId),
+                                            )
+                                        }
                                         className="flex-1 py-2 sm:py-2.5 rounded-lg sm:rounded-xl bg-padel-primary text-black text-[9px] sm:text-[10px] font-black uppercase hover:opacity-95 transition-opacity"
                                     >
                                         Ver pizarra

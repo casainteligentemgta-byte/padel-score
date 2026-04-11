@@ -67,6 +67,8 @@ function EventView() {
     const canUseMatchControl = canManageTournament || !!isMarker;
 
     const [allMatches, setAllMatches] = useState<any[]>([]);
+    /** Partidos con marcador activo en pizarra (misma idea que el dashboard del torneo: no depender solo del JSON del partido). */
+    const [markerLiveMatchIds, setMarkerLiveMatchIds] = useState<Set<string>>(new Set());
     const [activeTab, setActiveTab] = useState<string>('all');
     const [loading, setLoading] = useState(true);
 
@@ -304,6 +306,46 @@ function EventView() {
         setAllMatches(flat);
     }, [tournaments, tournamentIds]);
 
+    const normTid = (s: string) => String(s || '').replace(/-/g, '').toLowerCase();
+    const sameTournamentId = (a: string, b: string) => normTid(a) === normTid(b);
+
+    useEffect(() => {
+        if (tournamentIds.length === 0) {
+            setMarkerLiveMatchIds(new Set());
+            return;
+        }
+        let cancelled = false;
+        const tick = async () => {
+            const liveIds = new Set<string>();
+            const maxCourts = 16;
+            for (let c = 1; c <= maxCourts; c++) {
+                try {
+                    const state = await dataService.getPizarraCanchaState(`cancha_${c}`);
+                    const data = state?.data || {};
+                    const est = String(data?.estado || '');
+                    if (est === 'finalizado') continue;
+                    const tidRow = String(data?.torneo_id || '').trim();
+                    if (!tidRow) continue;
+                    const inEvent = tournamentIds.some((tid) => sameTournamentId(tid, tidRow));
+                    if (!inEvent) continue;
+                    if (est !== 'en_vivo' && est !== 'ready') continue;
+                    const pid = String(data?.partido_id || data?.active_match_id || '').trim();
+                    if (!pid || pid.startsWith('live_')) continue;
+                    liveIds.add(pid);
+                } catch {
+                    /* siguiente cancha */
+                }
+            }
+            if (!cancelled) setMarkerLiveMatchIds(liveIds);
+        };
+        void tick();
+        const id = window.setInterval(tick, 2000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(id);
+        };
+    }, [tournamentIds]);
+
     const numCanchas = (() => {
         const t = Object.values(tournaments)[0];
         const fromComplex = t?.complexName ? (KNOWN_COMPLEXES[t.complexName] ?? 0) : 0;
@@ -327,31 +369,69 @@ function EventView() {
         return 1;
     })();
 
-    const isMatchLive = (status: any) => status === 'LIVE' || status === 'IN_PROGRESS' || status === 'STARTED';
     const isMatchPending = (status: any) => status === 'PENDING' || !status;
     const isMatchFinished = (status: any) => status === 'FINISHED' || status === 'COMPLETED';
 
-    const allPending = allMatches.filter(m => isMatchPending(m.status));
+    const allPending = allMatches.filter((m) => {
+        const mid = String(m.id ?? '');
+        if (markerLiveMatchIds.has(mid)) return false;
+        return isMatchPending(m.status);
+    });
     const numSlotsPorComenzar = Math.min(numCanchas, allPending.length);
     const nextUpMatches = allPending.slice(0, numSlotsPorComenzar);
 
-    const effectiveLiveMatches = allMatches
-        .filter(m => isMatchLive(m.status))
-        .sort((a, b) => Number(a.court ?? 99) - Number(b.court ?? 99))
-        .slice(0, numCanchas);
+    const effectiveLiveMatches = useMemo(() => {
+        const fromStatus = allMatches.filter(
+            (m) => dataService.isMatchEnVivoStatus(m.status) && !dataService.isMatchFinishedLike(m),
+        );
+        const byId = new Map<string, any>(fromStatus.map((m) => [String(m.id ?? ''), m]));
+        for (const m of allMatches) {
+            const mid = String(m.id ?? '');
+            if (!mid || mid.startsWith('live_')) continue;
+            if (dataService.isMatchFinishedLike(m)) continue;
+            if (!markerLiveMatchIds.has(mid)) continue;
+            if (!byId.has(mid)) byId.set(mid, m);
+        }
+        return Array.from(byId.values())
+            .sort((a, b) => Number(a.court ?? 99) - Number(b.court ?? 99))
+            .slice(0, numCanchas);
+    }, [allMatches, markerLiveMatchIds, numCanchas]);
 
     const nextUpIds = new Set(nextUpMatches.map(m => m.id));
     const effectiveLiveIds = new Set(effectiveLiveMatches.map(m => m.id));
 
-    const liveCnt = Math.min(numCanchas, allMatches.filter(m => m.status === MatchStatus.LIVE).length);
-    const pendCnt = allMatches.filter(m => m.status === MatchStatus.PENDING).length;
+    const liveCnt = Math.min(
+        numCanchas,
+        allMatches.filter((m) => {
+            const mid = String(m.id ?? '');
+            return (
+                (dataService.isMatchEnVivoStatus(m.status) || markerLiveMatchIds.has(mid)) &&
+                !dataService.isMatchFinishedLike(m)
+            );
+        }).length,
+    );
+    const pendCnt = allMatches.filter((m) => {
+        const mid = String(m.id ?? '');
+        if (markerLiveMatchIds.has(mid)) return false;
+        return m.status === MatchStatus.PENDING;
+    }).length;
     const finCnt = allMatches.filter(m => m.status === MatchStatus.FINISHED).length;
 
     const filtered = allMatches.filter(m => {
         if (activeTab === 'all') return true;
         if (activeTab === 'groups' || activeTab === 'rules' || activeTab === 'ranking') return false;
-        if (activeTab === 'live') return isMatchLive(m.status);
-        if (activeTab === MatchStatus.PENDING) return isMatchPending(m.status);
+        if (activeTab === 'live') {
+            const mid = String(m.id ?? '');
+            return (
+                (dataService.isMatchEnVivoStatus(m.status) || markerLiveMatchIds.has(mid)) &&
+                !dataService.isMatchFinishedLike(m)
+            );
+        }
+        if (activeTab === MatchStatus.PENDING) {
+            const mid = String(m.id ?? '');
+            if (markerLiveMatchIds.has(mid)) return false;
+            return isMatchPending(m.status);
+        }
         if (activeTab === MatchStatus.FINISHED) return isMatchFinished(m.status);
         return m.status === activeTab;
     });

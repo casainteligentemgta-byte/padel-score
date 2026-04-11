@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
-    Trophy, Gamepad2, Monitor, Camera, Tv
+    Trophy, Gamepad2, Monitor, Camera, Tv, Crosshair
 } from 'lucide-react';
 import { dataService } from '@/lib/dataService';
 import { getFinishedMatchScoreLines } from '@/lib/matchFinishedScoreDisplay';
@@ -76,6 +76,11 @@ export function buildMarkerRoomHref(match: any, rankFallback: number): string {
 
     const canchaId = `cancha_${match.court ?? (match.courtIndex != null ? match.courtIndex + 1 : rankFallback + 1)}`;
     return `/marker/${encodeURIComponent(canchaId)}?${controlParams.toString()}`;
+}
+
+/** Pizarra concept con torneo + partido (misma vista que debe usar el hub en lugar del display/monitor). */
+export function buildPizarraConceptHref(tournamentId: string, matchId: string): string {
+    return `/dev/pizarra-concept?tournamentId=${encodeURIComponent(String(tournamentId))}&matchId=${encodeURIComponent(String(matchId))}`;
 }
 
 // ── Placeholder para pistas vacías ──────────────────────────────────────────
@@ -163,7 +168,7 @@ export function NextMatchCard({
         match._tournamentId && match.id
             ? `/tournaments/${match._tournamentId}/score/${encodeURIComponent(String(match.id))}`
             : markerHref;
-    const pizarraHref = `/dev/pizarra-concept?tournamentId=${encodeURIComponent(String(match._tournamentId))}&matchId=${encodeURIComponent(String(match.id || matchKey))}`;
+    const pizarraHref = buildPizarraConceptHref(String(match._tournamentId ?? ''), String(match.id || matchKey));
     const camasHref = `/tournaments/${match._tournamentId}/control/broadcasting`;
     const adsHref = `/admin/publicidad`;
 
@@ -275,7 +280,13 @@ export function NextMatchCard({
 
                 {/* Action Dock — solo visible para admin/marker */}
                 {showControlDock && (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40 overflow-hidden">
+                    <div
+                        className={`grid gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40 overflow-hidden ${
+                            canOpenMarkerOnDblClick
+                                ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+                                : 'grid-cols-2 sm:grid-cols-4'
+                        }`}
+                    >
                         <Link
                             href={controlHref}
                             className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
@@ -283,6 +294,18 @@ export function NextMatchCard({
                             <Gamepad2 className="w-3.5 h-3.5" />
                             <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Control</span>
                         </Link>
+                        {canOpenMarkerOnDblClick && (
+                            <Link
+                                href={markerHref}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex flex-col items-center justify-center gap-1 py-2 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                                title="Sala de marcador (misma ventana que doble clic en la tarjeta)"
+                            >
+                                <Crosshair className="w-3.5 h-3.5" />
+                                <span className="text-[6px] font-black uppercase tracking-tight leading-none whitespace-nowrap">Marcador</span>
+                            </Link>
+                        )}
                         <Link
                             href={pizarraHref}
                             target="_blank"
@@ -395,7 +418,13 @@ export function NextMatchCard({
 
             {/* Action Dock full — solo visible para admin/marker */}
             {showControlDock && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40">
+                <div
+                    className={`grid gap-px bg-white/[0.04] border-t-2 border-[#ccff00]/40 ${
+                        canOpenMarkerOnDblClick
+                            ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+                            : 'grid-cols-2 sm:grid-cols-4'
+                    }`}
+                >
                     <Link
                         href={controlHref}
                         className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
@@ -403,6 +432,18 @@ export function NextMatchCard({
                         <Gamepad2 className="w-4 h-4" />
                         <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Control</span>
                     </Link>
+                    {canOpenMarkerOnDblClick && (
+                        <Link
+                            href={markerHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex flex-col items-center justify-center gap-1.5 py-3.5 bg-[#ccff00]/10 text-[#ccff00] hover:bg-[#ccff00]/20 transition-all active:scale-95"
+                            title="Sala de marcador (misma ventana que doble clic en la tarjeta)"
+                        >
+                            <Crosshair className="w-4 h-4" />
+                            <span className="text-[8px] font-black uppercase tracking-widest leading-none whitespace-nowrap">Marcador</span>
+                        </Link>
+                    )}
                     <Link
                         href={pizarraHref}
                         target="_blank"
@@ -468,7 +509,16 @@ export function MatchCard({ match, idx, isNextUp, isEffectivelyLive, matchNumber
         if (!confirm('¿Comenzar este partido ahora?')) return;
         setEnding(true);
         try {
-            await dataService.updateMatch(match._tournamentId, match.id, { status: MatchStatus.LIVE });
+            const nowIso = new Date().toISOString();
+            await dataService.updateMatch(match._tournamentId, match.id, {
+                status: MatchStatus.LIVE,
+                startedAt: nowIso,
+                actualStartTime: nowIso,
+                sets: { t1: 0, t2: 0 },
+                games: { t1: 0, t2: 0 },
+                points: { t1: '0', t2: '0' },
+                server: { team: 1, player: 1 },
+            });
         } catch (e) {
             console.error('[startMatch]', e);
             alert('Error al comenzar el partido.');
