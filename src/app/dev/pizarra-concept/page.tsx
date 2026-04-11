@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -20,6 +21,7 @@ import { formatPizarraCategoryLevel, formatPizarraGender } from '@/lib/pizarraHe
 import { resolveMatchFromTournamentList } from '@/lib/resolveDisplayMatchId';
 import { inferMatchOrderFromId } from '@/lib/matchOrderMeta';
 import { buildPizarraShortPath, sedeIndexFromVenueName } from '@/lib/pizarraShortUrl';
+import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 
 /** Tipografía de nombres: mismo aspecto en TV (vh alto) y laptop (vw útil), con trazo compacto. */
 const pizarraPlayerNames = Barlow_Condensed({
@@ -421,6 +423,23 @@ function resolveWeatherZoneQuery(venueLabel: string): string {
   return 'Municipio Maneiro, Nueva Esparta, Venezuela';
 }
 
+/** Logo de cabecera: el mismo `sponsorLogoUrl` guardado al crear/editar el evento (hub / generador). */
+function resolveTournamentHeaderLogoUrl(tournament: unknown): string {
+  if (!tournament || typeof tournament !== 'object') return DEFAULT_EVENT_SPONSOR_LOGO_URL;
+  const t = tournament as Record<string, unknown>;
+  const direct = String(t.sponsorLogoUrl ?? '').trim();
+  if (direct) return direct;
+  const bs = t.broadcastingSettings;
+  if (bs && typeof bs === 'object') {
+    const sponsors = (bs as { sponsors?: { logoUrl?: string }[] }).sponsors;
+    if (Array.isArray(sponsors) && sponsors[0]?.logoUrl) {
+      const u = String(sponsors[0].logoUrl).trim();
+      if (u) return u;
+    }
+  }
+  return DEFAULT_EVENT_SPONSOR_LOGO_URL;
+}
+
 /** Temperatura actual por municipio de la sede (geocodificación + Open-Meteo). */
 async function fetchTemperatureForVenueName(venueLabel: string): Promise<string | null> {
   const base = venueLabel.trim();
@@ -485,9 +504,13 @@ function PizarraConceptPage() {
     [tournamentId, matchIdParam, multiTournamentIds.length],
   );
 
-  const [venueLogoUrl] = useState('/logos/logo-bodeguero-oficial.png');
   const [matchSnapshot, setMatchSnapshot] = useState<any>(null);
   const [tournamentSnapshot, setTournamentSnapshot] = useState<any>(null);
+
+  const headerLogoUrl = useMemo(
+    () => resolveTournamentHeaderLogoUrl(tournamentSnapshot),
+    [tournamentSnapshot],
+  );
 
   const [loadError, setLoadError] = useState<string | null>(null);
   /** Marcador en vivo desde `pizarra_cancha_state` (misma fuente que el marker). */
@@ -611,6 +634,16 @@ function PizarraConceptPage() {
     });
     return `${board.categoryLine} · ${board.genderLine} · ${timeStr} · TEMP ${ambientTempC}`;
   }, [board.categoryLine, board.genderLine, now, ambientTempC]);
+
+  /** Pista/cancha debajo de la sede: mismo criterio que el marcador o `?courtId=` en la URL. */
+  const headerCourtLine = useMemo(() => {
+    const fromBoard = String(board.courtHeaderLabel || '').trim();
+    if (fromBoard) return fromBoard;
+    if (courtNum != null && Number.isFinite(courtNum) && courtNum >= 1) {
+      return `PISTA ${Math.floor(courtNum)}`;
+    }
+    return '';
+  }, [board.courtHeaderLabel, courtNum]);
 
   /** Texto para geoclima: sede del torneo/partido (no ubicación del dispositivo). */
   const venueForWeather = useMemo(() => {
@@ -999,44 +1032,46 @@ function PizarraConceptPage() {
             </p>
           )}
         <header className="mb-1 flex shrink-0 flex-col items-center gap-0.5 text-center pt-0">
-          {board.courtHeaderLabel ? (
-            <div className="flex w-full max-w-[min(100%,42rem)] flex-col items-center gap-0 text-center">
-              <span className="text-[clamp(0.55rem,1.1vh,0.72rem)] font-semibold uppercase tracking-[0.14em] text-white/55 leading-none">
-                Cancha
-              </span>
-              <span className="text-[clamp(0.78rem,1.65vh,1.08rem)] font-bold tracking-[0.05em] text-white/90 leading-tight">
-                {board.courtHeaderLabel}
-              </span>
-            </div>
-          ) : null}
-          <div className={`flex h-[clamp(2.3rem,4.4vh,3.5rem)] w-[clamp(2.3rem,4.4vh,3.5rem)] items-center justify-center overflow-hidden rounded-2xl border border-[#d6b35a]/50 bg-[#0e2238] shadow-[0_0_22px_rgba(214,179,90,0.25)] ${board.courtHeaderLabel ? 'mt-1.5' : 'mt-2'}`}>
-            {venueLogoUrl ? (
+          <div className="mt-2 flex h-[clamp(2.3rem,4.4vh,3.5rem)] w-[clamp(2.3rem,4.4vh,3.5rem)] items-center justify-center overflow-hidden rounded-2xl border border-[#d6b35a]/50 bg-[#0e2238] shadow-[0_0_22px_rgba(214,179,90,0.25)]">
+            {headerLogoUrl ? (
               <img
-                src={venueLogoUrl}
-                alt="Logo sede o patrocinante"
+                src={headerLogoUrl}
+                alt="Logo del torneo"
                 className="h-full w-full object-contain"
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-[#10243d] px-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#ccff00]">
-                BODEGUERO
+                EVENTO
               </div>
             )}
           </div>
-          <div className="-mt-0.5 flex flex-col items-center">
+          <div className="-mt-0.5 flex flex-col items-center gap-0.5 px-1">
             <h1 className="text-[clamp(1rem,2.6vh,1.8rem)] font-bold tracking-[0.03em] text-white/95">
               {board.venueLabel}
             </h1>
-            <p className="-mt-1 text-[clamp(0.85rem,1.9vh,1.25rem)] font-semibold tracking-[0.05em] text-white/85">
-              {board.tournamentNameLine}
-            </p>
-            <p className="-mt-1 text-[clamp(0.6rem,1.25vh,0.78rem)] font-semibold uppercase tracking-[0.12em] text-[#90b6da]">
+            <div className="flex max-w-[min(100%,36rem)] flex-col items-center gap-1 text-center sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-2 sm:gap-y-0">
+              <p className="min-w-0 text-[clamp(0.85rem,1.9vh,1.25rem)] font-semibold tracking-[0.05em] text-white/85">
+                {board.tournamentNameLine}
+              </p>
+              {headerCourtLine ? (
+                <>
+                  <span className="hidden text-white/40 sm:inline" aria-hidden>
+                    ·
+                  </span>
+                  <p className="text-[clamp(0.75rem,1.65vh,1.05rem)] font-bold uppercase tracking-[0.08em] text-[#ccff00]/90">
+                    {headerCourtLine}
+                  </p>
+                </>
+              ) : null}
+            </div>
+            <p className="-mt-0.5 text-[clamp(0.6rem,1.25vh,0.78rem)] font-semibold uppercase tracking-[0.12em] text-[#90b6da]">
               {boardHeaderMetaLine}
             </p>
           </div>
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-        <main className="flex min-h-0 max-h-[min(42vh,calc(100dvh-13rem))] shrink-0 items-start justify-center overflow-hidden sm:max-h-[min(48vh,calc(100dvh-15rem))]">
+        <main className="flex min-h-0 max-h-[min(38vh,calc(100dvh-18rem))] shrink-0 items-start justify-center overflow-y-auto sm:max-h-[min(44vh,calc(100dvh-20rem))]">
           <aside
             className={`w-full max-w-[980px] overflow-hidden rounded-3xl border border-[#ccff00]/35 bg-[#0e1014] p-[clamp(0.55rem,1.6vh,1.25rem)] shadow-[0_0_40px_rgba(0,0,0,0.9),0_0_55px_rgba(204,255,0,0.14),inset_0_0_45px_rgba(255,255,255,0.03)] ${pizarraPlayerNames.className}`}
           >
@@ -1131,15 +1166,15 @@ function PizarraConceptPage() {
           </aside>
         </main>
 
-        {/* Móvil: vídeo arriba, carrusel abajo · sm+: dos columnas (shrink-0: no empuja/oculta la tira) */}
-        <section className="flex w-full shrink-0 flex-col gap-3 sm:grid sm:grid-cols-2 sm:gap-3">
-          <div className="relative order-1 w-full min-w-0 aspect-video overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-black shadow-[0_0_20px_rgba(204,255,0,0.12)] sm:order-none">
+        {/* Móvil: vídeo arriba, carrusel abajo · sm+: dos columnas. Ocupa el espacio vertical restante (sin aspect-video fijo) para no recortar por overflow. */}
+        <section className="grid min-h-0 w-full flex-1 grid-cols-1 gap-3 [grid-template-rows:minmax(0,1fr)_minmax(0,1fr)] sm:grid-cols-2 sm:[grid-template-rows:minmax(0,1fr)] sm:gap-3">
+          <div className="relative order-1 flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-black shadow-[0_0_20px_rgba(204,255,0,0.12)] sm:order-none">
             {adsPlaylist.length > 0 ? (
               <CourtAdVideoOrIframe
                 key={`ad-${currentAdIdx}`}
                 videoKey={`ad-${currentAdIdx}`}
                 url={adsPlaylist[currentAdIdx]}
-                className="h-full w-full object-contain bg-black"
+                className="absolute inset-0 box-border h-full w-full object-contain bg-black"
                 loop={adsPlaylist.length === 1}
                 onEnded={() => {
                   if (adsPlaylist.length > 1) {
@@ -1149,7 +1184,7 @@ function PizarraConceptPage() {
                 title="Publicidad vídeo"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-white/45">
+              <div className="flex min-h-0 flex-1 items-center justify-center text-white/45">
                 <span className="px-3 text-center text-[clamp(0.6rem,1.35vh,0.95rem)] font-bold uppercase tracking-[0.12em]">
                   ESPACIO PUBLICITARIO DISPONIBLE
                 </span>
@@ -1157,7 +1192,7 @@ function PizarraConceptPage() {
             )}
           </div>
 
-          <div className="relative order-2 w-full min-w-0 aspect-video overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-black shadow-[0_0_20px_rgba(204,255,0,0.12)] sm:order-none">
+          <div className="relative order-2 flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-black shadow-[0_0_20px_rgba(204,255,0,0.12)] sm:order-none">
             {carouselPlaylist.length > 0 ? (
               <AnimatePresence mode="wait">
                 <motion.img
@@ -1168,11 +1203,11 @@ function PizarraConceptPage() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.98 }}
                   transition={{ duration: 0.45 }}
-                  className="absolute inset-0 h-full w-full object-contain object-center bg-black"
+                  className="absolute inset-0 box-border h-full w-full min-h-0 object-contain object-center bg-black"
                 />
               </AnimatePresence>
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-white/45">
+              <div className="flex min-h-0 flex-1 items-center justify-center text-white/45">
                 <span className="px-3 text-center text-[clamp(0.6rem,1.35vh,0.95rem)] font-bold uppercase tracking-[0.12em]">
                   ESPACIO PUBLICITARIO DISPONIBLE
                 </span>

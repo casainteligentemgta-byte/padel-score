@@ -657,16 +657,18 @@ export default function InscribirmePage() {
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
             <Sidebar />
-            <div className="ipad-scroll-area pl-20 md:pl-24 pr-4 pb-24">
-                <header className="sticky top-0 z-50 bg-[#0a0a0a]/90 backdrop-blur border-b border-white/10 py-4">
-                    <div className="max-w-md mx-auto px-4 flex items-center justify-between">
+            <div className="ipad-scroll-area w-full min-w-0 pl-4 pr-4 pb-[max(6rem,env(safe-area-inset-bottom,0px))] md:pl-24 md:pr-4">
+                <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0a]/90 backdrop-blur pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-4">
+                    <div className="mx-auto flex max-w-md items-center justify-between gap-2 px-0 sm:px-1">
                         <BackButton href={`/tournaments/${tournamentId}`} />
-                        <h1 className="text-lg font-black italic uppercase tracking-tighter">Inscribirme</h1>
-                        <div className="w-10" />
+                        <h1 className="min-w-0 flex-1 text-center text-base font-black uppercase italic tracking-tighter sm:text-lg">
+                            Inscribirme
+                        </h1>
+                        <div className="w-10 shrink-0" aria-hidden />
                     </div>
                 </header>
 
-                <main className="max-w-md mx-auto px-4 py-8">
+                <main className="mx-auto max-w-md px-0 py-6 sm:px-1 sm:py-8">
                     {success ? (
                         <div className="rounded-3xl bg-[#ccff00]/10 border border-[#ccff00]/30 p-8 text-center space-y-4">
                             <CheckCircle2 className="w-16 h-16 text-[#ccff00] mx-auto" />
@@ -778,10 +780,10 @@ export default function InscribirmePage() {
                             ) : (
                                 <>
                                     <section className="mb-8">
-                                        <h2 className="text-xs font-black uppercase tracking-widest text-[#ccff00] mb-4">
+                                        <h2 className="mb-3 text-xs font-black uppercase tracking-widest text-[#ccff00]">
                                             Elige una o varias categorías (según tu edad y sexo)
                                         </h2>
-                                        <p className="text-[10px] text-gray-500 mb-4">
+                                        <p className="mb-4 text-[11px] leading-snug text-gray-500 sm:text-[10px]">
                                             Solo se muestran categorías que corresponden a tu perfil. Puedes inscribirte en varias; el horario evitará choques.
                                         </p>
                                         <div className="space-y-3">
@@ -792,37 +794,45 @@ export default function InscribirmePage() {
                                                 return (
                                                     <label
                                                         key={cat.key}
-                                                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${full ? 'bg-white/5 border-white/5 cursor-not-allowed opacity-70' : 'cursor-pointer'
-                                                            } ${selectedCategories.has(cat.key)
-                                                                ? 'bg-[#ccff00]/10 border-[#ccff00]/40'
-                                                                : !full ? 'bg-white/5 border-white/10 hover:border-white/20' : ''
-                                                            }`}
+                                                        className={`flex flex-col gap-3 rounded-2xl border p-3 transition-all sm:flex-row sm:items-start sm:justify-between sm:p-4 ${full ? 'cursor-not-allowed bg-white/5 opacity-70 border-white/5' : 'cursor-pointer'} ${
+                                                            selectedCategories.has(cat.key)
+                                                                ? 'border-[#ccff00]/40 bg-[#ccff00]/10'
+                                                                : !full
+                                                                  ? 'border-white/10 bg-white/5 hover:border-white/20'
+                                                                  : ''
+                                                        }`}
                                                     >
-                                                        <div className="flex items-center gap-3">
+                                                        <div className="flex min-w-0 flex-1 items-start gap-3">
                                                             <input
                                                                 type="checkbox"
                                                                 checked={selectedCategories.has(cat.key)}
                                                                 onChange={() => toggleCategory(cat.key)}
                                                                 disabled={full}
-                                                                className="w-5 h-5 rounded border-2 border-[#ccff00] text-[#ccff00] focus:ring-[#ccff00] disabled:opacity-50"
+                                                                className="mt-0.5 h-5 w-5 shrink-0 rounded border-2 border-[#ccff00] text-[#ccff00] focus:ring-[#ccff00] disabled:opacity-50"
                                                             />
-                                                            <span className={`font-bold ${full ? 'text-gray-500' : ''}`}>{cat.name}</span>
-                                                            <span className="text-[10px] text-gray-500 uppercase flex items-center gap-1.5">
-                                                                {cat.gender && (
-                                                                    <span>{cat.gender === 'MALE' ? 'Masc' : cat.gender === 'FEMALE' ? 'Fem' : 'Mixto'}</span>
-                                                                )}
-                                                                {(cat.ageMin != null || cat.ageMax != null) && (
-                                                                    <span>({cat.ageMin ?? '—'}–{cat.ageMax ?? '—'} años)</span>
-                                                                )}
-                                                                {full && <span className="text-amber-500 font-bold">Completo</span>}
-                                                            </span>
+                                                            <div className="min-w-0 flex-1 space-y-1.5">
+                                                                <span className={`block break-words text-sm font-bold leading-snug sm:text-base ${full ? 'text-gray-500' : ''}`}>
+                                                                    {cat.name}
+                                                                </span>
+                                                                <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase text-gray-500">
+                                                                    {cat.gender && (
+                                                                        <span>{cat.gender === 'MALE' ? 'Masc' : cat.gender === 'FEMALE' ? 'Fem' : 'Mixto'}</span>
+                                                                    )}
+                                                                    {(cat.ageMin != null || cat.ageMax != null) && (
+                                                                        <span>
+                                                                            ({cat.ageMin ?? '—'}–{cat.ageMax ?? '—'} años)
+                                                                        </span>
+                                                                    )}
+                                                                    {full && <span className="font-bold text-amber-500">Completo</span>}
+                                                                </span>
+                                                            </div>
                                                         </div>
-                                                        <div className="flex items-center gap-2">
+                                                        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-2 sm:flex-col sm:items-end sm:justify-start sm:border-t-0 sm:pt-0">
                                                             {slotsLabel && (
                                                                 <span className="text-[10px] text-gray-500">{slotsLabel}</span>
                                                             )}
                                                             {cat.price > 0 && (
-                                                                <span className={`text-sm font-black ${full ? 'text-gray-500' : 'text-[#ccff00]'}`}>
+                                                                <span className={`text-base font-black sm:text-sm ${full ? 'text-gray-500' : 'text-[#ccff00]'}`}>
                                                                     ${cat.price}
                                                                 </span>
                                                             )}
@@ -835,24 +845,28 @@ export default function InscribirmePage() {
 
                                     {selectedCategories.size > 0 && (
                                         <section className="mb-8 space-y-4">
-                                            <h2 className="text-xs font-black uppercase tracking-widest text-[#ccff00] mb-2">
+                                            <h2 className="mb-2 text-xs font-black uppercase tracking-widest text-[#ccff00]">
                                                 Datos del Compañero
                                             </h2>
-                                            <div className="mb-4 min-w-0">
+                                            <div className="mb-2 min-w-0 sm:mb-4">
                                                 <AutoShrinkName
                                                     name="Ingresa el código de 6 dígitos de tu pareja para completar el equipo."
-                                                    style={{ fontSize: '10px' }}
-                                                    className="text-gray-500 uppercase"
+                                                    style={{ fontSize: '11px' }}
+                                                    className="text-gray-500 uppercase leading-relaxed"
                                                 />
                                             </div>
 
-                                            <div className="flex gap-2">
-                                                <div className="relative flex-1">
-                                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-                                                        <Search className="w-5 h-5" />
+                                            <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                                                <div className="relative min-w-0 flex-1">
+                                                    <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 sm:left-4">
+                                                        <Search className="h-5 w-5" />
                                                     </div>
                                                     <input
                                                         type="text"
+                                                        inputMode="text"
+                                                        autoCapitalize="characters"
+                                                        autoCorrect="off"
+                                                        spellCheck={false}
                                                         value={partnerCode}
                                                         onChange={(e) => {
                                                             const val = e.target.value.replace(/\s/g, '').toUpperCase().slice(0, 6);
@@ -860,41 +874,45 @@ export default function InscribirmePage() {
                                                             if (foundPartner) setFoundPartner(null);
                                                             if (partnerError) setPartnerError(null);
                                                         }}
-                                                        placeholder="CÓDIGO (EJ: PX45T2)"
-                                                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all uppercase tracking-widest font-mono"
+                                                        placeholder="Código 6 caracteres"
+                                                        className="w-full min-h-[52px] rounded-2xl border border-white/10 bg-white/5 py-3.5 pl-11 pr-3 text-base font-bold uppercase tracking-widest text-white outline-none transition-all focus:border-[#ccff00]/50 sm:min-h-0 sm:p-4 sm:pl-12 sm:text-sm"
                                                     />
                                                 </div>
                                                 <button
                                                     type="button"
                                                     onClick={handlePartnerSearch}
                                                     disabled={searchingPartner || partnerCode.length !== 6}
-                                                    className="px-6 rounded-2xl bg-white/5 border border-white/10 text-white font-bold hover:bg-white/10 transition-all disabled:opacity-50"
+                                                    className="min-h-[48px] shrink-0 rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 text-sm font-bold text-white transition-all hover:bg-white/10 disabled:opacity-50 sm:min-h-0 sm:min-w-[7rem] sm:px-6 sm:py-4"
                                                 >
-                                                    {searchingPartner ? <Loader2 className="w-5 h-5 animate-spin" /> : 'BUSCAR'}
+                                                    {searchingPartner ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : 'BUSCAR'}
                                                 </button>
                                             </div>
 
                                             {partnerError && (
-                                                <div className="text-red-500 text-[10px] font-bold uppercase flex items-center gap-1 mt-1">
-                                                    <AlertCircle size={12} />
-                                                    {partnerError}
+                                                <div className="mt-1 flex items-start gap-1.5 text-[10px] font-bold uppercase text-red-500">
+                                                    <AlertCircle size={12} className="mt-0.5 shrink-0" />
+                                                    <span className="min-w-0 break-words leading-snug">{partnerError}</span>
                                                 </div>
                                             )}
 
                                             {foundPartner && (
-                                                <div className="p-4 rounded-2xl bg-[#ccff00]/10 border border-[#ccff00]/30 animate-in fade-in slide-in-from-top-2">
-                                                    <div className="flex items-center justify-between">
-                                                        <div>
-                                                            <p className="text-[10px] text-[#ccff00] font-black uppercase tracking-tighter">Compañero Confirmado</p>
-                                                            <p className="text-white font-bold">{foundPartner.name}</p>
-                                                            <p className="text-[10px] text-gray-500">{foundPartner.email}</p>
+                                                <div className="animate-in fade-in slide-in-from-top-2 rounded-2xl border border-[#ccff00]/30 bg-[#ccff00]/10 p-4">
+                                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                                        <div className="min-w-0">
+                                                            <p className="text-[10px] font-black uppercase tracking-tighter text-[#ccff00]">
+                                                                Compañero confirmado
+                                                            </p>
+                                                            <p className="break-words font-bold text-white">{foundPartner.name}</p>
+                                                            <p className="break-all text-[10px] text-gray-500">{foundPartner.email}</p>
                                                         </div>
                                                         <button
+                                                            type="button"
                                                             onClick={() => {
                                                                 setFoundPartner(null);
                                                                 setPartnerCode('');
                                                             }}
-                                                            className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-white"
+                                                            className="flex h-10 w-10 shrink-0 items-center justify-center self-end rounded-full bg-white/5 text-gray-400 hover:text-white sm:self-center"
+                                                            aria-label="Quitar compañero"
                                                         >
                                                             <X size={14} />
                                                         </button>
