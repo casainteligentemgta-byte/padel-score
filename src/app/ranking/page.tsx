@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
-import { Medal, Trophy, RefreshCw, ChevronDown } from 'lucide-react';
-import Sidebar from '@/components/Sidebar';
+import { Medal, Trophy, RefreshCw } from 'lucide-react';
+import { BackButton } from '@/components/BackButton';
 import { BouncingBall } from '@/components/BouncingBall';
 import LoginButton from '@/components/LoginButton';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -61,18 +61,22 @@ export default function RankingPage() {
 
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
-            <Sidebar />
-            {/* Debajo del menú fijo en móvil; título centrado respecto al ancho útil */}
-            <div className="mb-5 flex flex-col items-center gap-2 px-4 pt-[max(5.25rem,calc(env(safe-area-inset-top,0px)+4.25rem))] text-center sm:mb-6 sm:flex-row sm:items-center sm:justify-center sm:gap-3 sm:pt-8 sm:pl-20 md:pl-24 md:pr-4">
-                <span className="inline-flex shrink-0">
-                    <BouncingBall size={28} />
-                </span>
-                <div className="min-w-0">
-                    <h1 className="text-xl font-black italic uppercase tracking-tighter text-white sm:text-2xl md:text-3xl">Ranking</h1>
-                    <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">General y por torneo</p>
+            <header className="sticky top-0 z-50 flex items-center gap-2 border-b border-white/5 bg-[#0a0a0a]/95 px-3 py-2.5 backdrop-blur-xl pt-[max(0.35rem,env(safe-area-inset-top))] sm:gap-3 sm:px-4 sm:py-3">
+                <BackButton href="/hub" ariaLabel="Volver al hub" className="shrink-0" />
+                <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 text-center">
+                    <span className="inline-flex shrink-0 sm:hidden">
+                        <BouncingBall size={22} />
+                    </span>
+                    <h1 className="text-lg font-black italic uppercase tracking-tighter text-white sm:text-xl md:text-2xl">
+                        Ranking
+                    </h1>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 sm:text-[10px]">
+                        General y por torneo
+                    </p>
                 </div>
-            </div>
-            <main className="ipad-scroll-area px-4 pb-12 pl-4 pr-4 sm:pl-20 md:pl-24 md:pr-4">
+                <div className="h-10 w-10 shrink-0 sm:w-10" aria-hidden />
+            </header>
+            <main className="ipad-scroll-area px-4 pb-12 pt-4 sm:px-6">
                 <div className="mx-auto w-full max-w-lg space-y-5 sm:max-w-4xl sm:space-y-6">
                     <div className="flex w-full flex-col items-stretch gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
                         <div className="mx-auto flex w-full max-w-sm flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-1.5 sm:mx-0 sm:max-w-none sm:flex-row sm:gap-0">
