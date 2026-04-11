@@ -713,15 +713,16 @@ export default function InscribirmePage() {
 
     return (
         <div className="ipad-screen-container !max-w-none !px-0 !pt-2 !pb-0 sm:!px-4 sm:!pt-4 sm:!pb-0 md:!p-6 bg-[#0a0a0a] text-white font-outfit relative">
-            <Sidebar />
+            <Sidebar menuOpensUserHub={!!pendingInvitation} />
             <div className="ipad-scroll-area flex min-h-0 w-full min-w-0 max-w-[100vw] flex-1 flex-col overflow-x-hidden overflow-y-auto pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] pb-[max(6rem,env(safe-area-inset-bottom,0px))] sm:pl-4 sm:pr-4 md:pl-24 md:pr-4">
-                <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0a]/90 backdrop-blur pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-4">
-                    <div className="mx-auto flex w-full min-w-0 max-w-md items-center justify-between gap-2 px-3 sm:px-1">
-                        <BackButton href={`/tournaments/${tournamentId}`} />
-                        <h1 className="min-w-0 flex-1 text-center text-base font-black uppercase italic tracking-tighter sm:text-lg">
+                <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0a]/90 backdrop-blur pb-4 pt-[max(5.25rem,calc(env(safe-area-inset-top,0px)+4.25rem))] sm:pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
+                    {/* Móvil: debajo del menú hamburguesa fijo; sm+: una sola fila */}
+                    <div className="mx-auto flex w-full min-w-0 max-w-md flex-col gap-2 px-3 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:px-1 sm:pt-0">
+                        <BackButton href={`/tournaments/${tournamentId}`} className="shrink-0 self-start sm:self-center" />
+                        <h1 className="min-w-0 w-full text-center text-base font-black uppercase italic tracking-tighter sm:flex-1 sm:text-lg">
                             Inscribirme
                         </h1>
-                        <div className="w-10 shrink-0" aria-hidden />
+                        <div className="hidden w-10 shrink-0 sm:block" aria-hidden />
                     </div>
                 </header>
 

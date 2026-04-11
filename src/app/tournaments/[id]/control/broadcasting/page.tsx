@@ -510,18 +510,20 @@ export default function BroadcastingPage() {
         <div className="h-screen bg-[#050505] text-white flex overflow-hidden font-outfit">
             <Sidebar />
 
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden pl-20 md:pl-24">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden pl-4 pt-[max(4.75rem,calc(env(safe-area-inset-top,0px)+3.5rem))] sm:pl-20 sm:pt-0 md:pl-24">
 
                 {/* ── HEADER ─────────────────────────────────────────────── */}
-                <header className="flex-shrink-0 flex items-center justify-between px-4 lg:px-6 py-4 border-b border-white/[0.04] bg-black/20">
-                    <div className="flex items-center gap-4">
-                        <BackButton href={`/tournaments/${id}/control`} className="rounded-2xl" />
-                        <div className="p-3 bg-orange-500/10 rounded-2xl border border-orange-500/20 shadow-[0_0_20px_rgba(249,115,22,0.05)]">
-                            <Radio className="w-6 h-6 text-orange-400" />
+                <header className="flex flex-shrink-0 flex-col gap-4 border-b border-white/[0.04] bg-black/20 px-4 py-4 sm:flex-row sm:items-center sm:justify-between lg:px-6">
+                    <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                        <div className="flex items-center gap-3">
+                            <BackButton href={`/tournaments/${id}/control`} className="shrink-0 rounded-2xl" />
+                            <div className="shrink-0 rounded-2xl border border-orange-500/20 bg-orange-500/10 p-3 shadow-[0_0_20px_rgba(249,115,22,0.05)]">
+                                <Radio className="h-6 w-6 text-orange-400" />
+                            </div>
                         </div>
-                        <div>
-                            <h1 className="text-xl font-black italic uppercase tracking-tighter leading-none mb-1">Broadcasting Center</h1>
-                            <div className="flex items-center gap-3">
+                        <div className="min-w-0">
+                            <h1 className="mb-1 text-lg font-black italic uppercase tracking-tighter leading-none sm:text-xl">Broadcasting Center</h1>
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                                 <span className="flex items-center gap-1.5 text-[10px] text-gray-400 font-black uppercase tracking-widest">
                                     <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
                                     Master Relay
@@ -546,9 +548,9 @@ export default function BroadcastingPage() {
                     </div>
 
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                         {/* Columns selector */}
-                        <div className="hidden lg:flex items-center gap-1.5 p-1.5 bg-black/40 rounded-2xl border border-white/[0.05]">
+                        <div className="hidden items-center gap-1.5 rounded-2xl border border-white/[0.05] bg-black/40 p-1.5 lg:flex">
                             <LayoutGrid className="w-3.5 h-3.5 text-gray-600 ml-2 mr-1" />
                             {([2, 3, 4] as const).map(n => (
                                 <button

@@ -34,7 +34,15 @@ import { getCanchaLabel } from '@/lib/markerCanchas';
 import { dataService } from '@/lib/dataService';
 import BouncingBall from '@/components/BouncingBall';
 
-export default function Sidebar() {
+export type SidebarProps = {
+    /**
+     * Si es true, el botón superior no abre el panel lateral: navega al hub de usuario
+     * (misma lógica que «Perfil»: /mi-cuenta o /players/register).
+     */
+    menuOpensUserHub?: boolean;
+};
+
+export default function Sidebar({ menuOpensUserHub = false }: SidebarProps) {
     const [isOpen, setIsOpen] = useState(false);
     const { logout, isAdmin, markerCanchas, user } = useAuth();
     const { appTitle, clubName } = useAppSettings();
@@ -87,12 +95,24 @@ export default function Sidebar() {
 
     return (
         <>
-            {/* Hamburger Button */}
+            {/* Menú: panel lateral o acceso directo al hub de usuario (perfil / mi cuenta) */}
             <button
-                onClick={() => setIsOpen(true)}
+                type="button"
+                onClick={() => {
+                    if (menuOpensUserHub) {
+                        void handleMisDatosClick();
+                    } else {
+                        setIsOpen(true);
+                    }
+                }}
+                aria-label={menuOpensUserHub ? 'Ir a mi cuenta y perfil' : 'Abrir menú de navegación'}
                 className="fixed top-6 left-6 z-[100] w-12 h-12 bg-zinc-900/60 backdrop-blur-xl border border-white/5 rounded-full flex items-center justify-center hover:bg-zinc-800 transition-all text-white shadow-2xl"
             >
-                <Menu className="w-5 h-5 text-padel-primary" />
+                {menuOpensUserHub ? (
+                    <User className="w-5 h-5 text-padel-primary" />
+                ) : (
+                    <Menu className="w-5 h-5 text-padel-primary" />
+                )}
             </button>
 
             {/* Sidebar Overlay */}

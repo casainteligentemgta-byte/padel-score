@@ -62,35 +62,40 @@ export default function RankingPage() {
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
             <Sidebar />
-            <div className="flex items-center gap-3 mb-6 pl-20 md:pl-24 pr-4 pt-6">
-                <BouncingBall size={28} />
-                <div>
-                    <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white">Ranking</h1>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">General y por torneo</p>
+            {/* Debajo del menú fijo en móvil; título centrado respecto al ancho útil */}
+            <div className="mb-5 flex flex-col items-center gap-2 px-4 pt-[max(5.25rem,calc(env(safe-area-inset-top,0px)+4.25rem))] text-center sm:mb-6 sm:flex-row sm:items-center sm:justify-center sm:gap-3 sm:pt-8 sm:pl-20 md:pl-24 md:pr-4">
+                <span className="inline-flex shrink-0">
+                    <BouncingBall size={28} />
+                </span>
+                <div className="min-w-0">
+                    <h1 className="text-xl font-black italic uppercase tracking-tighter text-white sm:text-2xl md:text-3xl">Ranking</h1>
+                    <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">General y por torneo</p>
                 </div>
             </div>
-            <main className="ipad-scroll-area pl-20 md:pl-24 pr-4 pb-12">
-                <div className="max-w-4xl mx-auto space-y-6">
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex bg-white/5 rounded-2xl p-1 border border-white/10">
+            <main className="ipad-scroll-area px-4 pb-12 pl-4 pr-4 sm:pl-20 md:pl-24 md:pr-4">
+                <div className="mx-auto w-full max-w-lg space-y-5 sm:max-w-4xl sm:space-y-6">
+                    <div className="flex w-full flex-col items-stretch gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
+                        <div className="mx-auto flex w-full max-w-sm flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-1.5 sm:mx-0 sm:max-w-none sm:flex-row sm:gap-0">
                             <button
+                                type="button"
                                 onClick={() => setVista('general')}
-                                className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 ${vista === 'general' ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}
+                                className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black uppercase tracking-widest sm:w-auto sm:px-5 sm:py-2.5 ${vista === 'general' ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}
                             >
-                                <Trophy className="w-4 h-4" /> General
+                                <Trophy className="h-4 w-4 shrink-0" /> General
                             </button>
                             <button
+                                type="button"
                                 onClick={() => setVista('torneo')}
-                                className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 ${vista === 'torneo' ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}
+                                className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black uppercase tracking-widest sm:w-auto sm:px-5 sm:py-2.5 ${vista === 'torneo' ? 'bg-padel-primary text-black' : 'text-gray-500 hover:text-white'}`}
                             >
-                                <Medal className="w-4 h-4" /> Por torneo
+                                <Medal className="h-4 w-4 shrink-0" /> Por torneo
                             </button>
                         </div>
                         {vista === 'torneo' && tournaments.length > 0 && (
                             <select
                                 value={torneoSeleccionado}
                                 onChange={(e) => setTorneoSeleccionado(e.target.value)}
-                                className="bg-black/50 border border-white/20 rounded-xl pl-4 pr-10 py-2.5 text-sm font-bold text-white appearance-none focus:border-padel-primary focus:outline-none"
+                                className="w-full max-w-sm self-center rounded-xl border border-white/20 bg-black/50 py-3 pl-4 pr-10 text-sm font-bold text-white appearance-none focus:border-padel-primary focus:outline-none sm:max-w-xs sm:py-2.5"
                             >
                                 {tournaments.map((t) => (
                                     <option key={t.id} value={t.id}>{t.name}</option>
@@ -100,23 +105,23 @@ export default function RankingPage() {
                     </div>
                     <AnimatePresence mode="wait">
                         {vista === 'general' ? (
-                            <motion.section key="general" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="bg-[#111] border border-white/10 rounded-3xl p-6 md:p-8">
-                                <h2 className="text-lg font-black uppercase tracking-wider text-padel-primary mb-4">Ranking general</h2>
-                                <p className="text-gray-500 text-sm mb-6">Clasificación global según resultados en todos los torneos.</p>
-                                <div className="rounded-xl bg-black/30 border border-white/5 p-8 text-center">
-                                    <Medal className="w-12 h-12 text-padel-primary/30 mx-auto mb-3" />
-                                    <p className="text-gray-500 text-sm">Los datos de ranking general se mostrarán aquí cuando estén disponibles.</p>
+                            <motion.section key="general" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="rounded-2xl border border-white/10 bg-[#111] p-4 sm:rounded-3xl sm:p-6 md:p-8">
+                                <h2 className="mb-3 text-base font-black uppercase tracking-wider text-padel-primary sm:text-lg">Ranking general</h2>
+                                <p className="mb-4 text-sm text-gray-500">Clasificación global según resultados en todos los torneos.</p>
+                                <div className="rounded-xl border border-white/5 bg-black/30 px-4 py-8 text-center sm:p-8">
+                                    <Medal className="mx-auto mb-3 h-10 w-10 text-padel-primary/30 sm:h-12 sm:w-12" />
+                                    <p className="text-sm text-gray-500">Los datos de ranking general se mostrarán aquí cuando estén disponibles.</p>
                                 </div>
                             </motion.section>
                         ) : (
-                            <motion.section key="torneo" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="bg-[#111] border border-white/10 rounded-3xl p-6 md:p-8">
-                                <h2 className="text-lg font-black uppercase tracking-wider text-padel-primary mb-4">Ranking del torneo</h2>
+                            <motion.section key="torneo" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="rounded-2xl border border-white/10 bg-[#111] p-4 sm:rounded-3xl sm:p-6 md:p-8">
+                                <h2 className="mb-3 text-base font-black uppercase tracking-wider text-padel-primary sm:text-lg">Ranking del torneo</h2>
                                 {tournaments.length === 0 ? (
-                                    <p className="text-gray-500 text-sm">No tienes torneos. Crea o participa en uno para ver el ranking por torneo.</p>
+                                    <p className="text-sm text-gray-500">No tienes torneos. Crea o participa en uno para ver el ranking por torneo.</p>
                                 ) : (
-                                    <div className="rounded-xl bg-black/30 border border-white/5 p-8 text-center">
-                                        <Trophy className="w-12 h-12 text-padel-primary/30 mx-auto mb-3" />
-                                        <p className="text-gray-500 text-sm">El ranking del torneo seleccionado se mostrará aquí.</p>
+                                    <div className="rounded-xl border border-white/5 bg-black/30 px-4 py-8 text-center sm:p-8">
+                                        <Trophy className="mx-auto mb-3 h-10 w-10 text-padel-primary/30 sm:h-12 sm:w-12" />
+                                        <p className="text-sm text-gray-500">El ranking del torneo seleccionado se mostrará aquí.</p>
                                     </div>
                                 )}
                             </motion.section>

@@ -681,6 +681,26 @@ function PizarraConceptPage() {
     matchSnapshot,
   ]);
 
+  /**
+   * Enlace monitor siempre que haya torneo + partido: prioriza URL corta s{n}/c{n};
+   * si la sede no está en el mapa S1–S8, fallback a /tournaments/.../display/...
+   */
+  const monitorLinkDisplay = useMemo(() => {
+    if (shortMonitorLink) {
+      return {
+        href: shortMonitorLink.href,
+        label: `Monitor URL corta: ${shortMonitorLink.path} (este partido)`,
+      };
+    }
+    const tid = effectiveTournamentIdForCancha.trim();
+    const mid = effectiveMatchIdForCancha.trim();
+    if (!tid || !mid) return null;
+    return {
+      href: `/tournaments/${tid}/display/${mid}`,
+      label: 'Monitor / pizarra del partido (enlace estándar)',
+    };
+  }, [shortMonitorLink, effectiveTournamentIdForCancha, effectiveMatchIdForCancha]);
+
   /** Texto del marquee inferior: prioriza tira de admin; si no hay, tickers derivados del partido. */
   const footerTickerSegments = useMemo(() => {
     const tiraParts = tiraMessages.map((m) => String(m.mensaje ?? '').trim()).filter(Boolean);
@@ -1192,7 +1212,7 @@ function PizarraConceptPage() {
             )}
           </div>
 
-          <div className="relative order-2 flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-[#ccff00]/35 bg-transparent shadow-[0_0_20px_rgba(204,255,0,0.12)] sm:order-none">
+          <div className="relative order-2 flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border-0 bg-transparent shadow-none ring-1 ring-[#ccff00]/25 ring-inset sm:order-none">
             {carouselPlaylist.length > 0 ? (
               <AnimatePresence mode="wait">
                 <motion.img
@@ -1203,7 +1223,7 @@ function PizarraConceptPage() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.98 }}
                   transition={{ duration: 0.45 }}
-                  className="absolute inset-0 box-border h-full w-full min-h-0 object-contain object-center bg-transparent"
+                  className="absolute inset-0 box-border h-full w-full min-h-0 bg-transparent object-contain object-center"
                 />
               </AnimatePresence>
             ) : (
@@ -1216,14 +1236,14 @@ function PizarraConceptPage() {
           </div>
         </section>
 
-        {shortMonitorLink && (
+        {monitorLinkDisplay && (
           <div className="mt-1 flex shrink-0 justify-center px-2">
             <a
-              href={shortMonitorLink.href}
-              className="text-[clamp(0.58rem,1.1vh,0.72rem)] font-bold uppercase tracking-[0.12em] text-[#ccff00]/85 underline-offset-2 hover:text-[#ccff00] hover:underline"
-              title="Misma pizarra; URL corta con torneo y partido"
+              href={monitorLinkDisplay.href}
+              className="max-w-[min(100%,42rem)] text-center text-[clamp(0.58rem,1.1vh,0.72rem)] font-bold uppercase tracking-[0.12em] text-[#ccff00]/85 underline-offset-2 hover:text-[#ccff00] hover:underline"
+              title="Abrir la misma pizarra con torneo y partido"
             >
-              Monitor URL corta: {shortMonitorLink.path} (este partido)
+              {monitorLinkDisplay.label}
             </a>
           </div>
         )}

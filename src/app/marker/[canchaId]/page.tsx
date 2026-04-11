@@ -970,6 +970,8 @@ export default function MarkerControlPage() {
         historicoSets: Array<{ local: number; visitante: number }>;
         finalGames?: { local: number; visitante: number } | null;
         superTiebreakScore?: { t1: number; t2: number } | null;
+        /** Puntos finales del tie-break de set (t1/t2) cuando el partido termina en ese TB. */
+        tiebreakScoreFinal?: { t1: number; t2: number } | null;
     }): Promise<boolean> => {
         const curData = canchaDataRef.current || {};
         const tid = curData?.torneo_id;
@@ -985,6 +987,12 @@ export default function MarkerControlPage() {
             // y dejar el partido en IN_PROGRESS (muy visible tras STB / 2 sets + desempate).
             const nowIso = new Date().toISOString();
             finishedLockRef.current = true;
+            const finalPointsTiebreak =
+                params.superTiebreakScore != null
+                    ? { t1: String(params.superTiebreakScore.t1), t2: String(params.superTiebreakScore.t2) }
+                    : params.tiebreakScoreFinal != null
+                      ? { t1: String(params.tiebreakScoreFinal.t1), t2: String(params.tiebreakScoreFinal.t2) }
+                      : { t1: '0', t2: '0' };
             await dataService.updateMatch(String(tid), String(pid), {
                 status: 'FINISHED',
                 finishedAt: nowIso,
@@ -995,9 +1003,12 @@ export default function MarkerControlPage() {
                     t1: params.finalGames?.local ?? 0,
                     t2: params.finalGames?.visitante ?? 0,
                 },
-                points: { t1: '0', t2: '0' },
+                points: finalPointsTiebreak,
                 setScores,
                 ...(params.superTiebreakScore ? { superTiebreakScore: params.superTiebreakScore } : {}),
+                ...(params.tiebreakScoreFinal && !params.superTiebreakScore
+                    ? { tiebreakScore: { t1: params.tiebreakScoreFinal.t1, t2: params.tiebreakScoreFinal.t2 } }
+                    : {}),
             });
 
             const allMatches = await dataService.getMatches(String(tid));
@@ -1316,9 +1327,9 @@ export default function MarkerControlPage() {
                         await actualizarMarcadorLocal({
                             sets: newSets,
                             games: { local: 0, visitante: 0 },
-                            puntos: { local: '0', visitante: '0' },
-                            modo_puntos: 'normal',
-                            super_tiebreak: false,
+                            puntos: { local: String(finalLocal), visitante: String(finalVisit) },
+                            modo_puntos: 'super_tiebreak',
+                            super_tiebreak: true,
                             historico_sets: nextHistorico,
                             cronometro: freezeCronometro(currentMarcador.cronometro),
                         });
@@ -1355,11 +1366,13 @@ export default function MarkerControlPage() {
                             currentMarcador.super_tiebreak !== true;
 
                         if (matchOver) {
+                            const finalTbLocal = equipo === 'local' ? nuevo : actualOtro;
+                            const finalTbVisit = equipo === 'visitante' ? nuevo : actualOtro;
                             await actualizarMarcadorLocal({
                                 sets: newSets,
                                 games: { local: 0, visitante: 0 },
-                                puntos: { local: '0', visitante: '0' },
-                                modo_puntos: 'normal',
+                                puntos: { local: String(finalTbLocal), visitante: String(finalTbVisit) },
+                                modo_puntos: 'tiebreak',
                                 super_tiebreak: false,
                                 historico_sets: newHistorico,
                                 cronometro: freezeCronometro(currentMarcador.cronometro),
@@ -1368,6 +1381,7 @@ export default function MarkerControlPage() {
                                 sets: newSets,
                                 historicoSets: newHistorico,
                                 finalGames: hist,
+                                tiebreakScoreFinal: { t1: finalTbLocal, t2: finalTbVisit },
                             });
                             alert(
                                 `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${newSets.local}-${newSets.visitante})`
