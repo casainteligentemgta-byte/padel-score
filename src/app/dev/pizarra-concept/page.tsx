@@ -657,17 +657,6 @@ function PizarraConceptPage() {
     ).trim();
   }, [complexParam, publicidadVenueName, matchSnapshot, tournamentSnapshot]);
 
-  /** Enlace monitor: solo ruta estándar; no se muestra en UI el texto/enlace de URL corta s{n}/c{n}. */
-  const monitorLinkDisplay = useMemo(() => {
-    const tid = effectiveTournamentIdForCancha.trim();
-    const mid = effectiveMatchIdForCancha.trim();
-    if (!tid || !mid) return null;
-    return {
-      href: `/tournaments/${tid}/display/${mid}`,
-      label: 'Monitor / pizarra del partido (enlace estándar)',
-    };
-  }, [effectiveTournamentIdForCancha, effectiveMatchIdForCancha]);
-
   /** Texto del marquee inferior: prioriza tira de admin; si no hay, tickers derivados del partido. */
   const footerTickerSegments = useMemo(() => {
     const tiraParts = tiraMessages.map((m) => String(m.mensaje ?? '').trim()).filter(Boolean);
@@ -1179,7 +1168,7 @@ function PizarraConceptPage() {
             )}
           </div>
 
-          <div className="relative order-2 flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border-0 bg-transparent shadow-none ring-1 ring-[#ccff00]/25 ring-inset sm:order-none">
+          <div className="relative order-2 flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border-0 bg-transparent shadow-none sm:order-none">
             {carouselPlaylist.length > 0 ? (
               <AnimatePresence mode="wait">
                 <motion.img
@@ -1203,17 +1192,6 @@ function PizarraConceptPage() {
           </div>
         </section>
 
-        {monitorLinkDisplay && (
-          <div className="mt-1 flex shrink-0 justify-center px-2">
-            <a
-              href={monitorLinkDisplay.href}
-              className="max-w-[min(100%,42rem)] text-center text-[clamp(0.58rem,1.1vh,0.72rem)] font-bold uppercase tracking-[0.12em] text-[#ccff00]/85 underline-offset-2 hover:text-[#ccff00] hover:underline"
-              title="Abrir la misma pizarra con torneo y partido"
-            >
-              {monitorLinkDisplay.label}
-            </a>
-          </div>
-        )}
         </div>
 
         <footer className="relative z-30 mt-2 w-full shrink-0 overflow-hidden rounded-2xl border border-[#ccff00]/25 bg-[#0a0c10]/95 py-[clamp(0.3rem,1vh,0.75rem)] shadow-[0_-10px_40px_rgba(0,0,0,0.75),0_0_20px_rgba(204,255,0,0.12)] backdrop-blur-sm">
