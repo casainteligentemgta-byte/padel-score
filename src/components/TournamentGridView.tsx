@@ -32,9 +32,12 @@ export function TournamentGridView({
 }) {
   const availableGroups = groups.map((g) => g.name);
   return (
-    <div className="grid grid-cols-1 gap-6 p-6 bg-[#0a0a0a]">
+    <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-4 bg-[#0a0a0a] px-0 py-1 sm:gap-6 sm:py-2">
       {groups.map((group) => (
-        <div key={group.name} className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-md">
+        <div
+          key={group.name}
+          className="w-full max-w-full bg-white/5 border border-white/10 rounded-2xl p-3 backdrop-blur-md sm:p-4"
+        >
           {/* Encabezado del Grupo */}
           <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
             <h3 className="text-[#ccff00] font-black italic uppercase tracking-tighter">Grupo {group.name}</h3>

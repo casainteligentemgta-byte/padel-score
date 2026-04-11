@@ -367,7 +367,7 @@ export default function GroupPhaseView({
     const qualifyingSpots = Math.min(2, currentStandings.length);
 
     return (
-        <div className="space-y-4 relative">
+        <div className="relative mx-auto w-full max-w-md space-y-4">
 
             {/* ── Header + View toggle ─────────────────────────────────────────── */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

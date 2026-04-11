@@ -1203,31 +1203,7 @@ export default function TournamentDashboard() {
             ? strictTerminados
             : filteredMatches;
 
-    const isLiveDashboard = activeTab === 'En Vivo' && filteredMatches.length > 0 && filteredMatches.length <= _numCanchas;
-    /** Scroll vertical: Por comenzar siempre (antes con ≤3 pistas quedaba overflow-hidden). En vivo por pista, !pr-0 como antes. */
-    const mainScrollOverflowClass =
-        activeTab === 'Por Comenzar'
-            ? 'overflow-y-auto min-h-0 overscroll-y-contain touch-pan-y'
-            : isLiveDashboard
-              ? 'overflow-y-auto min-h-0 !pr-0 overscroll-y-contain touch-pan-y'
-              : 'overflow-y-auto min-h-0 overscroll-y-contain touch-pan-y';
-
-    const getLiveConfig = (count: number) => {
-        // Uniform config for rows of three as requested
-        return {
-            grid: 'grid-cols-3',
-            name: 'text-[14px]',
-            score: 'w-16 h-16 text-3xl',
-            sets: 'w-10 h-10 text-lg',
-            photo: 'w-11 h-11',
-            gap: 'gap-4',
-            padding: 'p-6',
-            spacing: 'space-y-6',
-            badge: 'text-[10px] px-3 py-1.5'
-        };
-    };
-
-    const liveConfig = isLiveDashboard ? getLiveConfig(filteredMatches.length) : null;
+    const mainScrollOverflowClass = 'overflow-y-auto min-h-0 overscroll-y-contain touch-pan-y';
 
     /**
      * Para un partido PENDING, detecta si hay un partido LIVE en la misma cancha
@@ -1708,7 +1684,7 @@ export default function TournamentDashboard() {
                 { label: 'QF 4', t1: standB[2]?.name ?? 'TBD', t2: standA[3]?.name ?? 'TBD', desc: '3° B vs 4° A' },
             ];
             const GroupPanel = ({ title, color, rows }: { title: string; color: string; rows: typeof standA }) => (
-                <div className={`flex-1 bg-white/5 rounded-2xl border ${color} overflow-hidden`}>
+                <div className={`w-full min-w-0 sm:flex-1 bg-white/5 rounded-2xl border ${color} overflow-hidden`}>
                     <div className={`px-4 py-3 border-b ${color} flex items-center gap-2`}>
                         <span className={`text-xs font-black uppercase tracking-widest ${title === 'Grupo A' ? 'text-[#ccff00]' : 'text-blue-400'}`}>{title}</span>
                     </div>
@@ -1729,8 +1705,8 @@ export default function TournamentDashboard() {
                 </div>
             );
             return (
-                <div className="space-y-5">
-                    <div className="flex gap-3">
+                <div className="mx-auto w-full max-w-md space-y-5">
+                    <div className="flex w-full flex-col gap-4 sm:flex-row sm:gap-3">
                         <GroupPanel title="Grupo A" color="border-[#ccff00]/20" rows={standA} />
                         <GroupPanel title="Grupo B" color="border-blue-500/20" rows={standB} />
                     </div>
@@ -1974,8 +1950,8 @@ export default function TournamentDashboard() {
         );
     })();
 
-    const headerMaxW = isLiveDashboard ? 'max-w-4xl' : useIpadTournamentShell ? 'max-w-4xl' : 'max-w-md';
-    const tabsNavMaxW = isLiveDashboard ? 'max-w-none' : useIpadTournamentShell ? 'max-w-4xl' : 'max-w-md';
+    const headerMaxW = useIpadTournamentShell ? 'max-w-4xl' : 'max-w-md';
+    const tabsNavMaxW = useIpadTournamentShell ? 'max-w-4xl' : 'max-w-md';
     const mainMaxWNonLive = useIpadTournamentShell ? 'max-w-4xl' : 'max-w-md';
 
     return (
@@ -2163,11 +2139,7 @@ export default function TournamentDashboard() {
                 }
             >
                 <main
-                    className={`${
-                        isLiveDashboard
-                            ? 'max-w-none w-full min-h-0 p-3 py-5'
-                            : `mx-auto flex min-h-0 w-full min-w-0 ${mainMaxWNonLive} flex-col px-4 py-6 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]`
-                    } transition-all duration-500`}
+                    className={`mx-auto flex min-h-0 w-full min-w-0 ${mainMaxWNonLive} flex-col px-4 py-6 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] transition-all duration-500`}
                 >
                     <AnimatePresence mode="wait">
                         {activeTab === 'Grupos' ? (
@@ -2499,11 +2471,11 @@ export default function TournamentDashboard() {
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
-                                className={isLiveDashboard
-                                    ? 'w-full p-6 pb-10 bg-[radial-gradient(circle_at_top,_#1a1a1a_0%,_#000_100%)]'
-                                    : activeTab === 'Por Comenzar'
+                                className={
+                                    activeTab === 'Por Comenzar'
                                         ? 'flex-1 flex flex-col min-h-0'
-                                        : 'space-y-8'}
+                                        : 'space-y-8'
+                                }
                             >
                                 {displayMatches.length === 0 ? (
                                     <div className="py-32 text-center space-y-6">
@@ -2518,15 +2490,13 @@ export default function TournamentDashboard() {
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className={(() => {
-                                        const count = displayMatches.filter((m: any) => m && m.team1 && m.team2).length;
-                                        const cols = _numCanchas <= 1 ? 1 : _numCanchas <= 2 ? 2 : 3;
-                                        const gridCols = cols === 1 ? 'grid-cols-1' : cols === 2 ? 'grid-cols-2' : 'grid-cols-3';
-                                        if (isLiveDashboard) return `grid ${gridCols} gap-4 items-start content-start w-full`;
-                                        if (activeTab === 'Por Comenzar') return `grid grid-cols-1 md:grid-cols-3 gap-3 flex-1 min-h-0 items-start`;
-
-                                        return 'grid grid-cols-1 md:grid-cols-3 gap-4 items-start';
-                                    })()}>
+                                    <div
+                                        className={
+                                            activeTab === 'Por Comenzar'
+                                                ? 'grid grid-cols-1 md:grid-cols-3 gap-3 flex-1 min-h-0 items-start'
+                                                : 'grid grid-cols-1 md:grid-cols-3 gap-4 items-start'
+                                        }
+                                    >
                                         {displayMatches.filter((match: any) => match && match.team1 && match.team2).map((match: any, idx: number) => {
                                             const mi = matches.findIndex((m: any) => m?.id && match?.id && m.id === match.id);
                                             const matchNumber = getMatchOrder(match, mi >= 0 ? mi : idx);
@@ -2581,8 +2551,8 @@ export default function TournamentDashboard() {
                                                     exit={{ opacity: 0, scale: 0.95 }}
                                                     className={`w-full ${activeTab === 'Por Comenzar' ? 'h-full flex flex-col' : ''}`}
                                                 >
-                                                    <div className={`min-w-0 max-w-full rounded-[2rem] shadow-[0_20px_60px_-8px_rgba(0,0,0,0.5),0_8px_24px_-4px_rgba(0,0,0,0.35),0_0_0_1px_rgba(0,0,0,0.2)] transition-all hover:shadow-[0_28px_70px_-10px_rgba(0,0,0,0.55),0_12px_28px_-4px_rgba(0,0,0,0.4),0_0_0_1px_rgba(0,0,0,0.25)] ${activeTab === 'Por Comenzar' ? 'h-full' : isLiveDashboard ? 'h-auto' : ''}`}>
-                                                        <div className={`min-w-0 max-w-full rounded-[2rem] overflow-hidden border flex flex-col hover:border-white/25 transition-all ${activeTab === 'Por Comenzar' ? 'h-full' : isLiveDashboard ? 'h-auto min-h-0' : 'h-full'} ${cardBg}`}>
+                                                    <div className={`min-w-0 max-w-full rounded-[2rem] shadow-[0_20px_60px_-8px_rgba(0,0,0,0.5),0_8px_24px_-4px_rgba(0,0,0,0.35),0_0_0_1px_rgba(0,0,0,0.2)] transition-all hover:shadow-[0_28px_70px_-10px_rgba(0,0,0,0.55),0_12px_28px_-4px_rgba(0,0,0,0.4),0_0_0_1px_rgba(0,0,0,0.25)] ${activeTab === 'Por Comenzar' ? 'h-full' : ''}`}>
+                                                        <div className={`min-w-0 max-w-full rounded-[2rem] overflow-hidden border flex h-full flex-col hover:border-white/25 transition-all ${cardBg}`}>
 
                                                             {/* ── Franja superior: partido · fecha · hora · fase (centrado) · pista · categoría/género ── */}
                                                             <div className={`px-4 pt-3 pb-2.5 border-b border-white/[0.10] flex flex-col items-center gap-2 text-center ${isLive ? 'bg-[#39ff14]/15' : isPorComenzar ? 'bg-[#ff9500]/15' : isEnCola ? 'bg-red-500/10' : 'bg-white/[0.07]'}`}>
@@ -2694,8 +2664,8 @@ export default function TournamentDashboard() {
                                                             </div>
 
                                                             {/* ── Contenido scrollable + nav fijo abajo (Control, Pizarra, Cámaras, ADS) ─────────────────── */}
-                                                            <div className={`flex flex-col min-h-0 ${isLiveDashboard ? '' : 'flex-1'}`}>
-                                                                <div className={`${isLiveDashboard ? 'min-h-0 overflow-visible' : 'flex-1 min-h-0 overflow-auto'}`}>
+                                                            <div className="flex min-h-0 flex-1 flex-col">
+                                                                <div className="min-h-0 flex-1 overflow-auto">
                                                                     {/* Body: Pizarra tipo marcador (nombres + P/G/S) o score por sets si finalizado */}
                                                                     {(() => {
                                                                         // Partido finalizado: mostrar solo score del Set 1, Set 2 y STB (si hubo)

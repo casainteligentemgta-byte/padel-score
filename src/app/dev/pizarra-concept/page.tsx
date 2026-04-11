@@ -20,7 +20,6 @@ import { resolveMatchTeamLines } from '@/lib/resolveMatchTeamLines';
 import { formatPizarraCategoryLevel, formatPizarraGender } from '@/lib/pizarraHeaderLabels';
 import { resolveMatchFromTournamentList } from '@/lib/resolveDisplayMatchId';
 import { inferMatchOrderFromId } from '@/lib/matchOrderMeta';
-import { buildPizarraShortPath, sedeIndexFromVenueName } from '@/lib/pizarraShortUrl';
 import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 
 /** Tipografía de nombres: mismo aspecto en TV (vh alto) y laptop (vw útil), con trazo compacto. */
@@ -658,40 +657,8 @@ function PizarraConceptPage() {
     ).trim();
   }, [complexParam, publicidadVenueName, matchSnapshot, tournamentSnapshot]);
 
-  /** Enlace tipo /s1/c1?tournamentId&matchId para compartir el mismo partido por URL corta. */
-  const shortMonitorLink = useMemo(() => {
-    const tid = effectiveTournamentIdForCancha.trim();
-    const mid = effectiveMatchIdForCancha.trim();
-    const v = (publicidadVenueName || venueForWeather || '').trim();
-    const n = courtNum ?? getCourtNum(matchSnapshot);
-    if (!tid || !mid || !v || n == null) return null;
-    const idx = sedeIndexFromVenueName(v);
-    if (!idx) return null;
-    const path = buildPizarraShortPath(idx, n);
-    return {
-      href: `/${path}?tournamentId=${encodeURIComponent(tid)}&matchId=${encodeURIComponent(mid)}`,
-      path,
-    };
-  }, [
-    effectiveTournamentIdForCancha,
-    effectiveMatchIdForCancha,
-    publicidadVenueName,
-    venueForWeather,
-    courtNum,
-    matchSnapshot,
-  ]);
-
-  /**
-   * Enlace monitor siempre que haya torneo + partido: prioriza URL corta s{n}/c{n};
-   * si la sede no está en el mapa S1–S8, fallback a /tournaments/.../display/...
-   */
+  /** Enlace monitor: solo ruta estándar; no se muestra en UI el texto/enlace de URL corta s{n}/c{n}. */
   const monitorLinkDisplay = useMemo(() => {
-    if (shortMonitorLink) {
-      return {
-        href: shortMonitorLink.href,
-        label: `Monitor URL corta: ${shortMonitorLink.path} (este partido)`,
-      };
-    }
     const tid = effectiveTournamentIdForCancha.trim();
     const mid = effectiveMatchIdForCancha.trim();
     if (!tid || !mid) return null;
@@ -699,7 +666,7 @@ function PizarraConceptPage() {
       href: `/tournaments/${tid}/display/${mid}`,
       label: 'Monitor / pizarra del partido (enlace estándar)',
     };
-  }, [shortMonitorLink, effectiveTournamentIdForCancha, effectiveMatchIdForCancha]);
+  }, [effectiveTournamentIdForCancha, effectiveMatchIdForCancha]);
 
   /** Texto del marquee inferior: prioriza tira de admin; si no hay, tickers derivados del partido. */
   const footerTickerSegments = useMemo(() => {
