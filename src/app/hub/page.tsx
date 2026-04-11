@@ -145,7 +145,7 @@ export default function HubPage() {
 
     const playerProfileHref = player?.id ? `/players/${player.id}` : '/players/register';
 
-    /** Columna derecha: Torneos → Partidos → Ranking (debajo del botón Perfil). */
+    /** Orden en rejilla 2 columnas: Perfil, Torneos, Partidos, Ranking, Tarjeta, Wallet. */
     const hubNavColumnItems = [
         {
             name: 'Torneos',
@@ -517,7 +517,7 @@ export default function HubPage() {
                         )}
                         </div>
 
-                        {/* Perfil (1ª columna) + Torneos / Partidos / Ranking (2ª columna); luego tarjeta de victoria y wallet */}
+                        {/* Rejilla 2 columnas: 6 accesos (perfil, torneos, partidos, ranking, tarjeta, wallet) */}
                         <section
                             aria-label="Acciones del hub"
                             className={
@@ -535,7 +535,7 @@ export default function HubPage() {
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0 }}
                                     onClick={hubProfileItem.onClick}
-                                    className={`relative group flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'gap-0 rounded-lg border p-0.5' : 'gap-0.5 rounded-xl border-2 p-1.5 sm:p-2'} ${hubProfileItem.glow} bg-[#111] ${hubProfileItem.border} ${hubProfileItem.hoverBorder} hover:bg-[#181818]`}
+                                    className={`relative group flex min-h-0 w-full min-w-0 flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'min-h-[2.65rem] gap-0 rounded-lg border p-0.5' : 'min-h-[56px] gap-0.5 rounded-xl border-2 p-1.5 sm:min-h-[72px] sm:p-2'} ${hubProfileItem.glow} bg-[#111] ${hubProfileItem.border} ${hubProfileItem.hoverBorder} hover:bg-[#181818]`}
                                 >
                                     <div
                                         className={`rounded-md transition-transform group-hover:scale-110 ${hubProfileItem.bg} ${hubProfileItem.color} ${hubCompactLayout ? 'p-0.5' : 'p-1 sm:p-1.5'}`}
@@ -561,47 +561,41 @@ export default function HubPage() {
                                         className={`absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none ${hubProfileItem.bg} ${hubCompactLayout ? 'rounded-lg' : 'rounded-xl'}`}
                                     />
                                 </motion.button>
-                                <div
-                                    className={`flex min-h-0 min-w-0 flex-1 flex-col ${hubCompactLayout ? 'gap-0.5' : 'gap-1.5 sm:gap-2'}`}
-                                >
-                                    {hubNavColumnItems.map((item, index) => (
-                                        <motion.button
-                                            key={item.name}
-                                            type="button"
-                                            initial={{ opacity: 0, y: 12 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ delay: 0.04 + index * 0.04 }}
-                                            onClick={() => router.push(item.href)}
-                                            className={`relative group flex min-h-0 flex-1 flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'min-h-[2.65rem] gap-0 rounded-lg border p-0.5' : 'min-h-[56px] gap-0.5 rounded-xl border-2 p-1.5 sm:min-h-0 sm:flex-1 sm:p-2'} ${item.glow} bg-[#111] ${item.border} ${item.hoverBorder} hover:bg-[#181818]`}
+                                {hubNavColumnItems.map((item, index) => (
+                                    <motion.button
+                                        key={item.name}
+                                        type="button"
+                                        initial={{ opacity: 0, y: 12 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.04 + index * 0.04 }}
+                                        onClick={() => router.push(item.href)}
+                                        className={`relative group flex min-h-0 w-full flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'min-h-[2.65rem] gap-0 rounded-lg border p-0.5' : 'min-h-[56px] gap-0.5 rounded-xl border-2 p-1.5 sm:min-h-[72px] sm:p-2'} ${item.glow} bg-[#111] ${item.border} ${item.hoverBorder} hover:bg-[#181818]`}
+                                    >
+                                        <div
+                                            className={`rounded-md transition-transform group-hover:scale-110 ${item.bg} ${item.color} ${hubCompactLayout ? 'p-0.5' : 'p-1 sm:p-1.5'}`}
                                         >
-                                            <div
-                                                className={`rounded-md transition-transform group-hover:scale-110 ${item.bg} ${item.color} ${hubCompactLayout ? 'p-0.5' : 'p-1 sm:p-1.5'}`}
-                                            >
-                                                <item.icon
-                                                    className={hubCompactLayout ? 'h-3 w-3' : 'h-4 w-4 sm:h-5 sm:w-5'}
-                                                    strokeWidth={1.8}
-                                                />
-                                            </div>
-                                            <div className="flex flex-col items-center gap-0">
-                                                <h3
-                                                    className={`text-center font-black italic leading-tight tracking-tight text-white ${hubCompactLayout ? 'text-[8px] leading-tight' : 'text-[10px] sm:text-[12px]'}`}
-                                                >
-                                                    {item.name}
-                                                </h3>
-                                                <p
-                                                    className={`text-center font-bold uppercase tracking-widest ${hubCompactLayout ? 'text-[5px]' : 'text-[6px] sm:text-[7px]'} ${item.color} opacity-70`}
-                                                >
-                                                    {item.subtitle}
-                                                </p>
-                                            </div>
-                                            <div
-                                                className={`absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none ${item.bg} ${hubCompactLayout ? 'rounded-lg' : 'rounded-xl'}`}
+                                            <item.icon
+                                                className={hubCompactLayout ? 'h-3 w-3' : 'h-4 w-4 sm:h-5 sm:w-5'}
+                                                strokeWidth={1.8}
                                             />
-                                        </motion.button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div className={`flex w-full flex-col ${hubCompactLayout ? 'gap-0.5' : 'gap-1.5 sm:gap-2'}`}>
+                                        </div>
+                                        <div className="flex flex-col items-center gap-0">
+                                            <h3
+                                                className={`text-center font-black italic leading-tight tracking-tight text-white ${hubCompactLayout ? 'text-[8px] leading-tight' : 'text-[10px] sm:text-[12px]'}`}
+                                            >
+                                                {item.name}
+                                            </h3>
+                                            <p
+                                                className={`text-center font-bold uppercase tracking-widest ${hubCompactLayout ? 'text-[5px]' : 'text-[6px] sm:text-[7px]'} ${item.color} opacity-70`}
+                                            >
+                                                {item.subtitle}
+                                            </p>
+                                        </div>
+                                        <div
+                                            className={`absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none ${item.bg} ${hubCompactLayout ? 'rounded-lg' : 'rounded-xl'}`}
+                                        />
+                                    </motion.button>
+                                ))}
                                 {hubBottomItems.map((item, index) => (
                                     <motion.button
                                         key={item.name}
@@ -613,7 +607,7 @@ export default function HubPage() {
                                             if (item.disabled) return;
                                             if (item.href) router.push(item.href);
                                         }}
-                                        className={`relative group flex w-full flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'min-h-[2.65rem] gap-0 rounded-lg border p-0.5' : 'min-h-[56px] gap-0.5 rounded-xl border-2 p-1.5 sm:min-h-[72px] sm:p-2'} ${item.glow}
+                                        className={`relative group flex min-h-0 w-full flex-col items-center justify-center border backdrop-blur-xl transition-all duration-200 active:scale-[0.97] shadow-md ${hubCompactLayout ? 'min-h-[2.65rem] gap-0 rounded-lg border p-0.5' : 'min-h-[56px] gap-0.5 rounded-xl border-2 p-1.5 sm:min-h-[72px] sm:p-2'} ${item.glow}
                                         ${
                                             item.disabled
                                                 ? 'bg-white/3 border-white/10 opacity-40 cursor-not-allowed'
