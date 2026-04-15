@@ -68,6 +68,10 @@ export type AdminSettings = {
     appTitle?: string;
     timezone?: string;
     updatedAt?: any;
+    /** Versión global de términos (Smart-Legal), si existe columna en admin_settings */
+    termsVersion?: string;
+    /** ID de carpeta Google Drive del dossier de publicidad (módulo admin publicidad) */
+    publicidadDossierDriveId?: string | null;
 };
 
 export type InscriptionData = {
@@ -90,6 +94,10 @@ export type InscriptionData = {
     paymentReference?: string;
     partnerId?: string;
     partnerName?: string;
+    /** Smart-Legal: rutas en bucket legal_vault */
+    legalSignaturePath?: string | null;
+    legalBiometricPath?: string | null;
+    acceptedTermsVersion?: string | null;
 };
 
 function sanitizeObject(obj: any): any {
@@ -1172,7 +1180,33 @@ export const dataService = {
             uniqueCode: data.unique_code,
             createdAt: data.created_at,
             updatedAt: data.updated_at,
+            acceptedTermsVersion: data.accepted_terms_version ?? null,
+            signatureUrl: data.signature_url ?? null,
+            biometricPhotoUrl: data.biometric_photo_url ?? null,
         };
+    },
+
+    /** Smart-Legal: actualiza versión aceptada y rutas de evidencia en `profiles`. */
+    async updateProfileLegalAcceptance(
+        uid: string,
+        payload: {
+            acceptedTermsVersion: string;
+            signaturePath?: string | null;
+            biometricPhotoPath?: string | null;
+        }
+    ) {
+        const row: Record<string, unknown> = {
+            accepted_terms_version: payload.acceptedTermsVersion,
+            updated_at: now(),
+        };
+        if (payload.signaturePath !== undefined) {
+            row.signature_url = payload.signaturePath;
+        }
+        if (payload.biometricPhotoPath !== undefined) {
+            row.biometric_photo_url = payload.biometricPhotoPath;
+        }
+        const { error } = await supabase().from('profiles').update(row).eq('id', uid);
+        throwIfError(error);
     },
 
     async setUserProfile(uid: string, data: any) {
@@ -1639,6 +1673,8 @@ export const dataService = {
                 clubName: data.club_name,
                 timezone: data.timezone,
                 updatedAt: data.updated_at,
+                termsVersion: (data as { terms_version?: string }).terms_version ?? undefined,
+                publicidadDossierDriveId: (data as { publicidad_dossier_drive_id?: string | null }).publicidad_dossier_drive_id ?? null,
             };
         } catch (e) {
             console.warn('[dataService] Error al obtener admin_settings (posiblemente la tabla no existe):', e);
@@ -1649,12 +1685,24 @@ export const dataService = {
     async setAdminSettings(data: Partial<AdminSettings>): Promise<void> {
         const c = getSupabaseClient();
         if (!c) return;
-        await c.from('admin_settings').update({
-            app_title: sanitizeString(data.appTitle),
-            club_name: sanitizeString(data.clubName),
-            timezone: sanitizeString(data.timezone),
-            updated_at: now(),
-        }).eq('id', 1);
+        const payload: Record<string, unknown> = { updated_at: now() };
+        if (data.appTitle !== undefined) payload.app_title = sanitizeString(data.appTitle);
+        if (data.clubName !== undefined) payload.club_name = sanitizeString(data.clubName);
+        if (data.timezone !== undefined) payload.timezone = sanitizeString(data.timezone);
+        if (data.termsVersion !== undefined) payload.terms_version = sanitizeString(data.termsVersion);
+        if (data.publicidadDossierDriveId !== undefined) {
+            const v = data.publicidadDossierDriveId;
+            payload.publicidad_dossier_drive_id =
+                v === null || v === '' ? null : sanitizeString(String(v).trim());
+        }
+        const { error } = await c.from('admin_settings').update(payload).eq('id', 1);
+        if (error?.code === '42703' && data.publicidadDossierDriveId !== undefined) {
+            const { publicidad_dossier_drive_id: _drop, ...rest } = payload as Record<string, unknown>;
+            const { error: err2 } = await c.from('admin_settings').update(rest).eq('id', 1);
+            throwIfError(err2);
+            return;
+        }
+        throwIfError(error);
     },
 
     async addInscription(data: InscriptionData, ownerId: string) {
@@ -1681,6 +1729,9 @@ export const dataService = {
                     paymentReference: data.paymentReference,
                     partnerId: data.partnerId,
                     partnerName: data.partnerName,
+                    legalSignaturePath: data.legalSignaturePath,
+                    legalBiometricPath: data.legalBiometricPath,
+                    acceptedTermsVersion: data.acceptedTermsVersion,
                 }),
                 created_at: now(),
                 updated_at: now(),

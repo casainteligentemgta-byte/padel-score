@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import Sidebar from '@/components/Sidebar';
 import { BackButton } from '@/components/BackButton';
+import { LegalContainer } from '@/components/legal/LegalContainer';
 import PaymentInfo from '@/components/PaymentInfo';
 import AutoShrinkName from '@/components/AutoShrinkName';
 import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
@@ -125,6 +126,11 @@ export default function InscribirmePage() {
     const [submitting, setSubmitting] = useState(false);
     const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
     const [acceptTerms, setAcceptTerms] = useState(false);
+    const [legalArtifacts, setLegalArtifacts] = useState<{
+        signaturePath: string | null;
+        biometricPath: string | null;
+        version: string;
+    } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [playerProfile, setPlayerProfile] = useState<{ gender?: 'MALE' | 'FEMALE'; birthDate?: string } | null>(null);
@@ -431,6 +437,15 @@ export default function InscribirmePage() {
         if (selectedCategories.size === 0) setWizardStep(0);
     }, [selectedCategories.size]);
 
+    const prevWizardForLegal = useRef(wizardStep);
+    useEffect(() => {
+        if (wizardStep === termsStepIndex && prevWizardForLegal.current !== termsStepIndex) {
+            setAcceptTerms(false);
+            setLegalArtifacts(null);
+        }
+        prevWizardForLegal.current = wizardStep;
+    }, [wizardStep, termsStepIndex]);
+
     const handleWizardNext = async () => {
         setError(null);
         if (wizardStep === 0) {
@@ -506,8 +521,8 @@ export default function InscribirmePage() {
             setError(partnerError || 'Debes buscar y confirmar a tu pareja usando su código de 6 dígitos.');
             return;
         }
-        if (!acceptTerms) {
-            setError('Debes aceptar los términos de inscripción.');
+        if (!acceptTerms || !legalArtifacts) {
+            setError('Debes completar lectura, firma (o validación facial) y aceptación de los términos de inscripción.');
             return;
         }
 
@@ -557,7 +572,10 @@ export default function InscribirmePage() {
                         paymentReference: paymentData.reference,
                         receiptUrl: paymentData.receiptUrl || undefined,
                         partnerId: currentPartner?.id,
-                        partnerName: currentPartner?.name
+                        partnerName: currentPartner?.name,
+                        legalSignaturePath: legalArtifacts.signaturePath,
+                        legalBiometricPath: legalArtifacts.biometricPath,
+                        acceptedTermsVersion: legalArtifacts.version,
                     },
                     user.uid
                 );
@@ -1183,25 +1201,27 @@ export default function InscribirmePage() {
                                     )}
 
                                     {wizardStep === termsStepIndex && (
-                                        <>
-                                            <section className="mb-8">
-                                                <label className="flex items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={acceptTerms}
-                                                        onChange={(e) => setAcceptTerms(e.target.checked)}
-                                                        className="mt-1 w-5 h-5 rounded border-2 border-[#ccff00] text-[#ccff00]"
-                                                    />
-                                                    <span className="text-sm text-gray-300">
-                                                        Acepto los{' '}
-                                                        <Link href="/terminos-inscripcion" target="_blank" className="text-[#ccff00] font-bold underline">
-                                                            Términos y Condiciones de Inscripción
-                                                        </Link>
-                                                        , incluida la veracidad del comprobante de pago si aplica.
-                                                    </span>
-                                                </label>
-                                            </section>
-                                        </>
+                                        <section className="mb-4 min-w-0">
+                                            <LegalContainer
+                                                type="inscription"
+                                                userId={user?.uid}
+                                                className="max-h-[min(78dvh,720px)] overflow-hidden rounded-2xl border border-[#ccff00]/25"
+                                                onAccept={async (p) => {
+                                                    if (!user?.uid) return;
+                                                    await dataService.updateProfileLegalAcceptance(user.uid, {
+                                                        acceptedTermsVersion: p.version,
+                                                        signaturePath: p.signaturePath,
+                                                        biometricPhotoPath: p.biometricPath,
+                                                    });
+                                                    setLegalArtifacts({
+                                                        signaturePath: p.signaturePath,
+                                                        biometricPath: p.biometricPath,
+                                                        version: p.version,
+                                                    });
+                                                    setAcceptTerms(true);
+                                                }}
+                                            />
+                                        </section>
                                     )}
                                     </div>
 
@@ -1234,7 +1254,7 @@ export default function InscribirmePage() {
                                                     <button
                                                         type="button"
                                                         onClick={() => void handleSubmit()}
-                                                        disabled={submitting || selectedCategories.size === 0 || !acceptTerms}
+                                                        disabled={submitting || selectedCategories.size === 0 || !acceptTerms || !legalArtifacts}
                                                         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ccff00] py-3.5 text-sm font-black uppercase text-black disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[220px]"
                                                     >
                                                         {submitting ? (

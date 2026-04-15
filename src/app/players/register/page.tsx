@@ -27,6 +27,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { formatDNI } from '@/lib/formatters';
 import Sidebar from '@/components/Sidebar';
 import { BackButton } from '@/components/BackButton';
+import { LegalContainer } from '@/components/legal/LegalContainer';
 
 function RegistrationFormContent() {
     const router = useRouter();
@@ -738,57 +739,32 @@ function RegistrationFormContent() {
                                 initial={{ scale: 0.9, opacity: 0, y: 20 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
                                 exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                                className="bg-[#111111] w-full max-w-lg rounded-[40px] p-10 border border-white/10 relative z-[130] flex flex-col max-h-[80vh] shadow-3xl overflow-hidden"
+                                className="relative z-[130] w-full max-w-lg max-h-[min(88dvh,820px)] overflow-hidden rounded-[40px] border border-white/10 bg-[#0a0a0a] shadow-3xl"
                             >
-                                <div className="flex items-center justify-between mb-8 flex-shrink-0">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-1.5 h-8 bg-padel-primary rounded-full shadow-[0_0_20px_#ccff00]" />
-                                        <h3 className="text-2xl font-black italic uppercase tracking-tighter">Contrato Pro <span className="text-padel-primary">Smart</span></h3>
-                                    </div>
-                                    <button onClick={() => setShowTermsModal(false)} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
-                                        <X className="w-5 h-5 text-zinc-400" />
-                                    </button>
-                                </div>
-
-                                <div className="overflow-y-auto pr-4 custom-scrollbar space-y-8 flex-1">
-                                    <div className="space-y-4">
-                                        <h4 className="text-xs font-black uppercase text-padel-primary tracking-widest italic">1. Exoneración de Responsabilidad</h4>
-                                        <p className="text-[11px] text-zinc-400 font-bold leading-relaxed uppercase tracking-wide">
-                                            El participante declara estar en condiciones físicas óptimas para la alta competencia. Liberas irrevocablemente a Smart Padel, sus organizadores y patrocinadores de toda responsabilidad por lesiones, accidentes o percances médicos ocurridos durante la competencia o en las instalaciones.
-                                        </p>
-                                    </div>
-
-                                    <div className="space-y-4">
-                                        <h4 className="text-xs font-black uppercase text-padel-primary tracking-widest italic">2. Uso de Imagen y Marca</h4>
-                                        <p className="text-[11px] text-zinc-400 font-bold leading-relaxed uppercase tracking-wide">
-                                            Autorizas el uso de tu nombre e imagen (fotos/videos) en redes sociales, transmisiones en vivo (Broadcasting PRO) y material publicitario de Smart Padel con fines promocionales globales.
-                                        </p>
-                                    </div>
-
-                                    <div className="space-y-4">
-                                        <h4 className="text-xs font-black uppercase text-padel-primary tracking-widest italic">3. Protección de Datos (Privacidad)</h4>
-                                        <p className="text-[11px] text-zinc-400 font-bold leading-relaxed uppercase tracking-wide">
-                                            Tus datos personales y médicos se almacenan exclusivamente para tu seguridad y la gestión operativa de los torneos. Smart Padel garantiza la confidencialidad total y no compartirá tu información con terceros sin consentimiento explícito.
-                                        </p>
-                                    </div>
-
-                                    <div className="space-y-4">
-                                        <h4 className="text-xs font-black uppercase text-padel-primary tracking-widest italic">4. Conducta Deportiva</h4>
-                                        <p className="text-[11px] text-zinc-400 font-bold leading-relaxed uppercase tracking-wide">
-                                            Te comprometes a mantener un espíritu de Fair Play. Conductas antideportivas pueden resultar en la expulsión inmediata del sistema oficial de Smart Padel.
-                                        </p>
-                                    </div>
-                                </div>
-
                                 <button
-                                    onClick={() => {
+                                    type="button"
+                                    onClick={() => setShowTermsModal(false)}
+                                    className="absolute right-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-zinc-300 hover:bg-white/10"
+                                    aria-label="Cerrar"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                                <LegalContainer
+                                    type="pro_player"
+                                    userId={user?.uid}
+                                    title="Contrato Pro Smart"
+                                    className="max-h-[min(88dvh,820px)] rounded-[40px] border-0 pt-2"
+                                    onAccept={async (p) => {
+                                        if (!user?.uid) return;
+                                        await dataService.updateProfileLegalAcceptance(user.uid, {
+                                            acceptedTermsVersion: p.version,
+                                            signaturePath: p.signaturePath,
+                                            biometricPhotoPath: p.biometricPath,
+                                        });
                                         setAcceptedTerms(true);
                                         setShowTermsModal(false);
                                     }}
-                                    className="mt-6 w-full py-4 bg-padel-primary text-black rounded-2xl font-black uppercase italic text-sm tracking-widest hover:scale-105 transition-all shadow-lg flex-shrink-0"
-                                >
-                                    ¡ACEPTO Y QUIERO JUGAR!
-                                </button>
+                                />
                             </motion.div>
                         </div>
                     )}

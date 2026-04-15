@@ -17,7 +17,26 @@ import {
   type CourtPlaylistRowDb,
 } from '@/lib/courtPlaylists';
 import { buildVenuesAndCourtsFromTournaments, type VenueWithCourts } from '@/lib/venuesFromTournaments';
-import { AlertCircle, ArrowLeft, Check, Download, Edit3, Eye, Layout, Loader2, Monitor, Trash2, Upload, X } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  BookOpen,
+  Check,
+  Copy,
+  Download,
+  Edit3,
+  ExternalLink,
+  Eye,
+  FolderOpen,
+  Layout,
+  Link2,
+  Loader2,
+  Monitor,
+  Share2,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react';
 import type { MediaContent, TiraInformativa } from '@/lib/supabase/publicidad';
 import { 
   addMediaContentAction, 
@@ -30,6 +49,7 @@ import {
   upsertPlaylistConfigAction,
   fetchAssignmentsAction,
 } from './actions';
+import { driveDossierUrls, parseGoogleDriveFolderId } from '@/lib/driveDossier';
 
 const mb = (bytes?: number | null) => {
   if (!bytes || Number(bytes) <= 0) return '—';
@@ -88,6 +108,12 @@ export default function AdminPublicidadPage() {
   const [previewMatchByCourt, setPreviewMatchByCourt] = useState<
     Record<string, { tournamentId: string; matchId: string } | null>
   >({});
+
+  /** Dossier Google Drive (admin_settings.publicidad_dossier_drive_id) */
+  const [dossierDraft, setDossierDraft] = useState('');
+  const [dossierFolderId, setDossierFolderId] = useState<string | null>(null);
+  const [savingDossier, setSavingDossier] = useState(false);
+  const [dossierCopied, setDossierCopied] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) router.push('/');
@@ -187,7 +213,20 @@ export default function AdminPublicidadPage() {
       try {
         setLoading(true);
         setError(null);
-        await Promise.all([fetchMedia(), fetchTicker(), loadVenuesAndCourts()]);
+        await Promise.all([
+          fetchMedia(),
+          fetchTicker(),
+          loadVenuesAndCourts(),
+          (async () => {
+            const s = await dataService.getAdminSettings();
+            if (!mounted) return;
+            const id = s?.publicidadDossierDriveId?.trim() || null;
+            if (id) {
+              setDossierFolderId(id);
+              setDossierDraft(id);
+            }
+          })(),
+        ]);
       } catch (e: any) {
         if (mounted) setError(e?.message || 'No se pudo cargar publicidad.');
       } finally {
@@ -494,6 +533,58 @@ export default function AdminPublicidadPage() {
     }
   };
 
+  const saveDossier = async () => {
+    const parsed = parseGoogleDriveFolderId(dossierDraft);
+    if (!parsed) {
+      setError('Introduce un ID de carpeta de Google Drive válido o una URL que contenga /folders/…');
+      return;
+    }
+    setSavingDossier(true);
+    setError(null);
+    try {
+      await dataService.setAdminSettings({ publicidadDossierDriveId: parsed });
+      setDossierFolderId(parsed);
+      setDossierDraft(parsed);
+    } catch (e: any) {
+      setError(e?.message || 'No se pudo guardar el dossier.');
+    } finally {
+      setSavingDossier(false);
+    }
+  };
+
+  const dossierOpenUrl = dossierFolderId ? driveDossierUrls(dossierFolderId).open : null;
+  const dossierEmbedUrl = dossierFolderId ? driveDossierUrls(dossierFolderId).embed : null;
+
+  const copyDossierLink = async () => {
+    if (!dossierOpenUrl) return;
+    try {
+      await navigator.clipboard.writeText(dossierOpenUrl);
+      setDossierCopied(true);
+      window.setTimeout(() => setDossierCopied(false), 2000);
+    } catch {
+      setError('No se pudo copiar al portapapeles.');
+    }
+  };
+
+  const shareDossier = async () => {
+    if (!dossierOpenUrl) return;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Dossier de publicidad — Smart Padel',
+          text: 'Enlace al dossier de publicidad en Google Drive:',
+          url: dossierOpenUrl,
+        });
+      } else {
+        await copyDossierLink();
+      }
+    } catch (e: any) {
+      if (String(e?.name || '') !== 'AbortError') {
+        await copyDossierLink();
+      }
+    }
+  };
+
   const deleteTicker = async (id: string) => {
     try {
       const r = await deleteTickerAction(id);
@@ -613,14 +704,23 @@ export default function AdminPublicidadPage() {
               <p className="text-[11px] text-white/60 uppercase tracking-wider leading-tight">Playlist independiente por sede y cancha</p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => router.push('/admin/display/templates')}
-              className="px-4 py-2 rounded-xl bg-zinc-900 border border-white/10 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 hover:bg-zinc-800 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-black/20"
-            >
-              <Layout className="w-4 h-4 text-padel-primary" />
-              Dynamic Studio
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/admin/publicidad/manual"
+                className="px-4 py-2 rounded-xl bg-zinc-900 border border-[#ccff00]/25 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 hover:bg-[#ccff00]/10 hover:border-[#ccff00]/45 transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-black/20"
+              >
+                <BookOpen className="w-4 h-4 text-padel-primary" />
+                Manual de ventas
+              </Link>
+              <button
+                type="button"
+                onClick={() => router.push('/admin/display/templates')}
+                className="px-4 py-2 rounded-xl bg-zinc-900 border border-white/10 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 hover:bg-zinc-800 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-black/20"
+              >
+                <Layout className="w-4 h-4 text-padel-primary" />
+                Dynamic Studio
+              </button>
+            </div>
           </header>
 
           {error && (
@@ -628,6 +728,90 @@ export default function AdminPublicidadPage() {
               <AlertCircle size={16} /> {error}
             </div>
           )}
+
+          <section className="rounded-2xl border border-padel-primary/35 bg-gradient-to-br from-padel-primary/[0.07] to-black/40 p-4 md:p-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-padel-primary/40 bg-black/50">
+                  <FolderOpen className="h-5 w-5 text-padel-primary" />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <h2 className="text-lg font-black uppercase italic tracking-tight text-white">Dossier de publicidad</h2>
+                  <p className="text-[11px] text-white/60 uppercase tracking-wider leading-snug">
+                    Carpeta en Google Drive — guarda el ID o pega el enlace; visualiza y comparte desde aquí (solo administrador).
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={!dossierOpenUrl}
+                  onClick={() => dossierOpenUrl && window.open(dossierOpenUrl, '_blank', 'noopener,noreferrer')}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-white/10 disabled:opacity-40"
+                >
+                  <ExternalLink className="h-4 w-4 text-padel-primary" />
+                  Abrir en Drive
+                </button>
+                <button
+                  type="button"
+                  disabled={!dossierOpenUrl}
+                  onClick={() => void copyDossierLink()}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-white/10 disabled:opacity-40"
+                >
+                  <Copy className="h-4 w-4 text-padel-primary" />
+                  {dossierCopied ? 'Copiado' : 'Copiar enlace'}
+                </button>
+                <button
+                  type="button"
+                  disabled={!dossierOpenUrl}
+                  onClick={() => void shareDossier()}
+                  className="inline-flex items-center gap-2 rounded-xl border border-padel-primary/50 bg-padel-primary/15 px-3 py-2 text-xs font-black uppercase tracking-wide text-padel-primary hover:bg-padel-primary/25 disabled:opacity-40"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Enviar / compartir
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-white/50">ID o URL de la carpeta</label>
+                <input
+                  type="text"
+                  value={dossierDraft}
+                  onChange={(e) => setDossierDraft(e.target.value)}
+                  placeholder="1gVX… o https://drive.google.com/drive/folders/…"
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3 py-2.5 text-sm text-white outline-none focus:border-padel-primary/60"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={savingDossier}
+                onClick={() => void saveDossier()}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-padel-primary px-5 py-2.5 text-sm font-black uppercase text-black hover:brightness-105 disabled:opacity-50"
+              >
+                {savingDossier ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                Guardar dossier
+              </button>
+            </div>
+
+            {dossierEmbedUrl && (
+              <div className="mt-5 space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-white/45">Vista previa embebida</p>
+                <p className="text-[10px] text-white/40">
+                  Si la carpeta no es pública o Drive bloquea el iframe, usa «Abrir en Drive».
+                </p>
+                <div className="overflow-hidden rounded-xl border border-white/10 bg-black/60">
+                  <iframe
+                    title="Dossier Google Drive"
+                    src={dossierEmbedUrl}
+                    className="h-[min(70vh,520px)] w-full bg-black"
+                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                  />
+                </div>
+              </div>
+            )}
+          </section>
 
           <section className="bg-white/[0.02] border border-white/10 rounded-2xl p-4 md:p-5">
             <div className="flex flex-wrap items-center gap-3">
