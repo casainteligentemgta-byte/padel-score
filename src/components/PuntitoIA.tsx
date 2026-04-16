@@ -95,11 +95,15 @@ function PuntitoSponsorAvatar({
     config,
     idle,
     celebrate,
+    thinking,
+    xEyes,
     gradientId,
 }: {
     config: SponsorConfig;
     idle: boolean;
     celebrate: boolean;
+    thinking: boolean;
+    xEyes: boolean;
     gradientId: string;
 }) {
     const isPro = config.premiumPartner === 'buchanans_pro';
@@ -107,6 +111,8 @@ function PuntitoSponsorAvatar({
     const acc = new Set(config.specialAccessories ?? []);
     const bodyFill = isPro ? `url(#${gradientId})` : config.bodyColor;
     const runIdle = idle && !celebrate;
+    const runThinking = thinking && !celebrate;
+    const runXEyes = xEyes && !celebrate;
 
     return (
         <motion.svg
@@ -143,23 +149,74 @@ function PuntitoSponsorAvatar({
             {isPro && <PadelSeamLines stroke={BUCHANANS_PRO.seam} />}
 
             <motion.g
-                animate={runIdle ? { x: [0, 1.5, 0, -1.5, 0] } : { x: 0 }}
-                transition={{ duration: 5.6, repeat: runIdle ? Infinity : 0, ease: 'easeInOut' }}
+                animate={
+                    runThinking
+                        ? { x: [0, 0.7, 0, -0.4, 0] }
+                        : runIdle
+                          ? { x: [0, 1.5, 0, -1.5, 0] }
+                          : { x: 0 }
+                }
+                transition={{ duration: 5.6, repeat: runIdle || runThinking ? Infinity : 0, ease: 'easeInOut' }}
             >
                 <motion.g
                     style={{ transformOrigin: '20px 19px' }}
-                    animate={runIdle ? { scaleY: [1, 1, 0.1, 1, 1] } : { scaleY: 1 }}
+                    animate={
+                        runThinking
+                            ? { scaleY: [1, 0.78, 0.96, 0.78, 1], x: [0, 0.6, 0] }
+                            : runIdle
+                              ? { scaleY: [1, 1, 0.1, 1, 1], x: 0 }
+                              : { scaleY: 1, x: 0 }
+                    }
                     transition={{
-                        duration: 3.4,
-                        repeat: runIdle ? Infinity : 0,
+                        duration: runThinking ? 1.6 : 3.4,
+                        repeat: runIdle || runThinking ? Infinity : 0,
                         ease: 'easeInOut',
-                        times: [0, 0.86, 0.9, 0.94, 1],
+                        times: runThinking ? undefined : [0, 0.86, 0.9, 0.94, 1],
                     }}
                 >
-                    <circle cx={14} cy={19} r={3.2} fill={eye} style={{ filter: 'drop-shadow(0 0 2px currentColor)' }} />
-                    <circle cx={26} cy={19} r={3.2} fill={eye} style={{ filter: 'drop-shadow(0 0 2px currentColor)' }} />
-                    <circle cx={13.2} cy={18.2} r={0.9} fill="rgba(255,255,255,0.85)" />
-                    <circle cx={25.2} cy={18.2} r={0.9} fill="rgba(255,255,255,0.85)" />
+                    {runXEyes ? (
+                        <>
+                            <motion.path
+                                d="M 12.2 18.2 L 17.8 23.8"
+                                stroke={eye}
+                                strokeWidth={1.9}
+                                strokeLinecap="round"
+                                animate={{ opacity: [1, 0.65, 1], rotate: [0, -10, 0] }}
+                                transition={{ duration: 0.8, repeat: Infinity, ease: 'easeInOut' }}
+                            />
+                            <motion.path
+                                d="M 17.8 18.2 L 12.2 23.8"
+                                stroke={eye}
+                                strokeWidth={1.9}
+                                strokeLinecap="round"
+                                animate={{ opacity: [1, 0.65, 1], rotate: [0, 10, 0] }}
+                                transition={{ duration: 0.8, repeat: Infinity, ease: 'easeInOut' }}
+                            />
+                            <motion.path
+                                d="M 22.2 18.2 L 27.8 23.8"
+                                stroke={eye}
+                                strokeWidth={1.9}
+                                strokeLinecap="round"
+                                animate={{ opacity: [1, 0.65, 1], rotate: [0, 10, 0] }}
+                                transition={{ duration: 0.8, repeat: Infinity, ease: 'easeInOut' }}
+                            />
+                            <motion.path
+                                d="M 27.8 18.2 L 22.2 23.8"
+                                stroke={eye}
+                                strokeWidth={1.9}
+                                strokeLinecap="round"
+                                animate={{ opacity: [1, 0.65, 1], rotate: [0, -10, 0] }}
+                                transition={{ duration: 0.8, repeat: Infinity, ease: 'easeInOut' }}
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <circle cx={14} cy={19} r={3.2} fill={eye} style={{ filter: 'drop-shadow(0 0 2px currentColor)' }} />
+                            <circle cx={26} cy={19} r={3.2} fill={eye} style={{ filter: 'drop-shadow(0 0 2px currentColor)' }} />
+                            <circle cx={13.2} cy={18.2} r={0.9} fill="rgba(255,255,255,0.85)" />
+                            <circle cx={25.2} cy={18.2} r={0.9} fill="rgba(255,255,255,0.85)" />
+                        </>
+                    )}
                 </motion.g>
             </motion.g>
 
@@ -211,6 +268,10 @@ export type PuntitoIAProps = {
     sponsorConfig?: SponsorConfig | null;
     /** Animación idle (parpadeo + mirada) cuando hay avatar patrocinado */
     idle?: boolean;
+    /** Ojos en modo “thinking” (usado durante procesamiento) */
+    thinking?: boolean;
+    /** Ojos en modo “X” (usado para errores/duplicados) */
+    xEyes?: boolean;
     className?: string;
 };
 
@@ -220,6 +281,8 @@ export function PuntitoIA({
     message,
     sponsorConfig,
     idle: idleProp,
+    thinking = false,
+    xEyes = false,
     className = '',
 }: PuntitoIAProps) {
     const uid = useId().replace(/:/g, '');
@@ -320,6 +383,8 @@ export function PuntitoIA({
                             config={sponsorConfig}
                             idle={idle}
                             celebrate={celebrate}
+                            thinking={thinking}
+                            xEyes={xEyes}
                             gradientId={gradientId}
                         />
                     </motion.div>

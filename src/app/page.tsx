@@ -44,7 +44,7 @@ export default function HomePage() {
             if (isAdmin) {
                 router.replace('/admin');
             } else if (!profileLoading) {
-                router.replace('/hub');
+                router.replace('/dashboard');
             }
         }
     }, [authLoading, user, profileLoading, isAdmin, router]);
@@ -111,7 +111,7 @@ export default function HomePage() {
             if (isAdmin) {
                 router.push('/admin');
             } else {
-                router.push('/hub');
+                router.push('/dashboard');
             }
 
         } catch (err: any) {

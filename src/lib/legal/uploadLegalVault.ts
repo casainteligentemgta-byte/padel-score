@@ -15,7 +15,12 @@ export async function uploadToLegalVault(
         upsert: false,
         cacheControl: '3600',
     });
-    if (error) throw error;
+    if (error) {
+        const details = [error.message, (error as any).code, (error as any).statusCode, (error as any).error]
+            .filter(Boolean)
+            .join(' | ');
+        throw new Error(`[legal_vault] ${details}`);
+    }
     return path;
 }
 

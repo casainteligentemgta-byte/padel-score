@@ -27,6 +27,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import BouncingBall from '@/components/BouncingBall';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import LegalModal from '@/components/legal/LegalModal';
+import { getAuthHeaders } from '@/lib/apiAuth';
 
 type PasswordRequirement = {
     label: string;
@@ -129,12 +131,17 @@ export default function LoginPage() {
         name: ''
     });
 
+    const [smartConsentAccepted, setSmartConsentAccepted] = useState(false);
+    const [smartConsentModalOpen, setSmartConsentModalOpen] = useState(false);
+    const [smartConsentSavePending, setSmartConsentSavePending] = useState(false);
+    const [smartConsentSaving, setSmartConsentSaving] = useState(false);
+
     useEffect(() => {
         if (!authLoading && user) {
             if (isAdmin) {
                 router.replace('/admin');
             } else if (!profileLoading) {
-                router.replace('/hub');
+                router.replace('/dashboard');
             }
         }
     }, [authLoading, user, profileLoading, isAdmin, router]);
@@ -206,12 +213,44 @@ export default function LoginPage() {
             if (isLogin) {
                 await signInWithEmail(formData.email, formData.password);
             } else {
+                if (!smartConsentAccepted) {
+                    setError('Debes aceptar el Contrato de Adhesión y Exoneración de Responsabilidad.');
+                    setLoading(false);
+                    return;
+                }
                 await signUpWithEmail(formData.email, formData.password, formData.name);
+
+                // Persistimos Smart Consent cuando ya existe sesión.
+                if (smartConsentAccepted) {
+                    setSmartConsentSaving(true);
+                    try {
+                        let headers = await getAuthHeaders();
+                        let tries = 0;
+                        while (!headers.Authorization && tries < 6) {
+                            await new Promise((r) => setTimeout(r, 250));
+                            headers = await getAuthHeaders();
+                            tries++;
+                        }
+
+                        if (headers.Authorization) {
+                            const res = await fetch('/api/legal/accept', {
+                                method: 'POST',
+                                headers: { ...headers, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({}),
+                            });
+                            setSmartConsentSavePending(!res.ok);
+                        } else {
+                            setSmartConsentSavePending(true);
+                        }
+                    } finally {
+                        setSmartConsentSaving(false);
+                    }
+                }
             }
             if (isAdmin) {
                 router.push('/admin');
             } else {
-                router.push('/hub');
+                router.push('/dashboard');
             }
         } catch (err: any) {
             setError(getAuthErrorMessage(err));
@@ -244,7 +283,7 @@ export default function LoginPage() {
             if (isAdmin) {
                 router.push('/admin');
             } else {
-                router.push('/hub');
+                router.push('/dashboard');
             }
         } catch (err: any) {
             setError(getAuthErrorMessage(err));
@@ -260,8 +299,12 @@ export default function LoginPage() {
         [formData.password]
     );
     const canSubmitSignup = useMemo(
-        () => formData.name.trim().length > 0 && formData.email.trim().length > 0 && isSignupPasswordValid,
-        [formData.name, formData.email, isSignupPasswordValid]
+        () =>
+            formData.name.trim().length > 0 &&
+            formData.email.trim().length > 0 &&
+            isSignupPasswordValid &&
+            smartConsentAccepted,
+        [formData.name, formData.email, isSignupPasswordValid, smartConsentAccepted]
     );
 
     if (authLoading) {
@@ -520,6 +563,43 @@ export default function LoginPage() {
                                 )}
                             </AnimatePresence>
 
+                            {!isLogin && (
+                                <div className="mt-1">
+                                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={smartConsentAccepted}
+                                            onChange={(e) => {
+                                                if (!e.target.checked) {
+                                                    setSmartConsentAccepted(false);
+                                                    setSmartConsentSavePending(false);
+                                                    return;
+                                                }
+                                                setSmartConsentModalOpen(true);
+                                            }}
+                                            className="mt-1 w-5 h-5 rounded border-2 border-white/10 accent-[#ccff00]"
+                                        />
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-bold text-white/90 leading-snug">
+                                                Acepto el Contrato de Adhesión y Exoneración de Responsabilidad
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSmartConsentModalOpen(true)}
+                                                className="mt-1 text-[11px] font-black uppercase tracking-widest text-padel-primary/90 hover:underline"
+                                            >
+                                                Ver contrato
+                                            </button>
+                                            {smartConsentSavePending && (
+                                                <p className="mt-1 text-[11px] text-amber-300/90">
+                                                    Guardado pendiente: se completará al iniciar sesión.
+                                                </p>
+                                            )}
+                                        </div>
+                                    </label>
+                                </div>
+                            )}
+
                             <button
                                 disabled={loading || (!isLogin && !canSubmitSignup)}
                                 type="submit"
@@ -568,6 +648,39 @@ export default function LoginPage() {
 
                     </div>
                 </motion.div>
+
+                <LegalModal
+                    open={smartConsentModalOpen}
+                    onClose={() => setSmartConsentModalOpen(false)}
+                    loading={smartConsentSaving}
+                    onAccept={async () => {
+                        // Marcamos intención (checkbox) y tratamos de persistir si hay sesión disponible.
+                        // En el signup suele existir sesión justo después del registro, y en caso contrario
+                        // dejamos reintento/persistencia para el submit.
+                        setSmartConsentAccepted(true);
+                        setSmartConsentModalOpen(false);
+
+                        try {
+                            const headers = await getAuthHeaders();
+                            if (!headers.Authorization) {
+                                setSmartConsentSavePending(true);
+                                return;
+                            }
+                            const res = await fetch('/api/legal/accept', {
+                                method: 'POST',
+                                headers: { ...headers, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({}),
+                            });
+                            if (!res.ok) {
+                                setSmartConsentSavePending(true);
+                            } else {
+                                setSmartConsentSavePending(false);
+                            }
+                        } catch {
+                            setSmartConsentSavePending(true);
+                        }
+                    }}
+                />
 
                 {/* Footer Controls (Simplificado / Oculto) */}
                 <div className="mt-8 flex flex-col items-center gap-6">

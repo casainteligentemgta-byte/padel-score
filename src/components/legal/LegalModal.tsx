@@ -1,0 +1,155 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Check, X } from 'lucide-react';
+import { SMART_CONSENT_LEGAL_VERSION } from '@/lib/legal/smartConsent';
+
+export type LegalModalProps = {
+  open: boolean;
+  onClose: () => void;
+  onAccept: () => Promise<void> | void;
+  loading?: boolean;
+  title?: string;
+};
+
+const LEGAL_TEXT = {
+  title: 'Contrato de Adhesión y Exoneración de Responsabilidad',
+  intro:
+    'Al marcar y aceptar este contrato, declaras haber leído y comprendido los términos de Smart Padel, y aceptas participar en los torneos y actividades de la plataforma bajo las condiciones aquí descritas.',
+  sections: [
+    {
+      h: '1. Adhesión y participación',
+      p: 'Este documento constituye un contrato de adhesión aplicable a tu participación en torneos y actividades gestionadas por Smart Padel. La aceptación es voluntaria y necesaria para el acceso a funciones del sistema, incluidos ranking y participación.',
+    },
+    {
+      h: '2. Condiciones físicas y exoneración',
+      p: 'Declara el participante estar en condiciones físicas óptimas para la práctica de alta competencia. El participante libera irrevocablemente a Smart Padel, a sus organizadores y patrocinadores de toda responsabilidad por lesiones, accidentes o percances médicos ocurridos durante la competencia o en las instalaciones.',
+    },
+    {
+      h: '3. Protección de datos personales',
+      p: 'Al aceptar, autorizas el tratamiento de tus datos personales con la finalidad de gestionar tu participación, comunicarte información de torneos y administrarte dentro de la plataforma. No se venderán tus datos a terceros.',
+    },
+    {
+      h: '4. Imagen y material audiovisual',
+      p: 'Autorizas el uso de tu nombre e imagen (fotos/videos) con fines promocionales y de transmisión asociada a torneos de Smart Padel, de acuerdo con la Política de Privacidad publicada en la plataforma.',
+    },
+    {
+      h: '5. Conducta deportiva',
+      p: 'Te comprometes a mantener un espíritu de Fair Play. Conductas antideportivas o incumplimientos pueden implicar la suspensión de acceso a funciones o la expulsión del evento.',
+    },
+    {
+      h: '6. Versión y vigencia',
+      p: 'La versión vigente de este contrato corresponde a la publicada en Smart Padel. Si existen actualizaciones, te será requerida una nueva aceptación.',
+    },
+  ],
+};
+
+export default function LegalModal({
+  open,
+  onClose,
+  onAccept,
+  loading = false,
+  title,
+}: LegalModalProps) {
+  const [localLoading, setLocalLoading] = useState(false);
+
+  const effectiveLoading = loading || localLoading;
+
+  const shownTitle = useMemo(() => title || LEGAL_TEXT.title, [title]);
+
+  const handleAccept = async () => {
+    if (effectiveLoading) return;
+    try {
+      setLocalLoading(true);
+      await onAccept();
+    } finally {
+      setLocalLoading(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-[260] flex items-center justify-center px-4 py-6">
+          <motion.button
+            type="button"
+            aria-label="Cerrar"
+            className="absolute inset-0 bg-black/90"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.98 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="relative z-[261] w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/10 bg-[#0a0a0a] shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-white/10 p-5">
+              <div className="min-w-0">
+                <h3 className="text-lg font-black uppercase italic tracking-tight text-white">
+                  {shownTitle}
+                </h3>
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                  Versión: {SMART_CONSENT_LEGAL_VERSION}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 hover:bg-white/10 border border-white/10"
+              >
+                <X className="h-5 w-5 text-zinc-300" />
+              </button>
+            </div>
+
+            <div className="max-h-[min(70vh,640px)] overflow-y-auto px-5 py-4">
+              <p className="text-sm leading-relaxed text-zinc-400 [text-wrap:pretty]">
+                {LEGAL_TEXT.intro}
+              </p>
+
+              <div className="mt-5 space-y-6">
+                {LEGAL_TEXT.sections.map((s, idx) => (
+                  <section key={idx}>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-[#ccff00]">
+                      {s.h}
+                    </h4>
+                    <p className="mt-2 text-sm leading-relaxed text-zinc-400 [text-wrap:pretty]">
+                      {s.p}
+                    </p>
+                  </section>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-white/10 p-5">
+              <p className="text-[10px] text-zinc-500 leading-relaxed">
+                Al aceptar, se registra tu consentimiento en la tabla <span className="text-zinc-300">profiles</span>.
+              </p>
+              <button
+                type="button"
+                disabled={effectiveLoading}
+                onClick={() => void handleAccept()}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#ccff00] px-5 py-3 text-sm font-black uppercase italic tracking-wide text-black shadow-[0_0_24px_rgba(204,255,0,0.25)] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {effectiveLoading ? (
+                  'Guardando…'
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Aceptar
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+

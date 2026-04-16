@@ -83,7 +83,8 @@ export function BiometricCapture({
             );
         }).catch((err) => {
             console.error(err);
-            alert('No se pudo guardar la captura. Revisa el bucket legal_vault en Supabase.');
+            const msg = err instanceof Error ? err.message : String(err);
+            alert(`No se pudo guardar la captura. ${msg}`);
             onCapturedPath(null);
         });
 

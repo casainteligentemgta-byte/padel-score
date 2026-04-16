@@ -18,7 +18,8 @@ import {
     Activity,
     Smartphone,
     Brain,
-    Sparkles
+    Sparkles,
+    Building2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -72,6 +73,15 @@ export default function AdminHubPage() {
             color: "from-purple-500/20 to-purple-500/5",
             borderColor: "border-purple-500/30",
             iconColor: "text-purple-400"
+        },
+        {
+            title: "Gestión de Sedes",
+            desc: "CRUD de clubes, branding y canchas",
+            icon: Building2,
+            href: "/admin/sedes",
+            color: "from-yellow-500/20 to-yellow-500/5",
+            borderColor: "border-yellow-500/30",
+            iconColor: "text-yellow-300"
         },
         {
             title: "Validación de Pagos",

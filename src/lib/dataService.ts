@@ -66,6 +66,10 @@ const generateUniqueCode = () => {
 export type AdminSettings = {
     clubName?: string;
     appTitle?: string;
+    /** Datos de facturación/transferencia del club (opcional, si existen columnas en admin_settings). */
+    clubRif?: string | null;
+    clubBank?: string | null;
+    clubPhone?: string | null;
     timezone?: string;
     updatedAt?: any;
     /** Versión global de términos (Smart-Legal), si existe columna en admin_settings */
@@ -98,6 +102,25 @@ export type InscriptionData = {
     legalSignaturePath?: string | null;
     legalBiometricPath?: string | null;
     acceptedTermsVersion?: string | null;
+};
+
+export type VenueRecord = {
+    id: string;
+    name: string;
+    slug: string;
+    rif?: string | null;
+    contact?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    instagram?: string | null;
+    city?: string | null;
+    courtsCount: number;
+    logoUrl?: string | null;
+    brandPrimary?: string | null;
+    brandSecondary?: string | null;
+    isActive: boolean;
+    createdAt?: string;
+    updatedAt?: string;
 };
 
 function sanitizeObject(obj: any): any {
@@ -1183,6 +1206,9 @@ export const dataService = {
             acceptedTermsVersion: data.accepted_terms_version ?? null,
             signatureUrl: data.signature_url ?? null,
             biometricPhotoUrl: data.biometric_photo_url ?? null,
+            statusLegal: data.status_legal ?? null,
+            legalVersion: data.legal_version ?? null,
+            legalTimestamp: data.legal_timestamp ?? null,
         };
     },
 
@@ -1663,23 +1689,42 @@ export const dataService = {
     },
 
     async getAdminSettings(): Promise<AdminSettings | null> {
-        try {
-            const c = getSupabaseClient();
-            if (!c) return null;
-            const { data, error } = await c.from('admin_settings').select('*').eq('id', 1).maybeSingle();
+        const c = getSupabaseClient();
+        if (!c) return null;
+
+        // Preferimos `app_settings` (como pide el spec), pero mantenemos compatibilidad
+        // con `admin_settings` (estructura actual en tu base de código).
+        const fetchFrom = async (table: 'app_settings' | 'admin_settings') => {
+            const { data, error } = await c.from(table).select('*').eq('id', 1).maybeSingle();
             if (error || !data) return null;
             return {
-                appTitle: data.app_title,
-                clubName: data.club_name,
-                timezone: data.timezone,
-                updatedAt: data.updated_at,
-                termsVersion: (data as { terms_version?: string }).terms_version ?? undefined,
-                publicidadDossierDriveId: (data as { publicidad_dossier_drive_id?: string | null }).publicidad_dossier_drive_id ?? null,
-            };
-        } catch (e) {
-            console.warn('[dataService] Error al obtener admin_settings (posiblemente la tabla no existe):', e);
-            return null;
+                appTitle: (data as any).app_title,
+                clubName: (data as any).club_name,
+                clubRif: (data as any).club_rif ?? (data as any).rif ?? null,
+                clubBank: (data as any).club_bank ?? (data as any).bank ?? null,
+                clubPhone: (data as any).club_phone ?? (data as any).telefono ?? (data as any).phone ?? null,
+                timezone: (data as any).timezone ?? 'America/Caracas',
+                updatedAt: (data as any).updated_at,
+                termsVersion: (data as any).terms_version ?? undefined,
+                publicidadDossierDriveId: (data as any).publicidad_dossier_drive_id ?? null,
+            } satisfies AdminSettings;
+        };
+
+        try {
+            const app = await fetchFrom('app_settings');
+            if (app) return app;
+        } catch {
+            // ignore y probamos fallback
         }
+
+        try {
+            const admin = await fetchFrom('admin_settings');
+            if (admin) return admin;
+        } catch (e) {
+            console.warn('[dataService] Error al obtener settings:', e);
+        }
+
+        return null;
     },
 
     async setAdminSettings(data: Partial<AdminSettings>): Promise<void> {
@@ -2465,6 +2510,82 @@ export const dataService = {
             console.warn('[dataService] getPublicidadByCancha exception:', e);
             return [];
         }
+    },
+    async listVenues(): Promise<VenueRecord[]> {
+        const { data, error } = await supabase()
+            .from('venues')
+            .select('*')
+            .order('created_at', { ascending: false });
+        throwIfError(error);
+        return (data || []).map((v: any) => ({
+            id: String(v.id),
+            name: String(v.name ?? ''),
+            slug: String(v.slug ?? ''),
+            rif: v.rif ?? null,
+            contact: v.contact ?? null,
+            phone: v.phone ?? null,
+            email: v.email ?? null,
+            instagram: v.instagram ?? null,
+            city: v.city ?? null,
+            courtsCount: Number(v.courts_count ?? 0),
+            logoUrl: v.logo_url ?? null,
+            brandPrimary: v.brand_primary ?? null,
+            brandSecondary: v.brand_secondary ?? null,
+            isActive: v.is_active !== false,
+            createdAt: v.created_at,
+            updatedAt: v.updated_at,
+        }));
+    },
+    async isVenueSlugAvailable(slug: string, excludeId?: string): Promise<boolean> {
+        let q = supabase().from('venues').select('id').eq('slug', slug).limit(1);
+        if (excludeId) q = q.neq('id', excludeId);
+        const { data, error } = await q;
+        throwIfError(error);
+        return !data || data.length === 0;
+    },
+    async createVenue(payload: Omit<VenueRecord, 'id' | 'createdAt' | 'updatedAt'>) {
+        const row = {
+            name: sanitizeString(payload.name),
+            slug: sanitizeString(payload.slug),
+            rif: sanitizeString(payload.rif),
+            contact: sanitizeString(payload.contact),
+            phone: sanitizeString(payload.phone),
+            email: sanitizeString(payload.email),
+            instagram: sanitizeString(payload.instagram),
+            city: sanitizeString(payload.city),
+            courts_count: Number(payload.courtsCount || 0),
+            logo_url: sanitizeString(payload.logoUrl),
+            brand_primary: sanitizeString(payload.brandPrimary),
+            brand_secondary: sanitizeString(payload.brandSecondary),
+            is_active: payload.isActive !== false,
+            created_at: now(),
+            updated_at: now(),
+        };
+        const { data, error } = await supabase().from('venues').insert(row).select('*').single();
+        throwIfError(error);
+        return data;
+    },
+    async updateVenue(id: string, payload: Partial<Omit<VenueRecord, 'id' | 'createdAt' | 'updatedAt'>>) {
+        const row: Record<string, unknown> = { updated_at: now() };
+        if (payload.name !== undefined) row.name = sanitizeString(payload.name);
+        if (payload.slug !== undefined) row.slug = sanitizeString(payload.slug);
+        if (payload.rif !== undefined) row.rif = sanitizeString(payload.rif);
+        if (payload.contact !== undefined) row.contact = sanitizeString(payload.contact);
+        if (payload.phone !== undefined) row.phone = sanitizeString(payload.phone);
+        if (payload.email !== undefined) row.email = sanitizeString(payload.email);
+        if (payload.instagram !== undefined) row.instagram = sanitizeString(payload.instagram);
+        if (payload.city !== undefined) row.city = sanitizeString(payload.city);
+        if (payload.courtsCount !== undefined) row.courts_count = Number(payload.courtsCount || 0);
+        if (payload.logoUrl !== undefined) row.logo_url = sanitizeString(payload.logoUrl);
+        if (payload.brandPrimary !== undefined) row.brand_primary = sanitizeString(payload.brandPrimary);
+        if (payload.brandSecondary !== undefined) row.brand_secondary = sanitizeString(payload.brandSecondary);
+        if (payload.isActive !== undefined) row.is_active = payload.isActive === true;
+        const { error } = await supabase().from('venues').update(row).eq('id', id);
+        throwIfError(error);
+    },
+    async deleteVenue(id: string) {
+        const { error } = await supabase().from('venues').delete().eq('id', id);
+        throwIfError(error);
     },
 };
 

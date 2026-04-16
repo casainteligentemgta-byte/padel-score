@@ -8,9 +8,11 @@ import { dataService } from '@/lib/dataService';
 import Sidebar from '@/components/Sidebar';
 import { BackButton } from '@/components/BackButton';
 import { LegalContainer } from '@/components/legal/LegalContainer';
+import LegalModal from '@/components/legal/LegalModal';
 import PaymentInfo from '@/components/PaymentInfo';
 import AutoShrinkName from '@/components/AutoShrinkName';
 import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
+import { getAuthHeaders } from '@/lib/apiAuth';
 import {
     ArrowLeft,
     CheckCircle2,
@@ -120,12 +122,15 @@ export default function InscribirmePage() {
     const tournamentId = useRouteSegment('id');
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { user, profile, loading: authLoading } = useAuth();
+    const { user, profile, loading: authLoading, refreshProfile } = useAuth();
     const [tournament, setTournament] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
     const [acceptTerms, setAcceptTerms] = useState(false);
+    const [smartConsentAccepted, setSmartConsentAccepted] = useState(false);
+    const [smartConsentModalOpen, setSmartConsentModalOpen] = useState(false);
+    const [smartConsentSaving, setSmartConsentSaving] = useState(false);
     const [legalArtifacts, setLegalArtifacts] = useState<{
         signaturePath: string | null;
         biometricPath: string | null;
@@ -232,6 +237,12 @@ export default function InscribirmePage() {
         });
         return () => { cancelled = true; };
     }, [user?.uid]);
+
+    // Smart Consent: si el usuario ya aceptó, precargamos el checkbox.
+    useEffect(() => {
+        const ok = profile?.status_legal === 'accepted' || profile?.statusLegal === 'accepted';
+        if (ok) setSmartConsentAccepted(true);
+    }, [profile?.status_legal, profile?.statusLegal]);
 
     useEffect(() => {
         if (!tournamentId) return;
@@ -521,8 +532,8 @@ export default function InscribirmePage() {
             setError(partnerError || 'Debes buscar y confirmar a tu pareja usando su código de 6 dígitos.');
             return;
         }
-        if (!acceptTerms || !legalArtifacts) {
-            setError('Debes completar lectura, firma (o validación facial) y aceptación de los términos de inscripción.');
+        if (!acceptTerms || !legalArtifacts || !smartConsentAccepted) {
+            setError('Debes completar lectura, firma (o validación facial) y aceptación del Contrato de Adhesión (Smart Consent).');
             return;
         }
 
@@ -1202,6 +1213,35 @@ export default function InscribirmePage() {
 
                                     {wizardStep === termsStepIndex && (
                                         <section className="mb-4 min-w-0">
+                                            <div className="mb-3">
+                                                <label className="flex items-start gap-3 cursor-pointer select-none">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={smartConsentAccepted}
+                                                        onChange={(e) => {
+                                                            if (!e.target.checked) {
+                                                                setSmartConsentAccepted(false);
+                                                                return;
+                                                            }
+                                                            setSmartConsentModalOpen(true);
+                                                        }}
+                                                        className="mt-1 w-5 h-5 rounded border-white/10 accent-[#ccff00]"
+                                                    />
+                                                    <div className="min-w-0">
+                                                        <p className="text-xs font-bold text-white/90 leading-snug">
+                                                            Acepto el Contrato de Adhesión y Exoneración de Responsabilidad
+                                                        </p>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSmartConsentModalOpen(true)}
+                                                            className="mt-1 text-[11px] font-black uppercase tracking-widest text-[#ccff00]/90 hover:underline"
+                                                        >
+                                                            Ver contrato
+                                                        </button>
+                                                    </div>
+                                                </label>
+                                            </div>
+
                                             <LegalContainer
                                                 type="inscription"
                                                 userId={user?.uid}
@@ -1219,6 +1259,34 @@ export default function InscribirmePage() {
                                                         version: p.version,
                                                     });
                                                     setAcceptTerms(true);
+                                                }}
+                                            />
+
+                                            <LegalModal
+                                                open={smartConsentModalOpen}
+                                                onClose={() => setSmartConsentModalOpen(false)}
+                                                loading={smartConsentSaving}
+                                                onAccept={async () => {
+                                                    setSmartConsentSaving(true);
+                                                    try {
+                                                        const headers = await getAuthHeaders();
+                                                        const res = await fetch('/api/legal/accept', {
+                                                            method: 'POST',
+                                                            headers: { ...headers, 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify({}),
+                                                        });
+                                                        if (!res.ok) {
+                                                            throw new Error('No autorizado o error al guardar el consentimiento.');
+                                                        }
+                                                        setSmartConsentAccepted(true);
+                                                        setSmartConsentModalOpen(false);
+                                                        setError(null);
+                                                        await refreshProfile();
+                                                    } catch (err: any) {
+                                                        setError(err?.message || 'Error al guardar Smart Consent.');
+                                                    } finally {
+                                                        setSmartConsentSaving(false);
+                                                    }
                                                 }}
                                             />
                                         </section>
@@ -1254,7 +1322,7 @@ export default function InscribirmePage() {
                                                     <button
                                                         type="button"
                                                         onClick={() => void handleSubmit()}
-                                                        disabled={submitting || selectedCategories.size === 0 || !acceptTerms || !legalArtifacts}
+                                                        disabled={submitting || selectedCategories.size === 0 || !acceptTerms || !legalArtifacts || !smartConsentAccepted}
                                                         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ccff00] py-3.5 text-sm font-black uppercase text-black disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[220px]"
                                                     >
                                                         {submitting ? (

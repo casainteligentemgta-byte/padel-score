@@ -22,6 +22,7 @@ import { getAuthHeaders } from '@/lib/apiAuth';
 import BouncingBall from '@/components/BouncingBall';
 import InvitationManager from '@/components/InvitationManager';
 import { buildPizarraConceptHref } from '@/app/tournaments/event/components/MatchCards';
+import { PuntitoIA } from '@/components/PuntitoIA';
 
 export default function HubPage() {
     const { user, profile, logout, loading: authLoading, isAdmin, profileLoading, refreshProfile } = useAuth();
@@ -253,6 +254,10 @@ export default function HubPage() {
 
     const photoUrl = player?.photo ?? user?.photoURL ?? null;
 
+    const smartConsentAccepted =
+        profile?.status_legal === 'accepted' ||
+        profile?.statusLegal === 'accepted';
+
     return (
         <div
             className="relative flex min-h-0 w-full flex-1 flex-col items-stretch overflow-x-hidden overflow-y-auto bg-[#080808] font-outfit text-white sm:min-h-0
@@ -260,6 +265,14 @@ export default function HubPage() {
             pt-[max(0.25rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]
             sm:pl-4 sm:pr-4 sm:pt-4 sm:pb-4"
         >
+            {!profileLoading && profile && !smartConsentAccepted && (
+                <PuntitoIA
+                    type="pro_player"
+                    celebrate={false}
+                    idle={false}
+                    message="¡Epa! Firma tu ficha para poder entrar en el ranking"
+                />
+            )}
             {/* Sidebar removed for minimalist view on Hub */}
 
             {/* Background Decorative Elements */}

@@ -95,7 +95,8 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
             });
         } catch (e) {
             console.error(e);
-            alert('Error al guardar la firma. Comprueba el bucket legal_vault y las políticas RLS.');
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Error al guardar la firma. ${msg}`);
         } finally {
             setSubmitting(false);
         }

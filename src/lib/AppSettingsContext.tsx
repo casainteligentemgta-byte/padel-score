@@ -8,6 +8,9 @@ const DEFAULTS = { appTitle: 'Smart Padel', clubName: '' };
 type AppSettingsContextValue = {
     appTitle: string;
     clubName: string;
+    clubRif?: string | null;
+    clubBank?: string | null;
+    clubPhone?: string | null;
     timezone: string;
     loading: boolean;
     refresh: () => Promise<void>;
@@ -31,6 +34,9 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
             setSettings({
                 appTitle: data?.appTitle || DEFAULTS.appTitle,
                 clubName: data?.clubName ?? DEFAULTS.clubName,
+                clubRif: (data as any)?.clubRif ?? (data as any)?.club_rif ?? null,
+                clubBank: (data as any)?.clubBank ?? (data as any)?.club_bank ?? null,
+                clubPhone: (data as any)?.clubPhone ?? (data as any)?.club_phone ?? null,
                 timezone: data?.timezone ?? ''
             });
         } catch {
@@ -49,6 +55,9 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     const value: AppSettingsContextValue = {
         appTitle: settings.appTitle ?? DEFAULTS.appTitle,
         clubName: settings.clubName ?? DEFAULTS.clubName,
+        clubRif: settings.clubRif ?? null,
+        clubBank: settings.clubBank ?? null,
+        clubPhone: settings.clubPhone ?? null,
         timezone: settings.timezone ?? '',
         loading,
         refresh: load
