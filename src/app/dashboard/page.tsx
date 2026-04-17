@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Home, Trophy, Medal, User, QrCode, X, Swords, TrendingUp, Flame } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/AuthContext';
@@ -17,6 +17,7 @@ type RecentMatch = {
 
 export default function DashboardPage() {
     const router = useRouter();
+    const pathname = usePathname();
     const { user, profile, loading: authLoading } = useAuth();
     const [qrOpen, setQrOpen] = useState(false);
     const [loadingData, setLoadingData] = useState(true);
@@ -135,7 +136,7 @@ export default function DashboardPage() {
     }
 
     return (
-        <div className="min-h-dvh bg-[#000000] text-white pb-24">
+        <div className="min-h-dvh bg-[#000000] text-white pb-8">
             <main className="mx-auto max-w-md px-4 pt-6">
                 <header className="mb-6 rounded-3xl border border-[#CCFF00]/20 bg-[#121212] p-4">
                     <div className="flex w-full flex-col items-center text-center">
@@ -174,6 +175,38 @@ export default function DashboardPage() {
                     <StatCard icon={<Flame className="h-4 w-4" />} label="Racha" value={loadingData ? '...' : stats.streak} />
                 </section>
 
+                <nav
+                    className="mb-4 rounded-2xl border border-white/10 bg-[#0B0B0B]/95 p-1.5 shadow-inner backdrop-blur-sm"
+                    aria-label="Navegación principal"
+                >
+                    <div className="grid grid-cols-4 gap-0.5">
+                        <NavItem
+                            icon={<Home className="h-5 w-5" />}
+                            label="Inicio"
+                            active={pathname === '/dashboard'}
+                            onClick={() => router.push('/dashboard')}
+                        />
+                        <NavItem
+                            icon={<User className="h-5 w-5" />}
+                            label="Perfil"
+                            active={pathname.startsWith('/mi-cuenta')}
+                            onClick={() => router.push('/mi-cuenta')}
+                        />
+                        <NavItem
+                            icon={<Trophy className="h-5 w-5" />}
+                            label="Torneos"
+                            active={pathname === '/tournaments' || pathname.startsWith('/tournaments/')}
+                            onClick={() => router.push('/tournaments')}
+                        />
+                        <NavItem
+                            icon={<Medal className="h-5 w-5" />}
+                            label="Ranking"
+                            active={pathname.startsWith('/ranking')}
+                            onClick={() => router.push('/ranking')}
+                        />
+                    </div>
+                </nav>
+
                 <section className="rounded-3xl border border-white/10 bg-[#121212] p-4">
                     <h2 className="mb-3 text-sm font-black uppercase tracking-wider text-[#CCFF00]">
                         Actividad Reciente
@@ -203,15 +236,6 @@ export default function DashboardPage() {
                     </div>
                 </section>
             </main>
-
-            <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0B0B0B]/95 backdrop-blur">
-                <div className="mx-auto grid max-w-md grid-cols-4 px-2 py-2">
-                    <NavItem icon={<Home className="h-5 w-5" />} label="Inicio" active onClick={() => router.push('/dashboard')} />
-                    <NavItem icon={<Trophy className="h-5 w-5" />} label="Torneos" onClick={() => router.push('/tournaments')} />
-                    <NavItem icon={<Medal className="h-5 w-5" />} label="Ranking" onClick={() => router.push('/ranking')} />
-                    <NavItem icon={<User className="h-5 w-5" />} label="Perfil" onClick={() => router.push('/mi-cuenta')} />
-                </div>
-            </nav>
 
             {qrOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
