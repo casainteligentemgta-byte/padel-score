@@ -170,6 +170,11 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
                             if (p) setCelebrate(true);
                         }}
                     />
+                    {bioPath && (
+                        <p className="mt-2 text-center text-[10px] font-bold uppercase tracking-wide text-[#ccff00]">
+                            Validación facial guardada
+                        </p>
+                    )}
                 </div>
 
                 <button

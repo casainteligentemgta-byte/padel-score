@@ -30,7 +30,7 @@ export default async function PublicPlayerProfilePage({ params }: PageProps) {
       <div className="absolute top-0 right-0 h-[420px] w-[420px] rounded-full bg-padel-primary/5 blur-[120px] pointer-events-none" />
       <div className="relative z-10 mx-auto max-w-3xl px-6 py-10 pb-20">
         <Link
-          href="/hub"
+          href="/dashboard"
           className="mb-8 inline-flex text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-padel-primary transition-colors"
         >
           ← Volver

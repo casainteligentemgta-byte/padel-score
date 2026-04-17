@@ -58,6 +58,7 @@ export default function MarkerControlPage() {
         j4: '',
     });
     const [showJugadoresEdit, setShowJugadoresEdit] = useState(false);
+    const [finishPressCount, setFinishPressCount] = useState(0);
     const finishedLockRef = useRef(false);
     const lastFinishedCheckRef = useRef<{ at: number; finished: boolean }>({ at: 0, finished: false });
 
@@ -426,9 +427,14 @@ export default function MarkerControlPage() {
         }
     };
 
+    useEffect(() => {
+        if (finishPressCount <= 0) return;
+        const t = window.setTimeout(() => setFinishPressCount(0), 5000);
+        return () => window.clearTimeout(t);
+    }, [finishPressCount]);
+
     // ── Desactivar partido ──────────────────────────────────────────────────
-    const handleDesactivar = async () => {
-        if (!confirm('¿Terminar el partido y poner la cancha en espera?')) return;
+    const executeFinishMatch = async () => {
         const curData = canchaDataRef.current || {};
         const curMarcador = curData.marcador;
         
@@ -498,7 +504,19 @@ export default function MarkerControlPage() {
             }
         } catch (err) {
             console.error('[Marker] Error desactivando cancha:', err);
+            alert('No se pudo terminar el partido. Revisa la conexión e inténtalo nuevamente.');
         }
+    };
+
+    const handleDesactivar = async () => {
+        if (!isEnVivo || !marcador) return;
+        const nextCount = finishPressCount + 1;
+        setFinishPressCount(nextCount);
+        if (nextCount < 3) {
+            return;
+        }
+        setFinishPressCount(0);
+        await executeFinishMatch();
     };
 
     // ── Operaciones de puntos (Supabase pizarra_cancha_state) ────────────────
@@ -2091,7 +2109,9 @@ export default function MarkerControlPage() {
                             className="w-full py-4 rounded-2xl font-black uppercase italic tracking-widest text-xs flex items-center justify-center gap-3 bg-red-500/10 border-2 border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all"
                         >
                             <Square className="w-4 h-4" />
-                            TERMINAR PARTIDO
+                            {finishPressCount > 0
+                                ? `CONFIRMAR (${finishPressCount}/3)`
+                                : 'TERMINAR PARTIDO (3 TOQUES)'}
                         </button>
                     </div>
                 )}

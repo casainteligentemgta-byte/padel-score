@@ -121,7 +121,7 @@ export default function PlayerProfilePage() {
 
             {/* Back Button Fixed Below Menu */}
             <div className="fixed top-24 left-6 z-[100]">
-                <BackButton href="/hub" />
+                <BackButton href="/dashboard" />
             </div>
 
             {/* Background Decorative Elements */}

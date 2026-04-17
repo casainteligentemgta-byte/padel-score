@@ -1526,6 +1526,9 @@ export default function FullScreenDisplay() {
 
     // ── Valores del marcador: preferir RTDB si hay marcador en vivo ──────────
     const lm = liveMarcador;
+    const asistenciaMedicaActiva = Boolean(lm?.asistencia_medica_active);
+    const mesaTecnicaActiva = Boolean(lm?.mesa_tecnica_active);
+    const overlayCriticoActivo = asistenciaMedicaActiva || mesaTecnicaActiva;
 
     /** Nombres que envía el marcador del partido (mismo criterio que la grilla / score) */
     const splitLiveTeamNombre = (nombre: string | undefined, fp1: string, fp2: string) => {
@@ -1764,6 +1767,32 @@ export default function FullScreenDisplay() {
             className={`min-h-screen h-screen w-screen text-white overflow-hidden font-outfit relative flex flex-col transition-colors duration-1000 ${isFinal ? 'bg-[#000] border-8 border-[#FFD700]/20' : 'bg-[#050505]'}`}
             style={{ padding: 'clamp(6px,1vh,16px) clamp(8px,1.2vw,20px)', gap: 'clamp(4px,0.8vh,12px)' }}
         >
+            {overlayCriticoActivo && (
+                <div className="pointer-events-none fixed inset-0 z-[520] flex items-center justify-center bg-black/86 px-8">
+                    <div
+                        className={`w-full max-w-6xl rounded-[2.5rem] border-2 px-8 py-12 text-center ${
+                            asistenciaMedicaActiva
+                                ? 'border-red-400/80 bg-red-500/22'
+                                : 'border-padel-primary/65 bg-padel-primary/14'
+                        }`}
+                    >
+                        <p className="text-[13px] font-black uppercase tracking-[0.45em] text-white/75">Alerta de juego</p>
+                        <h2
+                            className={`mt-5 text-[clamp(2.1rem,6.4vw,5.8rem)] font-black italic uppercase leading-[0.92] ${
+                                asistenciaMedicaActiva ? 'text-red-200' : 'text-padel-primary'
+                            }`}
+                        >
+                            {asistenciaMedicaActiva ? 'Asistencia Medica' : 'Mesa Tecnica'}
+                        </h2>
+                        <p className="mt-5 text-[clamp(0.9rem,2.2vw,1.45rem)] font-black uppercase tracking-[0.15em] text-white">
+                            {asistenciaMedicaActiva
+                                ? 'Detener acciones y activar protocolo medico'
+                                : 'Revision tecnica en progreso'}
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <AnimatePresence>
                 {courtTransferBanner && (
                     <motion.div

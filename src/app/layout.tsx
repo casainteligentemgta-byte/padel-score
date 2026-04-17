@@ -6,6 +6,7 @@ import { AppSettingsProvider } from "@/lib/AppSettingsContext";
 import RootErrorBoundary from "./RootErrorBoundary";
 import { InstallAppBanner } from "@/components/InstallAppBanner";
 import { TermsReacceptanceGate } from "@/components/TermsReacceptanceGate";
+import { DevServiceWorkerReset } from "@/components/DevServiceWorkerReset";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -52,6 +53,7 @@ export default function RootLayout({
                     <AuthProvider>
                         <TermsReacceptanceGate>
                             <AppSettingsProvider>
+                                <DevServiceWorkerReset />
                                 <main className="flex min-h-0 w-full flex-1 flex-col">
                                     {children}
                                 </main>

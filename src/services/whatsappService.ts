@@ -200,7 +200,7 @@ export async function sendAdminWelcomeMessage(params: {
   }
 
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://smartpadel.app').replace(/\/+$/, '');
-  const hubUrl = `${appUrl}/hub`;
+  const hubUrl = `${appUrl}/dashboard`;
   const body =
     `🎾 ¡Bienvenido/a ${params.playerName}!\n` +
     `Ya estás cargado/a para ${params.tournamentName} en ANTIGRAVITY Padel Score.\n` +

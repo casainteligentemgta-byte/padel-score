@@ -4,39 +4,47 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import {
     User,
-    Mail,
     Shield,
     RefreshCw,
     Edit3,
-    Save,
-    X,
     Phone,
     Instagram,
     Shirt,
-    Footprints,
     HeartPulse,
     Copy,
     Check,
-    CalendarDays,
     Users,
     LogOut,
     ChevronLeft,
-    Fingerprint
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import Sidebar from '@/components/Sidebar';
 import { BouncingBall } from '@/components/BouncingBall';
 import LoginButton from '@/components/LoginButton';
 import { dataService } from '@/lib/dataService';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { formatDate } from '@/lib/formatters';
 
+/** Tipografía y contenedores unificados (Mi cuenta) */
+const T = {
+    pageTitle: 'text-xl font-black italic uppercase tracking-tighter text-white sm:text-2xl',
+    pageSubtitle: 'mt-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500',
+    section: 'text-[11px] font-black uppercase tracking-[0.2em] text-[#ccff00]',
+    subsectionLabel: 'text-[10px] font-bold uppercase tracking-widest text-zinc-500',
+    body: 'text-sm leading-relaxed text-zinc-300',
+    bodySmall: 'text-xs leading-relaxed text-zinc-400',
+    card: 'rounded-2xl border border-white/10 bg-[#111] sm:rounded-3xl',
+    btnStack: 'flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap',
+    btnPrimary:
+        'inline-flex min-h-[48px] w-full flex-1 items-center justify-center rounded-2xl bg-[#ccff00] px-4 py-3 text-xs font-black uppercase tracking-widest text-black transition-all hover:bg-[#ccff00]/90 active:scale-[0.98] disabled:opacity-50 sm:min-h-0',
+    btnGhost:
+        'inline-flex min-h-[48px] w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase tracking-widest text-red-400 transition-all hover:bg-red-500/10 active:scale-[0.98] disabled:opacity-50 sm:min-h-0 sm:w-auto sm:min-w-[7rem]',
+    fichaNameOneLine:
+        'block w-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-justify font-black uppercase tracking-wide text-white [font-size:clamp(0.65rem,2.5vw+0.35rem,1.125rem)] [text-align-last:center] leading-none sm:text-left sm:[text-align-last:auto]',
+} as const;
+
 export default function MiCuentaPage() {
-    const { user, profile, loading: authLoading, refreshProfile, logout } = useAuth();
+    const { user, loading: authLoading, logout } = useAuth();
     const router = useRouter();
-    const [editOpen, setEditOpen] = useState(false);
-    const [editName, setEditName] = useState('');
-    const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [player, setPlayer] = useState<any | null>(null);
     const [loadingPlayer, setLoadingPlayer] = useState(true);
@@ -44,17 +52,10 @@ export default function MiCuentaPage() {
     const [invitations, setInvitations] = useState<any[]>([]);
     const [loadingInvs, setLoadingInvs] = useState(true);
     const [respondingId, setRespondingId] = useState<string | null>(null);
-    const [passkeySupported, setPasskeySupported] = useState(false);
-    const [biometricLoading, setBiometricLoading] = useState(false);
-    const [biometricMsg, setBiometricMsg] = useState<string>('');
 
     useEffect(() => {
         if (!authLoading && !user) router.replace('/login');
     }, [user, authLoading, router]);
-
-    useEffect(() => {
-        setPasskeySupported(typeof window !== 'undefined' && 'PublicKeyCredential' in window);
-    }, []);
 
     // Cargar ficha de jugador asociada a este usuario (participants.ownerId = uid)
     useEffect(() => {
@@ -140,59 +141,6 @@ export default function MiCuentaPage() {
         }
     };
 
-    const roleLabel = profile?.role === 'admin' ? 'Administrador' : profile?.role === 'marker' ? 'Marcador' : 'Jugador';
-
-    const openEdit = () => {
-        setEditName(profile?.name || user?.displayName || '');
-        setError('');
-        setEditOpen(true);
-    };
-
-    const saveProfile = async () => {
-        const name = editName?.trim();
-        if (!name) {
-            setError('El nombre es obligatorio.');
-            return;
-        }
-        if (!user?.uid) return;
-        setSaving(true);
-        setError('');
-        try {
-            await dataService.setUserProfile(user.uid, { name });
-            const supabase = getSupabaseClient();
-            if (supabase) await supabase.auth.updateUser({ data: { full_name: name, name } });
-            await refreshProfile();
-            setEditOpen(false);
-        } catch (e: any) {
-            setError(e?.message || 'Error al guardar. Intenta de nuevo.');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleEnableBiometric = async () => {
-        const supabase = getSupabaseClient();
-        if (!supabase) {
-            setBiometricMsg('Supabase no está configurado.');
-            return;
-        }
-        setBiometricLoading(true);
-        setBiometricMsg('');
-        try {
-            const authAny = supabase.auth as any;
-            if (typeof authAny.addPasskey !== 'function') {
-                throw new Error('Tu SDK de Supabase no soporta addPasskey en este entorno.');
-            }
-            const { error: addErr } = await authAny.addPasskey();
-            if (addErr) throw addErr;
-            setBiometricMsg('Biometría activada correctamente en este dispositivo.');
-        } catch (e: any) {
-            setBiometricMsg(e?.message || 'No se pudo activar FaceID/TouchID.');
-        } finally {
-            setBiometricLoading(false);
-        }
-    };
-
     if (authLoading) {
         return (
             <div className="min-h-screen bg-black flex items-center justify-center">
@@ -214,72 +162,75 @@ export default function MiCuentaPage() {
 
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative overflow-x-hidden">
-            <div className="flex items-center gap-3 mb-5 flex-shrink-0 pl-4 pr-4 md:pl-10 pt-4 min-w-0">
+            <div className="flex min-w-0 flex-shrink-0 items-center gap-3 px-[max(1rem,env(safe-area-inset-left,0px))] pb-2 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] md:pl-10">
                 <button
                     type="button"
                     onClick={() => router.back()}
-                    className="w-9 h-9 flex-shrink-0 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
+                    className="flex h-10 w-10 flex-shrink-0 touch-manipulation items-center justify-center rounded-full bg-white/5 transition-colors hover:bg-white/10"
                     aria-label="Volver"
                 >
-                    <ChevronLeft className="w-4 h-4 text-gray-300" />
+                    <ChevronLeft className="h-4 w-4 text-zinc-300" />
                 </button>
                 <BouncingBall size={22} />
                 <div className="min-w-0 flex-1">
-                    <h1 className="text-xl sm:text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white truncate">Mi perfil</h1>
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500">Datos de tu cuenta y ficha de jugador</p>
+                    <h1 className={`${T.pageTitle} truncate`}>Mi perfil</h1>
+                    <p className={T.pageSubtitle}>Ficha de jugador</p>
                 </div>
             </div>
-            <main className="ipad-scroll-area flex-1 min-h-0 w-full min-w-0 pl-4 pr-4 md:pl-24 pb-12">
-                <div className="w-full max-w-2xl mx-auto space-y-5 min-w-0">
+            <main className="ipad-scroll-area min-h-0 w-full min-w-0 flex-1 px-[max(1rem,env(safe-area-inset-left,0px))] pb-[max(5.5rem,env(safe-area-inset-bottom,28px))] pr-[max(1rem,env(safe-area-inset-right,0px))] md:pl-24 md:pr-6">
+                <div className="mx-auto min-w-0 w-full max-w-2xl space-y-8">
                     {/* SECCIÓN DE INVITACIONES PENDIENTES */}
                     {!loadingInvs && invitations.length > 0 && (
-                        <div className="space-y-3 w-full min-w-0">
-                            <h2 className="text-[10px] font-black uppercase tracking-widest text-[#ccff00] px-1 flex items-center gap-1.5">
-                                <Users className="w-3.5 h-3.5" /> Invitaciones Pendientes
+                        <section className="min-w-0 space-y-4" aria-labelledby="invitaciones-heading">
+                            <h2 id="invitaciones-heading" className={`${T.section} flex items-center gap-2`}>
+                                <Users className="h-3.5 w-3.5 shrink-0" aria-hidden /> Invitaciones pendientes
                             </h2>
                             {error && (
-                                <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold mb-4">
+                                <div className="rounded-2xl border border-red-500/25 bg-red-500/10 p-4 text-xs font-semibold text-red-400">
                                     {error}
                                 </div>
                             )}
-                            <div className="space-y-3">
+                            <div className="space-y-4">
                                 {invitations.map((inv) => (
-                                    <div key={inv.id} className="bg-[#111] border border-[#ccff00]/20 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
-                                        <div className="absolute top-0 right-0 p-3">
-                                            <div className="bg-[#ccff00]/10 text-[#ccff00] text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-widest">
-                                                Reserva Activa
-                                            </div>
+                                    <div
+                                        key={inv.id}
+                                        className={`${T.card} relative overflow-hidden border-[#ccff00]/25 p-5 shadow-xl sm:p-6`}
+                                    >
+                                        <div className="absolute right-0 top-0 p-3">
+                                            <span className="rounded-full bg-[#ccff00]/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-[#ccff00]">
+                                                Reserva activa
+                                            </span>
                                         </div>
-                                        <div className="flex flex-col gap-4">
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1">
-                                                    {inv.tournament_name || 'Torneo'}
-                                                </p>
-                                                <h3 className="text-lg font-black text-white uppercase italic tracking-tight">
+                                        <div className="flex flex-col gap-4 pr-14 sm:pr-0">
+                                            <div className="space-y-2">
+                                                <p className={`${T.subsectionLabel} text-zinc-500`}>{inv.tournament_name || 'Torneo'}</p>
+                                                <h3 className="text-base font-black uppercase italic tracking-tight text-white sm:text-lg">
                                                     Invitación de {inv.inviter_name}
                                                 </h3>
-                                                <p className="text-xs text-padel-primary font-bold">Categoría: {inv.category}</p>
+                                                <p className={`${T.body} font-semibold text-padel-primary`}>Categoría: {inv.category}</p>
                                             </div>
 
-                                            <div className="bg-white/5 border border-white/10 p-4 rounded-2xl">
-                                                <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Nota importante:</p>
-                                                <p className="text-[11px] text-gray-300 leading-relaxed">
+                                            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                                                <p className={`${T.subsectionLabel} mb-2 text-zinc-500`}>Nota importante</p>
+                                                <p className={T.body}>
                                                     ¡Tienes un lugar reservado! Acepta antes de que expire el tiempo para asegurar tu participación.
                                                 </p>
                                             </div>
 
-                                            <div className="flex gap-2 pt-2">
+                                            <div className={`${T.btnStack} pt-1`}>
                                                 <button
+                                                    type="button"
                                                     onClick={() => handleInvitationResponse(inv.id, 'accepted')}
                                                     disabled={respondingId === inv.id}
-                                                    className="flex-1 py-3 rounded-2xl bg-[#ccff00] text-black font-black uppercase text-[10px] tracking-widest hover:bg-[#ccff00]/90 disabled:opacity-50 transition-all"
+                                                    className={T.btnPrimary}
                                                 >
-                                                    {respondingId === inv.id ? 'Procesando...' : 'Aceptar Inscripción'}
+                                                    {respondingId === inv.id ? 'Procesando…' : 'Aceptar inscripción'}
                                                 </button>
                                                 <button
+                                                    type="button"
                                                     onClick={() => handleInvitationResponse(inv.id, 'rejected')}
                                                     disabled={respondingId === inv.id}
-                                                    className="px-6 py-3 rounded-2xl bg-white/5 text-red-500 font-black uppercase text-[10px] tracking-widest hover:bg-red-500/10 transition-all"
+                                                    className={T.btnGhost}
                                                 >
                                                     Rechazar
                                                 </button>
@@ -288,28 +239,29 @@ export default function MiCuentaPage() {
                                     </div>
                                 ))}
                             </div>
-                        </div>
+                        </section>
                     )}
 
                     {/* Ficha de jugador (si existe en participants) */}
                     {!loadingPlayer && player && (
-                        <div className="w-full max-w-full min-w-0 bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl">
-                            <div className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-5">
-                                <div className="flex flex-wrap items-end justify-between gap-3">
-                                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white/5 overflow-hidden flex items-center justify-center flex-shrink-0 border border-white/10">
+                        <section className={`${T.card} min-w-0 overflow-hidden shadow-xl`} aria-labelledby="ficha-heading">
+                            <div className="space-y-6 p-5 sm:p-6 md:p-8">
+                                <h2 id="ficha-heading" className={`${T.section}`}>
+                                    Ficha de jugador
+                                </h2>
+
+                                <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+                                    <div className="flex min-w-0 gap-4">
+                                        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/5 sm:h-24 sm:w-24">
                                             {player.photo ? (
-                                                <img src={player.photo} alt="" className="w-full h-full object-cover" />
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img src={player.photo} alt="" className="h-full w-full object-cover" />
                                             ) : (
-                                                <User className="w-8 h-8 sm:w-9 sm:h-9 text-gray-600" />
+                                                <User className="h-8 w-8 text-zinc-600 sm:h-9 sm:w-9" />
                                             )}
                                         </div>
-                                        <div className="min-w-0 flex flex-col justify-center flex-1">
-                                            <div className="flex items-center gap-2 leading-tight min-w-0">
-                                                <p className="font-black uppercase tracking-wider text-white truncate text-base sm:text-xl">
-                                                    {player.name} {player.lastName}
-                                                </p>
-                                            </div>
+                                        <div className="min-w-0 flex-1 space-y-2">
+                                            <p className={`${T.fichaNameOneLine} sm:text-lg`}>{player.name} {player.lastName}</p>
                                             {player?.uniqueCode && (
                                                 <button
                                                     type="button"
@@ -322,178 +274,158 @@ export default function MiCuentaPage() {
                                                             setError('No se pudo copiar el código.');
                                                         }
                                                     }}
-                                                    onTouchStart={async () => {
-                                                        try {
-                                                            await navigator.clipboard.writeText(String(player.uniqueCode));
-                                                            setCopied(true);
-                                                            setTimeout(() => setCopied(false), 1600);
-                                                        } catch {
-                                                            setError('No se pudo copiar el código.');
-                                                        }
-                                                    }}
-                                                    className="mt-1 inline-flex w-fit items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 hover:border-padel-primary/40 text-gray-300 hover:text-white transition-all"
-                                                    title="Toca para copiar el código"
+                                                    className="inline-flex max-w-full touch-manipulation items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left transition-all hover:border-padel-primary/40 hover:text-white"
+                                                    title="Copiar código"
                                                 >
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Código:</span>
-                                                    <span className="font-black text-sm sm:text-base tracking-[0.25em] text-white">{player.uniqueCode}</span>
-                                                    {copied ? <Check className="w-3.5 h-3.5 text-padel-primary" /> : <Copy className="w-3.5 h-3.5 text-gray-500" />}
+                                                    <span className={`${T.subsectionLabel} shrink-0 text-zinc-500`}>Código</span>
+                                                    <span className="font-mono text-sm font-black tracking-[0.2em] text-white">{player.uniqueCode}</span>
+                                                    {copied ? <Check className="h-4 w-4 shrink-0 text-padel-primary" /> : <Copy className="h-4 w-4 shrink-0 text-zinc-500" />}
                                                 </button>
                                             )}
-                                            <p className="mt-0.5 text-[9px] font-bold uppercase tracking-widest text-gray-500 flex flex-wrap items-center gap-1.5 leading-tight">
-                                                <span>Posición:</span>
-                                                <span className="text-padel-primary truncate">{player.position || 'Drive / Revés'}</span>
+                                            <p className={`${T.subsectionLabel} flex flex-wrap items-center gap-x-2 gap-y-0.5`}>
+                                                <span>Posición</span>
+                                                <span className="font-semibold text-padel-primary">{player.position || 'Drive / Revés'}</span>
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                                        <div className="flex flex-wrap justify-end gap-1">
-                                            <span className="px-3 py-1 rounded-full bg-padel-primary/10 text-padel-primary text-[11px] font-black uppercase tracking-widest">
-                                                Nivel {player.level ?? 4}
-                                            </span>
-                                        </div>
+
+                                    <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end lg:w-auto lg:flex-col lg:items-stretch">
+                                        <span className="inline-flex w-fit items-center rounded-full bg-padel-primary/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-padel-primary">
+                                            Nivel {player.level ?? 4}
+                                        </span>
                                         <button
+                                            type="button"
                                             onClick={() => router.push(`/players/register?edit=${player.id}`)}
-                                            className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-padel-primary hover:text-black text-gray-300 text-[11px] font-black uppercase tracking-widest transition-all"
+                                            className="inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase tracking-widest text-zinc-200 transition-all hover:border-padel-primary/50 hover:bg-padel-primary hover:text-black sm:min-h-0 lg:w-full"
                                         >
-                                            <Edit3 className="w-3.5 h-3.5" />
-                                            Modificar
+                                            <Edit3 className="h-4 w-4 shrink-0" />
+                                            Modificar ficha
                                         </button>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 border-t border-white/5 pt-3 mt-1 items-end">
-                                    {/* Identificación */}
-                                    <div className="space-y-2 min-w-0 flex flex-col justify-end">
-                                        <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-1.5">
-                                            <Shield className="w-3.5 h-3.5 flex-shrink-0" /> Identificación
+                                <div className="grid grid-cols-1 gap-6 border-t border-white/10 pt-6 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6">
+                                    <div className="min-w-0 space-y-2">
+                                        <p className={`${T.subsectionLabel} flex items-center gap-2`}>
+                                            <Shield className="h-3.5 w-3.5 shrink-0" aria-hidden /> Identificación
                                         </p>
-                                        <div className="text-[11px] sm:text-xs text-gray-300 space-y-0.5 break-words">
-                                            <p className="flex flex-wrap gap-x-1"><span className="font-bold text-white">Cédula:</span> <span className="min-w-0">{player.dni || '—'}</span></p>
-                                            <p className="flex flex-wrap gap-x-1"><span className="font-bold text-white">Fecha nac.:</span> <span>{formatDate(player.birthDate)}</span></p>
+                                        <div className={`${T.body} space-y-1.5 break-words`}>
+                                            <p>
+                                                <span className="font-semibold text-white">Cédula:</span>{' '}
+                                                <span className="text-zinc-300">{player.dni || '—'}</span>
+                                            </p>
+                                            <p>
+                                                <span className="font-semibold text-white">Fecha nac.:</span>{' '}
+                                                <span className="text-zinc-300">{formatDate(player.birthDate)}</span>
+                                            </p>
                                         </div>
                                     </div>
 
-                                    {/* Contacto — al lado de Identificación */}
-                                    <div className="space-y-2 min-w-0 flex flex-col justify-end">
-                                        <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-1.5">
-                                            <Phone className="w-3.5 h-3.5 flex-shrink-0" /> Contacto
+                                    <div className="min-w-0 space-y-2">
+                                        <p className={`${T.subsectionLabel} flex items-center gap-2`}>
+                                            <Phone className="h-3.5 w-3.5 shrink-0" aria-hidden /> Contacto
                                         </p>
-                                        <div className="text-sm sm:text-base text-gray-300 space-y-0.5 break-words">
-                                            <p><span className="font-bold text-white">WhatsApp:</span> {player.phone || '—'}</p>
-                                            <p className="flex items-center gap-1 min-w-0"><Instagram className="w-3 h-3 text-gray-500 flex-shrink-0" /><span className="min-w-0 truncate"><span className="font-bold text-white">IG:</span> {player.instagram ? `@${String(player.instagram).replace('@', '')}` : 'No vinculado'}</span></p>
+                                        <div className={`${T.body} space-y-1.5 break-words`}>
+                                            <p>
+                                                <span className="font-semibold text-white">WhatsApp:</span>{' '}
+                                                <span className="text-zinc-300">{player.phone || '—'}</span>
+                                            </p>
+                                            <p className="flex min-w-0 items-start gap-2">
+                                                <Instagram className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden />
+                                                <span className="min-w-0">
+                                                    <span className="font-semibold text-white">IG:</span>{' '}
+                                                    <span className="text-zinc-300">
+                                                        {player.instagram ? `@${String(player.instagram).replace('@', '')}` : 'No vinculado'}
+                                                    </span>
+                                                </span>
+                                            </p>
                                         </div>
                                     </div>
 
-                                    {/* Tallas */}
-                                    <div className="space-y-2 min-w-0">
-                                        <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-1.5">
-                                            <Shirt className="w-3.5 h-3.5 flex-shrink-0" /> Tallas
+                                    <div className="min-w-0 space-y-2">
+                                        <p className={`${T.subsectionLabel} flex items-center gap-2`}>
+                                            <Shirt className="h-3.5 w-3.5 shrink-0" aria-hidden /> Tallas
                                         </p>
-                                        <div className="text-[11px] sm:text-xs text-gray-300 space-y-1 break-words">
-                                            <p className="flex items-center gap-1 leading-tight"><Shirt className="w-3 h-3 text-gray-500 flex-shrink-0" /><span><span className="font-bold text-white">Franela:</span> {player.suitSize || '—'}</span></p>
-                                            <p className="flex items-center gap-1 leading-tight"><Shirt className="w-3 h-3 text-gray-500 flex-shrink-0" /><span><span className="font-bold text-white">Short:</span> {player.shortSize || '—'}</span></p>
-                                            <p className="flex items-center gap-1 leading-tight"><Footprints className="w-3 h-3 text-gray-500 flex-shrink-0" /><span><span className="font-bold text-white">Calzado:</span> {player.shoeSize || '—'}</span></p>
+                                        <div className={`${T.body} space-y-1.5 break-words`}>
+                                            <p>
+                                                <span className="font-semibold text-white">Franela:</span>{' '}
+                                                <span className="text-zinc-300">{player.suitSize || '—'}</span>
+                                            </p>
+                                            <p>
+                                                <span className="font-semibold text-white">Short:</span>{' '}
+                                                <span className="text-zinc-300">{player.shortSize || '—'}</span>
+                                            </p>
+                                            <p>
+                                                <span className="font-semibold text-white">Calzado:</span>{' '}
+                                                <span className="text-zinc-300">{player.shoeSize || '—'}</span>
+                                            </p>
                                         </div>
                                     </div>
 
-                                    {/* Salud */}
-                                    <div className="space-y-2 min-w-0">
-                                        <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest flex items-center gap-1.5">
-                                            <HeartPulse className="w-3.5 h-3.5 flex-shrink-0" /> Salud
+                                    <div className="min-w-0 space-y-2">
+                                        <p className={`${T.subsectionLabel} flex items-center gap-2`}>
+                                            <HeartPulse className="h-3.5 w-3.5 shrink-0" aria-hidden /> Salud
                                         </p>
-                                        <div className="text-[11px] sm:text-xs text-gray-300 space-y-0.5 break-words">
-                                            <p><span className="font-bold text-white">Sangre:</span> {player.bloodType || '—'}</p>
-                                            <p><span className="font-bold text-white">Alergias:</span> {player.allergies || 'Ninguna'}</p>
-                                            <p><span className="font-bold text-white">Cond. médicas:</span> {player.medicalConditions || 'Ninguna'}</p>
+                                        <div className={`${T.body} space-y-1.5 break-words`}>
+                                            <p>
+                                                <span className="font-semibold text-white">Sangre:</span>{' '}
+                                                <span className="text-zinc-300">{player.bloodType || '—'}</span>
+                                            </p>
+                                            <p>
+                                                <span className="font-semibold text-white">Alergias:</span>{' '}
+                                                <span className="text-zinc-300">{player.allergies || 'Ninguna'}</span>
+                                            </p>
+                                            <p>
+                                                <span className="font-semibold text-white">Cond. médicas:</span>{' '}
+                                                <span className="text-zinc-300">{player.medicalConditions || 'Ninguna'}</span>
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        </section>
                     )}
 
                     {/* Si no hay ficha aún, sugerir registro */}
                     {!loadingPlayer && !player && (
-                        <div className="w-full max-w-full min-w-0 bg-[#111] border border-dashed border-white/15 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 text-center space-y-2.5">
-                            <p className="text-xs sm:text-sm font-bold text-gray-300">Aún no has creado tu ficha de jugador.</p>
-                            <p className="text-[10px] sm:text-[11px] text-gray-500 max-w-md mx-auto">
+                        <section
+                            className={`${T.card} border-dashed border-white/20 p-6 text-center sm:p-8`}
+                            aria-labelledby="sin-ficha-heading"
+                        >
+                            <h2 id="sin-ficha-heading" className={T.section}>
+                                Ficha de jugador
+                            </h2>
+                            <p className={`${T.body} mx-auto mt-4 max-w-md font-medium text-zinc-200`}>
+                                Aún no has creado tu ficha de jugador.
+                            </p>
+                            <p className={`${T.bodySmall} mx-auto mt-2 max-w-md`}>
                                 Completa tu perfil deportivo con tallas, tipo de sangre y datos de contacto para agilizar inscripciones y emergencias médicas.
                             </p>
                             <button
                                 type="button"
                                 onClick={() => router.push('/players/register')}
-                                className="mt-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white text-black font-black text-[10px] uppercase tracking-widest hover:bg-gray-200 active:scale-[0.98] transition-all"
+                                className="mt-6 inline-flex min-h-[48px] w-full max-w-sm touch-manipulation items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-xs font-black uppercase tracking-widest text-black transition-all hover:bg-zinc-200 active:scale-[0.98]"
                             >
                                 Crear ficha de jugador
                             </button>
-                        </div>
+                        </section>
                     )}
-
-                    {/* FaceID / TouchID: oculto por solicitud - {passkeySupported && (...)} */}
                 </div>
 
-                {/* Botón de Cerrar Sesión */}
-                <div className="pt-5 w-full min-w-0">
+                <div className="mx-auto mt-2 w-full max-w-2xl min-w-0 px-0">
                     <button
+                        type="button"
                         onClick={async () => {
                             await logout();
                             router.replace('/login');
                         }}
-                        className="w-full max-w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-red-500/10 text-red-500 font-black uppercase italic tracking-widest text-sm border border-red-500/20 hover:bg-red-500/20 transition-all active:scale-[0.98]"
+                        className="flex w-full min-h-[52px] touch-manipulation items-center justify-center gap-2 rounded-2xl border border-red-500/25 bg-red-500/10 py-3.5 text-sm font-black uppercase italic tracking-widest text-red-400 transition-all hover:bg-red-500/20 active:scale-[0.98]"
                     >
-                        <LogOut className="w-4 h-4 flex-shrink-0" />
-                        Finalizar Sesión
+                        <LogOut className="h-4 w-4 shrink-0" aria-hidden />
+                        Finalizar sesión
                     </button>
                 </div>
             </main>
-
-            {/* Modal editar perfil */}
-            {editOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                    <div className="w-full max-w-md bg-[#1a1a1a] border border-white/10 rounded-3xl p-6 shadow-2xl">
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-lg font-black uppercase italic tracking-tight text-white">Actualizar perfil</h2>
-                            <button
-                                type="button"
-                                onClick={() => !saving && setEditOpen(false)}
-                                className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2">Nombre</label>
-                                <input
-                                    type="text"
-                                    value={editName}
-                                    onChange={(e) => setEditName(e.target.value)}
-                                    placeholder="Tu nombre"
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:border-padel-primary outline-none transition-colors"
-                                />
-                            </div>
-                            {error && <p className="text-xs text-red-400 font-bold">{error}</p>}
-                        </div>
-                        <div className="flex gap-3 mt-6">
-                            <button
-                                type="button"
-                                onClick={saveProfile}
-                                disabled={saving}
-                                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-padel-primary text-black font-black text-xs uppercase tracking-widest hover:bg-padel-primary/90 disabled:opacity-50 transition-all"
-                            >
-                                <Save className="w-4 h-4" /> {saving ? 'Guardando...' : 'Guardar'}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => !saving && setEditOpen(false)}
-                                className="px-6 py-3 rounded-2xl bg-white/5 text-gray-400 font-bold text-xs uppercase tracking-widest hover:bg-white/10 transition-all"
-                            >
-                                Cancelar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

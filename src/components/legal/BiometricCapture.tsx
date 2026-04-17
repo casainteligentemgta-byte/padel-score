@@ -15,6 +15,9 @@ export function BiometricCapture({
 }) {
     const [open, setOpen] = useState(false);
     const [streaming, setStreaming] = useState(false);
+    /** El vídeo ya tiene dimensiones reales (evita captura en negro en móviles/WebViews). */
+    const [videoReady, setVideoReady] = useState(false);
+    const [saving, setSaving] = useState(false);
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -25,6 +28,7 @@ export function BiometricCapture({
             v.srcObject = null;
         }
         setStreaming(false);
+        setVideoReady(false);
     }, []);
 
     const openCamera = async () => {
@@ -33,14 +37,19 @@ export function BiometricCapture({
             return;
         }
         setOpen(true);
+        setVideoReady(false);
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
                 audio: false,
             });
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                await videoRef.current.play();
+            const v = videoRef.current;
+            if (v) {
+                v.srcObject = stream;
+                await v.play();
+                if (v.videoWidth > 0 && v.videoHeight > 0) {
+                    setVideoReady(true);
+                }
             }
             setStreaming(true);
         } catch (e) {
@@ -50,45 +59,67 @@ export function BiometricCapture({
         }
     };
 
+    const onVideoMeta = useCallback(() => {
+        const v = videoRef.current;
+        if (v && v.videoWidth > 0 && v.videoHeight > 0) {
+            setVideoReady(true);
+        }
+    }, []);
+
     const capture = async () => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        if (!video || !canvas || !userId) return;
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
+        if (!video || !canvas || !userId) {
+            alert('No se pudo acceder a la cámara. Cierra e inténtalo de nuevo.');
+            return;
+        }
+        if (!videoReady || (video.videoWidth ?? 0) < 2 || (video.videoHeight ?? 0) < 2) {
+            alert('Espera un momento hasta que se vea la imagen de la cámara y vuelve a pulsar Guardar captura.');
+            return;
+        }
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        canvas.width = w;
+        canvas.height = h;
         const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        if (!ctx) {
+            alert('No se pudo preparar la captura en este dispositivo.');
+            return;
+        }
+        setSaving(true);
+        ctx.drawImage(video, 0, 0, w, h);
         stopStream();
 
-        await new Promise<void>((resolve, reject) => {
-            canvas.toBlob(
-                async (blob) => {
-                    try {
-                        if (!blob) {
-                            onCapturedPath(null);
+        try {
+            await new Promise<void>((resolve, reject) => {
+                canvas.toBlob(
+                    async (blob) => {
+                        try {
+                            if (!blob) {
+                                reject(new Error('No se pudo generar la imagen (blob vacío).'));
+                                return;
+                            }
+                            const { uploadToLegalVault } = await import('@/lib/legal/uploadLegalVault');
+                            const path = await uploadToLegalVault(userId, 'face-validation.jpg', blob, 'image/jpeg');
+                            onCapturedPath(path);
                             resolve();
-                            return;
+                        } catch (err) {
+                            reject(err);
                         }
-                        const { uploadToLegalVault } = await import('@/lib/legal/uploadLegalVault');
-                        const path = await uploadToLegalVault(userId, 'face-validation.jpg', blob, 'image/jpeg');
-                        onCapturedPath(path);
-                        resolve();
-                    } catch (err) {
-                        reject(err);
-                    }
-                },
-                'image/jpeg',
-                0.88
-            );
-        }).catch((err) => {
+                    },
+                    'image/jpeg',
+                    0.88
+                );
+            });
+            setOpen(false);
+        } catch (err) {
             console.error(err);
             const msg = err instanceof Error ? err.message : String(err);
             alert(`No se pudo guardar la captura. ${msg}`);
             onCapturedPath(null);
-        });
-
-        setOpen(false);
+        } finally {
+            setSaving(false);
+        }
     };
 
     const close = () => {
@@ -134,16 +165,27 @@ export function BiometricCapture({
                                 </button>
                             </div>
                             <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-black">
-                                <video ref={videoRef} className="h-full w-full object-cover" playsInline muted />
-                                {!streaming && <div className="absolute inset-0 flex items-center justify-center text-xs text-zinc-500">Iniciando cámara…</div>}
+                                <video
+                                    ref={videoRef}
+                                    className="h-full w-full object-cover"
+                                    playsInline
+                                    muted
+                                    onLoadedMetadata={onVideoMeta}
+                                    onLoadedData={onVideoMeta}
+                                />
+                                {(!streaming || !videoReady) && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/60 px-3 text-center text-xs text-zinc-300">
+                                        {streaming && !videoReady ? 'Preparando imagen…' : 'Iniciando cámara…'}
+                                    </div>
+                                )}
                             </div>
                             <button
                                 type="button"
-                                disabled={!streaming}
+                                disabled={!streaming || !videoReady || saving}
                                 onClick={() => void capture()}
-                                className="mt-4 w-full rounded-2xl bg-[#ccff00] py-3 text-sm font-black uppercase text-black disabled:opacity-40"
+                                className="mt-4 w-full rounded-2xl bg-[#ccff00] py-3 text-sm font-black uppercase text-black disabled:cursor-not-allowed disabled:opacity-40"
                             >
-                                Guardar captura
+                                {saving ? 'Guardando…' : 'Guardar captura'}
                             </button>
                         </motion.div>
                     </div>

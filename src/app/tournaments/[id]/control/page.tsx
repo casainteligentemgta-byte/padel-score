@@ -956,10 +956,18 @@ export default function ControlPanel() {
         return (score[sA] || 99) - (score[sB] || 99);
     });
 
-    const proximosMatches = matches.filter(m => {
-        const s = m.status?.toString().toUpperCase();
-        return (s === 'SCHEDULED' || s === 'PENDING') && (m.court === undefined || m.court === null || m.court === '');
-    });
+    const totalCourtsForQueue = Math.max(
+        1,
+        Number((tournament as any)?.totalCourts || 0) ||
+            (Array.isArray((tournament as any)?.courtNames) ? (tournament as any).courtNames.length : 0) ||
+            Number((tournament as any)?.courtsCount || 0) ||
+            Number((tournament as any)?.courts_count || 0) ||
+            1
+    );
+
+    // "Por comenzar" debe mostrar una ventana dinámica según canchas de la sede.
+    // Cuando uno pasa a EN VIVO, automáticamente entra el siguiente pendiente.
+    const proximosMatches = pendingMatches.slice(0, totalCourtsForQueue);
 
     const progress = matches.length > 0 ? (finishedMatches.length / matches.length) * 100 : 0;
 

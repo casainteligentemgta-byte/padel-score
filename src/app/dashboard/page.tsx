@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Home, Trophy, Medal, User, QrCode, X, Swords, TrendingUp, Flame } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -126,13 +126,6 @@ export default function DashboardPage() {
         };
     }, [user?.uid, user?.photoURL]);
 
-    const greeting = useMemo(() => {
-        const h = new Date().getHours();
-        if (h < 12) return 'Buenos días';
-        if (h < 19) return 'Buenas tardes';
-        return 'Buenas noches';
-    }, []);
-
     if (authLoading || !user) {
         return (
             <div className="min-h-dvh bg-black text-white flex items-center justify-center">
@@ -145,24 +138,24 @@ export default function DashboardPage() {
         <div className="min-h-dvh bg-[#000000] text-white pb-24">
             <main className="mx-auto max-w-md px-4 pt-6">
                 <header className="mb-6 rounded-3xl border border-[#CCFF00]/20 bg-[#121212] p-4">
-                    <div className="flex items-center justify-between gap-4">
-                        <div className="min-w-0">
-                            <p className="text-xs uppercase tracking-widest text-zinc-500">{greeting}</p>
-                            <h1 className="truncate text-xl font-black">
-                                {profile?.name || user.displayName || 'Jugador'}
-                            </h1>
-                            <span className="mt-2 inline-flex rounded-full border border-[#CCFF00]/40 px-2.5 py-1 text-xs font-bold text-[#CCFF00]">
-                                {category}
-                            </span>
-                        </div>
-                        <div className="h-16 w-16 overflow-hidden rounded-2xl border border-[#CCFF00]/40 bg-zinc-900">
+                    <div className="flex w-full flex-col items-center text-center">
+                        <div className="mx-auto h-24 w-24 shrink-0 overflow-hidden rounded-2xl border-2 border-[#CCFF00]/40 bg-zinc-900 shadow-[0_0_24px_rgba(204,255,0,0.12)]">
                             {avatar ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img src={avatar} alt="" className="h-full w-full object-cover" />
                             ) : (
-                                <div className="h-full w-full grid place-items-center text-zinc-500 text-sm">SP</div>
+                                <div className="grid h-full w-full place-items-center text-sm text-zinc-500">SP</div>
                             )}
                         </div>
+                        <h1
+                            className="mt-4 w-full min-w-0 max-w-full truncate px-1 text-center text-lg font-black leading-tight tracking-tight text-white [font-size:clamp(0.75rem,3.2vw+0.35rem,1.125rem)]"
+                            title={profile?.name || user.displayName || 'Jugador'}
+                        >
+                            {profile?.name || user.displayName || 'Jugador'}
+                        </h1>
+                        <span className="mt-3 inline-flex max-w-full rounded-full border border-[#CCFF00]/40 px-3 py-1.5 text-xs font-bold leading-snug text-[#CCFF00]">
+                            {category}
+                        </span>
                     </div>
                 </header>
 
@@ -214,7 +207,7 @@ export default function DashboardPage() {
             <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0B0B0B]/95 backdrop-blur">
                 <div className="mx-auto grid max-w-md grid-cols-4 px-2 py-2">
                     <NavItem icon={<Home className="h-5 w-5" />} label="Inicio" active onClick={() => router.push('/dashboard')} />
-                    <NavItem icon={<Trophy className="h-5 w-5" />} label="Partidos" onClick={() => router.push('/tournaments')} />
+                    <NavItem icon={<Trophy className="h-5 w-5" />} label="Torneos" onClick={() => router.push('/tournaments')} />
                     <NavItem icon={<Medal className="h-5 w-5" />} label="Ranking" onClick={() => router.push('/ranking')} />
                     <NavItem icon={<User className="h-5 w-5" />} label="Perfil" onClick={() => router.push('/mi-cuenta')} />
                 </div>

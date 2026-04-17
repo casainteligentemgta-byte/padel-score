@@ -22,6 +22,7 @@ import { getAuthErrorMessage } from '@/lib/authErrorMessages';
 import { useRouter } from 'next/navigation';
 import BouncingBall from '@/components/BouncingBall';
 import { useAppSettings } from '@/lib/AppSettingsContext';
+import { isAdminAccess } from '@/lib/adminAccess';
 
 export default function HomePage() {
     const { user, isAdmin, loading: authLoading, profileLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
@@ -108,11 +109,8 @@ export default function HomePage() {
             } else {
                 await signUpWithEmail(formData.email, formData.password, formData.name);
             }
-            if (isAdmin) {
-                router.push('/admin');
-            } else {
-                router.push('/dashboard');
-            }
+            const shouldGoAdmin = isAdmin || isAdminAccess(undefined, formData.email);
+            router.push(shouldGoAdmin ? '/admin' : '/dashboard');
 
         } catch (err: any) {
             setError(getAuthErrorMessage(err));

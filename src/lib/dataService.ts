@@ -1232,6 +1232,31 @@ export const dataService = {
             row.biometric_photo_url = payload.biometricPhotoPath;
         }
         const { error } = await supabase().from('profiles').update(row).eq('id', uid);
+        if (!error) return;
+
+        const msg = String((error as { message?: string }).message ?? '');
+        const code = (error as { code?: string }).code;
+        const missingAcceptedTermsCol =
+            code === 'PGRST204' ||
+            code === '42703' ||
+            /accepted_terms_version/i.test(msg) ||
+            /accepted terms version/i.test(msg);
+
+        if (missingAcceptedTermsCol) {
+            const fallback: Record<string, unknown> = { updated_at: now() };
+            if (payload.signaturePath !== undefined) fallback.signature_url = payload.signaturePath;
+            if (payload.biometricPhotoPath !== undefined) fallback.biometric_photo_url = payload.biometricPhotoPath;
+            const { error: err2 } = await supabase().from('profiles').update(fallback).eq('id', uid);
+            if (!err2) {
+                console.warn(
+                    '[dataService] La columna profiles.accepted_terms_version no existe en la base remota. ' +
+                        'Se guardaron firma/biométrico; ejecuta en Supabase SQL Editor: supabase/migrations/051_profiles_accepted_terms_evidence_ensure.sql'
+                );
+                return;
+            }
+            throwIfError(err2);
+            return;
+        }
         throwIfError(error);
     },
 

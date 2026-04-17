@@ -52,7 +52,7 @@ export default function VictoryCardPage() {
     <div className="min-h-screen bg-[#080808] text-white font-outfit p-6">
       <div className="max-w-md mx-auto">
         <Link
-          href="/hub"
+          href="/dashboard"
           className="inline-flex items-center gap-2 text-white/70 hover:text-[#ccff00] text-sm font-bold mb-6"
         >
           <ArrowLeft className="w-4 h-4" />

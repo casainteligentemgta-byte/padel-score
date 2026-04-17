@@ -62,7 +62,7 @@ export default function RankingPage() {
     return (
         <div className="ipad-screen-container bg-[#0a0a0a] text-white font-outfit relative">
             <header className="sticky top-0 z-50 flex items-center gap-2 border-b border-white/5 bg-[#0a0a0a]/95 px-3 py-2.5 backdrop-blur-xl pt-[max(0.35rem,env(safe-area-inset-top))] sm:gap-3 sm:px-4 sm:py-3">
-                <BackButton href="/hub" ariaLabel="Volver al hub" className="shrink-0" />
+                <BackButton href="/dashboard" ariaLabel="Volver al inicio" className="shrink-0" />
                 <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 text-center">
                     <span className="inline-flex shrink-0 sm:hidden">
                         <BouncingBall size={22} />

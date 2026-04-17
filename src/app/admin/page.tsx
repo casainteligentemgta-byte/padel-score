@@ -141,8 +141,9 @@ export default function AdminHubPage() {
 
                         <div className="flex items-center gap-3 sm:gap-4 border-l border-white/10 pl-4 sm:pl-6">
                             <div className="text-right">
-                                <p className="text-[8px] sm:text-[10px] font-black uppercase italic tracking-tighter text-white">{profile?.name || 'Administrador'}</p>
-                                <p className="text-[7px] sm:text-[8px] font-bold uppercase tracking-widest text-padel-primary/60">Super Admin</p>
+                                <p className="text-[8px] sm:text-[10px] font-black normal-case tracking-tight text-white">
+                                    casainteligentemgta@gmail.com
+                                </p>
                             </div>
                             <div className="relative group">
                                 <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gradient-to-br from-padel-primary/20 to-black border border-padel-primary/30 flex items-center justify-center text-[10px] sm:text-xs font-black text-padel-primary">
@@ -244,22 +245,6 @@ export default function AdminHubPage() {
                         ))}
                     </div>
 
-                    {/* Logout Button - Moved up and styled in Ferrari Red */}
-                    <div className="mt-8 flex justify-center">
-                        <button
-                            onClick={async () => {
-                                await logout();
-                                router.replace('/login');
-                            }}
-                            className="flex items-center gap-2 group transition-all hover:scale-105 active:scale-95 bg-transparent border-none outline-none cursor-pointer"
-                        >
-                            <LogOut className="w-4 h-4 text-[#FF2800]" />
-                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#FF2800] italic drop-shadow-[0_0_8px_rgba(255,40,0,0.3)]">
-                                Finalizar Sesión Administrativa
-                            </span>
-                        </button>
-                    </div>
-
                     {/* Quick Access Footer */}
                     <motion.div
                         initial={{ opacity: 0 }}
@@ -280,6 +265,22 @@ export default function AdminHubPage() {
                             <span className="text-[10px] font-black uppercase tracking-[0.3em]">Supabase Identity Core</span>
                         </div>
                     </motion.div>
+
+                    {/* Logout al final de la página */}
+                    <div className="mt-10 lg:mt-14 flex justify-center">
+                        <button
+                            onClick={async () => {
+                                await logout();
+                                router.replace('/login');
+                            }}
+                            className="flex items-center gap-2 group transition-all hover:scale-105 active:scale-95 bg-transparent border-none outline-none cursor-pointer"
+                        >
+                            <LogOut className="w-4 h-4 text-[#FF2800]" />
+                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#FF2800] italic drop-shadow-[0_0_8px_rgba(255,40,0,0.3)]">
+                                Finalizar Sesión
+                            </span>
+                        </button>
+                    </div>
                 </div>
             </main>
 

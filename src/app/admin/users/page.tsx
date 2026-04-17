@@ -342,7 +342,11 @@ export default function AdminUsersPage() {
                                 initial={{ opacity: 0, y: 6 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.18, delay: Math.min(idx, 12) * 0.015 }}
-                                className="group relative bg-white/[0.02] hover:bg-white/[0.04] backdrop-blur-3xl border border-white/5 hover:border-padel-primary/20 rounded-2xl transition-all duration-300 min-w-0"
+                                className={`group relative backdrop-blur-3xl border rounded-2xl transition-all duration-300 min-w-0 ${
+                                    idx % 2 === 0
+                                        ? 'bg-white/[0.07] border-white/20 hover:bg-padel-primary/[0.14] hover:border-padel-primary/35'
+                                        : 'bg-[#050505] border-white/10 hover:bg-padel-primary/[0.10] hover:border-padel-primary/30'
+                                }`}
                             >
                                 <div className="flex min-h-[56px] min-w-0 flex-nowrap items-center gap-2 overflow-x-auto px-4 py-3 sm:px-6 lg:px-10 [scrollbar-width:thin]">
                                     {/* Foto */}

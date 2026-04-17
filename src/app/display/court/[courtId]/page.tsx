@@ -473,6 +473,8 @@ function DualPlaylistStrip({
     imageKey,
     onVideoEnded,
     singleVideoLoop,
+    asistenciaMedicaActiva,
+    mesaTecnicaActiva,
 }: {
     canchaId: string;
     currentVideoUrl: string | null;
@@ -481,13 +483,30 @@ function DualPlaylistStrip({
     imageKey: string;
     onVideoEnded: () => void;
     singleVideoLoop: boolean;
+    asistenciaMedicaActiva?: boolean;
+    mesaTecnicaActiva?: boolean;
 }) {
     const hasVideo = Boolean(currentVideoUrl);
     const hasImage = Boolean(currentImageUrl);
+    const criticalText = asistenciaMedicaActiva ? 'Asistencia Medica' : mesaTecnicaActiva ? 'Mesa Tecnica' : '';
+    const criticalSub = asistenciaMedicaActiva
+        ? 'Protocolo medico activo en esta cancha'
+        : mesaTecnicaActiva
+            ? 'Revision tecnica activa en esta cancha'
+            : '';
+    const criticalTone = asistenciaMedicaActiva
+        ? 'border-red-400/70 bg-red-500/20 text-red-200'
+        : 'border-padel-primary/60 bg-padel-primary/16 text-padel-primary';
     return (
         <div className="grid h-[min(22vh,10rem)] w-full grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-px overflow-hidden bg-white/10 sm:h-[min(26vh,12rem)] sm:grid-cols-2 sm:grid-rows-1 sm:[grid-template-columns:50%_50%]">
             <div className="relative flex min-h-0 min-w-0 h-full w-full items-center justify-center overflow-hidden bg-black">
-                {hasVideo ? (
+                {criticalText ? (
+                    <div className={`mx-2 flex w-full max-w-full flex-col items-center justify-center rounded-2xl border px-3 py-2 text-center ${criticalTone}`}>
+                        <p className="text-[8px] font-black uppercase tracking-[0.22em] text-white/70">Cuadro video</p>
+                        <p className="mt-1 text-[clamp(0.75rem,2.2vw,1.2rem)] font-black uppercase italic leading-tight">{criticalText}</p>
+                        <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white/85">{criticalSub}</p>
+                    </div>
+                ) : hasVideo ? (
                     <CourtAdVideoOrIframe
                         url={currentVideoUrl!}
                         videoKey={videoKey}
@@ -501,7 +520,13 @@ function DualPlaylistStrip({
                 )}
             </div>
             <div className="relative flex min-h-0 min-w-0 h-full w-full items-center justify-center overflow-hidden bg-black">
-                {hasImage ? (
+                {criticalText ? (
+                    <div className={`mx-2 flex w-full max-w-full flex-col items-center justify-center rounded-2xl border px-3 py-2 text-center ${criticalTone}`}>
+                        <p className="text-[8px] font-black uppercase tracking-[0.22em] text-white/70">Cuadro imagenes</p>
+                        <p className="mt-1 text-[clamp(0.75rem,2.2vw,1.2rem)] font-black uppercase italic leading-tight">{criticalText}</p>
+                        <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white/85">{criticalSub}</p>
+                    </div>
+                ) : hasImage ? (
                     <img
                         key={imageKey}
                         src={currentImageUrl!}
@@ -686,6 +711,9 @@ export default function CourtDisplayPage() {
     const effectiveCancha = pizarraData;
     const isEnVivo = effectiveCancha?.estado === 'en_vivo';
     const marcador = effectiveCancha?.marcador;
+    const asistenciaMedicaActiva = Boolean(marcador?.asistencia_medica_active);
+    const mesaTecnicaActiva = Boolean(marcador?.mesa_tecnica_active);
+    const overlayCriticoActivo = asistenciaMedicaActiva || mesaTecnicaActiva;
     /** Marker escribe en `marcador.cronometro`; compat. si existiera clave suelta en `data`. */
     const cronometroPartido =
         marcador?.cronometro ?? (effectiveCancha && typeof effectiveCancha === 'object' ? (effectiveCancha as { cronometro?: unknown }).cronometro : undefined);
@@ -794,6 +822,8 @@ export default function CourtDisplayPage() {
                                 imageKey={playlists.imageKey}
                                 onVideoEnded={playlists.videoAdvanceByTimer ? () => {} : playlists.onVideoEnded}
                                 singleVideoLoop={playlists.videoUrls.length <= 1 || playlists.videoAdvanceByTimer}
+                                asistenciaMedicaActiva={asistenciaMedicaActiva}
+                                mesaTecnicaActiva={mesaTecnicaActiva}
                             />
                             <TickerMarquee messages={playlists.tickerMessages} />
                         </>
@@ -828,6 +858,32 @@ export default function CourtDisplayPage() {
                 matchChronoCron={cronometroPartido as Parameters<typeof PizarraCenterChrono>[0]['cron']}
             />
 
+            {overlayCriticoActivo && (
+                <div className="pointer-events-none absolute inset-0 z-[120] flex items-center justify-center bg-black/82 px-6">
+                    <div
+                        className={`w-full max-w-5xl rounded-[2.2rem] border-2 px-6 py-10 text-center shadow-[0_0_60px_rgba(0,0,0,0.55)] ${
+                            asistenciaMedicaActiva
+                                ? 'border-red-400/70 bg-red-500/20'
+                                : 'border-padel-primary/60 bg-padel-primary/15'
+                        }`}
+                    >
+                        <p className="text-[12px] font-black uppercase tracking-[0.45em] text-white/75">Alerta de cancha</p>
+                        <h2
+                            className={`mt-4 text-[clamp(1.8rem,6.5vw,5rem)] font-black italic uppercase leading-[0.95] tracking-tight ${
+                                asistenciaMedicaActiva ? 'text-red-200' : 'text-padel-primary'
+                            }`}
+                        >
+                            {asistenciaMedicaActiva ? 'Asistencia Medica' : 'Mesa Tecnica'}
+                        </h2>
+                        <p className="mt-4 text-[clamp(0.85rem,2.1vw,1.4rem)] font-black uppercase tracking-[0.16em] text-white">
+                            {asistenciaMedicaActiva
+                                ? 'Personal medico requerido en esta pista'
+                                : 'Revision tecnica solicitada por el arbitro'}
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <PizarraScoreboardFit>
                 <div className="flex w-full min-h-0 flex-col items-center gap-2 overflow-x-hidden px-1 pt-0">
                     {marcador ? <PizarraTableScoreboard marcador={marcador} /> : null}
@@ -845,6 +901,8 @@ export default function CourtDisplayPage() {
                             imageKey={playlists.imageKey}
                             onVideoEnded={playlists.videoAdvanceByTimer ? () => {} : playlists.onVideoEnded}
                             singleVideoLoop={playlists.videoUrls.length <= 1 || playlists.videoAdvanceByTimer}
+                            asistenciaMedicaActiva={asistenciaMedicaActiva}
+                            mesaTecnicaActiva={mesaTecnicaActiva}
                         />
                     </div>
                     <TickerMarquee messages={playlists.tickerMessages} />

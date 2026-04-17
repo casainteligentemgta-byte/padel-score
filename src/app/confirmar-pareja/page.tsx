@@ -89,7 +89,7 @@ export default function ConfirmarParejaPage() {
 
     useEffect(() => {
         if (!success) return;
-        const t = window.setTimeout(() => router.push('/hub'), 2500);
+        const t = window.setTimeout(() => router.push('/dashboard'), 2500);
         return () => window.clearTimeout(t);
     }, [success, router]);
 
@@ -124,7 +124,7 @@ export default function ConfirmarParejaPage() {
                     <AlertCircle className="w-11 h-11 mx-auto mb-3 text-amber-300" />
                     <h1 className="font-black text-xl mb-2 uppercase">Enlace inválido</h1>
                     <p className="text-sm text-white/75 mb-6">No encontramos un ID válido en la ruta de confirmación.</p>
-                    <Link href="/hub" className="inline-flex items-center gap-2 rounded-full bg-padel-primary px-5 py-2.5 text-black font-bold">
+                    <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-full bg-padel-primary px-5 py-2.5 text-black font-bold">
                         Ir al Dashboard <ArrowRight className="w-4 h-4" />
                     </Link>
                 </div>
@@ -156,7 +156,7 @@ export default function ConfirmarParejaPage() {
                             <p className="text-sm text-white/70 mb-6">
                                 Esta inscripción ya está en estado <span className="font-bold text-emerald-300">CONFIRMED</span>.
                             </p>
-                            <Link href="/hub" className="inline-flex items-center gap-2 rounded-full bg-padel-primary px-5 py-2.5 text-black font-bold">
+                            <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-full bg-padel-primary px-5 py-2.5 text-black font-bold">
                                 Ir al Dashboard <ArrowRight className="w-4 h-4" />
                             </Link>
                         </motion.div>
@@ -181,7 +181,7 @@ export default function ConfirmarParejaPage() {
                             >
                                 {sending ? 'Confirmando...' : 'Confirmar'}
                             </motion.button>
-                            <Link href="/hub" className="mt-4 block text-center text-xs font-bold text-white/45 hover:text-white/70">
+                            <Link href="/dashboard" className="mt-4 block text-center text-xs font-bold text-white/45 hover:text-white/70">
                                 Ir al Dashboard
                             </Link>
                         </motion.div>

@@ -238,7 +238,7 @@ function PlayersListContent() {
                                 <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-500 tracking-widest text-right">Acciones</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-white/5">
+                        <tbody>
                             {filteredPlayers.length === 0 ? (
                                 <tr>
                                     <td colSpan={4} className="px-6 py-20 text-center text-gray-500 italic font-medium">
@@ -246,8 +246,15 @@ function PlayersListContent() {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredPlayers.map((player) => (
-                                    <tr key={player.id} className="hover:bg-white/[0.02] transition-colors group">
+                                filteredPlayers.map((player, index) => (
+                                    <tr
+                                        key={player.id}
+                                        className={`group border-b transition-colors ${
+                                            index % 2 === 0
+                                                ? 'bg-white/[0.015] border-white/10 hover:bg-padel-primary/[0.07]'
+                                                : 'bg-[#0b0b0b] border-white/5 hover:bg-padel-primary/[0.05]'
+                                        }`}
+                                    >
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-4">
                                                 <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center overflow-hidden border-2 border-white/5 group-hover:border-padel-primary/30 transition-all">

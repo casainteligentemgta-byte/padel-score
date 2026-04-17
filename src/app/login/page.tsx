@@ -29,6 +29,7 @@ import BouncingBall from '@/components/BouncingBall';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import LegalModal from '@/components/legal/LegalModal';
 import { getAuthHeaders } from '@/lib/apiAuth';
+import { isAdminAccess } from '@/lib/adminAccess';
 
 type PasswordRequirement = {
     label: string;
@@ -247,11 +248,8 @@ export default function LoginPage() {
                     }
                 }
             }
-            if (isAdmin) {
-                router.push('/admin');
-            } else {
-                router.push('/dashboard');
-            }
+            const shouldGoAdmin = isAdmin || isAdminAccess(undefined, formData.email);
+            router.push(shouldGoAdmin ? '/admin' : '/dashboard');
         } catch (err: any) {
             setError(getAuthErrorMessage(err));
         } finally {

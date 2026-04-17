@@ -139,7 +139,7 @@ export default function MatchReportPage() {
                     <p className="text-sm text-white/80">{error}</p>
                     <button
                         type="button"
-                        onClick={() => router.push('/hub')}
+                        onClick={() => router.push('/dashboard')}
                         className="mt-4 px-6 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-bold text-sm"
                     >
                         Volver al Hub
