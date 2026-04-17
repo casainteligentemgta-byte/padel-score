@@ -265,7 +265,7 @@ export default function HubPage() {
             pt-[max(0.25rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]
             sm:pl-4 sm:pr-4 sm:pt-4 sm:pb-4"
         >
-            {!profileLoading && profile && !smartConsentAccepted && (
+            {!profileLoading && profile && !smartConsentAccepted && !isAdmin && (
                 <PuntitoIA
                     type="pro_player"
                     celebrate={false}

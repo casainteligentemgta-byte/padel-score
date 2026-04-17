@@ -14,9 +14,14 @@ function shouldBypassTermsGate(pathname: string | null): boolean {
 
 export function TermsReacceptanceGate({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
-    const { user, profile, profileLoading } = useAuth();
+    const { user, profile, profileLoading, isAdmin } = useAuth();
 
     if (!user || profileLoading || shouldBypassTermsGate(pathname)) {
+        return <>{children}</>;
+    }
+
+    // Administradores no deben ver el flujo de términos de inscripción / re-aceptación global.
+    if (isAdmin) {
         return <>{children}</>;
     }
 
