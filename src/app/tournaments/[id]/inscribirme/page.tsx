@@ -12,7 +12,8 @@ import LegalModal from '@/components/legal/LegalModal';
 import PaymentInfo from '@/components/PaymentInfo';
 import AutoShrinkName from '@/components/AutoShrinkName';
 import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
-import { getAuthHeaders } from '@/lib/apiAuth';
+import { getSupabaseClient } from '@/lib/supabase/client';
+import { SMART_CONSENT_LEGAL_VERSION, SMART_CONSENT_STATUS_ACCEPTED } from '@/lib/legal/smartConsent';
 import {
     ArrowLeft,
     CheckCircle2,
@@ -1264,16 +1265,19 @@ export default function InscribirmePage() {
                                                         version: p.version,
                                                     });
                                                     setAcceptTerms(true);
-                                                    // Also auto-accept smart consent when signing the inscription
-                                                    if (!smartConsentAccepted) {
-                                                        setSmartConsentAccepted(true);
+                                                    // Auto-accept smart consent when signing the inscription (direct client update)
+                                                    if (!smartConsentAccepted && user?.uid) {
                                                         try {
-                                                            const headers = await getAuthHeaders();
-                                                            await fetch('/api/legal/accept', {
-                                                                method: 'POST',
-                                                                headers: { ...headers, 'Content-Type': 'application/json' },
-                                                                body: JSON.stringify({ autoAccepted: true }),
-                                                            });
+                                                            const supabase = getSupabaseClient();
+                                                            if (supabase) {
+                                                                await supabase.from('profiles').update({
+                                                                    status_legal: SMART_CONSENT_STATUS_ACCEPTED,
+                                                                    legal_version: SMART_CONSENT_LEGAL_VERSION,
+                                                                    legal_timestamp: new Date().toISOString(),
+                                                                    updated_at: new Date().toISOString(),
+                                                                }).eq('id', user.uid);
+                                                            }
+                                                            setSmartConsentAccepted(true);
                                                         } catch (e) {
                                                             console.error('Auto-accept error:', e);
                                                         }
@@ -1295,33 +1299,28 @@ export default function InscribirmePage() {
                                                 onClose={() => setSmartConsentModalOpen(false)}
                                                 loading={smartConsentSaving}
                                                 onAccept={async () => {
+                                                    if (!user?.uid) {
+                                                        setError('Debes iniciar sesión para aceptar el contrato.');
+                                                        return;
+                                                    }
                                                     setSmartConsentSaving(true);
                                                     try {
-                                                        // Retry auth headers once — Supabase session may not be ready on first call
-                                                        let headers = await getAuthHeaders();
-                                                        if (!headers.Authorization) {
-                                                            await new Promise((r) => setTimeout(r, 600));
-                                                            headers = await getAuthHeaders();
-                                                        }
-                                                        const res = await fetch('/api/legal/accept', {
-                                                            method: 'POST',
-                                                            headers: { ...headers, 'Content-Type': 'application/json' },
-                                                            body: JSON.stringify({}),
-                                                        });
-                                                        if (!res.ok) {
-                                                            let serverMsg = `Error ${res.status}`;
-                                                            try {
-                                                                const body = await res.json();
-                                                                if (body?.error) serverMsg = body.error;
-                                                            } catch { /* ignore */ }
-                                                            throw new Error(serverMsg);
-                                                        }
+                                                        // Direct Supabase client update — bypasses Bearer token / API route entirely
+                                                        const supabase = getSupabaseClient();
+                                                        if (!supabase) throw new Error('Cliente Supabase no disponible.');
+                                                        const { error: sbError } = await supabase.from('profiles').update({
+                                                            status_legal: SMART_CONSENT_STATUS_ACCEPTED,
+                                                            legal_version: SMART_CONSENT_LEGAL_VERSION,
+                                                            legal_timestamp: new Date().toISOString(),
+                                                            updated_at: new Date().toISOString(),
+                                                        }).eq('id', user.uid);
+                                                        if (sbError) throw new Error(sbError.message);
                                                         setSmartConsentAccepted(true);
                                                         setSmartConsentModalOpen(false);
                                                         setError(null);
                                                         await refreshProfile();
                                                     } catch (err: any) {
-                                                        setError(err?.message || 'Error al guardar Smart Consent.');
+                                                        setError(err?.message || 'Error al guardar el consentimiento.');
                                                     } finally {
                                                         setSmartConsentSaving(false);
                                                     }

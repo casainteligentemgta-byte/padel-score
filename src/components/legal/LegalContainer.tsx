@@ -115,41 +115,42 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
                 <div className="mb-6">
                     {children ?? (type === 'inscription' ? <LegalTermsInscriptionBody /> : <LegalTermsProPlayerBody />)}
                 </div>
+            </div>
 
-                <div className="space-y-4 border-t border-white/10 pt-6 pb-4">
-                    <div>
-                        <div className="mb-2 flex items-center justify-between">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-[#ccff00]">Firma digital</span>
-                            <button
-                                type="button"
-                                onClick={clearSignature}
-                                className="text-[10px] font-bold uppercase text-zinc-500 underline hover:text-white"
-                            >
-                                Limpiar
-                            </button>
-                        </div>
-                        <SignaturePadField
-                            padRef={padRef}
-                            onStrokeEnd={(empty) => {
-                                setSigEmpty(empty);
-                            }}
-                        />
+            {/* Signature + Biometric — outside the scroll area so they're always visible */}
+            <div className="space-y-4 border-t border-white/10 px-5 pt-4 pb-2">
+                <div>
+                    <div className="mb-2 flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[#ccff00]">Firma digital</span>
+                        <button
+                            type="button"
+                            onClick={clearSignature}
+                            className="text-[10px] font-bold uppercase text-zinc-500 underline hover:text-white"
+                        >
+                            Limpiar
+                        </button>
                     </div>
+                    <SignaturePadField
+                        padRef={padRef}
+                        onStrokeEnd={(empty) => {
+                            setSigEmpty(empty);
+                        }}
+                    />
+                </div>
 
-                    <div>
-                        <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">Alternativa biométrica</p>
-                        <BiometricCapture
-                            userId={userId}
-                            onCapturedPath={(p) => {
-                                setBioPath(p);
-                            }}
-                        />
-                        {bioPath && (
-                            <p className="mt-2 text-center text-[10px] font-bold uppercase tracking-wide text-[#ccff00]">
-                                Validación facial guardada
-                            </p>
-                        )}
-                    </div>
+                <div>
+                    <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">Alternativa biométrica</p>
+                    <BiometricCapture
+                        userId={userId}
+                        onCapturedPath={(p) => {
+                            setBioPath(p);
+                        }}
+                    />
+                    {bioPath && (
+                        <p className="mt-2 text-center text-[10px] font-bold uppercase tracking-wide text-[#ccff00]">
+                            Validación facial guardada
+                        </p>
+                    )}
                 </div>
             </div>
 
