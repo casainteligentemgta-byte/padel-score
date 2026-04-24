@@ -1,0 +1,90 @@
+[debug] [2026-04-24T19:14:39.115Z] ----------------------------------------------------------------------
+[debug] [2026-04-24T19:14:39.131Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\matal\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy
+[debug] [2026-04-24T19:14:39.131Z] CLI Version:   15.7.0
+[debug] [2026-04-24T19:14:39.131Z] Platform:      win32
+[debug] [2026-04-24T19:14:39.131Z] Node Version:  v20.18.0
+[debug] [2026-04-24T19:14:39.132Z] Time:          Fri Apr 24 2026 15:14:39 GMT-0400 (Venezuela Time)
+[debug] [2026-04-24T19:14:39.132Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-24T19:14:43.789Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-24T19:14:43.790Z] > authorizing via signed-in user (casainteligentemgta@gmail.com)
+[debug] [2026-04-24T19:14:43.790Z] [iam] checking project padel-score-pro-777 for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebase.projects.update","firebaseauth.configs.update","firebasedatabase.instances.update","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]
+[debug] [2026-04-24T19:14:43.792Z] Checked if tokens are valid: false, expires at: 1777058375740
+[debug] [2026-04-24T19:14:43.792Z] Checked if tokens are valid: false, expires at: 1777058375740
+[debug] [2026-04-24T19:14:43.793Z] > refreshing access token with scopes: []
+[debug] [2026-04-24T19:14:43.796Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-04-24T19:14:43.796Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-04-24T19:14:44.130Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-04-24T19:14:44.130Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-04-24T19:14:44.148Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/padel-score-pro-777:testIamPermissions [none]
+[debug] [2026-04-24T19:14:44.148Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/padel-score-pro-777:testIamPermissions  x-goog-user-project=padel-score-pro-777
+[debug] [2026-04-24T19:14:44.148Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/padel-score-pro-777:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebase.projects.update","firebaseauth.configs.update","firebasedatabase.instances.update","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]}
+[debug] [2026-04-24T19:14:44.506Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/padel-score-pro-777:testIamPermissions 200
+[debug] [2026-04-24T19:14:44.507Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/padel-score-pro-777:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebase.projects.update","firebaseauth.configs.update","firebasedatabase.instances.update","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]}
+[debug] [2026-04-24T19:14:44.508Z] Checked if tokens are valid: true, expires at: 1777061683131
+[debug] [2026-04-24T19:14:44.508Z] Checked if tokens are valid: true, expires at: 1777061683131
+[debug] [2026-04-24T19:14:44.509Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/padel-score-pro-777 [none]
+[debug] [2026-04-24T19:14:44.949Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/padel-score-pro-777 200
+[debug] [2026-04-24T19:14:44.950Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/padel-score-pro-777 {"projectId":"padel-score-pro-777","projectNumber":"725028600303","displayName":"Padel Score Pro","name":"projects/padel-score-pro-777","resources":{"hostingSite":"padel-score-pro-777","realtimeDatabaseInstance":"padel-score-pro-777-default-rtdb"},"state":"ACTIVE","etag":"1_3b66dbad-9242-4c91-b2f6-d5bf205ec82c"}
+[debug] [2026-04-24T19:14:44.950Z] Checked if tokens are valid: true, expires at: 1777061683131
+[debug] [2026-04-24T19:14:44.950Z] Checked if tokens are valid: true, expires at: 1777061683131
+[debug] [2026-04-24T19:14:44.950Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/padel-score-pro-777 [none]
+[debug] [2026-04-24T19:14:45.256Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/padel-score-pro-777 200
+[debug] [2026-04-24T19:14:45.257Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/padel-score-pro-777 {"projectId":"padel-score-pro-777","projectNumber":"725028600303","displayName":"Padel Score Pro","name":"projects/padel-score-pro-777","resources":{"hostingSite":"padel-score-pro-777","realtimeDatabaseInstance":"padel-score-pro-777-default-rtdb"},"state":"ACTIVE","etag":"1_3b66dbad-9242-4c91-b2f6-d5bf205ec82c"}
+[debug] [2026-04-24T19:14:52.417Z] defaultcredentials: writing to file C:\Users\matal\AppData\Roaming\firebase\casainteligentemgta_gmail_com_application_default_credentials.json
+[debug] [2026-04-24T19:14:52.422Z] Checked if tokens are valid: true, expires at: 1777061683131
+[debug] [2026-04-24T19:14:52.422Z] Checked if tokens are valid: true, expires at: 1777061683131
+[debug] [2026-04-24T19:14:52.424Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/padel-score-pro-777/sites pageToken=&pageSize=10
+[debug] [2026-04-24T19:14:53.309Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/padel-score-pro-777/sites 200
+[debug] [2026-04-24T19:14:53.310Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/padel-score-pro-777/sites {"sites":[{"name":"projects/padel-score-pro-777/sites/padel-score-pro-777","defaultUrl":"https://padel-score-pro-777.web.app","appId":"1:725028600303:web:11052e1fff30c047051e1a","type":"DEFAULT_SITE"}]}
+[debug] [2026-04-24T19:14:53.313Z] Checked if tokens are valid: true, expires at: 1777061683131
+[debug] [2026-04-24T19:14:53.313Z] Checked if tokens are valid: true, expires at: 1777061683131
+[debug] [2026-04-24T19:14:53.314Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/-/webApps/1:725028600303:web:11052e1fff30c047051e1a/config [none]
+[debug] [2026-04-24T19:14:53.781Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/-/webApps/1:725028600303:web:11052e1fff30c047051e1a/config 200
+[debug] [2026-04-24T19:14:53.781Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/-/webApps/1:725028600303:web:11052e1fff30c047051e1a/config {"projectId":"padel-score-pro-777","appId":"1:725028600303:web:11052e1fff30c047051e1a","databaseURL":"https://padel-score-pro-777-default-rtdb.firebaseio.com","storageBucket":"padel-score-pro-777.firebasestorage.app","apiKey":"AIzaSyAExkCMW5KYOMBO-7tW_fuWd6rCZYlC-c0","authDomain":"padel-score-pro-777.firebaseapp.com","messagingSenderId":"725028600303","projectNumber":"725028600303","version":"2"}
+[info] 
+   Thank you for trying our early preview of Next.js support on Firebase Hosting.
+   During the preview, support is best-effort and breaking changes can be expected. Proceed with caution.
+   The integration is known to work with Next.js version 12 - 15.0. You may encounter errors.
+
+   Documentation: https://firebase.google.com/docs/hosting/frameworks/nextjs
+   File a bug: https://github.com/firebase/firebase-tools/issues/new?template=bug_report.md
+   Submit a feature request: https://github.com/firebase/firebase-tools/issues/new?template=feature_request.md
+
+   We'd love to learn from you. Express your interest in helping us shape the future of Firebase Hosting: https://goo.gle/41enW5X
+
+[debug] [2026-04-24T19:15:06.256Z] Checked if tokens are valid: true, expires at: 1777061683131
+[debug] [2026-04-24T19:15:06.256Z] Checked if tokens are valid: true, expires at: 1777061683131
+[debug] [2026-04-24T19:15:06.257Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/padel-score-pro-777/sites/padel-score-pro-777 [none]
+[debug] [2026-04-24T19:15:06.967Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/padel-score-pro-777/sites/padel-score-pro-777 200
+[debug] [2026-04-24T19:15:06.968Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/padel-score-pro-777/sites/padel-score-pro-777 {"name":"projects/padel-score-pro-777/sites/padel-score-pro-777","defaultUrl":"https://padel-score-pro-777.web.app","appId":"1:725028600303:web:11052e1fff30c047051e1a","type":"DEFAULT_SITE"}
+[info] ▲ Next.js 16.1.6 (Turbopack)
+
+[info] - Environments: .env.local
+
+
+[info]   Creating an optimized production build ...
+
+[info] ✓ Compiled successfully in 31.4s
+
+[info]   Running TypeScript ...
+
+[info] Failed to compile.
+
+
+[info] ./src/app/admin/master-generator/page.tsx:1140:94
+Type error: Argument of type 'number' is not assignable to parameter of type 'SetStateAction<string>'.
+
+  1138 |                                                             type="number"
+  1139 |                                                             value={pendingPrice}
+> 1140 |                                                             onChange={(e) => setPendingPrice(Number(e.target.value) || 0)}
+       |                                                                                              ^
+  1141 |                                                             placeholder="0.00"
+  1142 |                                                             className="w-full bg-black/40 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-black italic text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
+  1143 |                                                         />
+
+[info] Next.js build worker exited with code: 1 and signal: null
+
+[debug] [2026-04-24T19:16:50.573Z] Error: ENOENT: no such file or directory, open 'C:\Users\matal\Desktop\ANTIGRAVITY\Padel Score\.next\export-marker.json'
+[error] 
+[error] Error: An unexpected error has occurred.

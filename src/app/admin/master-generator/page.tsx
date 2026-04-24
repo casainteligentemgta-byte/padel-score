@@ -1137,7 +1137,7 @@ export default function MasterGeneratorPage() {
                                                         <input
                                                             type="number"
                                                             value={pendingPrice}
-                                                            onChange={(e) => setPendingPrice(Number(e.target.value) || 0)}
+                                                            onChange={(e) => setPendingPrice(e.target.value)}
                                                             placeholder="0.00"
                                                             className="w-full bg-black/40 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-black italic text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
                                                         />
