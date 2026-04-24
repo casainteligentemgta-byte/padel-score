@@ -1,0 +1,17 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/tournaments/layout,_N_T_/tournaments/event/layout,_N_T_/tournaments/event/podium/layout,_N_T_/tournaments/event/podium/page,_N_T_/tournaments/event/podium"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/tournaments/event/podium/__PAGE__",
+    "/tournaments/event/podium",
+    "/tournaments/event",
+    "/tournaments",
+    "/_index",
+    "/_head"
+  ]
+}

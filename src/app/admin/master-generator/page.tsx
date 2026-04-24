@@ -221,7 +221,7 @@ export default function MasterGeneratorPage() {
     const [pendingAdvanceCount, setPendingAdvanceCount] = useState<1 | 2>(2);
     const [pendingQuickQualification, setPendingQuickQualification] = useState(false);
     const [pendingConsolacionMatchFormat, setPendingConsolacionMatchFormat] = useState<'ONE_SET_9' | 'TWO_SHORT_SETS'>('TWO_SHORT_SETS');
-    const [pendingPrice, setPendingPrice] = useState<number>(0);
+    const [pendingPrice, setPendingPrice] = useState<string>('');
     const [pendingTieBreakRule, setPendingTieBreakRule] = useState<'GAMES_DIFF' | 'HEAD_TO_HEAD'>('GAMES_DIFF');
 
     // Sorteo aleatorio: barajar equipos antes de repartir en grupos (por defecto activado)
@@ -254,7 +254,7 @@ export default function MasterGeneratorPage() {
         setPendingTournamentType('AMERICANO');
         setPendingPointsGoal(16);
         setPendingRRFormat('TWO_NORMAL_SETS');
-        setPendingPrice(0);
+        setPendingPrice('');
         setPendingTieBreakRule('GAMES_DIFF');
         setLogoLocalPreview(null);
         setMatchDurationInput(String(INITIAL_EVENT_DATA.matchDurationMinutes));
@@ -416,7 +416,7 @@ export default function MasterGeneratorPage() {
         setPendingAdvanceCount(2);
         setPendingQuickQualification(false);
         setPendingConsolacionMatchFormat('TWO_SHORT_SETS');
-        setPendingPrice(0);
+        setPendingPrice('');
         setPendingTieBreakRule('GAMES_DIFF');
     };
 
@@ -445,7 +445,7 @@ export default function MasterGeneratorPage() {
                         quickQualification: pendingTournamentType === 'ROUND_ROBIN' && pendingAdvanceCount === 2 ? pendingQuickQualification : undefined,
                         type: pendingTournamentType === 'CUADRO_CONSOLACION' ? TournamentType.CUADRO_CONSOLACION : TournamentType.ROUND_ROBIN,
                         consolacionMatchFormat: pendingTournamentType === 'CUADRO_CONSOLACION' ? pendingConsolacionMatchFormat : undefined,
-                        inscriptionPrice: pendingPrice,
+                        inscriptionPrice: Number(pendingPrice) || 0,
                         tieBreakRule: pendingTieBreakRule,
                         teams: Array.from({ length: pendingNumTeams }, (_, j) => ({
                             id: `team-${c.id}-${j}`,
@@ -476,7 +476,7 @@ export default function MasterGeneratorPage() {
                     advanceCount: pendingAdvanceCount,
                     quickQualification: pendingTournamentType === 'ROUND_ROBIN' && pendingAdvanceCount === 2 ? pendingQuickQualification : undefined,
                     consolacionMatchFormat: pendingTournamentType === 'CUADRO_CONSOLACION' ? pendingConsolacionMatchFormat : undefined,
-                    inscriptionPrice: pendingPrice,
+                    inscriptionPrice: Number(pendingPrice) || 0,
                     tieBreakRule: pendingTieBreakRule,
                     teams: Array.from({ length: pendingNumTeams }, (_, i) => ({
                         id: `team-${id}-${i}`,
@@ -1292,9 +1292,10 @@ export default function MasterGeneratorPage() {
                                                     <div className="relative group">
                                                         <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-padel-primary transition-colors" />
                                                         <input
-                                                            type="number"
+                                                            type="text"
+                                                            inputMode="decimal"
                                                             value={pendingPrice}
-                                                            onChange={(e) => setPendingPrice(Number(e.target.value) || 0)}
+                                                            onChange={(e) => setPendingPrice(e.target.value)}
                                                             placeholder="0.00"
                                                             className="w-full bg-black/40 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm font-black italic text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-700"
                                                         />
@@ -1511,28 +1512,7 @@ export default function MasterGeneratorPage() {
                                                                 </button>
                                                             </div>
 
-                                                            <div className="w-full min-w-0 relative">
-                                                                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-zinc-500 z-10">
-                                                                    <LinkIcon className="w-4 h-4" />
-                                                                </div>
-                                                                <input
-                                                                    type="text"
-                                                                    value={eventData.sponsorLogoUrl || ''}
-                                                                    onChange={e => setEventData(prev => ({ ...prev, sponsorLogoUrl: e.target.value }))}
-                                                                    placeholder="O pega una URL de imagen (https://…)"
-                                                                    className="w-full bg-black/40 border border-zinc-800 rounded-xl h-12 min-h-[3rem] pl-9 pr-[4.5rem] sm:pr-36 text-xs sm:text-sm text-white focus:border-padel-primary outline-none transition-all placeholder:text-zinc-600 box-border"
-                                                                />
-                                                                {eventData.sponsorLogoUrl && eventData.sponsorLogoUrl.startsWith('http') && !eventData.sponsorLogoUrl.includes('supabase.co/storage') && (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={handleSubirDesdeUrl}
-                                                                        disabled={isUploadingLogo}
-                                                                        className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 px-2 sm:px-2.5 bg-padel-primary/20 hover:bg-padel-primary text-padel-primary hover:text-white rounded-md transition-all text-[9px] font-black uppercase tracking-tight disabled:opacity-50 inline-flex items-center"
-                                                                    >
-                                                                        {isUploadingLogo ? '…' : 'Subir'}
-                                                                    </button>
-                                                                )}
-                                                            </div>
+
 
                                                             <input
                                                                 id="logo-upload"
@@ -1864,7 +1844,7 @@ export default function MasterGeneratorPage() {
                                                                     setPendingAdvanceCount((cat as any).advanceCount ?? 2);
                                                                     setPendingQuickQualification(!!(cat as any).quickQualification);
                                                                     setPendingConsolacionMatchFormat((cat as any).consolacionMatchFormat ?? 'TWO_SHORT_SETS');
-                                                                    setPendingPrice(cat.inscriptionPrice ?? 0);
+                                                                    setPendingPrice(String(cat.inscriptionPrice ?? ''));
                                                                     setPendingTieBreakRule((cat as any).tieBreakRule ?? 'GAMES_DIFF');
                                                                 }}
                                                                 className="text-zinc-600 hover:text-padel-primary transition-colors p-1.5 hover:bg-padel-primary/10 rounded-lg"

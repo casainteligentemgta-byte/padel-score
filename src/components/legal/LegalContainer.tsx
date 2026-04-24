@@ -64,7 +64,7 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
     const onScroll = () => recomputeScroll();
 
     const hasValidation = !sigEmpty || !!bioPath;
-    const canSubmit = scrollComplete && hasValidation && !!userId;
+    const canSubmit = hasValidation && !!userId; // Removed scrollComplete requirement
 
     const defaultTitle =
         type === 'inscription' ? 'TERMINOS DE INSCRIPCION' : 'Contrato Pro Smart';
@@ -104,17 +104,53 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
         <div
             className={`relative flex min-h-0 flex-col rounded-3xl border border-white/10 bg-[#0a0a0a] font-sans text-zinc-100 ${className}`}
         >
-            <div className="border-b border-white/10 px-5 pb-3 pt-5 text-center">
-                <h3 className="text-lg font-black uppercase italic tracking-tight text-white">{title ?? defaultTitle}</h3>
-                <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Versión {CURRENT_TERMS_VERSION}</p>
-            </div>
+            {/* Omitted title header for cleaner scroll experience */}
+
 
             <div
                 ref={scrollRef}
                 onScroll={onScroll}
-                className="legal-scroll-area min-h-[180px] max-h-[min(42vh,320px)] flex-1 overflow-y-auto overflow-x-hidden px-5 py-4 text-justify"
+                className="legal-scroll-area min-h-[250px] max-h-[min(65vh,520px)] flex-1 overflow-y-auto overflow-x-hidden px-5 py-4 text-justify"
             >
-                {children ?? (type === 'inscription' ? <LegalTermsInscriptionBody /> : <LegalTermsProPlayerBody />)}
+                <div className="mb-6">
+                    {children ?? (type === 'inscription' ? <LegalTermsInscriptionBody /> : <LegalTermsProPlayerBody />)}
+                </div>
+
+                <div className="space-y-4 border-t border-white/10 pt-6 pb-4">
+                    <div>
+                        <div className="mb-2 flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-[#ccff00]">Firma digital</span>
+                            <button
+                                type="button"
+                                onClick={clearSignature}
+                                className="text-[10px] font-bold uppercase text-zinc-500 underline hover:text-white"
+                            >
+                                Limpiar
+                            </button>
+                        </div>
+                        <SignaturePadField
+                            padRef={padRef}
+                            onStrokeEnd={(empty) => {
+                                setSigEmpty(empty);
+                            }}
+                        />
+                    </div>
+
+                    <div>
+                        <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">Alternativa biométrica</p>
+                        <BiometricCapture
+                            userId={userId}
+                            onCapturedPath={(p) => {
+                                setBioPath(p);
+                            }}
+                        />
+                        {bioPath && (
+                            <p className="mt-2 text-center text-[10px] font-bold uppercase tracking-wide text-[#ccff00]">
+                                Validación facial guardada
+                            </p>
+                        )}
+                    </div>
+                </div>
             </div>
 
             <div className="space-y-1.5 border-t border-white/10 px-5 py-2">
@@ -130,46 +166,9 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
                         transition={{ type: 'spring', stiffness: 300, damping: 35 }}
                     />
                 </div>
-                {!scrollComplete && (
-                    <p className="text-[10px] text-amber-200/90">Desplázate hasta el final para habilitar la firma.</p>
-                )}
             </div>
 
-            <div className="space-y-3 border-t border-white/10 px-5 py-4">
-                <div>
-                    <div className="mb-2 flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-[#ccff00]">Firma digital</span>
-                        <button
-                            type="button"
-                            onClick={clearSignature}
-                            className="text-[10px] font-bold uppercase text-zinc-500 underline hover:text-white"
-                        >
-                            Limpiar
-                        </button>
-                    </div>
-                    <SignaturePadField
-                        padRef={padRef}
-                        onStrokeEnd={(empty) => {
-                            setSigEmpty(empty);
-                        }}
-                    />
-                </div>
-
-                <div>
-                    <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">Alternativa biométrica</p>
-                    <BiometricCapture
-                        userId={userId}
-                        onCapturedPath={(p) => {
-                            setBioPath(p);
-                        }}
-                    />
-                    {bioPath && (
-                        <p className="mt-2 text-center text-[10px] font-bold uppercase tracking-wide text-[#ccff00]">
-                            Validación facial guardada
-                        </p>
-                    )}
-                </div>
-
+            <div className="border-t border-white/10 px-5 py-4">
                 <button
                     type="button"
                     disabled={!canSubmit || submitting}

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comprobar colores</title>
+  <style>
+    * { margin: 0; box-sizing: border-box; }
+    html, body {
+      min-height: 100vh;
+      background: #0a0a0a !important;
+      color: #fff !important;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .caja {
+      text-align: center;
+      padding: 40px;
+      border: 2px solid #ccff00;
+      border-radius: 16px;
+    }
+    h1 { font-size: 24px; margin-bottom: 16px; }
+    p { color: #888; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="caja">
+    <h1>Fondo oscuro correcto</h1>
+    <p>Si ves fondo negro y texto blanco/amarillo, el navegador respeta los colores.</p>
+    <p style="margin-top:12px;color:#ccff00;">Si todo se ve blanco, el problema puede ser: tema de Windows, extensiones o modo alto contraste.</p>
+  </div>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/hub/layout,_N_T_/hub/victory-card/layout,_N_T_/hub/victory-card/page,_N_T_/hub/victory-card"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/hub/victory-card/__PAGE__",
+    "/hub/victory-card",
+    "/hub",
+    "/_index",
+    "/_head"
+  ]
+}

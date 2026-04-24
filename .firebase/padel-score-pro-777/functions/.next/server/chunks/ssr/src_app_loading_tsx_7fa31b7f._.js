@@ -1,0 +1,3 @@
+module.exports=[402747,a=>{"use strict";var b=a.i(907997);function c(){return(0,b.jsxs)("div",{style:{position:"fixed",inset:0,background:"#0a0a0a",color:"#ccff00",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,fontSize:20,fontWeight:700},children:[(0,b.jsx)("span",{children:"Smart Padel"}),(0,b.jsx)("span",{style:{fontSize:14,color:"#888"},children:"Cargando…"})]})}a.s(["default",()=>c])}];
+
+//# sourceMappingURL=src_app_loading_tsx_7fa31b7f._.js.map

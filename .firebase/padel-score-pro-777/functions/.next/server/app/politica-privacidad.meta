@@ -1,0 +1,15 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/politica-privacidad/layout,_N_T_/politica-privacidad/page,_N_T_/politica-privacidad"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/politica-privacidad/__PAGE__",
+    "/politica-privacidad",
+    "/_index",
+    "/_head"
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/matal/Desktop/ANTIGRAVITY/Padel%20Score/src/app/loading.tsx"],"sourcesContent":["export default function Loading() {\r\n    return (\r\n        <div\r\n            style={{\r\n                position: 'fixed',\r\n                inset: 0,\r\n                background: '#0a0a0a',\r\n                color: '#ccff00',\r\n                display: 'flex',\r\n                flexDirection: 'column',\r\n                alignItems: 'center',\r\n                justifyContent: 'center',\r\n                gap: 16,\r\n                fontSize: 20,\r\n                fontWeight: 700,\r\n            }}\r\n        >\r\n            <span>Smart Padel</span>\r\n            <span style={{ fontSize: 14, color: '#888' }}>Cargando…</span>\r\n        </div>\r\n    );\r\n}\r\n"],"names":[],"mappings":";;;;;;AAAe,SAAS;IACpB,qBACI,8OAAC;QACG,OAAO;YACH,UAAU;YACV,OAAO;YACP,YAAY;YACZ,OAAO;YACP,SAAS;YACT,eAAe;YACf,YAAY;YACZ,gBAAgB;YAChB,KAAK;YACL,UAAU;YACV,YAAY;QAChB;;0BAEA,8OAAC;0BAAK;;;;;;0BACN,8OAAC;gBAAK,OAAO;oBAAE,UAAU;oBAAI,OAAO;gBAAO;0BAAG;;;;;;;;;;;;AAG1D"}}]
+}

@@ -36,7 +36,8 @@ import {
     ChevronDown,
     ChevronUp,
     Search,
-    RefreshCw
+    RefreshCw,
+    Check
 } from 'lucide-react';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 
@@ -1060,8 +1061,7 @@ export default function InscribirmePage() {
                                                                         <>
                                                                             <option value="Pago Móvil" className="bg-[#111]">Pago Móvil</option>
                                                                             <option value="Transferencia Bancaria" className="bg-[#111]">Transferencia Bancaria</option>
-                                                                            <option value="Mercado Pago" className="bg-[#111]">Mercado Pago</option>
-                                                                            <option value="Zelle" className="bg-[#111]">Zelle</option>
+                                                                            <option value="Zelle" disabled className="bg-[#111] opacity-50">Zelle (Próximamente)</option>
                                                                         </>
                                                                     )}
                                                                 </select>
@@ -1213,39 +1213,44 @@ export default function InscribirmePage() {
 
                                     {wizardStep === termsStepIndex && (
                                         <section className="mb-4 min-w-0">
-                                            <div className="mb-3">
-                                                <label className="flex items-start gap-3 cursor-pointer select-none">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={smartConsentAccepted}
-                                                        onChange={(e) => {
-                                                            if (!e.target.checked) {
+                                            <div className="mb-6 rounded-2xl bg-white/5 p-4 border border-white/10">
+                                                <div className="flex items-start gap-4">
+                                                    <div 
+                                                        onClick={() => {
+                                                            if (!smartConsentAccepted) {
+                                                                setSmartConsentModalOpen(true);
+                                                            } else {
                                                                 setSmartConsentAccepted(false);
-                                                                return;
                                                             }
-                                                            setSmartConsentModalOpen(true);
                                                         }}
-                                                        className="mt-1 w-5 h-5 rounded border-white/10 accent-[#ccff00]"
-                                                    />
-                                                    <div className="min-w-0">
-                                                        <p className="text-xs text-white/90 leading-snug font-normal">
-                                                            Declaro haber leido, comprendido y aceptado los <span className="underline">Términos y Condiciones</span> y la <span className="underline">Politica de Privacidad</span>.
+                                                        className={`mt-1 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-lg border-2 transition-all ${
+                                                            smartConsentAccepted 
+                                                                ? 'border-[#ccff00] bg-[#ccff00] text-black' 
+                                                                : 'border-white/20 bg-transparent'
+                                                        }`}
+                                                    >
+                                                        {smartConsentAccepted && <Check size={14} strokeWidth={4} />}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-xs font-medium leading-relaxed text-white/80">
+                                                            Confirmo que he leído y acepto los <span className="text-[#ccff00] underline font-bold cursor-pointer" onClick={() => setSmartConsentModalOpen(true)}>Términos y Condiciones</span> y la <span className="text-[#ccff00] underline font-bold cursor-pointer" onClick={() => setSmartConsentModalOpen(true)}>Política de Privacidad</span> de Padel Score Pro.
                                                         </p>
                                                         <button
                                                             type="button"
                                                             onClick={() => setSmartConsentModalOpen(true)}
-                                                            className="mt-1 text-[11px] font-black uppercase tracking-widest text-[#ccff00]/90 hover:underline"
+                                                            className="mt-3 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-[11px] font-black uppercase tracking-widest text-[#ccff00] border-2 border-[#ccff00] hover:bg-[#ccff00]/10 transition-all"
                                                         >
-                                                            Ver contrato
+                                                            <FileText size={14} />
+                                                            Ver contrato completo
                                                         </button>
                                                     </div>
-                                                </label>
+                                                </div>
                                             </div>
 
                                             <LegalContainer
                                                 type="inscription"
                                                 userId={user?.uid}
-                                                className="max-h-[min(78dvh,720px)] overflow-hidden rounded-2xl border border-[#ccff00]/25"
+                                                className="border-[#ccff00]/25"
                                                 onAccept={async (p) => {
                                                     if (!user?.uid) return;
                                                     await dataService.updateProfileLegalAcceptance(user.uid, {
@@ -1259,8 +1264,31 @@ export default function InscribirmePage() {
                                                         version: p.version,
                                                     });
                                                     setAcceptTerms(true);
+                                                    // Also auto-accept smart consent when signing the inscription
+                                                    if (!smartConsentAccepted) {
+                                                        setSmartConsentAccepted(true);
+                                                        try {
+                                                            const headers = await getAuthHeaders();
+                                                            await fetch('/api/legal/accept', {
+                                                                method: 'POST',
+                                                                headers: { ...headers, 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({ autoAccepted: true }),
+                                                            });
+                                                        } catch (e) {
+                                                            console.error('Auto-accept error:', e);
+                                                        }
+                                                    }
                                                 }}
-                                            />
+                                            >
+                                                <div className="text-center py-4">
+                                                    <p className="text-xs font-bold uppercase tracking-widest text-[#ccff00]">
+                                                        Firma de Inscripción
+                                                    </p>
+                                                    <p className="mt-2 text-[10px] text-white/50">
+                                                        Al firmar a continuación, confirmas tu inscripción y la aceptación de los términos visualizados anteriormente.
+                                                    </p>
+                                                </div>
+                                            </LegalContainer>
 
                                             <LegalModal
                                                 open={smartConsentModalOpen}
