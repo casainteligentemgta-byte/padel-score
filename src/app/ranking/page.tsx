@@ -64,12 +64,12 @@ export default function RankingPage() {
             <header className="sticky top-0 z-50 flex items-center gap-2 border-b border-white/5 bg-[#0a0a0a]/95 px-3 py-2.5 backdrop-blur-xl pt-[max(0.35rem,env(safe-area-inset-top))] sm:gap-3 sm:px-4 sm:py-3">
                 <BackButton href="/dashboard" ariaLabel="Volver al inicio" className="shrink-0" />
                 <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 text-center">
-                    <span className="inline-flex shrink-0 sm:hidden">
-                        <BouncingBall size={22} />
-                    </span>
-                    <h1 className="text-lg font-black italic uppercase tracking-tighter text-white sm:text-xl md:text-2xl">
-                        Ranking
-                    </h1>
+                    <div className="flex items-center gap-2 sm:gap-3">
+                        <BouncingBall size={20} className="sm:h-6 sm:w-6" />
+                        <h1 className="text-lg font-black italic uppercase tracking-tighter text-white sm:text-xl md:text-2xl">
+                            Ranking
+                        </h1>
+                    </div>
                     <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 sm:text-[10px]">
                         General y por torneo
                     </p>

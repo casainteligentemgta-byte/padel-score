@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { isProfileTermsStale } from '@/lib/legal/termsVersion';
@@ -15,6 +16,13 @@ function shouldBypassTermsGate(pathname: string | null): boolean {
 export function TermsReacceptanceGate({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const { user, profile, profileLoading, isAdmin } = useAuth();
+
+    useEffect(() => {
+        if (user && !profileLoading) {
+            const stale = isProfileTermsStale(profile?.acceptedTermsVersion);
+            console.log('[TermsGate] User:', user.email, 'ProfileVersion:', profile?.acceptedTermsVersion, 'Stale:', stale);
+        }
+    }, [user, profile, profileLoading]);
 
     if (!user || profileLoading || shouldBypassTermsGate(pathname)) {
         return <>{children}</>;

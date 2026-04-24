@@ -174,7 +174,6 @@ export default function MiCuentaPage() {
                 <BouncingBall size={22} />
                 <div className="min-w-0 flex-1">
                     <h1 className={`${T.pageTitle} truncate`}>Mi perfil</h1>
-                    <p className={T.pageSubtitle}>Ficha de jugador</p>
                 </div>
             </div>
             <main className="ipad-scroll-area min-h-0 w-full min-w-0 flex-1 px-[max(1rem,env(safe-area-inset-left,0px))] pb-[max(5.5rem,env(safe-area-inset-bottom,28px))] pr-[max(1rem,env(safe-area-inset-right,0px))] md:pl-24 md:pr-6">
@@ -245,66 +244,44 @@ export default function MiCuentaPage() {
                     {/* Ficha de jugador (si existe en participants) */}
                     {!loadingPlayer && player && (
                         <section className={`${T.card} min-w-0 overflow-hidden shadow-xl`} aria-labelledby="ficha-heading">
-                            <div className="space-y-6 p-5 sm:p-6 md:p-8">
-                                <h2 id="ficha-heading" className={`${T.section}`}>
-                                    Ficha de jugador
-                                </h2>
-
-                                <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
-                                    <div className="flex min-w-0 gap-4">
-                                        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/5 sm:h-24 sm:w-24">
-                                            {player.photo ? (
-                                                // eslint-disable-next-line @next/next/no-img-element
-                                                <img src={player.photo} alt="" className="h-full w-full object-cover" />
-                                            ) : (
-                                                <User className="h-8 w-8 text-zinc-600 sm:h-9 sm:w-9" />
-                                            )}
-                                        </div>
-                                        <div className="min-w-0 flex-1 space-y-2">
-                                            <p className={`${T.fichaNameOneLine} sm:text-lg`}>{player.name} {player.lastName}</p>
-                                            {player?.uniqueCode && (
-                                                <button
-                                                    type="button"
-                                                    onClick={async () => {
-                                                        try {
-                                                            await navigator.clipboard.writeText(String(player.uniqueCode));
-                                                            setCopied(true);
-                                                            setTimeout(() => setCopied(false), 1600);
-                                                        } catch {
-                                                            setError('No se pudo copiar el código.');
-                                                        }
-                                                    }}
-                                                    className="inline-flex max-w-full touch-manipulation items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left transition-all hover:border-padel-primary/40 hover:text-white"
-                                                    title="Copiar código"
-                                                >
-                                                    <span className={`${T.subsectionLabel} shrink-0 text-zinc-500`}>Código</span>
-                                                    <span className="font-mono text-sm font-black tracking-[0.2em] text-white">{player.uniqueCode}</span>
-                                                    {copied ? <Check className="h-4 w-4 shrink-0 text-padel-primary" /> : <Copy className="h-4 w-4 shrink-0 text-zinc-500" />}
-                                                </button>
-                                            )}
-                                            <p className={`${T.subsectionLabel} flex flex-wrap items-center gap-x-2 gap-y-0.5`}>
-                                                <span>Posición</span>
-                                                <span className="font-semibold text-padel-primary">{player.position || 'Drive / Revés'}</span>
-                                            </p>
-                                        </div>
+                            <div className="space-y-8 p-6 sm:p-8 md:p-10">
+                                {/* Encabezado Centrado */}
+                                <div className="flex flex-col items-center gap-6 text-center">
+                                    <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-padel-primary/30 bg-white/5 shadow-xl shadow-padel-primary/10 sm:h-28 sm:w-28">
+                                        {player.photo ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img src={player.photo} alt="" className="h-full w-full object-cover" />
+                                        ) : (
+                                            <User className="h-10 w-10 text-zinc-600" />
+                                        )}
                                     </div>
 
-                                    <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end lg:w-auto lg:flex-col lg:items-stretch">
-                                        <span className="inline-flex w-fit items-center rounded-full bg-padel-primary/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-padel-primary">
-                                            Nivel {player.level ?? 4}
-                                        </span>
-                                        <button
-                                            type="button"
-                                            onClick={() => router.push(`/players/register?edit=${player.id}`)}
-                                            className="inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase tracking-widest text-zinc-200 transition-all hover:border-padel-primary/50 hover:bg-padel-primary hover:text-black sm:min-h-0 lg:w-full"
-                                        >
-                                            <Edit3 className="h-4 w-4 shrink-0" />
-                                            Modificar ficha
-                                        </button>
+                                    <div className="space-y-4">
+                                        <h2 className="text-xl font-black uppercase italic tracking-tight text-white sm:text-2xl">
+                                            {player.name} {player.lastName}
+                                        </h2>
+
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">
+                                                <span>Código:</span>
+                                                <span className="font-mono font-black text-white">{player.uniqueCode}</span>
+                                            </div>
+                                            <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-[0.15em]">
+                                                <div className="flex items-center gap-2 text-padel-primary">
+                                                    <span>Nivel:</span>
+                                                    <span className="font-black">{player.level ?? 4}</span>
+                                                </div>
+                                                <div className="h-3 w-px bg-white/10" />
+                                                <div className="flex items-center gap-2 text-white">
+                                                    <span className="text-zinc-500">Posición:</span>
+                                                    <span className="font-black">{player.position || 'Drive / Revés'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 gap-6 border-t border-white/10 pt-6 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6">
+                                <div className="grid grid-cols-1 gap-6 border-t border-white/10 pt-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6">
                                     <div className="min-w-0 space-y-2">
                                         <p className={`${T.subsectionLabel} flex items-center gap-2`}>
                                             <Shield className="h-3.5 w-3.5 shrink-0" aria-hidden /> Identificación
@@ -347,15 +324,18 @@ export default function MiCuentaPage() {
                                             <Shirt className="h-3.5 w-3.5 shrink-0" aria-hidden /> Tallas
                                         </p>
                                         <div className={`${T.body} space-y-1.5 break-words`}>
-                                            <p>
+                                            <p className="flex items-center gap-2">
+                                                <Shirt className="h-3.5 w-3.5 text-zinc-500" />
                                                 <span className="font-semibold text-white">Franela:</span>{' '}
                                                 <span className="text-zinc-300">{player.suitSize || '—'}</span>
                                             </p>
-                                            <p>
+                                            <p className="flex items-center gap-2">
+                                                <Shirt className="h-3.5 w-3.5 text-zinc-500 rotate-180" />
                                                 <span className="font-semibold text-white">Short:</span>{' '}
                                                 <span className="text-zinc-300">{player.shortSize || '—'}</span>
                                             </p>
-                                            <p>
+                                            <p className="flex items-center gap-2">
+                                                <User className="h-3.5 w-3.5 text-zinc-500" />
                                                 <span className="font-semibold text-white">Calzado:</span>{' '}
                                                 <span className="text-zinc-300">{player.shoeSize || '—'}</span>
                                             </p>
@@ -392,9 +372,6 @@ export default function MiCuentaPage() {
                             className={`${T.card} border-dashed border-white/20 p-6 text-center sm:p-8`}
                             aria-labelledby="sin-ficha-heading"
                         >
-                            <h2 id="sin-ficha-heading" className={T.section}>
-                                Ficha de jugador
-                            </h2>
                             <p className={`${T.body} mx-auto mt-4 max-w-md font-medium text-zinc-200`}>
                                 Aún no has creado tu ficha de jugador.
                             </p>
@@ -412,7 +389,18 @@ export default function MiCuentaPage() {
                     )}
                 </div>
 
-                <div className="mx-auto mt-2 w-full max-w-2xl min-w-0 px-0">
+                <div className="mx-auto mt-8 w-full max-w-2xl space-y-4">
+                    {player && (
+                        <button
+                            type="button"
+                            onClick={() => router.push(`/players/register?edit=${player.id}`)}
+                            className="flex w-full min-h-[52px] touch-manipulation items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 py-3.5 text-xs font-black uppercase tracking-widest text-zinc-200 transition-all hover:bg-white/10 active:scale-[0.98]"
+                        >
+                            <Edit3 className="h-4 w-4 shrink-0" />
+                            Modificar ficha
+                        </button>
+                    )}
+
                     <button
                         type="button"
                         onClick={async () => {

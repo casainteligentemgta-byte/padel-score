@@ -630,23 +630,29 @@ function RegistrationFormContent() {
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="space-y-1">
                                             <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Franela</label>
-                                            <select
-                                                className="w-full bg-zinc-950 border border-white/20 rounded-xl px-2 py-2 text-[10px] font-black uppercase outline-none appearance-none text-white text-center focus:border-padel-primary focus:bg-black transition-all"
-                                                value={formData.suitSize}
-                                                onChange={e => updateField('suitSize', e.target.value)}
-                                            >
-                                                {sizes.map(s => <option key={s} value={s} className="bg-zinc-900">{s}</option>)}
-                                            </select>
+                                            <div className="relative group">
+                                                <select
+                                                    className="w-full bg-zinc-950 border border-white/20 rounded-xl pl-8 pr-2 py-2 text-[10px] font-black uppercase outline-none appearance-none text-white focus:border-padel-primary focus:bg-black transition-all"
+                                                    value={formData.suitSize}
+                                                    onChange={e => updateField('suitSize', e.target.value)}
+                                                >
+                                                    {sizes.map(s => <option key={s} value={s} className="bg-zinc-900">{s}</option>)}
+                                                </select>
+                                                <Shirt className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-800 group-focus-within:text-padel-primary pointer-events-none" />
+                                            </div>
                                         </div>
                                         <div className="space-y-1">
                                             <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Short</label>
-                                            <select
-                                                className="w-full bg-zinc-950 border border-white/20 rounded-xl px-2 py-2 text-[10px] font-black uppercase outline-none appearance-none text-white text-center focus:border-padel-primary focus:bg-black transition-all"
-                                                value={formData.shortSize}
-                                                onChange={e => updateField('shortSize', e.target.value)}
-                                            >
-                                                {sizes.map(s => <option key={s} value={s} className="bg-zinc-900">{s}</option>)}
-                                            </select>
+                                            <div className="relative group">
+                                                <select
+                                                    className="w-full bg-zinc-950 border border-white/20 rounded-xl pl-8 pr-2 py-2 text-[10px] font-black uppercase outline-none appearance-none text-white focus:border-padel-primary focus:bg-black transition-all"
+                                                    value={formData.shortSize}
+                                                    onChange={e => updateField('shortSize', e.target.value)}
+                                                >
+                                                    {sizes.map(s => <option key={s} value={s} className="bg-zinc-900">{s}</option>)}
+                                                </select>
+                                                <Shirt className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-800 group-focus-within:text-padel-primary pointer-events-none opacity-70" />
+                                            </div>
                                         </div>
                                     </div>
 

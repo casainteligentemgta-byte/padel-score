@@ -23,6 +23,8 @@ import { useRouter } from 'next/navigation';
 import BouncingBall from '@/components/BouncingBall';
 import { useAppSettings } from '@/lib/AppSettingsContext';
 import { isAdminAccess } from '@/lib/adminAccess';
+import LegalModal from '@/components/legal/LegalModal';
+import { getAuthHeaders } from '@/lib/apiAuth';
 
 export default function HomePage() {
     const { user, isAdmin, loading: authLoading, profileLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
@@ -39,6 +41,10 @@ export default function HomePage() {
         password: '',
         name: ''
     });
+
+    const [smartConsentAccepted, setSmartConsentAccepted] = useState(false);
+    const [smartConsentModalOpen, setSmartConsentModalOpen] = useState(false);
+    const [smartConsentSaving, setSmartConsentSaving] = useState(false);
 
     useEffect(() => {
         if (!authLoading && user) {
@@ -107,7 +113,33 @@ export default function HomePage() {
             if (isLogin) {
                 await signInWithEmail(formData.email, formData.password);
             } else {
+                if (!smartConsentAccepted) {
+                    setError('Debes aceptar los Términos y Condiciones y la Política de Privacidad.');
+                    setLoading(false);
+                    return;
+                }
                 await signUpWithEmail(formData.email, formData.password, formData.name);
+
+                // Persistimos el consentimiento legal
+                try {
+                    let headers = await getAuthHeaders();
+                    let tries = 0;
+                    while (!headers.Authorization && tries < 6) {
+                        await new Promise((r) => setTimeout(r, 250));
+                        headers = await getAuthHeaders();
+                        tries++;
+                    }
+
+                    if (headers.Authorization) {
+                        await fetch('/api/legal/accept', {
+                            method: 'POST',
+                            headers: { ...headers, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({}),
+                        });
+                    }
+                } catch (e) {
+                    console.error('Error persisting legal consent:', e);
+                }
             }
             const shouldGoAdmin = isAdmin || isAdminAccess(undefined, formData.email);
             router.push(shouldGoAdmin ? '/admin' : '/dashboard');
@@ -279,6 +311,37 @@ export default function HomePage() {
                                 )}
                             </AnimatePresence>
 
+                            {!isLogin && (
+                                <div className="mt-2 px-2">
+                                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={smartConsentAccepted}
+                                            onChange={(e) => {
+                                                if (!e.target.checked) {
+                                                    setSmartConsentAccepted(false);
+                                                    return;
+                                                }
+                                                setSmartConsentModalOpen(true);
+                                            }}
+                                            className="mt-1 w-5 h-5 rounded border-2 border-white/10 accent-[#ccff00]"
+                                        />
+                                        <div className="min-w-0">
+                                            <p className="text-xs text-white/90 leading-snug font-normal">
+                                                Declaro haber leido, comprendido y aceptado los <span className="underline">Términos y Condiciones</span> y la <span className="underline">Politica de Privacidad</span>.
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSmartConsentModalOpen(true)}
+                                                className="mt-1 text-[11px] font-black uppercase tracking-widest text-padel-primary/90 hover:underline"
+                                            >
+                                                Ver contrato
+                                            </button>
+                                        </div>
+                                    </label>
+                                </div>
+                            )}
+
                             <button
                                 disabled={loading}
                                 type="submit"
@@ -323,6 +386,16 @@ export default function HomePage() {
                     </button>
                 </div>
             </motion.div>
+
+            <LegalModal
+                open={smartConsentModalOpen}
+                onClose={() => setSmartConsentModalOpen(false)}
+                loading={smartConsentSaving}
+                onAccept={() => {
+                    setSmartConsentAccepted(true);
+                    setSmartConsentModalOpen(false);
+                }}
+            />
         </div>
     );
 }

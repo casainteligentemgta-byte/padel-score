@@ -5,7 +5,7 @@ import Link from 'next/link';
 /** Texto legal de inscripción (alineado con /terminos-inscripcion). */
 export function LegalTermsInscriptionBody() {
     return (
-        <div className="space-y-4 text-sm leading-relaxed text-zinc-400 [text-wrap:pretty]">
+        <div className="space-y-4 text-sm leading-relaxed text-zinc-400 [text-wrap:pretty] text-justify">
             <p>
                 Al inscribirte en un torneo aceptas los siguientes términos. Lee con atención la información sobre
                 comprobantes de pago y el uso de tus datos personales.
@@ -59,7 +59,7 @@ export function LegalTermsInscriptionBody() {
 /** Contrato Pro Smart (registro jugador). */
 export function LegalTermsProPlayerBody() {
     return (
-        <div className="space-y-4 text-sm leading-relaxed text-zinc-400 [text-wrap:pretty]">
+        <div className="space-y-4 text-sm leading-relaxed text-zinc-400 [text-wrap:pretty] text-justify">
             <section>
                 <h3 className="mb-1 text-xs font-black uppercase tracking-wider text-[#ccff00]">1. Exoneración de responsabilidad</h3>
                 <p>

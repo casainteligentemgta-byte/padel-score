@@ -578,8 +578,8 @@ export default function LoginPage() {
                                             className="mt-1 w-5 h-5 rounded border-2 border-white/10 accent-[#ccff00]"
                                         />
                                         <div className="min-w-0">
-                                            <p className="text-xs font-bold text-white/90 leading-snug">
-                                                Acepto el Contrato de Adhesión y Exoneración de Responsabilidad
+                                            <p className="text-xs text-white/90 leading-snug font-normal">
+                                                Declaro haber leido, comprendido y aceptado los <span className="underline">Términos y Condiciones</span> y la <span className="underline">Politica de Privacidad</span>.
                                             </p>
                                             <button
                                                 type="button"

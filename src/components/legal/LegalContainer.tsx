@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type SignatureCanvas from 'react-signature-canvas';
 import { motion } from 'framer-motion';
-import { PuntitoIA, type LegalFlowType } from '@/components/legal/PuntitoIA';
+import { type LegalFlowType } from '@/components/legal/PuntitoIA';
 import { SignaturePadField } from '@/components/legal/SignaturePadField';
 import { BiometricCapture } from '@/components/legal/BiometricCapture';
 import { LegalTermsInscriptionBody, LegalTermsProPlayerBody } from '@/components/legal/LegalTermsBodies';
@@ -31,7 +31,6 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
     const [scrollComplete, setScrollComplete] = useState(false);
     const padRef = useRef<SignatureCanvas | null>(null);
     const [sigEmpty, setSigEmpty] = useState(true);
-    const [celebrate, setCelebrate] = useState(false);
     const [bioPath, setBioPath] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
@@ -68,12 +67,11 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
     const canSubmit = scrollComplete && hasValidation && !!userId;
 
     const defaultTitle =
-        type === 'inscription' ? 'Términos de inscripción' : 'Contrato Pro Smart';
+        type === 'inscription' ? 'TERMINOS DE INSCRIPCION' : 'Contrato Pro Smart';
 
     const clearSignature = () => {
         padRef.current?.clear();
         setSigEmpty(true);
-        setCelebrate(false);
     };
 
     const handleAccept = async () => {
@@ -106,9 +104,7 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
         <div
             className={`relative flex min-h-0 flex-col rounded-3xl border border-white/10 bg-[#0a0a0a] font-sans text-zinc-100 ${className}`}
         >
-            <PuntitoIA type={type} celebrate={celebrate} />
-
-            <div className="border-b border-white/10 px-5 pb-3 pt-5 pr-[min(240px,40%)]">
+            <div className="border-b border-white/10 px-5 pb-3 pt-5 text-center">
                 <h3 className="text-lg font-black uppercase italic tracking-tight text-white">{title ?? defaultTitle}</h3>
                 <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Versión {CURRENT_TERMS_VERSION}</p>
             </div>
@@ -116,7 +112,7 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
             <div
                 ref={scrollRef}
                 onScroll={onScroll}
-                className="legal-scroll-area min-h-[180px] max-h-[min(42vh,320px)] flex-1 overflow-y-auto overflow-x-hidden px-5 py-4"
+                className="legal-scroll-area min-h-[180px] max-h-[min(42vh,320px)] flex-1 overflow-y-auto overflow-x-hidden px-5 py-4 text-justify"
             >
                 {children ?? (type === 'inscription' ? <LegalTermsInscriptionBody /> : <LegalTermsProPlayerBody />)}
             </div>
@@ -155,8 +151,6 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
                         padRef={padRef}
                         onStrokeEnd={(empty) => {
                             setSigEmpty(empty);
-                            if (!empty) setCelebrate(true);
-                            else setCelebrate(false);
                         }}
                     />
                 </div>
@@ -167,7 +161,6 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
                         userId={userId}
                         onCapturedPath={(p) => {
                             setBioPath(p);
-                            if (p) setCelebrate(true);
                         }}
                     />
                     {bioPath && (
