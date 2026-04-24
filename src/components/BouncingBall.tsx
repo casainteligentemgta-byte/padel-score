@@ -16,9 +16,11 @@ interface BouncingBallProps {
     duration?: number;
     /** Altura del rebote relativa al tamaño. Default: 2.2 */
     bounceHeight?: number;
+    /** Clases de CSS adicionales. */
+    className?: string;
 }
 
-export function BouncingBall({ size = 36, duration = 700, bounceHeight = 2.2 }: BouncingBallProps) {
+export function BouncingBall({ size = 36, duration = 700, bounceHeight = 2.2, className = "" }: BouncingBallProps) {
     const travel = size * bounceHeight;          // px que sube la pelota
     const shadowBase = size * 0.55;             // ancho base de la sombra
     const animId = `bb-${size}-${duration}`;     // ID único para los keyframes
@@ -122,7 +124,7 @@ export function BouncingBall({ size = 36, duration = 700, bounceHeight = 2.2 }: 
                 }
             `}</style>
 
-            <div className={`${animId}-wrap`} role="img" aria-label="Pelota de pádel">
+            <div className={`${animId}-wrap ${className}`} role="img" aria-label="Pelota de pádel">
                 <div className={`${animId}-ball`} />
                 <div className={`${animId}-shadow`} style={{ marginTop: `${size * 0.05}px` }} />
             </div>
