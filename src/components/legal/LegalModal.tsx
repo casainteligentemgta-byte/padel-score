@@ -71,7 +71,7 @@ export default function LegalModal({
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-[260] flex items-center justify-center px-4 py-6">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4 py-6">
           <motion.button
             type="button"
             aria-label="Cerrar"
@@ -87,7 +87,7 @@ export default function LegalModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="relative z-[261] w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/10 bg-[#0a0a0a] shadow-2xl"
+            className="relative z-[10000] w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/10 bg-[#0a0a0a] shadow-2xl"
           >
             <div className="flex items-start justify-between gap-3 border-b border-white/10 p-5">
               <div className="min-w-0">

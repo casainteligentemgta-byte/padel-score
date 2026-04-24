@@ -14,7 +14,7 @@ export function TermsReacceptanceOverlay() {
 
     if (accepted) {
         return (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0a0a]/90 backdrop-blur-md p-4">
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0a0a0a]/90 backdrop-blur-md p-4">
                 <motion.div 
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
@@ -45,7 +45,7 @@ export function TermsReacceptanceOverlay() {
     }
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0a0a]/80 backdrop-blur-sm p-4 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="smart-legal-title">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0a0a0a]/80 backdrop-blur-sm p-4 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="smart-legal-title">
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
