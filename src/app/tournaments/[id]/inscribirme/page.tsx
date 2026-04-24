@@ -1297,14 +1297,24 @@ export default function InscribirmePage() {
                                                 onAccept={async () => {
                                                     setSmartConsentSaving(true);
                                                     try {
-                                                        const headers = await getAuthHeaders();
+                                                        // Retry auth headers once — Supabase session may not be ready on first call
+                                                        let headers = await getAuthHeaders();
+                                                        if (!headers.Authorization) {
+                                                            await new Promise((r) => setTimeout(r, 600));
+                                                            headers = await getAuthHeaders();
+                                                        }
                                                         const res = await fetch('/api/legal/accept', {
                                                             method: 'POST',
                                                             headers: { ...headers, 'Content-Type': 'application/json' },
                                                             body: JSON.stringify({}),
                                                         });
                                                         if (!res.ok) {
-                                                            throw new Error('No autorizado o error al guardar el consentimiento.');
+                                                            let serverMsg = `Error ${res.status}`;
+                                                            try {
+                                                                const body = await res.json();
+                                                                if (body?.error) serverMsg = body.error;
+                                                            } catch { /* ignore */ }
+                                                            throw new Error(serverMsg);
                                                         }
                                                         setSmartConsentAccepted(true);
                                                         setSmartConsentModalOpen(false);
