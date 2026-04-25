@@ -1,6 +1,8 @@
 /**
  * Reglas de validación de pagos (Agente de Operaciones y Finanzas).
  * Compara el monto (OCR o capturado) con el precio de la categoría.
+ * En torneos por equipos, el precio de la categoría es el de la inscripción de la pareja
+ * completa (un pago = un equipo en esa categoría), no por jugador.
  * - Coincidencia directa (misma cifra) → pagado.
  * - Si se indica tasa BCV (VES por 1 USD), se acepta equivalencia:
  *   monto en Bs. del comprobante vs precio en USD de la categoría (caso Venezuela).
@@ -10,7 +12,7 @@ export type PaymentStatus = 'pending' | 'paid' | 'alert';
 
 export interface ValidationInput {
     amountExtracted: number | null | undefined;
-    /** Normalmente en USD; debe ser el monto de la categoría. */
+    /** En USD: monto de inscripción de la categoría (por equipo/pareja en formatos por pareja). */
     categoryPrice: number;
     /**
      * Tasa BCV: bolívares por 1 dólar oficial.

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getAuthHeaders } from '@/lib/apiAuth';
 
 export default function AdminValidacionPagosPage() {
     const { user, isAdmin, loading: authLoading } = useAuth();
@@ -84,6 +85,31 @@ export default function AdminValidacionPagosPage() {
         })();
     }, [isAdmin]);
 
+    /**
+     * Tras aprobar al menos un pago: 16 “jugadores” (parejas=2) → WhatsApp al CEO y cierre de inscripciones en el JSON del torneo.
+     */
+    const checkTournamentPlayerCap = async (tournamentId: string | null | undefined) => {
+        const tid = String(tournamentId || '').trim();
+        if (!tid) return;
+        try {
+            const r = await fetch('/api/admin/approve-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+                body: JSON.stringify({ tournamentId: tid }),
+            });
+            const j = (await r.json().catch(() => ({}))) as {
+                capReached?: boolean;
+                alreadyNotified?: boolean;
+                whatsapp?: { sent?: boolean; error?: string };
+            };
+            if (r.ok && j.capReached && j.whatsapp?.sent) {
+                toast.success('Cupo lleno: aviso al CEO y torneo en “inscripciones cerradas”.');
+            }
+        } catch (e) {
+            console.warn('[cupo-torneo]', e);
+        }
+    };
+
     const handleUpdateStatus = async (id: string, status: 'paid' | 'alert' | 'pending', message: string | null = null) => {
         try {
             const inscription = inscriptions.find(ins => ins.id === id);
@@ -100,6 +126,7 @@ export default function AdminValidacionPagosPage() {
                 } catch (assignError) {
                     console.error('[AssignPlayersError]:', assignError);
                 }
+                await checkTournamentPlayerCap(inscription.tournamentId);
             }
 
             setInscriptions(prev => prev.map(ins => ins.id === id ? { ...ins, paymentStatus: status, alertMessage: message } : ins));
@@ -135,6 +162,7 @@ export default function AdminValidacionPagosPage() {
         }
         setAutoVerifying(true);
         let updated = 0;
+        const tournamentsToCheck = new Set<string>();
         try {
             for (const ins of pending) {
                 const amount = ins.paymentData?.paymentAmount != null ? Number(ins.paymentData.paymentAmount) : null;
@@ -154,11 +182,15 @@ export default function AdminValidacionPagosPage() {
                             ins.partnerName
                         );
                     } catch {}
+                    if (ins.tournamentId) tournamentsToCheck.add(String(ins.tournamentId));
                     updated++;
                 } else if (result.paymentStatus === 'alert' && result.alertMessage) {
                     await dataService.updateInscription(ins.id, { paymentStatus: 'alert', alertMessage: result.alertMessage });
                     updated++;
                 }
+            }
+            for (const tid of tournamentsToCheck) {
+                await checkTournamentPlayerCap(tid);
             }
             await loadInscriptions();
             if (updated > 0) alert(`Verificación automática: ${updated} inscripción(es) actualizada(s).`);
@@ -225,6 +257,7 @@ export default function AdminValidacionPagosPage() {
             return;
         }
         setReconcileLoading(true);
+        const tournamentIds = new Set<string>();
         try {
             for (const ins of toMark) {
                 await dataService.updateInscription(ins.id, { paymentStatus: 'paid', alertMessage: null });
@@ -236,6 +269,10 @@ export default function AdminValidacionPagosPage() {
                         ins.partnerName
                     );
                 } catch {}
+                if (ins.tournamentId) tournamentIds.add(String(ins.tournamentId));
+            }
+            for (const tid of tournamentIds) {
+                await checkTournamentPlayerCap(tid);
             }
             await loadInscriptions();
             setReferencesText('');

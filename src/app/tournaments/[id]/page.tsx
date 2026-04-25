@@ -61,6 +61,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { getFinishedMatchScoreLines } from '@/lib/matchFinishedScoreDisplay';
 import { buildPizarraConceptHref } from '@/app/tournaments/event/components/MatchCards';
+import { sortTournamentMatchesForDisplay } from '@/lib/tournamentMatchSort';
 
 /** Mismo diseño para Marcador (en vivo) y celdas del dock — en móvil más compacto (~mitad de ancho por celda en rejilla 4 col) */
 const MATCH_CARD_ACTION_LINK =
@@ -799,28 +800,32 @@ export default function TournamentDashboard() {
         const defaultDateStr = startD && !isNaN(startD.getTime()) ? startD.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
 
         const tableData = matches.length > 0
-            ? [...matches].sort((a, b) => {
-                const timeA = _toMsT(a.time || a.scheduledTime);
-                const timeB = _toMsT(b.time || b.scheduledTime);
-                return timeA - timeB;
-            }).map((m, idx) => {
-                const timeRaw = m.time || m.scheduledTime;
-                const d = timeRaw?.toDate ? timeRaw.toDate() : new Date(timeRaw);
+            ? sortTournamentMatchesForDisplay([...matches] as Record<string, unknown>[]).map((m, idx) => {
+                const timeRaw = (m as { scheduledStartTime?: unknown; time?: unknown; scheduledTime?: unknown }).scheduledStartTime
+                    || (m as { time?: unknown; scheduledTime?: unknown }).time
+                    || (m as { scheduledTime?: unknown }).scheduledTime;
+                const tr = timeRaw as { toDate?: () => Date } | string | number | Date | undefined;
+                const d = tr && typeof (tr as { toDate?: () => Date }).toDate === 'function' ? (tr as { toDate: () => Date }).toDate() : new Date(tr as string | number | Date);
                 const dateStr = isNaN(d.getTime()) ? defaultDateStr : d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const time = isNaN(d.getTime()) ? (timeRaw ? String(timeRaw) : '-') : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
                 // Misma prioridad que las tarjetas del dashboard: team1/team2 vienen enriquecidos
                 // con buildTeamDisplay (nombres desde tournament.teams); team1Name en Firebase puede quedar desactualizado.
-                const label1 = m.team1?.name ?? m.team1Name ?? 'Por definir';
-                const label2 = m.team2?.name ?? m.team2Name ?? 'Por definir';
+                const mm = m as { team1?: { name?: string }; team2?: { name?: string }; team1Name?: string; team2Name?: string; status?: string; score?: string; court?: string | number; courtIndex?: number | null; stage?: string; bracketPosition?: { round?: number; matchInRound?: number } | null; matchNumber?: number; order?: number; orden?: number; id?: string };
+                const label1 = mm.team1?.name ?? mm.team1Name ?? 'Por definir';
+                const label2 = mm.team2?.name ?? mm.team2Name ?? 'Por definir';
+                const posLabel = (() => {
+                    const n = Number((m as { match_number?: number }).match_number ?? mm.matchNumber ?? mm.order ?? mm.orden);
+                    return Number.isFinite(n) && n > 0 ? n : idx + 1;
+                })();
                 return [
-                    idx + 1,
+                    posLabel,
                     dateStr,
                     time,
-                    m.court ?? (m.courtIndex != null ? m.courtIndex + 1 : '-'),
+                    mm.court ?? (mm.courtIndex != null ? mm.courtIndex + 1 : '-'),
                     label1,
-                    m.status === MatchStatus.FINISHED ? (m.score || '-') : 'VS',
+                    mm.status === MatchStatus.FINISHED ? (mm.score || '-') : 'VS',
                     label2,
-                    getStageLabel(m)
+                    getStageLabel(m as any)
                 ];
             })
             : [];
@@ -1194,14 +1199,15 @@ export default function TournamentDashboard() {
         return m.stage === 'MAIN_DRAW' && getStageLabel(m) === activeTab;
     });
 
-    const displayMatches =
-        activeTab === 'Por Comenzar'
+    const displayMatches = sortTournamentMatchesForDisplay(
+        (activeTab === 'Por Comenzar'
             ? strictPorComenzar
             : activeTab === 'En Vivo'
             ? strictEnVivo
             : activeTab === 'Finalizados'
             ? strictTerminados
-            : filteredMatches;
+            : filteredMatches) as Record<string, unknown>[]
+    );
 
     const mainScrollOverflowClass = 'overflow-y-auto min-h-0 overscroll-y-contain touch-pan-y';
 
@@ -1238,9 +1244,10 @@ export default function TournamentDashboard() {
 
         // Retraso estimado en esta cancha
         const delayMins = Math.ceil(elapsedMins - SLOT);
-        const scheduledMs = match.scheduledTime?.toDate
-            ? match.scheduledTime.toDate().getTime()
-            : new Date(match.scheduledTime).getTime();
+        const schedRaw = match.scheduledStartTime || match.scheduledTime;
+        const scheduledMs = schedRaw?.toDate
+            ? schedRaw.toDate().getTime()
+            : new Date(schedRaw).getTime();
         const estimatedStartMs = scheduledMs + delayMins * 60000 + 5 * 60000; // +5 min buffer
 
         return { delayMins, estimatedStartMs };
@@ -2498,8 +2505,7 @@ export default function TournamentDashboard() {
                                         }
                                     >
                                         {displayMatches.filter((match: any) => match && match.team1 && match.team2).map((match: any, idx: number) => {
-                                            const mi = matches.findIndex((m: any) => m?.id && match?.id && m.id === match.id);
-                                            const matchNumber = getMatchOrder(match, mi >= 0 ? mi : idx);
+                                            const matchNumber = getMatchOrder(match, idx);
 
                                             // ── Resolver nombres de jugadores ──────────────────────────────────
                                             // Prioridad: teamLabel (TBD/knockout) > p1Name > p1.name > team1Name > '?'
@@ -2567,7 +2573,7 @@ export default function TournamentDashboard() {
                                                                         </>
                                                                     )}
                                                                     {(() => {
-                                                                        const raw = match.time || match.scheduledTime;
+                                                                        const raw = match.scheduledStartTime || match.time || match.scheduledTime;
                                                                         if (delayInfo) {
                                                                             const est = new Date(delayInfo.estimatedStartMs);
                                                                             return (

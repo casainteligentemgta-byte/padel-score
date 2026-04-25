@@ -4,6 +4,12 @@ import { getAuthHeaders } from './apiAuth';
 import { getScoringRules } from './matchScoringRules';
 import { syncMatchOrderFields } from './matchOrderMeta';
 import { selectCanchaPublicidadPlaylist } from './canchaPublicidadQuery';
+import {
+  isTestPartnerCode,
+  TEST_PARTNER_DISPLAY_NAME,
+  TEST_PARTNER_EMAIL,
+  TEST_PARTNER_USER_ID,
+} from './testPartnerProfile';
 
 const supabase = () => {
     const c = getSupabaseClient();
@@ -1349,6 +1355,14 @@ export const dataService = {
         const cleanedCode = code.trim().toUpperCase().replace(/\s/g, '');
         if (!/^[A-Z0-9]{6}$/.test(cleanedCode)) return null;
 
+        if (isTestPartnerCode(cleanedCode)) {
+            return {
+                id: TEST_PARTNER_USER_ID,
+                name: TEST_PARTNER_DISPLAY_NAME,
+                email: TEST_PARTNER_EMAIL,
+            };
+        }
+
         try {
             const authHeaders = await getAuthHeaders();
             if (authHeaders.Authorization) {
@@ -2030,6 +2044,47 @@ export const dataService = {
             paymentStatus: r.payment_status,
             inscriptionStatus: (r.inscription_status as string) ?? 'NORMAL',
         };
+    },
+
+    /**
+     * Con el id de `teams` (invitación), obtiene el `inscriptionId` asociado si el usuario logueado es el invitado (player B).
+     */
+    async getInscriptionIdForPartnerTeam(teamId: string): Promise<string | null> {
+        const cleanT = String(teamId ?? '').trim();
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanT)) {
+            return null;
+        }
+        const db = supabase();
+        const { data: { user } } = await db.auth.getUser();
+        if (!user?.id) return null;
+
+        const { data: team, error: te } = await db
+            .from('teams')
+            .select('tournament_id, category, player_a_id, player_b_id, status, expires_at')
+            .eq('id', cleanT)
+            .maybeSingle();
+        if (te || !team) return null;
+        if (String((team as any).player_b_id) !== user.id) return null;
+        if (
+            (team as any).status === 'pending' &&
+            (team as any).expires_at &&
+            new Date(String((team as any).expires_at)) < new Date()
+        ) {
+            return null;
+        }
+
+        const t = team as { tournament_id: string; category: string; player_a_id: string };
+        const { data: ins, error: ie } = await db
+            .from('inscriptions')
+            .select('id')
+            .eq('tournament_id', t.tournament_id)
+            .eq('category_key', t.category)
+            .eq('user_id', t.player_a_id)
+            .eq('partner_id', user.id)
+            .maybeSingle();
+        if (ie) return null;
+        if (ins && (ins as { id?: string }).id) return String((ins as { id: string }).id);
+        return null;
     },
 
     /**

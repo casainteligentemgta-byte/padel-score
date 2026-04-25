@@ -45,6 +45,8 @@ import {
     Check
 } from 'lucide-react';
 import { useRouteSegment } from '@/lib/useRouteSegment';
+import { getAuthHeaders } from '@/lib/apiAuth';
+import { isTestPartnerUserId } from '@/lib/testPartnerProfile';
 import { TournamentType } from '@/types/tournament';
 
 /** Categorías de inscripción que el organizador puede configurar en el torneo (tournament.inscriptionCategories). */
@@ -57,7 +59,10 @@ export type InscriptionCategoryOption = {
     ageMin?: number;
     /** Edad máxima (años cumplidos) para inscribirse en esta categoría. Opcional. */
     ageMax?: number;
-    /** Cupo máximo de inscritos en esta categoría. Opcional; si no se define, sin límite. */
+    /**
+     * Cupo máximo en plazas (jugadores) por categoría.
+     * En torneos por equipos, el formulario de torneo usa parejas×2; el cupo "ocupado" cuenta equipos (1 inscripción = 1 pareja).
+     */
     maxSlots?: number;
 };
 
@@ -359,8 +364,13 @@ export default function InscribirmePage() {
     );
     const isCategoryFull = (cat: InscriptionCategoryOption) => {
         if (cat.maxSlots == null) return false;
-        const count = inscriptionCountByCategory[cat.key] ?? 0;
-        return count >= cat.maxSlots;
+        const teamOrInscriptionCount = inscriptionCountByCategory[cat.key] ?? 0;
+        // getOccupiedSlots = nº de equipos (filas en `teams`); maxSlots = plazas (p. ej. 16 = 8 parejas)
+        if (!isIndividual) {
+            const capEquipos = Math.max(1, Math.floor(cat.maxSlots / 2));
+            return teamOrInscriptionCount >= capEquipos;
+        }
+        return teamOrInscriptionCount >= cat.maxSlots;
     };
     const availableCategories = eligibleCategories.filter((cat) => !isCategoryFull(cat));
     const needsProfileForEligibility =
@@ -399,17 +409,6 @@ export default function InscribirmePage() {
         if (partnerCode.length !== 6) {
             setPartnerError('El código debe ser de 6 dígitos.');
             return false;
-        }
-
-        // Llave maestra de pruebas: permite continuar el flujo sin validar jugador real
-        if (partnerCode === '999999') {
-            setFoundPartner({
-                id: null,
-                name: 'Compañero Demo',
-                email: 'demo@smartpadel.local',
-            });
-            setPartnerError(null);
-            return true;
         }
 
         setSearchingPartner(true);
@@ -704,6 +703,50 @@ export default function InscribirmePage() {
                         ...inv,
                         partner_name: currentPartner.name
                     });
+                    try {
+                        const inviterFirst = String(participantName || 'Jugador')
+                            .trim()
+                            .split(/\s+/)[0];
+                        const whRes = await fetch('/api/invitations/send-partner-whatsapp', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+                            body: JSON.stringify({
+                                teamId: inv.id,
+                                tournamentDisplayName: tournament.name,
+                                inviterFirstName: inviterFirst,
+                            }),
+                        });
+                        if (!whRes.ok) {
+                            const j = await whRes.json().catch(() => ({}));
+                            console.warn('WhatsApp a compañero no enviado:', (j as { error?: string })?.error || whRes.status);
+                        }
+                    } catch (waErr) {
+                        console.warn('Error al enviar WhatsApp a compañero:', waErr);
+                    }
+                    if (isTestPartnerUserId(currentPartner.id)) {
+                        try {
+                            const ac = await fetch('/api/inscriptions/auto-confirm-test-partner', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    ...(await getAuthHeaders()),
+                                },
+                                body: JSON.stringify({
+                                    teamId: inv.id,
+                                    inscriptionId,
+                                }),
+                            });
+                            if (!ac.ok) {
+                                const j = await ac.json().catch(() => ({}));
+                                console.warn(
+                                    'Auto-confirmación pareja de prueba 888888:',
+                                    (j as { error?: string })?.error || ac.status
+                                );
+                            }
+                        } catch (acErr) {
+                            console.warn('Auto-confirm test partner:', acErr);
+                        }
+                    }
                 }
             }
 
@@ -955,11 +998,32 @@ export default function InscribirmePage() {
                                         <p className="mb-4 text-[11px] leading-snug text-gray-500 sm:text-[10px]">
                                             Solo se muestran categorías que corresponden a tu perfil. Puedes inscribirte en varias; el horario evitará choques.
                                         </p>
+                                        {isIndividual ? (
+                                            <p className="mb-4 text-[10px] leading-snug text-gray-400 sm:text-[10px]">
+                                                <span className="font-bold text-gray-300">Importe mostrado:</span> precio <strong>por jugador</strong> en cada categoría; el pago de la inscripción es por esa plaza.
+                                            </p>
+                                        ) : (
+                                            <p className="mb-4 text-[10px] leading-snug text-gray-400 sm:text-[10px]">
+                                                <span className="font-bold text-gray-300">Importe mostrado:</span> precio <strong>por equipo (pareja)</strong>: un solo pago cubre a los dos jugadores de la categoría elegida.
+                                            </p>
+                                        )}
                                         <div className="space-y-3">
                                             {eligibleCategories.map((cat) => {
                                                 const full = isCategoryFull(cat);
                                                 const count = inscriptionCountByCategory[cat.key] ?? 0;
-                                                const slotsLabel = cat.maxSlots != null ? ` ${count}/${cat.maxSlots} plazas` : '';
+                                                const maxPlazas = cat.maxSlots;
+                                                const capEquipos =
+                                                    !isIndividual && maxPlazas != null
+                                                        ? Math.max(1, Math.floor(maxPlazas / 2))
+                                                        : null;
+                                                const slotsLabel =
+                                                    maxPlazas == null
+                                                        ? ''
+                                                        : isIndividual
+                                                          ? ` ${count}/${maxPlazas} plazas`
+                                                          : capEquipos != null
+                                                            ? ` ${count}/${capEquipos} equipos`
+                                                            : '';
                                                 return (
                                                     <label
                                                         key={cat.key}
@@ -1001,9 +1065,12 @@ export default function InscribirmePage() {
                                                                 <span className="text-[10px] text-gray-500">{slotsLabel}</span>
                                                             )}
                                                             {cat.price > 0 && (
-                                                                <span className={`text-base font-black sm:text-sm ${full ? 'text-gray-500' : 'text-[#ccff00]'}`}>
-                                                                    ${cat.price}
-                                                                </span>
+                                                                <div className={`text-right text-base font-black sm:text-sm ${full ? 'text-gray-500' : 'text-[#ccff00]'}`}>
+                                                                    <span>${cat.price}</span>
+                                                                    <span className="block text-[9px] font-bold uppercase text-gray-500 sm:text-[8px]">
+                                                                        {isIndividual ? 'p. jugador' : 'p. equipo'}
+                                                                    </span>
+                                                                </div>
                                                             )}
                                                         </div>
                                                     </label>
@@ -1107,6 +1174,33 @@ export default function InscribirmePage() {
                                                             Datos de Pago
                                                         </h2>
                                                     </div>
+                                                    <p className="text-[10px] leading-snug text-gray-500">
+                                                        {isIndividual ? (
+                                                            <>
+                                                                Total:{' '}
+                                                                <span className="font-black text-white">
+                                                                    {getCurrency(paymentData.method) === '$' ? '$' : ''}
+                                                                    {totalPrice.toFixed(2)}
+                                                                </span>
+                                                                {getCurrency(paymentData.method) !== '$' && (
+                                                                    <span className="text-white"> {getCurrency(paymentData.method).replace(/\.$/, '')}</span>
+                                                                )}
+                                                                . Suma por categoría (precio por <strong>jugador</strong> en americano individual).
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                Total:{' '}
+                                                                <span className="font-black text-white">
+                                                                    {getCurrency(paymentData.method) === '$' ? '$' : ''}
+                                                                    {totalPrice.toFixed(2)}
+                                                                </span>
+                                                                {getCurrency(paymentData.method) !== '$' && (
+                                                                    <span className="text-white"> {getCurrency(paymentData.method).replace(/\.$/, '')}</span>
+                                                                )}
+                                                                . Categorías elegidas: <strong>precio por equipo (pareja)</strong>, un pago por inscripción de la pareja en cada categoría.
+                                                            </>
+                                                        )}
+                                                    </p>
 
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                         <div className="space-y-2">

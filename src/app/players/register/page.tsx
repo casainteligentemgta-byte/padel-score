@@ -23,6 +23,7 @@ import {
     CircleDot
 } from 'lucide-react';
 import { dataService } from '@/lib/dataService';
+import { getAuthHeaders } from '@/lib/apiAuth';
 import { useAuth } from '@/lib/AuthContext';
 import { formatDNI } from '@/lib/formatters';
 import Sidebar from '@/components/Sidebar';
@@ -249,6 +250,23 @@ function RegistrationFormContent() {
                     }
                 } catch (emailError) {
                     console.error('Error sending notification email:', emailError);
+                }
+
+                try {
+                    const wh = await fetch('/api/admin/new-profile-alert', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+                        body: JSON.stringify({
+                            firstName: formData.name,
+                            lastName: formData.lastName,
+                        }),
+                    });
+                    if (!wh.ok) {
+                        const j = await wh.json().catch(() => ({}));
+                        console.warn('Aviso admin (WhatsApp) no enviado:', (j as { error?: string })?.error);
+                    }
+                } catch (adminErr) {
+                    console.warn('Aviso admin (WhatsApp):', adminErr);
                 }
 
                 alert('¡Jugador registrado con éxito!');

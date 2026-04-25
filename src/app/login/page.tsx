@@ -23,7 +23,7 @@ import {
 import { useAuth } from '@/lib/AuthContext';
 import { isValidEmail, isValidPassword, validateSignupPassword } from '@/lib/authValidators';
 import { getAuthErrorMessage } from '@/lib/authErrorMessages';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import BouncingBall from '@/components/BouncingBall';
 import { getSupabaseClient } from '@/lib/supabase/client';
@@ -35,6 +35,15 @@ type PasswordRequirement = {
     label: string;
     regex: RegExp;
 };
+
+function safeInternalNextPath(raw: string | null | undefined): string | null {
+    if (!raw) return null;
+    const t = String(raw).trim();
+    if (!t.startsWith('/') || t.startsWith('//') || t.includes('://') || t.includes('..')) {
+        return null;
+    }
+    return t;
+}
 
 const PASSWORD_REQUIREMENTS: PasswordRequirement[] = [
     { label: '6-12 caracteres', regex: /^.{6,12}$/ },
@@ -116,6 +125,7 @@ export default function LoginPage() {
         enableDevMode
     } = useAuth();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [isLogin, setIsLogin] = useState(true);
     const [designMode, setDesignMode] = useState<'minimal' | 'glass'>('glass');
     const [loading, setLoading] = useState(false);
@@ -139,13 +149,18 @@ export default function LoginPage() {
 
     useEffect(() => {
         if (!authLoading && user) {
+            const next = safeInternalNextPath(searchParams.get('next'));
+            if (next) {
+                router.replace(next);
+                return;
+            }
             if (isAdmin) {
                 router.replace('/admin');
             } else if (!profileLoading) {
                 router.replace('/dashboard');
             }
         }
-    }, [authLoading, user, profileLoading, isAdmin, router]);
+    }, [authLoading, user, profileLoading, isAdmin, router, searchParams]);
 
     useEffect(() => {
         setPasskeySupported(typeof window !== 'undefined' && 'PublicKeyCredential' in window);
@@ -248,8 +263,13 @@ export default function LoginPage() {
                     }
                 }
             }
-            const shouldGoAdmin = isAdmin || isAdminAccess(undefined, formData.email);
-            router.push(shouldGoAdmin ? '/admin' : '/dashboard');
+            const next = safeInternalNextPath(searchParams.get('next'));
+            if (next) {
+                router.push(next);
+            } else {
+                const shouldGoAdmin = isAdmin || isAdminAccess(undefined, formData.email);
+                router.push(shouldGoAdmin ? '/admin' : '/dashboard');
+            }
         } catch (err: any) {
             setError(getAuthErrorMessage(err));
         } finally {
@@ -278,7 +298,10 @@ export default function LoginPage() {
                 navigator.vibrate([12, 45, 14]);
             }
             setPasskeyBurst(true);
-            if (isAdmin) {
+            const next = safeInternalNextPath(searchParams.get('next'));
+            if (next) {
+                router.push(next);
+            } else if (isAdmin) {
                 router.push('/admin');
             } else {
                 router.push('/dashboard');

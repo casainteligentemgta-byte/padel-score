@@ -10,10 +10,17 @@ import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
 const LOG = '[Smart Padel · WhatsApp]';
 
+function getAppBaseUrl(): string {
+  return (process.env.NEXT_PUBLIC_APP_URL || 'https://smartpadel.app').replace(/\/+$/, '');
+}
+
 export type WhatsNotificationType =
   | 'admin_welcome'
+  | 'admin_new_profile'
   | 'partner_invitation'
-  | 'match_reminder';
+  | 'match_reminder'
+  | 'profile_welcome'
+  | 'tournament_cap_ceo';
 
 export type SendResult = { success: boolean; sid?: string; error?: string };
 
@@ -199,14 +206,126 @@ export async function sendAdminWelcomeMessage(params: {
     return { success: false, error: 'Número de teléfono inválido' };
   }
 
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://smartpadel.app').replace(/\/+$/, '');
-  const hubUrl = `${appUrl}/dashboard`;
+  const hubUrl = `${getAppBaseUrl()}/dashboard`;
   const body =
     `🎾 ¡Bienvenido/a ${params.playerName}!\n` +
     `Ya estás cargado/a para ${params.tournamentName} en ANTIGRAVITY Padel Score.\n` +
     `Ingresa aquí para ver tu actividad: ${hubUrl}`;
 
   return sendWhatsAppMessage(toAddress, body, 'admin_welcome', params.inscriptionId ?? null);
+}
+
+/**
+ * Bienvenida al crear/activar perfil en Smart Padel 58 (ficha, alta en profiles, etc.).
+ */
+export async function sendProfileWelcomeMessage(params: { phone: string; firstName: string }): Promise<SendResult> {
+  const first = (params.firstName || 'Jugador').trim().split(/\s+/)[0] || 'Jugador';
+  const toAddress = normalizeWhatsAppAddress(params.phone);
+  if (!toAddress) {
+    await logNotification({
+      recipient: params.phone,
+      type: 'profile_welcome',
+      status: 'failed',
+      error_message: 'Número de teléfono inválido',
+    });
+    return { success: false, error: 'Número de teléfono inválido' };
+  }
+
+  const body =
+    `¡Bienvenido al futuro del Pádel, ${first}! 🎾🤖 Puntito ya te tiene en el sistema de Smart Padel 58. ` +
+    `Tu perfil ha sido creado exitosamente. Próximo paso: inscribirte en el torneo y subir tu pago.`;
+
+  return sendWhatsAppMessage(toAddress, body, 'profile_welcome');
+}
+
+/**
+ * Aviso interno al admin cuando alguien crea un perfil (alpha / validación de firma).
+ * `ADMIN_ALERT_WHATSAPP` (E.164 sin + o con +), por defecto 584122117270.
+ */
+export async function sendAdminNewProfileAlert(params: { firstName: string; lastName: string }): Promise<SendResult> {
+  const raw =
+    process.env.ADMIN_ALERT_WHATSAPP?.trim() || '584122117270';
+  const toAddress = normalizeWhatsAppAddress(raw);
+  if (!toAddress) {
+    await logNotification({
+      recipient: raw,
+      type: 'admin_new_profile',
+      status: 'failed',
+      error_message: 'ADMIN_ALERT_WHATSAPP no válido',
+    });
+    return { success: false, error: 'Número de admin no válido' };
+  }
+
+  const first = (params.firstName || '').trim() || 'Jugador';
+  const last = (params.lastName || '').trim();
+  const full = last ? `${first} ${last}`.trim() : first;
+
+  const body =
+    `NOTIFICACIÓN ALPHA: Nuevo registro. ${full} acaba de crear su perfil. ` +
+    `Revisa el dashboard para validar su firma legal.`;
+
+  return sendWhatsAppMessage(toAddress, body, 'admin_new_profile');
+}
+
+/**
+ * Aviso al fundador/CEO: cupo lleno (p. ej. 16 jugadores = 8 parejas) en un torneo.
+ * `CEO_ALERT_WHATSAPP` o `ADMIN_ALERT_WHATSAPP`, fallback 584122117270.
+ */
+export async function sendCeoTournamentFullAlert(params: { tournamentName: string }): Promise<SendResult> {
+  const raw =
+    process.env.CEO_ALERT_WHATSAPP?.trim() ||
+    process.env.ADMIN_ALERT_WHATSAPP?.trim() ||
+    '584122117270';
+  const toAddress = normalizeWhatsAppAddress(raw);
+  if (!toAddress) {
+    await logNotification({
+      recipient: raw,
+      type: 'tournament_cap_ceo',
+      status: 'failed',
+      error_message: 'CEO/ADMIN_WA no válido',
+    });
+    return { success: false, error: 'Número CEO no válido' };
+  }
+
+  const name = (params.tournamentName || 'Torneo').trim();
+  const body =
+    `🚨 ¡CASA LLENA, FOUNDER! 🚨 El evento “${name}” acaba de alcanzar sus 16 jugadores confirmados (8 parejas con pago aprobado). ` +
+    `Entra al administrador a generar el cuadro de partidos.`;
+
+  return sendWhatsAppMessage(toAddress, body, 'tournament_cap_ceo');
+}
+
+/**
+ * Invitación a pareja (copy Pampatar / accept-invite con teamId = fila en `teams`).
+ */
+export async function sendPartnerAcceptInviteMessage(params: {
+  toPhone: string;
+  inviterFirstName: string;
+  teamId: string;
+  /** Texto del torneo mostrado al invitado (ej. Beta Test: Pampatar Open). */
+  tournamentDisplayName?: string;
+}): Promise<SendResult> {
+  const toAddress = normalizeWhatsAppAddress(params.toPhone);
+  if (!toAddress) {
+    await logNotification({
+      recipient: params.toPhone,
+      type: 'partner_invitation',
+      status: 'failed',
+      error_message: 'Número de teléfono inválido',
+    });
+    return { success: false, error: 'Número de teléfono inválido' };
+  }
+
+  const name = (params.inviterFirstName || 'Tu compañero').trim().split(/\s+/)[0] || 'Tu compañero';
+  const eventName = (params.tournamentDisplayName || "Beta Test: Pampatar Open").trim();
+  const base = getAppBaseUrl();
+  const link = `${base}/accept-invite?teamId=${encodeURIComponent(params.teamId)}`;
+
+  const body =
+    `¡Épale! 🎾 Tu compañero ${name} te ha invitado a formar pareja en el '${eventName}'. ` +
+    `\n\nPara aceptar y jugar, debes registrarte y firmar el acuerdo digital aquí: \n${link}`;
+
+  return sendWhatsAppMessage(toAddress, body, 'partner_invitation');
 }
 
 /**
@@ -232,7 +351,7 @@ export async function sendPartnerInvitationMessage(params: {
     return { success: false, error: 'Número de teléfono inválido' };
   }
 
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://smartpadel.app').replace(/\/+$/, '');
+  const appUrl = getAppBaseUrl();
   const confirmUrl = `${appUrl}/confirmar-pareja?id=${encodeURIComponent(params.inscriptionId)}`;
   const body =
     `🎾 Hola ${params.guestName}, ${params.hostName} te invitó como pareja para ${params.tournamentName}.\n` +
@@ -274,6 +393,10 @@ export async function sendMatchReminder(params: {
  */
 export const whatsappService = {
   sendAdminWelcomeMessage,
+  sendAdminNewProfileAlert,
+  sendCeoTournamentFullAlert,
+  sendProfileWelcomeMessage,
+  sendPartnerAcceptInviteMessage,
   sendPartnerInvitationMessage,
   sendPartnerInvitation,
   sendMatchReminder,

@@ -822,7 +822,13 @@ export default function NewTournamentPage() {
                                             <User className="w-3.5 h-3.5 text-padel-primary" /> Categorías de inscripción
                                         </label>
                                         <p className="text-xs text-gray-500">
-                                            Los jugadores podrán inscribirse desde la app. Indica el <strong>nº de parejas</strong> por categoría y los cupos se crearán solos (parejas × 2 plazas). El horario evitará choques entre categorías.
+                                            Los jugadores podrán inscribirse desde la app. Indica el <strong>nº de parejas</strong> por categoría y los cupos se crearán solos (parejas × 2 plazas).{' '}
+                                            {tournamentData.type === TournamentType.AMERICANO_INDIVIDUAL ? (
+                                                <>El <strong>precio (USD)</strong> en este flujo es por <strong>jugador</strong> (plaza) en la categoría.</>
+                                            ) : (
+                                                <>El <strong>precio (USD) es por equipo (pareja)</strong>: un solo pago inscribe a la pareja en esa categoría.</>
+                                            )}{' '}
+                                            El horario evitará choques entre categorías.
                                         </p>
                                         {(tournamentData.inscriptionCategories?.length ?? 0) > 0 && (
                                             <ul className="space-y-2">
@@ -852,6 +858,16 @@ export default function NewTournamentPage() {
                                                             className="w-20 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-sm font-bold text-white"
                                                         />
                                                         <span className="text-[10px] text-gray-500">$</span>
+                                                        {tournamentData.type !== TournamentType.AMERICANO_INDIVIDUAL && (
+                                                            <span className="text-[9px] text-gray-600" title="USD por pareja inscrita">
+                                                                /pareja
+                                                            </span>
+                                                        )}
+                                                        {tournamentData.type === TournamentType.AMERICANO_INDIVIDUAL && (
+                                                            <span className="text-[9px] text-gray-600" title="USD por jugador (plaza)">
+                                                                /jug
+                                                            </span>
+                                                        )}
                                                         <span className="text-[10px] text-gray-500">Edad:</span>
                                                         <input
                                                             type="number"
@@ -1746,7 +1762,13 @@ export default function NewTournamentPage() {
                                                 </div>
                                                 <div>
                                                     <h4 className="text-sm font-black uppercase italic text-white leading-none">Precio de Inscripción</h4>
-                                                    <p className="text-[10px] text-gray-500 mt-1 uppercase font-bold tracking-tighter">Establece el costo para esta categoría</p>
+                                                    <p className="text-[10px] text-gray-500 mt-1 font-bold tracking-tighter">
+                                                        {tournamentData.type === TournamentType.AMERICANO_INDIVIDUAL ? (
+                                                            <>Precio por <strong>jugador</strong> (cada plaza en el americano individual / rey de pista).</>
+                                                        ) : (
+                                                            <>Precio por <strong>equipo (pareja)</strong> en la categoría: un pago inscribe a la pareja entera.</>
+                                                        )}
+                                                    </p>
                                                 </div>
                                             </div>
 

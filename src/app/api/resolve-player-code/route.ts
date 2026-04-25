@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/authServerSupabase';
+import {
+  isTestPartnerCode,
+  TEST_PARTNER_DISPLAY_NAME,
+  TEST_PARTNER_EMAIL,
+  TEST_PARTNER_USER_ID,
+} from '@/lib/testPartnerProfile';
 
 const CODE_RE = /^[A-Z0-9]{6}$/;
 
@@ -31,6 +37,14 @@ export async function GET(req: Request) {
   const raw = new URL(req.url).searchParams.get('code')?.trim().toUpperCase().replace(/\s/g, '') || '';
   if (!CODE_RE.test(raw)) {
     return NextResponse.json({ error: 'Código inválido.' }, { status: 400 });
+  }
+
+  if (isTestPartnerCode(raw)) {
+    return NextResponse.json({
+      id: TEST_PARTNER_USER_ID,
+      name: TEST_PARTNER_DISPLAY_NAME,
+      email: TEST_PARTNER_EMAIL,
+    });
   }
 
   const { data: profile, error: pErr } = await supabase

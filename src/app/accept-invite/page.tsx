@@ -1,15 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { dataService, isValidInscriptionId } from '@/lib/dataService';
-import { useRouteSegment } from '@/lib/useRouteSegment';
-
-type InscriptionPreview = Awaited<ReturnType<typeof dataService.getInscriptionById>>;
+import { dataService } from '@/lib/dataService';
 
 function vibrateConfirm(): void {
     if (typeof navigator === 'undefined') return;
@@ -53,39 +50,58 @@ function ConfettiBurst() {
     );
 }
 
-export default function ConfirmarParejaPage() {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function AcceptInviteContent() {
     const router = useRouter();
-    const idFromRoute = useRouteSegment('id');
-    const inscriptionId = useMemo(() => (idFromRoute || '').trim(), [idFromRoute]);
-    const idValid = isValidInscriptionId(inscriptionId);
+    const searchParams = useSearchParams();
+    const teamId = useMemo(() => (searchParams.get('teamId') || '').trim(), [searchParams]);
+    const idValid = UUID_RE.test(teamId);
 
     const { user, loading: authLoading } = useAuth();
-    const [fetching, setFetching] = useState(true);
-    const [sending, setSending] = useState(false);
-    const [inscription, setInscription] = useState<InscriptionPreview>(null);
+    const [resolving, setResolving] = useState(true);
+    const [inscriptionId, setInscriptionId] = useState<string | null>(null);
+    const [preview, setPreview] = useState<Awaited<ReturnType<typeof dataService.getInscriptionById>>>(null);
     const [error, setError] = useState<string | null>(null);
+    const [sending, setSending] = useState(false);
     const [success, setSuccess] = useState(false);
 
     useEffect(() => {
         if (!idValid) {
-            setFetching(false);
+            setResolving(false);
+            return;
+        }
+        if (authLoading) return;
+        if (!user) {
+            setResolving(false);
             return;
         }
         let cancelled = false;
         (async () => {
             try {
-                const row = await dataService.getInscriptionById(inscriptionId);
-                if (!cancelled) setInscription(row);
+                setResolving(true);
+                const ins = await dataService.getInscriptionIdForPartnerTeam(teamId);
+                if (cancelled) return;
+                if (!ins) {
+                    setInscriptionId(null);
+                    setPreview(null);
+                    setError('No pudimos vincular esta invitación con tu cuenta, o el enlace expiró.');
+                } else {
+                    setInscriptionId(ins);
+                    setError(null);
+                    const row = await dataService.getInscriptionById(ins);
+                    if (!cancelled) setPreview(row);
+                }
             } catch (e) {
-                if (!cancelled) setError(e instanceof Error ? e.message : 'No pudimos cargar la invitación.');
+                if (!cancelled) setError(e instanceof Error ? e.message : 'No se pudo cargar la invitación.');
             } finally {
-                if (!cancelled) setFetching(false);
+                if (!cancelled) setResolving(false);
             }
         })();
         return () => {
             cancelled = true;
         };
-    }, [inscriptionId, idValid]);
+    }, [idValid, teamId, user, authLoading]);
 
     useEffect(() => {
         if (!success) return;
@@ -94,7 +110,11 @@ export default function ConfirmarParejaPage() {
     }, [success, router]);
 
     const handleConfirm = useCallback(async () => {
-        if (!idValid || !inscriptionId) return;
+        if (!idValid || !teamId) return;
+        if (!inscriptionId) {
+            setError('No hay inscripción vinculada. Comprueba que inicies con la misma cuenta que usó tu compañero al reservar.');
+            return;
+        }
         setError(null);
         setSending(true);
         try {
@@ -102,17 +122,22 @@ export default function ConfirmarParejaPage() {
             await dataService.confirmReservedTeam(inscriptionId);
             setSuccess(true);
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'No se pudo confirmar la pareja.');
+            setError(e instanceof Error ? e.message : 'No se pudo aceptar la invitación.');
         } finally {
             setSending(false);
         }
-    }, [idValid, inscriptionId]);
+    }, [idValid, teamId, inscriptionId]);
 
-    const status = String(inscription?.inscriptionStatus ?? 'NORMAL').toUpperCase();
+    const loginHref = useMemo(() => {
+        const next = `/accept-invite?teamId=${encodeURIComponent(teamId)}`;
+        return `/login?next=${encodeURIComponent(next)}`;
+    }, [teamId]);
+
+    const status = String(preview?.inscriptionStatus ?? 'NORMAL').toUpperCase();
     const isAlreadyConfirmed = status === 'CONFIRMED';
 
-    const player1Name = inscription?.participantName?.trim() || 'Tu compañero';
-    const tournamentName = inscription?.tournamentName?.trim() || 'torneo';
+    const player1Name = preview?.participantName?.trim() || 'Tu compañero';
+    const tournamentName = preview?.tournamentName?.trim() || 'el torneo';
 
     return (
         <div className="min-h-screen bg-[#080808] text-white font-outfit relative overflow-hidden flex items-center justify-center px-4">
@@ -123,13 +148,42 @@ export default function ConfirmarParejaPage() {
                 <div className="relative z-10 w-full max-w-md rounded-2xl border border-amber-400/30 bg-amber-400/10 p-6 text-center">
                     <AlertCircle className="w-11 h-11 mx-auto mb-3 text-amber-300" />
                     <h1 className="font-black text-xl mb-2 uppercase">Enlace inválido</h1>
-                    <p className="text-sm text-white/75 mb-6">No encontramos un ID válido en la ruta de confirmación.</p>
+                    <p className="text-sm text-white/75 mb-6">Falta o no es válido el parámetro <span className="font-mono">teamId</span> del enlace.</p>
                     <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-full bg-padel-primary px-5 py-2.5 text-black font-bold">
                         Ir al Dashboard <ArrowRight className="w-4 h-4" />
                     </Link>
                 </div>
-            ) : authLoading || fetching ? (
+            ) : authLoading || resolving ? (
                 <DarkSkeleton />
+            ) : !user ? (
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.04] p-6 sm:p-8 text-center"
+                >
+                    <h1 className="text-2xl font-black tracking-tight mb-2">Acepta tu pareja</h1>
+                    <p className="text-sm text-white/65 mb-6">
+                        Inicia sesión o regístrate con la <span className="font-bold text-white">misma cuenta</span> (correo o método) vinculada
+                        a tu ficha, luego vuelve aquí para firmar y confirmar.
+                    </p>
+                    <Link
+                        href={loginHref}
+                        className="inline-flex w-full justify-center items-center gap-2 rounded-xl bg-padel-primary py-3.5 text-sm font-black uppercase tracking-wide text-black"
+                    >
+                        Iniciar sesión o registro
+                    </Link>
+                    <Link href="/dashboard" className="mt-4 block text-center text-xs font-bold text-white/45 hover:text-white/70">
+                        Ir al Dashboard
+                    </Link>
+                </motion.div>
+            ) : error && !inscriptionId ? (
+                <div className="relative z-10 w-full max-w-md rounded-2xl border border-rose-400/30 bg-rose-500/10 p-6 text-center">
+                    <AlertCircle className="w-10 h-10 mx-auto mb-2 text-rose-300" />
+                    <p className="text-sm text-white/85 mb-4">{error}</p>
+                    <Link href={loginHref} className="text-padel-primary font-bold text-sm">
+                        Probar otra sesión
+                    </Link>
+                </div>
             ) : (
                 <AnimatePresence mode="wait">
                     {success ? (
@@ -142,8 +196,8 @@ export default function ConfirmarParejaPage() {
                             <ConfettiBurst />
                             <CheckCircle2 className="w-16 h-16 mx-auto mb-3 text-emerald-300" />
                             <h2 className="text-2xl font-black tracking-tight uppercase">¡LUGAR ASEGURADO!</h2>
-                            <p className="text-sm text-white/75 mt-2">¡Listo! Le hemos avisado a tu compañero por email.</p>
-                            <p className="text-xs text-white/50 mt-1">Redirigiendo al hub...</p>
+                            <p className="text-sm text-white/75 mt-2">Hemos notificado a tu compañero.</p>
+                            <p className="text-xs text-white/50 mt-1">Redirigiendo al hub…</p>
                         </motion.div>
                     ) : isAlreadyConfirmed ? (
                         <motion.div
@@ -154,7 +208,7 @@ export default function ConfirmarParejaPage() {
                         >
                             <h1 className="text-xl font-black uppercase mb-2">Equipo listo</h1>
                             <p className="text-sm text-white/70 mb-6">
-                                Esta inscripción ya está en estado <span className="font-bold text-emerald-300">CONFIRMED</span>.
+                                Esta inscripción ya está <span className="font-bold text-emerald-300">CONFIRMED</span>.
                             </p>
                             <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-full bg-padel-primary px-5 py-2.5 text-black font-bold">
                                 Ir al Dashboard <ArrowRight className="w-4 h-4" />
@@ -168,18 +222,18 @@ export default function ConfirmarParejaPage() {
                             className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl p-6 sm:p-8"
                         >
                             <h1 className="text-2xl font-black tracking-tight mb-4">
-                                🎾 ¡PREPÁRATE! {player1Name} te ha invitado a su equipo para el {tournamentName}
+                                🎾 ¡Hola! {player1Name} te ha reservado lugar en {tournamentName}
                             </h1>
-                            <p className="text-sm text-white/65 mb-6">Confirma tu lugar ahora para cerrar la pareja.</p>
+                            <p className="text-sm text-white/65 mb-6">Confirma ahora completando el acuerdo (firma) y cerrar la pareja en la app.</p>
                             {error ? <p className="text-red-400 text-sm mb-4">{error}</p> : null}
                             <motion.button
                                 type="button"
                                 onClick={handleConfirm}
-                                disabled={sending || !user}
+                                disabled={sending || !inscriptionId}
                                 whileTap={{ scale: sending ? 1 : 0.98 }}
                                 className="w-full rounded-xl bg-padel-primary py-3.5 text-sm font-black uppercase tracking-wide text-black disabled:opacity-50"
                             >
-                                {sending ? 'Confirmando...' : 'Confirmar'}
+                                {sending ? 'Confirmando…' : 'Confirmar mi lugar'}
                             </motion.button>
                             <Link href="/dashboard" className="mt-4 block text-center text-xs font-bold text-white/45 hover:text-white/70">
                                 Ir al Dashboard
@@ -189,5 +243,19 @@ export default function ConfirmarParejaPage() {
                 </AnimatePresence>
             )}
         </div>
+    );
+}
+
+export default function AcceptInvitePage() {
+    return (
+        <Suspense
+            fallback={
+                <div className="min-h-screen bg-[#080808] flex items-center justify-center p-4">
+                    <DarkSkeleton />
+                </div>
+            }
+        >
+            <AcceptInviteContent />
+        </Suspense>
     );
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
+import { sendAdminNewProfileAlert } from '@/services/whatsappService';
 
 type QuickRegisterBody = {
   tournamentId?: string;
@@ -75,6 +76,8 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    let adminNotifyNewProfile = false;
 
     const { data: tournament, error: tErr } = await supabase
       .from('tournaments')
@@ -209,9 +212,11 @@ export async function POST(request: Request) {
             );
           }
           profileId = fallback.data.id as string;
+          adminNotifyNewProfile = true;
         }
         } else {
           profileId = insertRes.data.id as string;
+          adminNotifyNewProfile = true;
         }
       }
     }
@@ -259,6 +264,17 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: ins.error.message }, { status: 400 });
       }
       inscriptionCreated = true;
+    }
+
+    if (adminNotifyNewProfile) {
+      const nameParts = fullName.split(/\s+/).filter(Boolean);
+      const first = nameParts[0] || 'Jugador';
+      const last = nameParts.slice(1).join(' ').trim();
+      try {
+        await sendAdminNewProfileAlert({ firstName: first, lastName: last || '' });
+      } catch (e) {
+        console.error('[quick-register] aviso admin WhatsApp:', e);
+      }
     }
 
     return NextResponse.json({
