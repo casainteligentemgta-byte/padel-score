@@ -1827,6 +1827,40 @@ export const dataService = {
     },
 
     /**
+     * Tras inscribirse en dupla: marca la fila en RESERVED para que el compañero pueda aceptar en
+     * `/confirmar-pareja/:id` (mismo `inscriptionId` devuelto por addInscription).
+     */
+    async setInscriptionAwaitingPartnerConfirmation(inscriptionId: string, partnerProfileId: string): Promise<void> {
+        const cleanI = String(inscriptionId ?? '').trim();
+        const cleanP = String(partnerProfileId ?? '').trim();
+        if (!isValidInscriptionId(cleanI) || !cleanP) return;
+
+        const db = supabase();
+        const { error } = await db
+            .from('inscriptions')
+            .update({
+                inscription_status: 'RESERVED',
+                partner_id: cleanP,
+                updated_at: now(),
+            } as any)
+            .eq('id', cleanI);
+        if (!error) return;
+
+        const errMsg = String((error as any).message || '').toLowerCase();
+        const isMissingPartnerCol =
+            errMsg.includes('partner_id') || errMsg.includes('column') || (error as any).code === '42703';
+        if (isMissingPartnerCol) {
+            const { error: e2 } = await db
+                .from('inscriptions')
+                .update({ inscription_status: 'RESERVED', updated_at: now() } as any)
+                .eq('id', cleanI);
+            throwIfError(e2);
+            return;
+        }
+        throwIfError(error);
+    },
+
+    /**
      * Sincroniza automáticamente los equipos (teams) de un torneo a partir de una inscripción.
      * Reemplaza el siguiente slot libre (placeholder "Jugador X") con los nombres reales del jugador/pareja.
      * Devuelve el id del equipo del torneo actualizado para enlazarlo con la invitación (código del compañero).

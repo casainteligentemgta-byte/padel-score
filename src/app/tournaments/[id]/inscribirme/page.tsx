@@ -633,6 +633,17 @@ export default function InscribirmePage() {
                 );
                 createdInscriptionIds.push(inscriptionId);
 
+                if (!isIndividual && currentPartner?.id && !isMercadoPago) {
+                    try {
+                        await dataService.setInscriptionAwaitingPartnerConfirmation(
+                            inscriptionId,
+                            currentPartner.id
+                        );
+                    } catch (markErr) {
+                        console.error('No se pudo marcar la inscripción para confirmación del compañero:', markErr);
+                    }
+                }
+
                 if (isMercadoPago) continue;
 
                 // Sincronizar equipos del torneo (solo si no es Mercado Pago; con MP el webhook lo hará al aprobar)

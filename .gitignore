@@ -31,6 +31,13 @@ yarn-error.log*
 # vercel
 .vercel
 
+# firebase (caché local / emulador; no versionar)
+.firebase/
+firebase-debug.log
+
+# local / experimentos
+scratch/
+
 # proyecto ajeno (no compilar en build)
 /smart-padel
 

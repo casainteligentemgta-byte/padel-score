@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, 
@@ -9,14 +9,11 @@ import {
   AlertTriangle, 
   CheckCircle2, 
   Clock, 
-  TrendingUp, 
   Search,
-  Filter,
   RefreshCcw,
   ArrowUpRight,
   UserCheck,
-  ShieldCheck,
-  FileText
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
@@ -73,21 +70,40 @@ export default function AdminDashboard() {
   const [payments, setPayments] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [errorLogs, setErrorLogs] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!supabase) return;
     
     try {
+      let payRows: any[] | null = null;
+      const paySelect = '*, profiles(name, full_name, email)';
+      const { data: pendingPay, error: payErr } = await supabase
+        .from('payment_logs')
+        .select(paySelect)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(300);
+      if (payErr) {
+        const { data: fallback } = await supabase
+          .from('payment_logs')
+          .select(paySelect)
+          .order('created_at', { ascending: false })
+          .limit(300);
+        payRows = (fallback || []).filter((p: any) => !p.status || String(p.status).toLowerCase() === 'pending');
+      } else {
+        payRows = pendingPay || [];
+      }
+
       // 1. Fetch Stats & Recent Data
       const [
         { count: userCount },
-        { data: recentPayments },
         { data: recentProfiles },
         { data: recentLogs },
         { data: recentErrors }
       ] = await Promise.all([
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
-        supabase.from('payment_logs').select('*, profiles(name, full_name, email)').order('created_at', { ascending: false }).limit(10),
         supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(10),
         supabase.from('system_logs').select('*').order('timestamp', { ascending: false }).limit(20),
         supabase.from('error_logs').select('*').order('created_at', { ascending: false }).limit(10)
@@ -109,7 +125,7 @@ export default function AdminDashboard() {
         activeAlerts: alerts
       });
 
-      setPayments(recentPayments || []);
+      setPayments(payRows || []);
       setPlayers(recentProfiles || []);
       setLogs(recentLogs || []);
       setErrorLogs(recentErrors || []);
@@ -145,6 +161,37 @@ export default function AdminDashboard() {
     }
   }, [isAdmin, authLoading, fetchData, router, supabase]);
 
+  const filteredPayments = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return payments;
+    return payments.filter((p: any) => {
+      const pr = p.profiles;
+      const u = Array.isArray(pr) ? pr[0] : pr;
+      const name = [u?.full_name, u?.name, u?.email]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      const ref = String(p.reference_number || '').toLowerCase();
+      const phone = String(p.phone_emitter || '').toLowerCase();
+      return ref.includes(q) || name.includes(q) || phone.includes(q);
+    });
+  }, [payments, searchTerm]);
+
+  const handleApprovePaymentLog = async (id: string) => {
+    if (!supabase || !id) return;
+    setApprovingId(id);
+    try {
+      const { error } = await supabase.from('payment_logs').update({ status: 'paid' } as any).eq('id', id);
+      if (error) throw error;
+      await fetchData();
+    } catch (e) {
+      console.error(e);
+      alert(e instanceof Error ? e.message : 'No se pudo aprobar el pago.');
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
@@ -159,7 +206,8 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-[#050505] text-white p-4 md:p-8">
       {/* Header */}
-      <div className="max-w-7xl mx-auto mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="max-w-7xl mx-auto mb-10 flex flex-col gap-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <div className="px-2 py-1 bg-padel-primary/10 border border-padel-primary/20 rounded text-[10px] font-bold text-padel-primary uppercase tracking-wider">
@@ -175,8 +223,21 @@ export default function AdminDashboard() {
           </h1>
           <p className="text-white/50 font-medium">Centro de control y monitoreo en tiempo real.</p>
         </div>
-        
-        <div className="flex items-center gap-3">
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        {activeTab === 'payments' && (
+          <div className="relative w-full sm:w-72">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-padel-primary/60" />
+            <input
+              type="text"
+              placeholder="Referencia, nombre, email o teléfono…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-[#111] border border-padel-primary/40 rounded-full py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/35 focus:outline-none focus:ring-2 focus:ring-padel-primary/50"
+            />
+          </div>
+        )}
+        <div className="flex items-center gap-3 sm:ml-auto">
           <button 
             onClick={() => fetchData()}
             className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors group"
@@ -194,6 +255,8 @@ export default function AdminDashboard() {
               <div className="text-[10px] text-white/40">Sesión Activa</div>
             </div>
           </div>
+        </div>
+        </div>
         </div>
       </div>
 
@@ -259,22 +322,20 @@ export default function AdminDashboard() {
           >
             {/* Main List */}
             <div className="lg:col-span-2 bg-[#111] border border-white/5 rounded-3xl overflow-hidden">
-              <div className="p-6 border-b border-white/5 flex justify-between items-center">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  {activeTab === 'payments' && <CreditCard className="w-5 h-5 text-padel-primary" />}
-                  {activeTab === 'users' && <UserCheck className="w-5 h-5 text-padel-primary" />}
-                  {activeTab === 'logs' && <Activity className="w-5 h-5 text-padel-primary" />}
-                  {activeTab === 'payments' ? 'Últimos Movimientos' : activeTab === 'users' ? 'Últimos Registros' : 'Actividad del Sistema'}
-                </h2>
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
-                    <input 
-                      type="text" 
-                      placeholder="Buscar..."
-                      className="bg-white/5 border border-white/10 rounded-lg py-1.5 pl-10 pr-4 text-xs focus:outline-none focus:border-padel-primary/50 w-40"
-                    />
-                  </div>
+              <div className="p-6 border-b border-white/5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                <div>
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    {activeTab === 'payments' && <CreditCard className="w-5 h-5 text-padel-primary" />}
+                    {activeTab === 'users' && <UserCheck className="w-5 h-5 text-padel-primary" />}
+                    {activeTab === 'logs' && <Activity className="w-5 h-5 text-padel-primary" />}
+                    {activeTab === 'payments' ? 'Pagos pendientes (Pago Móvil / reportes)' : activeTab === 'users' ? 'Últimos Registros' : 'Actividad del Sistema'}
+                  </h2>
+                  {activeTab === 'payments' && (
+                    <p className="text-xs text-white/40 mt-1">
+                      {filteredPayments.length} mostrado(s)
+                      {searchTerm ? ` · filtrando: «${searchTerm}»` : ''}
+                    </p>
+                  )}
                 </div>
               </div>
               
@@ -286,8 +347,9 @@ export default function AdminDashboard() {
                         <>
                           <th className="px-6 py-4">Usuario</th>
                           <th className="px-6 py-4">Referencia</th>
-                          <th className="px-6 py-4">Banco</th>
+                          <th className="px-6 py-4">Banco / monto</th>
                           <th className="px-6 py-4">Fecha</th>
+                          <th className="px-6 py-4 text-right">Acciones</th>
                         </>
                       )}
                       {activeTab === 'users' && (
@@ -309,24 +371,75 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {activeTab === 'payments' && payments.map((item) => (
-                      <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
-                        <td className="px-6 py-4">
-                          <div className="font-bold text-sm text-white">{item.profiles?.full_name || 'Usuario'}</div>
-                          <div className="text-[10px] text-white/40">{item.profiles?.email}</div>
-                        </td>
-                        <td className="px-6 py-4 font-mono text-xs text-padel-primary">#{item.reference_number}</td>
-                        <td className="px-6 py-4 text-xs text-white/70">{item.bank_origin || 'N/A'}</td>
-                        <td className="px-6 py-4 text-[10px] text-white/40">
-                          {new Date(item.created_at).toLocaleString('es-VE', { 
-                            day: '2-digit', 
-                            month: '2-digit', 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
+                    {activeTab === 'payments' && filteredPayments.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-12 text-center text-sm text-white/40">
+                          {searchTerm
+                            ? 'No hay pagos pendientes que coincidan con la búsqueda.'
+                            : 'No hay pagos pendientes en payment_logs.'}
                         </td>
                       </tr>
-                    ))}
+                    )}
+                    {activeTab === 'payments' && filteredPayments.map((item: any) => {
+                      const pr = item.profiles;
+                      const u = Array.isArray(pr) ? pr[0] : pr;
+                      const displayName = [u?.full_name, u?.name].filter(Boolean).join(' ').trim() || u?.email || '—';
+                      const receiptUrl = item.receipt_url as string | undefined;
+                      return (
+                        <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
+                          <td className="px-6 py-4">
+                            <div className="font-bold text-sm text-white">{displayName}</div>
+                            <div className="text-[10px] text-white/40">{u?.email}</div>
+                          </td>
+                          <td className="px-6 py-4 font-mono text-xs text-padel-primary">#{item.reference_number}</td>
+                          <td className="px-6 py-4 text-xs text-white/70">
+                            <div>{item.bank_origin || '—'}</div>
+                            {item.amount_bs != null && (
+                              <div className="text-[10px] text-padel-primary/80 mt-0.5">{item.amount_bs} Bs.</div>
+                            )}
+                            {item.phone_emitter && (
+                              <div className="text-[10px] text-white/40 mt-0.5">Tel. {item.phone_emitter}</div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-[10px] text-white/40">
+                            {new Date(item.created_at).toLocaleString('es-VE', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void handleApprovePaymentLog(item.id)}
+                                disabled={approvingId === item.id}
+                                className="inline-flex items-center justify-center rounded-lg bg-padel-primary px-3 py-1.5 text-[10px] font-black uppercase text-black hover:brightness-95 disabled:opacity-50"
+                              >
+                                {approvingId === item.id ? '…' : 'Aprobar'}
+                              </button>
+                              {receiptUrl && (
+                                <a
+                                  href={receiptUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] font-bold text-white/80 hover:bg-white/10"
+                                >
+                                  Recibo
+                                </a>
+                              )}
+                              <a
+                                href="/admin/validacion-pagos"
+                                className="inline-flex items-center justify-center rounded-lg border border-white/10 px-2 py-1.5 text-[9px] font-bold text-white/50 hover:text-white"
+                              >
+                                Validar
+                              </a>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {activeTab === 'users' && players.map((item) => (
                       <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
                         <td className="px-6 py-4">

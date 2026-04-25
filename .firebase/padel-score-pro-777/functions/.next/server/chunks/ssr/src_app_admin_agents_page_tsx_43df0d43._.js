@@ -1,3 +1,0 @@
-module.exports=[524336,a=>{"use strict";var b=a.i(187924),c=a.i(572131),d=a.i(50944);function e(){let a=(0,d.useRouter)();return(0,c.useEffect)(()=>{a.replace("/agents")},[a]),(0,b.jsx)("div",{className:"min-h-screen bg-[#050505] flex items-center justify-center",children:(0,b.jsx)("div",{className:"text-center text-white",children:(0,b.jsx)("p",{className:"text-sm font-bold uppercase tracking-widest text-padel-primary",children:"Redirigiendo a IA Hub..."})})})}a.s(["default",()=>e])}];
-
-//# sourceMappingURL=src_app_admin_agents_page_tsx_43df0d43._.js.map
