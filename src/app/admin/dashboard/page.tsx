@@ -14,7 +14,8 @@ import {
   ArrowUpRight,
   UserCheck,
   ShieldCheck,
-  ArrowLeft
+  ArrowLeft,
+  UserPlus
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
@@ -58,7 +59,7 @@ export default function AdminDashboard() {
   const supabase = getSupabaseClient();
   const router = useRouter();
   
-  const [activeTab, setActiveTab] = useState<'payments' | 'users' | 'logs'>('payments');
+  const [activeTab, setActiveTab] = useState<'payments' | 'users' | 'logs' | 'inscriptions'>('payments');
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -70,6 +71,7 @@ export default function AdminDashboard() {
   const [players, setPlayers] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
+  const [inscriptions, setInscriptions] = useState<any[]>([]);
   const [errorLogs, setErrorLogs] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -77,16 +79,18 @@ export default function AdminDashboard() {
     payments: false,
     users: false,
     logs: false,
+    inscriptions: false,
   });
   const isFetchingRef = useRef(false);
   const pendingRefreshRef = useRef(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasBootstrappedFeedRef = useRef(false);
-  const activeTabRef = useRef<'payments' | 'users' | 'logs'>('payments');
+  const activeTabRef = useRef<'payments' | 'users' | 'logs' | 'inscriptions'>('payments');
   const latestFeedStampRef = useRef({
     payments: '',
     users: '',
     logs: '',
+    inscriptions: '',
   });
 
   const handleGoBack = useCallback(() => {
@@ -118,6 +122,7 @@ export default function AdminDashboard() {
         { count: userCount },
         { data: recentProfiles },
         { data: recentLogs },
+        { data: recentInscriptions },
         { data: recentErrors },
         { count: paidCount },
         { count: pendingCount },
@@ -132,6 +137,11 @@ export default function AdminDashboard() {
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
         supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(10),
         supabase.from('system_logs').select('*').order('timestamp', { ascending: false }).limit(20),
+        supabase
+          .from('inscriptions')
+          .select('id, tournament_name, category_key, participant_name, payment_status, inscription_status, data, created_at')
+          .order('created_at', { ascending: false })
+          .limit(30),
         supabase.from('error_logs').select('*').order('created_at', { ascending: false }).limit(10),
         supabase.from('inscriptions').select('id', { count: 'exact', head: true }).eq('payment_status', 'paid'),
         supabase.from('inscriptions').select('id', { count: 'exact', head: true }).eq('payment_status', 'pending'),
@@ -157,19 +167,21 @@ export default function AdminDashboard() {
       setPayments(payRows);
       setPlayers(recentProfiles || []);
       setLogs(recentLogs || []);
+      setInscriptions(recentInscriptions || []);
       setErrorLogs(recentErrors || []);
 
       const latestStamp = {
         payments: payRows?.[0]?.created_at ? String(payRows[0].created_at) : '',
         users: recentProfiles?.[0]?.created_at ? String(recentProfiles[0].created_at) : '',
         logs: recentLogs?.[0]?.timestamp ? String(recentLogs[0].timestamp) : '',
+        inscriptions: recentInscriptions?.[0]?.created_at ? String(recentInscriptions[0].created_at) : '',
       };
 
       if (!hasBootstrappedFeedRef.current) {
         latestFeedStampRef.current = latestStamp;
         hasBootstrappedFeedRef.current = true;
       } else {
-        (['payments', 'users', 'logs'] as const).forEach((key) => {
+        (['payments', 'users', 'logs', 'inscriptions'] as const).forEach((key) => {
           const prev = latestFeedStampRef.current[key];
           const next = latestStamp[key];
           if (next && prev && next !== prev && activeTabRef.current !== key) {
@@ -215,6 +227,7 @@ export default function AdminDashboard() {
         .channel('admin_dashboard_realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_logs' }, scheduleRefresh)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, scheduleRefresh)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'inscriptions' }, scheduleRefresh)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'system_logs' }, scheduleRefresh)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'error_logs' }, scheduleRefresh)
         .subscribe();
@@ -374,7 +387,7 @@ export default function AdminDashboard() {
       {/* Content Tabs */}
       <div className="max-w-7xl mx-auto h-[calc(100vh-290px)] md:h-[calc(100vh-305px)] flex flex-col">
         <div className="flex gap-1 p-1 bg-transparent border border-padel-primary/20 rounded-2xl w-fit mb-3">
-          {(['payments', 'users', 'logs'] as const).map((tab) => (
+          {(['payments', 'users', 'inscriptions', 'logs'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -386,8 +399,15 @@ export default function AdminDashboard() {
             >
               {tab === 'payments' && <CreditCard className="w-4 h-4" />}
               {tab === 'users' && <UserCheck className="w-4 h-4" />}
+              {tab === 'inscriptions' && <UserPlus className="w-4 h-4" />}
               {tab === 'logs' && <Activity className="w-4 h-4" />}
-              {tab === 'payments' ? 'Pagos Recientes' : tab === 'users' ? 'Nuevos Usuarios' : 'Logs del Sistema'}
+              {tab === 'payments'
+                ? 'Pagos Recientes'
+                : tab === 'users'
+                  ? 'Nuevos Usuarios'
+                  : tab === 'inscriptions'
+                    ? 'Equipos Inscritos'
+                    : 'Logs del Sistema'}
               {activeTab !== tab && needsAttention[tab] && (
                 <span
                   className="ml-1 inline-flex h-2.5 w-2.5 rounded-full bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.7)] animate-pulse"
@@ -415,8 +435,15 @@ export default function AdminDashboard() {
                   <h2 className="text-lg font-bold flex items-center gap-2">
                     {activeTab === 'payments' && <CreditCard className="w-5 h-5 text-padel-primary" />}
                     {activeTab === 'users' && <UserCheck className="w-5 h-5 text-padel-primary" />}
+                    {activeTab === 'inscriptions' && <UserPlus className="w-5 h-5 text-padel-primary" />}
                     {activeTab === 'logs' && <Activity className="w-5 h-5 text-padel-primary" />}
-                    {activeTab === 'payments' ? 'Pagos pendientes (Pago Móvil / reportes)' : activeTab === 'users' ? 'Últimos Registros' : 'Actividad del Sistema'}
+                    {activeTab === 'payments'
+                      ? 'Pagos pendientes (Pago Móvil / reportes)'
+                      : activeTab === 'users'
+                        ? 'Últimos Registros'
+                        : activeTab === 'inscriptions'
+                          ? 'Inscripciones recientes de equipos'
+                          : 'Actividad del Sistema'}
                   </h2>
                   {activeTab === 'payments' && (
                     <p className="text-[11px] text-white/40 mt-1">
@@ -453,6 +480,14 @@ export default function AdminDashboard() {
                           <th className="px-4 py-3">Nivel</th>
                           <th className="px-4 py-3">Módulo</th>
                           <th className="px-4 py-3">Mensaje</th>
+                          <th className="px-4 py-3">Hora</th>
+                        </>
+                      )}
+                      {activeTab === 'inscriptions' && (
+                        <>
+                          <th className="px-4 py-3">Equipo</th>
+                          <th className="px-4 py-3">Torneo / Categoría</th>
+                          <th className="px-4 py-3">Estado</th>
                           <th className="px-4 py-3">Hora</th>
                         </>
                       )}
@@ -563,6 +598,68 @@ export default function AdminDashboard() {
                         </td>
                       </tr>
                     ))}
+                    {activeTab === 'inscriptions' && inscriptions.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-10 text-center text-sm text-white/40">
+                          Sin inscripciones recientes.
+                        </td>
+                      </tr>
+                    )}
+                    {activeTab === 'inscriptions' && inscriptions.map((item: any) => {
+                      const d = (item.data || {}) as { partnerName?: string };
+                      const partner = String(d.partnerName || '').trim();
+                      const lead = String(item.participant_name || 'Jugador').trim();
+                      const teamName = partner ? `${lead} / ${partner}` : lead;
+                      const tournament = String(item.tournament_name || 'Torneo').trim();
+                      const category = String(item.category_key || '—').trim();
+                      const paymentStatus = String(item.payment_status || 'pending').toLowerCase();
+                      const inscriptionStatus = String(item.inscription_status || 'normal').toUpperCase();
+                      const payChip =
+                        paymentStatus === 'paid'
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                          : paymentStatus === 'alert'
+                            ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                            : 'bg-amber-500/15 text-amber-300 border-amber-500/30';
+                      const insChip =
+                        inscriptionStatus === 'CONFIRMED'
+                          ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                          : inscriptionStatus === 'RESERVED'
+                            ? 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30'
+                            : 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30';
+
+                      return (
+                        <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 py-3.5">
+                            <div className="font-bold text-sm text-white">{teamName}</div>
+                            <div className="text-[10px] text-white/40 font-mono">#{String(item.id || '').slice(0, 8)}</div>
+                          </td>
+                          <td className="px-4 py-3.5 text-xs text-white/80">
+                            <div className="font-bold">{tournament}</div>
+                            <div className="text-[10px] text-white/40 uppercase">{category}</div>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className={`inline-flex items-center rounded-md border px-2 py-1 text-[10px] font-black uppercase tracking-wide ${payChip}`}>
+                                Pago: {paymentStatus}
+                              </span>
+                              <span className={`inline-flex items-center rounded-md border px-2 py-1 text-[10px] font-black uppercase tracking-wide ${insChip}`}>
+                                Insc: {inscriptionStatus}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5 text-[10px] text-white/40">
+                            {item.created_at
+                              ? new Date(item.created_at).toLocaleString('es-VE', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
