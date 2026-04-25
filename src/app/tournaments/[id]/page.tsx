@@ -1030,6 +1030,7 @@ export default function TournamentDashboard() {
         MAS_40: '+40', FEM_40: '+40', MIX_40: '+40', MAS_45: '+45', MAS_50: '+50',
         SUMA_7: 'Suma 7', SUMA_8: 'Suma 8', SUMA_9: 'Suma 9',
         SUMA_10: 'Suma 10', SUMA_11: 'Suma 11',
+        OPEN: 'OPEN',
         PRIMERA: '1ª Cat.', SEGUNDA: '2ª Cat.', TERCERA: '3ª Cat.',
         CUARTA: '4ª Cat.', QUINTA: '5ª Cat.', SEXTA: '6ª Cat.', SEPTIMA: '7ª Cat.',
     };

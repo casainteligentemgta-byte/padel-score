@@ -35,6 +35,7 @@ import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournam
 import { MasterScheduleEngine, MasterScheduleConfig, CategoryConfig } from '@/services/MasterScheduleEngine';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
+import { getAuthHeaders } from '@/lib/apiAuth';
 import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 import { useRouter } from 'next/navigation';
 
@@ -377,6 +378,7 @@ export default function MasterGeneratorPage() {
         SUMA_9: 'Suma 9',
         SUMA_10: 'Suma 10',
         SUMA_11: 'Suma 11',
+        OPEN: 'OPEN',
     };
 
     const CATEGORY_PRIORITY: Record<string, number> = {
@@ -397,6 +399,7 @@ export default function MasterGeneratorPage() {
         [TournamentCategory.SUMA_9]: 12,
         [TournamentCategory.SUMA_10]: 13,
         [TournamentCategory.SUMA_11]: 14,
+        [TournamentCategory.OPEN]: 15,
     };
 
     const GENDER_PRIORITY: Record<string, number> = {
@@ -900,6 +903,69 @@ export default function MasterGeneratorPage() {
         NO_TIE_BREAK: { label: 'Sin Tie-Break', desc: 'Hasta ganar por 2 games', icon: '🔁' },
     };
 
+    /** Póster local (canvas) si Nano Banana 2 no está configurado o falla la red. */
+    const generatePosterCanvasLocal = (): string => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1080;
+        canvas.height = 1350;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('No se pudo crear el lienzo del póster.');
+
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const grad = ctx.createRadialGradient(860, 260, 120, 860, 260, 700);
+        grad.addColorStop(0, 'rgba(204,255,0,0.30)');
+        grad.addColorStop(1, 'rgba(204,255,0,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = '#ccff00';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(28, 28, canvas.width - 56, canvas.height - 56);
+
+        ctx.fillStyle = '#ccff00';
+        ctx.font = '900 36px Inter, Arial, sans-serif';
+        ctx.fillText('SMART PADEL · MEDIA MASTER', 74, 110);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '900 84px Inter, Arial, sans-serif';
+        const title = posterData.title.toUpperCase().slice(0, 42);
+        ctx.fillText(title, 74, 230);
+
+        const drawMeta = (label: string, value: string, y: number) => {
+            ctx.fillStyle = '#8a8a8a';
+            ctx.font = '700 24px Inter, Arial, sans-serif';
+            ctx.fillText(label.toUpperCase(), 74, y);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '800 42px Inter, Arial, sans-serif';
+            ctx.fillText((value || 'Por definir').slice(0, 28), 74, y + 52);
+        };
+        drawMeta('Fecha', posterData.date || eventData.startDate || '', 360);
+        drawMeta('Horario', posterData.time || eventData.dailyStartTime || '', 510);
+        drawMeta('Sede', posterData.venue || eventData.complexName || '', 660);
+        drawMeta('Categoría', posterData.category || 'Open', 810);
+
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(74, 980, canvas.width - 148, 210);
+        ctx.strokeStyle = 'rgba(204,255,0,0.35)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(74, 980, canvas.width - 148, 210);
+
+        if (posterData.prize.trim()) {
+            ctx.fillStyle = '#ccff00';
+            ctx.font = '800 32px Inter, Arial, sans-serif';
+            ctx.fillText(`PREMIO: ${posterData.prize.toUpperCase().slice(0, 36)}`, 110, 1055);
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '900 52px Inter, Arial, sans-serif';
+        ctx.fillText((posterData.cta || 'Inscríbete ahora').toUpperCase().slice(0, 28), 110, 1138);
+        ctx.fillStyle = '#8a8a8a';
+        ctx.font = '700 24px Inter, Arial, sans-serif';
+        ctx.fillText('www.smartpadel58.com', 110, 1185);
+
+        return canvas.toDataURL('image/png');
+    };
+
     const handleGeneratePoster = async () => {
         if (!posterData.title.trim()) {
             alert('Indica el título del torneo para generar el póster.');
@@ -907,73 +973,60 @@ export default function MasterGeneratorPage() {
         }
         setIsGeneratingPoster(true);
         try {
-            const canvas = document.createElement('canvas');
-            canvas.width = 1080;
-            canvas.height = 1350;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) throw new Error('No se pudo crear el lienzo del póster.');
+            const res = await fetch('/api/admin/poster-nano-banana-2', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(await getAuthHeaders()),
+                },
+                body: JSON.stringify({
+                    title: posterData.title.trim(),
+                    date: posterData.date || eventData.startDate || '',
+                    time: posterData.time || eventData.dailyStartTime || '',
+                    venue: posterData.venue || eventData.complexName || '',
+                    category: posterData.category || '',
+                    prize: posterData.prize || '',
+                    cta: posterData.cta || 'Inscríbete ahora',
+                    imageQuality: '2K',
+                }),
+            });
 
-            // Background
-            ctx.fillStyle = '#050505';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            const grad = ctx.createRadialGradient(860, 260, 120, 860, 260, 700);
-            grad.addColorStop(0, 'rgba(204,255,0,0.30)');
-            grad.addColorStop(1, 'rgba(204,255,0,0)');
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const j = (await res.json().catch(() => ({}))) as { imageDataUrl?: string; error?: string };
 
-            // Frame
-            ctx.strokeStyle = '#ccff00';
-            ctx.lineWidth = 8;
-            ctx.strokeRect(28, 28, canvas.width - 56, canvas.height - 56);
-
-            // Header
-            ctx.fillStyle = '#ccff00';
-            ctx.font = '900 36px Inter, Arial, sans-serif';
-            ctx.fillText('SMART PADEL · MEDIA MASTER', 74, 110);
-
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '900 84px Inter, Arial, sans-serif';
-            const title = posterData.title.toUpperCase().slice(0, 42);
-            ctx.fillText(title, 74, 230);
-
-            // Meta blocks
-            const drawMeta = (label: string, value: string, y: number) => {
-                ctx.fillStyle = '#8a8a8a';
-                ctx.font = '700 24px Inter, Arial, sans-serif';
-                ctx.fillText(label.toUpperCase(), 74, y);
-                ctx.fillStyle = '#ffffff';
-                ctx.font = '800 42px Inter, Arial, sans-serif';
-                ctx.fillText((value || 'Por definir').slice(0, 28), 74, y + 52);
-            };
-            drawMeta('Fecha', posterData.date || eventData.startDate || '', 360);
-            drawMeta('Horario', posterData.time || eventData.dailyStartTime || '', 510);
-            drawMeta('Sede', posterData.venue || eventData.complexName || '', 660);
-            drawMeta('Categoría', posterData.category || 'Open', 810);
-
-            // Bottom CTA strip
-            ctx.fillStyle = 'rgba(255,255,255,0.06)';
-            ctx.fillRect(74, 980, canvas.width - 148, 210);
-            ctx.strokeStyle = 'rgba(204,255,0,0.35)';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(74, 980, canvas.width - 148, 210);
-
-            if (posterData.prize.trim()) {
-                ctx.fillStyle = '#ccff00';
-                ctx.font = '800 32px Inter, Arial, sans-serif';
-                ctx.fillText(`PREMIO: ${posterData.prize.toUpperCase().slice(0, 36)}`, 110, 1055);
+            if (res.ok && j.imageDataUrl) {
+                setPosterImage(j.imageDataUrl);
+                return;
             }
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '900 52px Inter, Arial, sans-serif';
-            ctx.fillText((posterData.cta || 'Inscríbete ahora').toUpperCase().slice(0, 28), 110, 1138);
-            ctx.fillStyle = '#8a8a8a';
-            ctx.font = '700 24px Inter, Arial, sans-serif';
-            ctx.fillText('www.smartpadel58.com', 110, 1185);
 
-            const dataUrl = canvas.toDataURL('image/png');
-            setPosterImage(dataUrl);
-        } catch (err: any) {
-            alert(err?.message || 'No se pudo generar el póster.');
+            if (res.status === 401 || res.status === 403) {
+                alert(j.error || 'No autorizado. Inicia sesión como administrador.');
+                return;
+            }
+
+            const missingNanoKey =
+                res.status === 503 &&
+                (j.error || '').toLowerCase().includes('nanophoto_api_key');
+
+            if (missingNanoKey) {
+                setPosterImage(generatePosterCanvasLocal());
+                alert(
+                    'Nano Banana 2: falta NANOPHOTO_API_KEY en el servidor (Vercel / .env). Se generó el póster simple en canvas.'
+                );
+                return;
+            }
+
+            alert(j.error || `Nano Banana 2 no disponible (HTTP ${res.status}).`);
+        } catch (err: unknown) {
+            try {
+                setPosterImage(generatePosterCanvasLocal());
+                alert(
+                    `Error de red con Nano Banana 2: ${err instanceof Error ? err.message : 'desconocido'}. Se usó el póster simple.`
+                );
+            } catch (fallbackErr: unknown) {
+                alert(
+                    fallbackErr instanceof Error ? fallbackErr.message : 'No se pudo generar el póster.'
+                );
+            }
         } finally {
             setIsGeneratingPoster(false);
         }
@@ -1781,7 +1834,11 @@ export default function MasterGeneratorPage() {
                                                     <h3 className="text-sm font-black uppercase tracking-widest text-padel-primary">Generador de póster</h3>
                                                 </div>
                                                 <p className="text-[11px] text-zinc-400">
-                                                    Completa los datos clave del torneo y genera una imagen lista para publicar.
+                                                    Imagen con{' '}
+                                                    <span className="text-zinc-300 font-bold">Nano Banana 2</span> (NanoPhoto).
+                                                    Configura{' '}
+                                                    <code className="text-padel-primary/90">NANOPHOTO_API_KEY</code> en el servidor;
+                                                    si falta, se usa un póster simple en canvas.
                                                 </p>
 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1841,7 +1898,7 @@ export default function MasterGeneratorPage() {
                                                         disabled={isGeneratingPoster}
                                                         className="h-11 px-4 rounded-xl bg-padel-primary text-black font-black uppercase text-[11px] tracking-wider hover:brightness-110 disabled:opacity-60"
                                                     >
-                                                        {isGeneratingPoster ? 'Generando…' : 'Generar póster'}
+                                                        {isGeneratingPoster ? 'Generando (IA)…' : 'Generar con Nano Banana 2'}
                                                     </button>
                                                     <button
                                                         type="button"
@@ -1956,7 +2013,8 @@ export default function MasterGeneratorPage() {
                                                     TournamentCategory.MAS_45,
                                                     TournamentCategory.MAS_50, TournamentCategory.SUMA_7,
                                                     TournamentCategory.SUMA_8, TournamentCategory.SUMA_9,
-                                                    TournamentCategory.SUMA_10, TournamentCategory.SUMA_11
+                                                    TournamentCategory.SUMA_10, TournamentCategory.SUMA_11,
+                                                    TournamentCategory.OPEN,
                                                 ].map(level => {
                                                     const exists = eventData.categories.some(c => c.gender === activeGender && c.category === level);
 

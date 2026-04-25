@@ -68,6 +68,7 @@ const CAT_LEVEL_LABELS: Record<string, string> = {
     PRIMERA: '1ª', SEGUNDA: '2ª', TERCERA: '3ª', CUARTA: '4ª', QUINTA: '5ª', SEXTA: '6ª', SEPTIMA: '7ª',
     MAS_40: '+40', FEM_40: '+40', MIX_40: '+40', MAS_45: '+45', MAS_50: '+50',
     SUMA_7: 'Suma 7', SUMA_8: 'Suma 8', SUMA_9: 'Suma 9', SUMA_10: 'Suma 10', SUMA_11: 'Suma 11',
+    OPEN: 'OPEN',
 };
 function formatCategoryLevel(cat: string | undefined): string {
     if (!cat) return '';

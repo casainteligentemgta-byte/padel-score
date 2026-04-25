@@ -18,6 +18,7 @@ const CAT_LEVEL_LABELS: Record<string, string> = {
     SUMA_9: 'Suma 9',
     SUMA_10: 'Suma 10',
     SUMA_11: 'Suma 11',
+    OPEN: 'OPEN',
 };
 
 export function formatPizarraGender(gender: string | undefined): string {

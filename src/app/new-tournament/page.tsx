@@ -161,6 +161,7 @@ export default function NewTournamentPage() {
         { id: TournamentCategory.SUMA_9, label: 'Suma 9' },
         { id: TournamentCategory.SUMA_10, label: 'Suma 10' },
         { id: TournamentCategory.SUMA_11, label: 'Suma 11' },
+        { id: TournamentCategory.OPEN, label: 'OPEN' },
     ];
 
     const COMPLEXES = [

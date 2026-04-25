@@ -32,9 +32,7 @@ export default function AdminValidacionPagosPage() {
     const [inscriptions, setInscriptions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedInscription, setSelectedInscription] = useState<any>(null);
-    const [filter, setFilter] = useState<
-        'all' | 'pending' | 'paid' | 'alert' | 'exonerado' | 'rechazado' | 'revision'
-    >('all');
+    const [filter, setFilter] = useState<'all' | 'paid' | 'exonerado' | 'revision' | 'rechazado'>('all');
     const [autoVerifying, setAutoVerifying] = useState(false);
     const [ocrLoading, setOcrLoading] = useState(false);
     const [ocrResult, setOcrResult] = useState<{ amount: number | null; suggestion: 'paid' | 'alert' | 'pending'; message: string } | null>(null);
@@ -515,12 +513,10 @@ export default function AdminValidacionPagosPage() {
                             {(
                                 [
                                     ['all', 'Todos'],
-                                    ['pending', 'Pend.'],
-                                    ['paid', 'Pagados'],
-                                    ['exonerado', 'Exon.'],
+                                    ['paid', 'Pagado'],
+                                    ['exonerado', 'Exonerado'],
                                     ['revision', 'Revisión'],
-                                    ['rechazado', 'Rech.'],
-                                    ['alert', 'Alerta'],
+                                    ['rechazado', 'Rechazado'],
                                 ] as const
                             ).map(([f, label]) => (
                                 <button
@@ -629,7 +625,7 @@ export default function AdminValidacionPagosPage() {
                             </div>
                             {refSearchNorm ? (
                                 <p className="text-[11px] text-white/45 mt-2">
-                                    Filtro por referencia activo — se combina con el filtro de pestaña (Todos, Pend., etc.).
+                                    Filtro por referencia activo — se combina con el filtro de pestaña (Todos, Pagado, Exonerado, etc.).
                                 </p>
                             ) : null}
                         </div>

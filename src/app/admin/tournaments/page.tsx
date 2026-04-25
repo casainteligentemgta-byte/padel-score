@@ -173,7 +173,8 @@ export default function AdminTournamentsPage() {
                         SUMA_8: 'Suma 8',
                         SUMA_9: 'Suma 9',
                         SUMA_10: 'Suma 10',
-                        SUMA_11: 'Suma 11'
+                        SUMA_11: 'Suma 11',
+                        OPEN: 'OPEN',
                     };
 
                     return Object.entries(groups).map(([key, groupTournaments], gIdx) => {
@@ -184,7 +185,8 @@ export default function AdminTournamentsPage() {
                             SUMA_8: 'Suma 8',
                             SUMA_9: 'Suma 9',
                             SUMA_10: 'Suma 10',
-                            SUMA_11: 'Suma 11'
+                            SUMA_11: 'Suma 11',
+                            OPEN: 'OPEN',
                         };
 
                         const first = groupTournaments[0];

@@ -41,7 +41,8 @@ export enum TournamentCategory {
     SUMA_8 = 'SUMA_8',
     SUMA_9 = 'SUMA_9',
     SUMA_10 = 'SUMA_10',
-    SUMA_11 = 'SUMA_11'
+    SUMA_11 = 'SUMA_11',
+    OPEN = 'OPEN',
 }
 
 export enum MatchStatus {

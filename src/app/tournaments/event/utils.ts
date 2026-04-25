@@ -113,6 +113,7 @@ const CAT_LABEL_MAP: Record<string, string> = {
     SUMA_9: 'Suma 9',
     SUMA_10: 'Suma 10',
     SUMA_11: 'Suma 11',
+    OPEN: 'OPEN',
     PRIMERA: '1ª Cat.',
     SEGUNDA: '2ª Cat.',
     TERCERA: '3ª Cat.',
