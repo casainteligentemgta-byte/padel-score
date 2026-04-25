@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { getAuthHeaders } from '@/lib/apiAuth';
 import { useRouter } from 'next/navigation';
 
 interface StatCardProps {
@@ -65,8 +66,10 @@ export default function AdminDashboard() {
     totalUsers: 0,
     paidInscriptions: 0,
     pendingPayments: 0,
-    activeAlerts: 0
+    activeAlerts: 0,
+    capacity: 0,
   });
+  const [activeTournamentVenue, setActiveTournamentVenue] = useState('—');
   
   const [players, setPlayers] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
@@ -75,6 +78,7 @@ export default function AdminDashboard() {
   const [errorLogs, setErrorLogs] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [fullViewTab, setFullViewTab] = useState<'payments' | 'users' | 'inscriptions' | 'logs' | null>(null);
   const [needsAttention, setNeedsAttention] = useState({
     payments: false,
     users: false,
@@ -116,25 +120,28 @@ export default function AdminDashboard() {
 
     isFetchingRef.current = true;
     try {
-      const paySelect = '*, profiles(name, full_name, email)';
+      const authHeaders = await getAuthHeaders();
+      let payRows: any[] = [];
+      const paymentsRes = await fetch('/api/admin/payment-logs', { headers: authHeaders });
+      if (paymentsRes.ok) {
+        const j = await paymentsRes.json();
+        payRows = Array.isArray(j) ? j : [];
+      }
+
       const [
-        { data: pendingPay, error: payErr },
-        { count: userCount },
+        { data: activeTournament },
         { data: recentProfiles },
         { data: recentLogs },
         { data: recentInscriptions },
         { data: recentErrors },
-        { count: paidCount },
-        { count: pendingCount },
-        { count: alertCount },
       ] = await Promise.all([
         supabase
-          .from('payment_logs')
-          .select(paySelect)
-          .eq('status', 'pending')
+          .from('tournaments')
+          .select('id, data, status, created_at')
+          .in('status', ['active', 'registration_open'])
           .order('created_at', { ascending: false })
-          .limit(120),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+          .limit(1)
+          .maybeSingle(),
         supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(10),
         supabase.from('system_logs').select('*').order('timestamp', { ascending: false }).limit(20),
         supabase
@@ -143,25 +150,61 @@ export default function AdminDashboard() {
           .order('created_at', { ascending: false })
           .limit(30),
         supabase.from('error_logs').select('*').order('created_at', { ascending: false }).limit(10),
-        supabase.from('inscriptions').select('id', { count: 'exact', head: true }).eq('payment_status', 'paid'),
-        supabase.from('inscriptions').select('id', { count: 'exact', head: true }).eq('payment_status', 'pending'),
-        supabase.from('inscriptions').select('id', { count: 'exact', head: true }).eq('payment_status', 'alert'),
       ]);
-      let payRows: any[] = pendingPay || [];
-      if (payErr) {
-        const { data: fallback } = await supabase
-          .from('payment_logs')
-          .select(paySelect)
-          .order('created_at', { ascending: false })
-          .limit(120);
-        payRows = (fallback || []).filter((p: any) => !p.status || String(p.status).toLowerCase() === 'pending');
+
+      let activeTournamentUsers = 0;
+      let paidPlayers = 0;
+      let pendingPlayers = 0;
+      let alertPlayers = 0;
+      let totalCapacity = 0;
+      if (activeTournament?.id) {
+        const { data: activeRows } = await supabase
+          .from('inscriptions')
+          .select('payment_status, data')
+          .eq('tournament_id', activeTournament.id);
+
+        const rows = activeRows || [];
+        const playersForRow = (r: any) => {
+          const d = (r?.data || {}) as Record<string, unknown>;
+          const hasPartner = Boolean(
+            (typeof d.partnerId === 'string' && String(d.partnerId).trim() !== '') ||
+            (typeof d.partnerName === 'string' && String(d.partnerName).trim() !== '')
+          );
+          return hasPartner ? 2 : 1;
+        };
+
+        activeTournamentUsers = rows.reduce((acc, r: any) => acc + playersForRow(r), 0);
+        paidPlayers = rows
+          .filter((r: any) => String(r.payment_status || '').toLowerCase() === 'paid')
+          .reduce((acc, r: any) => acc + playersForRow(r), 0);
+        pendingPlayers = rows
+          .filter((r: any) => String(r.payment_status || '').toLowerCase() === 'pending')
+          .reduce((acc, r: any) => acc + playersForRow(r), 0);
+        alertPlayers = rows
+          .filter((r: any) => String(r.payment_status || '').toLowerCase() === 'alert')
+          .reduce((acc, r: any) => acc + playersForRow(r), 0);
+
+        const td = ((activeTournament as any)?.data || {}) as Record<string, unknown>;
+        const categories = (td.inscriptionCategories || td.categories || []) as Array<Record<string, unknown>>;
+        totalCapacity = categories.reduce((acc, c) => {
+          const n = Number(c.maxSlots ?? 0);
+          return acc + (Number.isFinite(n) && n > 0 ? n : 0);
+        }, 0);
       }
+      const venueName = String(
+        (activeTournament as any)?.data?.complexName ||
+        (activeTournament as any)?.data?.venueName ||
+        (activeTournament as any)?.data?.venue ||
+        '—'
+      ).trim() || '—';
+      setActiveTournamentVenue(venueName);
 
       setStats({
-        totalUsers: userCount || 0,
-        paidInscriptions: paidCount || 0,
-        pendingPayments: pendingCount || 0,
-        activeAlerts: alertCount || 0
+        totalUsers: activeTournamentUsers,
+        paidInscriptions: paidPlayers,
+        pendingPayments: pendingPlayers,
+        activeAlerts: alertPlayers,
+        capacity: totalCapacity,
       });
 
       setPayments(payRows);
@@ -257,13 +300,25 @@ export default function AdminDashboard() {
       return ref.includes(q) || name.includes(q) || phone.includes(q);
     });
   }, [payments, searchTerm]);
+  const previewPayments = filteredPayments.slice(0, 3);
+  const previewUsers = players.slice(0, 3);
+  const previewInscriptions = inscriptions.slice(0, 3);
+  const previewLogs = logs.slice(0, 3);
 
   const handleApprovePaymentLog = async (id: string) => {
     if (!supabase || !id) return;
     setApprovingId(id);
     try {
-      const { error } = await supabase.from('payment_logs').update({ status: 'paid' } as any).eq('id', id);
-      if (error) throw error;
+      const authHeaders = await getAuthHeaders();
+      const r = await fetch('/api/admin/payment-logs', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ id, status: 'paid' }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error((j as { error?: string }).error || 'No se pudo aprobar el pago.');
+      }
       await fetchData();
     } catch (e) {
       console.error(e);
@@ -357,374 +412,211 @@ export default function AdminDashboard() {
       {/* Stats Grid */}
       <div className="max-w-7xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <StatCard 
-          title="Usuarios Totales" 
-          value={stats.totalUsers} 
+          title={`Inscritos activos (${activeTournamentVenue})`} 
+          value={stats.capacity > 0 ? `${stats.totalUsers} / ${stats.capacity}` : stats.totalUsers} 
           icon={Users} 
-          trend="+12%" 
+          trend={stats.capacity > 0 ? `Faltan ${Math.max(0, stats.capacity - stats.totalUsers)}` : undefined} 
           color="blue-500" 
         />
         <StatCard 
           title="Inscripciones Pagas" 
-          value={stats.paidInscriptions} 
+          value={stats.capacity > 0 ? `${stats.paidInscriptions} / ${stats.capacity}` : stats.paidInscriptions} 
           icon={CheckCircle2} 
-          trend="+5.4%" 
+          trend={stats.capacity > 0 ? `${Math.round((stats.paidInscriptions / Math.max(1, stats.capacity)) * 100)}%` : undefined} 
           color="emerald-500" 
         />
         <StatCard 
           title="Pagos Pendientes" 
-          value={stats.pendingPayments} 
+          value={stats.capacity > 0 ? `${stats.pendingPayments} / ${stats.capacity}` : stats.pendingPayments} 
           icon={Clock} 
+          trend={stats.capacity > 0 ? `${Math.round((stats.pendingPayments / Math.max(1, stats.capacity)) * 100)}%` : undefined}
           color="amber-500" 
         />
         <StatCard 
           title="Alertas de Pago" 
-          value={stats.activeAlerts} 
+          value={stats.capacity > 0 ? `${stats.activeAlerts} / ${stats.capacity}` : stats.activeAlerts} 
           icon={AlertTriangle} 
+          trend={stats.capacity > 0 ? `${Math.round((stats.activeAlerts / Math.max(1, stats.capacity)) * 100)}%` : undefined}
           color="rose-500" 
         />
       </div>
 
-      {/* Content Tabs */}
-      <div className="max-w-7xl mx-auto h-[calc(100vh-290px)] md:h-[calc(100vh-305px)] flex flex-col">
-        <div className="flex gap-1 p-1 bg-transparent border border-padel-primary/20 rounded-2xl w-fit mb-3">
-          {(['payments', 'users', 'inscriptions', 'logs'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold transition-all duration-300 flex items-center gap-2 ${
-                activeTab === tab 
-                  ? 'bg-padel-primary text-black shadow-lg shadow-padel-primary/20' 
-                  : 'text-white/55 hover:text-padel-primary hover:bg-padel-primary/10'
-              }`}
-            >
-              {tab === 'payments' && <CreditCard className="w-4 h-4" />}
-              {tab === 'users' && <UserCheck className="w-4 h-4" />}
-              {tab === 'inscriptions' && <UserPlus className="w-4 h-4" />}
-              {tab === 'logs' && <Activity className="w-4 h-4" />}
-              {tab === 'payments'
-                ? 'Pagos Recientes'
-                : tab === 'users'
-                  ? 'Nuevos Usuarios'
-                  : tab === 'inscriptions'
-                    ? 'Equipos Inscritos'
-                    : 'Logs del Sistema'}
-              {activeTab !== tab && needsAttention[tab] && (
-                <span
-                  className="ml-1 inline-flex h-2.5 w-2.5 rounded-full bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.7)] animate-pulse"
-                  aria-label="requiere atención"
-                  title="Hay novedades en esta lista"
-                />
-              )}
-            </button>
-          ))}
+      {/* Listas compactas */}
+      <div className="max-w-7xl mx-auto h-[calc(100vh-290px)] md:h-[calc(100vh-305px)] grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
+        <div className="lg:col-span-2 min-h-0 overflow-auto pr-1 space-y-4">
+          <section className="bg-[#111] border border-white/5 rounded-3xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold flex items-center gap-2"><CreditCard className="w-5 h-5 text-padel-primary" /> PAGOS</h2>
+              <div className="flex items-center gap-2">
+                <a
+                  href="/admin/validacion-pagos"
+                  className="inline-flex items-center justify-center rounded-lg border border-padel-primary/35 bg-padel-primary/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-padel-primary hover:bg-padel-primary/20"
+                >
+                  Validación de pagos
+                </a>
+                <button onClick={() => setFullViewTab('payments')} className="text-[10px] font-black uppercase tracking-wider text-padel-primary hover:underline">Abrir pantalla completa</button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {previewPayments.map((p: any) => {
+                const rawStatus = String(p.status || 'pending').toLowerCase();
+                const statusLabel = rawStatus === 'paid' ? 'Verificado' : rawStatus === 'alert' ? 'Rechazado' : 'Comprobado';
+                return (
+                  <div key={p.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold truncate">#{p.reference_number} · {p.bank_origin || 'Banco'}</p>
+                      <p className="text-[11px] text-white/45 truncate">{p.phone_emitter || 'Sin teléfono'}</p>
+                    </div>
+                    <span className="text-[10px] font-black uppercase text-padel-primary">{statusLabel}</span>
+                  </div>
+                );
+              })}
+              {previewPayments.length === 0 && <p className="text-sm text-white/40">Sin pagos para mostrar.</p>}
+            </div>
+          </section>
+
+          <section className="bg-[#111] border border-white/5 rounded-3xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold flex items-center gap-2"><UserCheck className="w-5 h-5 text-padel-primary" /> NUEVOS USUARIOS</h2>
+              <button onClick={() => setFullViewTab('users')} className="text-[10px] font-black uppercase tracking-wider text-padel-primary hover:underline">Abrir pantalla completa</button>
+            </div>
+            <div className="space-y-2">
+              {previewUsers.map((u: any) => (
+                <div key={u.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                  <p className="text-sm font-bold truncate">{u.full_name || u.name || 'Jugador'}</p>
+                  <p className="text-[11px] text-white/45 truncate">{u.email || 'Sin email'}</p>
+                </div>
+              ))}
+              {previewUsers.length === 0 && <p className="text-sm text-white/40">Sin usuarios nuevos.</p>}
+            </div>
+          </section>
+
+          <section className="bg-[#111] border border-white/5 rounded-3xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold flex items-center gap-2"><UserPlus className="w-5 h-5 text-padel-primary" /> EQUIPOS INSCRITOS</h2>
+              <button onClick={() => setFullViewTab('inscriptions')} className="text-[10px] font-black uppercase tracking-wider text-padel-primary hover:underline">Abrir pantalla completa</button>
+            </div>
+            <div className="space-y-2">
+              {previewInscriptions.map((item: any) => {
+                const d = (item.data || {}) as { partnerName?: string };
+                const partner = String(d.partnerName || '').trim();
+                const lead = String(item.participant_name || 'Jugador').trim();
+                return (
+                  <div key={item.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                    <p className="text-sm font-bold truncate">{partner ? `${lead} / ${partner}` : lead}</p>
+                    <p className="text-[11px] text-white/45 truncate">{item.tournament_name || 'Torneo'} · {item.category_key || '—'}</p>
+                  </div>
+                );
+              })}
+              {previewInscriptions.length === 0 && <p className="text-sm text-white/40">Sin equipos inscritos recientes.</p>}
+            </div>
+          </section>
         </div>
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.2 }}
-            className="grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0 flex-1"
-          >
-            {/* Main List */}
-            <div className="lg:col-span-2 bg-[#111] border border-white/5 rounded-3xl overflow-hidden min-h-0 flex flex-col">
-              <div className="p-4 border-b border-white/5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                <div>
-                  <h2 className="text-lg font-bold flex items-center gap-2">
-                    {activeTab === 'payments' && <CreditCard className="w-5 h-5 text-padel-primary" />}
-                    {activeTab === 'users' && <UserCheck className="w-5 h-5 text-padel-primary" />}
-                    {activeTab === 'inscriptions' && <UserPlus className="w-5 h-5 text-padel-primary" />}
-                    {activeTab === 'logs' && <Activity className="w-5 h-5 text-padel-primary" />}
-                    {activeTab === 'payments'
-                      ? 'Pagos pendientes (Pago Móvil / reportes)'
-                      : activeTab === 'users'
-                        ? 'Últimos Registros'
-                        : activeTab === 'inscriptions'
-                          ? 'Inscripciones recientes de equipos'
-                          : 'Actividad del Sistema'}
-                  </h2>
-                  {activeTab === 'payments' && (
-                    <p className="text-[11px] text-white/40 mt-1">
-                      {filteredPayments.length} mostrado(s)
-                      {searchTerm ? ` · filtrando: «${searchTerm}»` : ''}
-                    </p>
-                  )}
+        <div className="min-h-0 overflow-auto pr-1 space-y-4">
+          <section className="bg-[#111] border border-white/5 rounded-3xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-rose-500" /> Errores de pantalla</h2>
+              <span className="bg-rose-500/20 text-rose-400 text-[10px] font-bold px-2 py-1 rounded-full">{errorLogs.length}</span>
+            </div>
+            <div className="space-y-2">
+              {errorLogs.slice(0, 3).map((err: any) => (
+                <div key={err.id} className="rounded-xl border border-rose-500/20 bg-rose-500/5 px-3 py-2">
+                  <p className="text-[11px] text-rose-300 truncate">{err.cancha_id || 'Global'}</p>
+                  <p className="text-[11px] text-white/55 line-clamp-2">{err.error_message}</p>
                 </div>
+              ))}
+              {errorLogs.length === 0 && <p className="text-sm text-white/40">Sin errores registrados.</p>}
+            </div>
+          </section>
+
+          <section className="bg-[#111] border border-white/5 rounded-3xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold flex items-center gap-2"><Activity className="w-5 h-5 text-padel-primary" /> Logs del sistema</h2>
+              <button onClick={() => setFullViewTab('logs')} className="text-[10px] font-black uppercase tracking-wider text-padel-primary hover:underline">Abrir pantalla completa</button>
+            </div>
+            <div className="space-y-2">
+              {previewLogs.map((l: any) => (
+                <div key={l.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                  <p className="text-[11px] text-padel-primary uppercase">{l.level || 'info'} · {l.module || 'sistema'}</p>
+                  <p className="text-[11px] text-white/55 line-clamp-2">{l.message}</p>
+                </div>
+              ))}
+              {previewLogs.length === 0 && <p className="text-sm text-white/40">Sin logs recientes.</p>}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {fullViewTab && (
+          <motion.div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-sm p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <div className="max-w-7xl mx-auto h-full bg-[#0b0b0b] border border-white/10 rounded-3xl overflow-hidden flex flex-col">
+              <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+                <h3 className="text-sm font-black uppercase tracking-widest text-padel-primary">
+                  {fullViewTab === 'payments' && 'Pagos'}
+                  {fullViewTab === 'users' && 'Nuevos usuarios'}
+                  {fullViewTab === 'inscriptions' && 'Equipos inscritos'}
+                  {fullViewTab === 'logs' && 'Logs del sistema'}
+                </h3>
+                <button onClick={() => setFullViewTab(null)} className="px-3 py-1.5 rounded-lg bg-padel-primary text-black text-xs font-black uppercase">Cerrar</button>
               </div>
-              
-              <div className="overflow-auto min-h-0">
-                <table className="w-full text-left">
-                  <thead className="text-[10px] uppercase font-bold text-white/30 bg-white/[0.02]">
-                    <tr>
-                      {activeTab === 'payments' && (
-                        <>
-                          <th className="px-4 py-3">Usuario</th>
-                          <th className="px-4 py-3">Referencia</th>
-                          <th className="px-4 py-3">Banco / monto</th>
-                          <th className="px-4 py-3">Fecha</th>
-                          <th className="px-4 py-3 text-right">Acciones</th>
-                        </>
-                      )}
-                      {activeTab === 'users' && (
-                        <>
-                          <th className="px-4 py-3">Nombre</th>
-                          <th className="px-4 py-3">Email</th>
-                          <th className="px-4 py-3">Rol</th>
-                          <th className="px-4 py-3">Registrado</th>
-                        </>
-                      )}
-                      {activeTab === 'logs' && (
-                        <>
-                          <th className="px-4 py-3">Nivel</th>
-                          <th className="px-4 py-3">Módulo</th>
-                          <th className="px-4 py-3">Mensaje</th>
-                          <th className="px-4 py-3">Hora</th>
-                        </>
-                      )}
-                      {activeTab === 'inscriptions' && (
-                        <>
-                          <th className="px-4 py-3">Equipo</th>
-                          <th className="px-4 py-3">Torneo / Categoría</th>
-                          <th className="px-4 py-3">Estado</th>
-                          <th className="px-4 py-3">Hora</th>
-                        </>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {activeTab === 'payments' && filteredPayments.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-10 text-center text-sm text-white/40">
-                          {searchTerm
-                            ? 'No hay pagos pendientes que coincidan con la búsqueda.'
-                            : 'No hay pagos pendientes en payment_logs.'}
-                        </td>
-                      </tr>
-                    )}
-                    {activeTab === 'payments' && filteredPayments.map((item: any) => {
-                      const pr = item.profiles;
-                      const u = Array.isArray(pr) ? pr[0] : pr;
-                      const displayName = [u?.full_name, u?.name].filter(Boolean).join(' ').trim() || u?.email || '—';
-                      const receiptUrl = item.receipt_url as string | undefined;
-                      return (
-                        <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
-                          <td className="px-4 py-3.5">
-                            <div className="font-bold text-sm text-white">{displayName}</div>
-                            <div className="text-[10px] text-white/40">{u?.email}</div>
-                          </td>
-                          <td className="px-4 py-3.5 font-mono text-xs text-padel-primary">#{item.reference_number}</td>
-                          <td className="px-4 py-3.5 text-xs text-white/70">
-                            <div>{item.bank_origin || '—'}</div>
-                            {item.amount_bs != null && (
-                              <div className="text-[10px] text-padel-primary/80 mt-0.5">{item.amount_bs} Bs.</div>
-                            )}
-                            {item.phone_emitter && (
-                              <div className="text-[10px] text-white/40 mt-0.5">Tel. {item.phone_emitter}</div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3.5 text-[10px] text-white/40">
-                            {new Date(item.created_at).toLocaleString('es-VE', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </td>
-                          <td className="px-4 py-3.5 text-right">
-                            <div className="flex flex-wrap items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void handleApprovePaymentLog(item.id)}
-                                disabled={approvingId === item.id}
-                                className="inline-flex items-center justify-center rounded-lg bg-padel-primary px-3 py-1.5 text-[10px] font-black uppercase text-black hover:brightness-95 disabled:opacity-50"
-                              >
-                                {approvingId === item.id ? '…' : 'Aprobar'}
-                              </button>
-                              {receiptUrl && (
-                                <a
-                                  href={receiptUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] font-bold text-white/80 hover:bg-white/10"
-                                >
-                                  Recibo
-                                </a>
-                              )}
-                              <a
-                                href="/admin/validacion-pagos"
-                                className="inline-flex items-center justify-center rounded-lg border border-white/10 px-2 py-1.5 text-[9px] font-bold text-white/50 hover:text-white"
-                              >
-                                Validar
-                              </a>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {activeTab === 'users' && players.map((item) => (
-                      <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="px-4 py-3.5">
-                          <div className="font-bold text-sm text-white">{item.full_name || item.name}</div>
-                        </td>
-                        <td className="px-4 py-3.5 text-xs text-white/70">{item.email}</td>
-                        <td className="px-4 py-3.5">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                            item.role === 'admin' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                          }`}>
-                            {item.role || 'PLAYER'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5 text-[10px] text-white/40">
-                          {new Date(item.created_at).toLocaleDateString()}
-                        </td>
-                      </tr>
+              <div className="p-4 overflow-auto min-h-0">
+                {fullViewTab === 'payments' && (
+                  <div className="space-y-2">
+                    {filteredPayments.map((p: any) => (
+                      <div key={p.id} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold truncate">#{p.reference_number} · {p.bank_origin || 'Banco'}</p>
+                          <p className="text-[11px] text-white/50 truncate">{p.phone_emitter || 'Sin teléfono'} · {p.amount_bs ?? '—'} Bs.</p>
+                        </div>
+                        <span className="text-[10px] font-black uppercase text-padel-primary">{String(p.status || 'pending')}</span>
+                      </div>
                     ))}
-                    {activeTab === 'logs' && logs.map((item) => (
-                      <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="px-4 py-3.5">
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                            item.level === 'error' ? 'bg-rose-500/20 text-rose-400' : 
-                            item.level === 'warning' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'
-                          }`}>
-                            {item.level}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5 text-[10px] font-bold text-white/60">{item.module}</td>
-                        <td className="px-4 py-3.5 text-[11px] text-white/80 max-w-xs truncate">{item.message}</td>
-                        <td className="px-4 py-3.5 text-[10px] text-white/40">
-                          {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </td>
-                      </tr>
+                  </div>
+                )}
+                {fullViewTab === 'users' && (
+                  <div className="space-y-2">
+                    {players.map((u: any) => (
+                      <div key={u.id} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2">
+                        <p className="text-sm font-bold truncate">{u.full_name || u.name || 'Jugador'}</p>
+                        <p className="text-[11px] text-white/50 truncate">{u.email || 'Sin email'} · {u.role || 'player'}</p>
+                      </div>
                     ))}
-                    {activeTab === 'inscriptions' && inscriptions.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="px-4 py-10 text-center text-sm text-white/40">
-                          Sin inscripciones recientes.
-                        </td>
-                      </tr>
-                    )}
-                    {activeTab === 'inscriptions' && inscriptions.map((item: any) => {
+                  </div>
+                )}
+                {fullViewTab === 'inscriptions' && (
+                  <div className="space-y-2">
+                    {inscriptions.map((item: any) => {
                       const d = (item.data || {}) as { partnerName?: string };
                       const partner = String(d.partnerName || '').trim();
                       const lead = String(item.participant_name || 'Jugador').trim();
-                      const teamName = partner ? `${lead} / ${partner}` : lead;
-                      const tournament = String(item.tournament_name || 'Torneo').trim();
-                      const category = String(item.category_key || '—').trim();
-                      const paymentStatus = String(item.payment_status || 'pending').toLowerCase();
-                      const inscriptionStatus = String(item.inscription_status || 'normal').toUpperCase();
-                      const payChip =
-                        paymentStatus === 'paid'
-                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                          : paymentStatus === 'alert'
-                            ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
-                            : 'bg-amber-500/15 text-amber-300 border-amber-500/30';
-                      const insChip =
-                        inscriptionStatus === 'CONFIRMED'
-                          ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
-                          : inscriptionStatus === 'RESERVED'
-                            ? 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30'
-                            : 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30';
-
                       return (
-                        <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
-                          <td className="px-4 py-3.5">
-                            <div className="font-bold text-sm text-white">{teamName}</div>
-                            <div className="text-[10px] text-white/40 font-mono">#{String(item.id || '').slice(0, 8)}</div>
-                          </td>
-                          <td className="px-4 py-3.5 text-xs text-white/80">
-                            <div className="font-bold">{tournament}</div>
-                            <div className="text-[10px] text-white/40 uppercase">{category}</div>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <div className="flex flex-wrap gap-1.5">
-                              <span className={`inline-flex items-center rounded-md border px-2 py-1 text-[10px] font-black uppercase tracking-wide ${payChip}`}>
-                                Pago: {paymentStatus}
-                              </span>
-                              <span className={`inline-flex items-center rounded-md border px-2 py-1 text-[10px] font-black uppercase tracking-wide ${insChip}`}>
-                                Insc: {inscriptionStatus}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5 text-[10px] text-white/40">
-                            {item.created_at
-                              ? new Date(item.created_at).toLocaleString('es-VE', {
-                                  day: '2-digit',
-                                  month: '2-digit',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })
-                              : '—'}
-                          </td>
-                        </tr>
+                        <div key={item.id} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2">
+                          <p className="text-sm font-bold truncate">{partner ? `${lead} / ${partner}` : lead}</p>
+                          <p className="text-[11px] text-white/50 truncate">
+                            {item.tournament_name || 'Torneo'} · {item.category_key || '—'} · {item.payment_status || 'pending'}
+                          </p>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Sidebar Alerts / Errors */}
-            <div className="flex flex-col gap-4 min-h-0">
-              <div className="bg-[#111] border border-white/5 rounded-3xl p-4 min-h-0 flex flex-col">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold flex items-center gap-2">
-                    <ShieldCheck className="w-5 h-5 text-rose-500" />
-                    Errores de Pantalla
-                  </h2>
-                  <span className="bg-rose-500/20 text-rose-400 text-[10px] font-bold px-2 py-1 rounded-full">
-                    {errorLogs.length} Críticos
-                  </span>
-                </div>
-                
-                <div className="space-y-3 overflow-auto min-h-0">
-                  {errorLogs.length === 0 ? (
-                    <div className="py-10 flex flex-col items-center justify-center text-center opacity-30">
-                      <CheckCircle2 className="w-10 h-10 mb-2" />
-                      <p className="text-xs">Sin errores registrados</p>
-                    </div>
-                  ) : (
-                    errorLogs.map((err) => (
-                      <div key={err.id} className="p-3 bg-rose-500/[0.03] border border-rose-500/10 rounded-2xl group hover:border-rose-500/30 transition-colors">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="font-bold text-xs text-rose-400">{err.cancha_id || 'Global'}</div>
-                          <div className="text-[9px] text-white/30">{new Date(err.created_at).toLocaleTimeString()}</div>
-                        </div>
-                        <p className="text-[11px] text-white/70 line-clamp-2">{err.error_message}</p>
+                  </div>
+                )}
+                {fullViewTab === 'logs' && (
+                  <div className="space-y-2">
+                    {logs.map((l: any) => (
+                      <div key={l.id} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2">
+                        <p className="text-[11px] text-padel-primary uppercase">{l.level || 'info'} · {l.module || 'sistema'}</p>
+                        <p className="text-[11px] text-white/50 line-clamp-2">{l.message}</p>
                       </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-padel-primary/5 border border-padel-primary/10 rounded-3xl p-4 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-padel-primary/10 blur-2xl -mr-10 -mt-10" />
-                <h2 className="text-lg font-bold mb-2 relative z-10">Métricas PRO</h2>
-                <p className="text-xs text-white/50 mb-4 relative z-10">Optimización de recursos y monitoreo de tráfico en tiempo real.</p>
-                
-                <div className="space-y-4 relative z-10">
-                  <div className="flex items-center justify-between text-xs font-medium">
-                    <span className="text-white/60">Salud del Servidor</span>
-                    <span className="text-emerald-400">99.9%</span>
+                    ))}
                   </div>
-                  <div className="w-full bg-white/5 rounded-full h-1.5">
-                    <div className="bg-emerald-400 h-full rounded-full w-[99.9%]" />
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-xs font-medium">
-                    <span className="text-white/60">Latencia Realtime</span>
-                    <span className="text-padel-primary">42ms</span>
-                  </div>
-                  <div className="w-full bg-white/5 rounded-full h-1.5">
-                    <div className="bg-padel-primary h-full rounded-full w-[15%]" />
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </motion.div>
-        </AnimatePresence>
-      </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
