@@ -457,15 +457,15 @@ export default function AdminDashboard() {
                 <button onClick={() => setFullViewTab('payments')} className="rounded-lg border border-padel-primary/35 bg-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-padel-primary hover:bg-padel-primary/10">Abrir pantalla completa</button>
               </div>
             </div>
-            <div className="space-y-2">
-              {previewPayments.map((p: any) => {
+            <div className="space-y-1">
+              {previewPayments.map((p: any, idx: number) => {
                 const rawStatus = String(p.status || 'pending').toLowerCase();
                 const statusLabel = rawStatus === 'paid' ? 'Verificado' : rawStatus === 'alert' ? 'Rechazado' : 'Comprobado';
                 return (
-                  <div key={p.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 flex items-center justify-between gap-3">
+                  <div key={p.id} className={`rounded-lg border px-3 py-1.5 flex items-center justify-between gap-3 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold truncate">#{p.reference_number} · {p.bank_origin || 'Banco'}</p>
-                      <p className="text-[11px] text-white/45 truncate">{p.phone_emitter || 'Sin teléfono'}</p>
+                      <p className="text-[12px] font-bold truncate">#{p.reference_number} · {p.bank_origin || 'Banco'}</p>
+                      <p className="text-[10px] text-white/55 truncate">{p.phone_emitter || 'Sin teléfono'}</p>
                     </div>
                     <span className="text-[10px] font-black uppercase text-padel-primary">{statusLabel}</span>
                   </div>
@@ -480,16 +480,16 @@ export default function AdminDashboard() {
               <h2 className="text-lg font-bold flex items-center gap-2"><UserCheck className="w-5 h-5 text-padel-primary" /> NUEVOS USUARIOS</h2>
               <button onClick={() => setFullViewTab('users')} className="rounded-lg border border-padel-primary/35 bg-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-padel-primary hover:bg-padel-primary/10">Abrir pantalla completa</button>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <div className="grid grid-cols-4 gap-2 px-3 text-[10px] font-black uppercase tracking-widest text-padel-primary/80">
                 <span>Nombre</span>
                 <span>Apellido</span>
                 <span>Teléfono</span>
                 <span>Email</span>
               </div>
-              {previewUsers.map((u: any) => (
-                <div key={u.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-                  <div className="grid grid-cols-4 gap-2 text-[11px]">
+              {previewUsers.map((u: any, idx: number) => (
+                <div key={u.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
+                  <div className="grid grid-cols-4 gap-2 text-[10px] leading-tight">
                     <p className="truncate font-bold">{String(u.name || u.full_name || 'Jugador').trim().split(' ')[0] || '—'}</p>
                     <p className="truncate text-white/80">{String(u.last_name || u.lastName || (u.full_name || '').split(' ').slice(1).join(' ') || '').trim() || '—'}</p>
                     <p className="truncate text-white/70">{u.phone || u.whatsapp || '—'}</p>
@@ -506,15 +506,15 @@ export default function AdminDashboard() {
               <h2 className="text-lg font-bold flex items-center gap-2"><UserPlus className="w-5 h-5 text-padel-primary" /> EQUIPOS INSCRITOS</h2>
               <button onClick={() => setFullViewTab('inscriptions')} className="rounded-lg border border-padel-primary/35 bg-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-padel-primary hover:bg-padel-primary/10">Abrir pantalla completa</button>
             </div>
-            <div className="space-y-2">
-              {previewInscriptions.map((item: any) => {
+            <div className="space-y-1">
+              {previewInscriptions.map((item: any, idx: number) => {
                 const d = (item.data || {}) as { partnerName?: string };
                 const partner = String(d.partnerName || '').trim();
                 const lead = String(item.participant_name || 'Jugador').trim();
                 return (
-                  <div key={item.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-                    <p className="text-sm font-bold truncate">{partner ? `${lead} / ${partner}` : lead}</p>
-                    <p className="text-[11px] text-white/45 truncate">{item.tournament_name || 'Torneo'} · {item.category_key || '—'}</p>
+                  <div key={item.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
+                    <p className="text-[12px] font-bold truncate">{partner ? `${lead} / ${partner}` : lead}</p>
+                    <p className="text-[10px] text-white/55 truncate">{item.tournament_name || 'Torneo'} · {item.category_key || '—'}</p>
                   </div>
                 );
               })}
@@ -573,12 +573,12 @@ export default function AdminDashboard() {
               </div>
               <div className="p-4 overflow-auto min-h-0">
                 {fullViewTab === 'payments' && (
-                  <div className="space-y-2">
-                    {filteredPayments.map((p: any) => (
-                      <div key={p.id} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 flex items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    {filteredPayments.map((p: any, idx: number) => (
+                      <div key={p.id} className={`rounded-lg border px-3 py-1.5 flex items-center justify-between gap-3 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
                         <div className="min-w-0">
-                          <p className="text-sm font-bold truncate">#{p.reference_number} · {p.bank_origin || 'Banco'}</p>
-                          <p className="text-[11px] text-white/50 truncate">{p.phone_emitter || 'Sin teléfono'} · {p.amount_bs ?? '—'} Bs.</p>
+                          <p className="text-[12px] font-bold truncate">#{p.reference_number} · {p.bank_origin || 'Banco'}</p>
+                          <p className="text-[10px] text-white/55 truncate">{p.phone_emitter || 'Sin teléfono'} · {p.amount_bs ?? '—'} Bs.</p>
                         </div>
                         <span className="text-[10px] font-black uppercase text-padel-primary">{String(p.status || 'pending')}</span>
                       </div>
@@ -586,25 +586,25 @@ export default function AdminDashboard() {
                   </div>
                 )}
                 {fullViewTab === 'users' && (
-                  <div className="space-y-2">
-                    {players.map((u: any) => (
-                      <div key={u.id} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2">
-                        <p className="text-sm font-bold truncate">{u.full_name || u.name || 'Jugador'}</p>
-                        <p className="text-[11px] text-white/50 truncate">{u.email || 'Sin email'} · {u.role || 'player'}</p>
+                  <div className="space-y-1">
+                    {players.map((u: any, idx: number) => (
+                      <div key={u.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
+                        <p className="text-[12px] font-bold truncate">{u.full_name || u.name || 'Jugador'}</p>
+                        <p className="text-[10px] text-white/55 truncate">{u.email || 'Sin email'} · {u.role || 'player'}</p>
                       </div>
                     ))}
                   </div>
                 )}
                 {fullViewTab === 'inscriptions' && (
-                  <div className="space-y-2">
-                    {inscriptions.map((item: any) => {
+                  <div className="space-y-1">
+                    {inscriptions.map((item: any, idx: number) => {
                       const d = (item.data || {}) as { partnerName?: string };
                       const partner = String(d.partnerName || '').trim();
                       const lead = String(item.participant_name || 'Jugador').trim();
                       return (
-                        <div key={item.id} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2">
-                          <p className="text-sm font-bold truncate">{partner ? `${lead} / ${partner}` : lead}</p>
-                          <p className="text-[11px] text-white/50 truncate">
+                        <div key={item.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
+                          <p className="text-[12px] font-bold truncate">{partner ? `${lead} / ${partner}` : lead}</p>
+                          <p className="text-[10px] text-white/55 truncate">
                             {item.tournament_name || 'Torneo'} · {item.category_key || '—'} · {item.payment_status || 'pending'}
                           </p>
                         </div>
@@ -613,11 +613,11 @@ export default function AdminDashboard() {
                   </div>
                 )}
                 {fullViewTab === 'logs' && (
-                  <div className="space-y-2">
-                    {logs.map((l: any) => (
-                      <div key={l.id} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2">
+                  <div className="space-y-1">
+                    {logs.map((l: any, idx: number) => (
+                      <div key={l.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
                         <p className="text-[11px] text-padel-primary uppercase">{l.level || 'info'} · {l.module || 'sistema'}</p>
-                        <p className="text-[11px] text-white/50 line-clamp-2">{l.message}</p>
+                        <p className="text-[10px] text-white/55 line-clamp-2">{l.message}</p>
                       </div>
                     ))}
                   </div>

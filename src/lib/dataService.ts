@@ -1007,7 +1007,24 @@ export const dataService = {
     async getAllParticipants() {
         const { data, error } = await supabase().from('participants').select('*').order('created_at', { ascending: false });
         throwIfError(error);
-        return (data || []).map((r: any) => mergeDataRow(r));
+        const rows = (data || []).map((r: any) => mergeDataRow(r));
+        const ownerIds = [...new Set(rows.map((r: any) => r.ownerId).filter(Boolean).map(String))];
+        if (ownerIds.length === 0) return rows;
+        const { data: profs } = await supabase()
+            .from('profiles')
+            .select('id, legal_timestamp')
+            .in('id', ownerIds);
+        const tsByOwner: Record<string, string> = {};
+        (profs || []).forEach((p: any) => {
+            if (p?.id && p?.legal_timestamp) tsByOwner[String(p.id)] = String(p.legal_timestamp);
+        });
+        return rows.map((r: any) => {
+            const oid = r.ownerId ? String(r.ownerId) : '';
+            return {
+                ...r,
+                termsAcceptedAt: oid && tsByOwner[oid] ? tsByOwner[oid] : null,
+            };
+        });
     },
 
     async searchParticipants(query: string, limit = 10) {

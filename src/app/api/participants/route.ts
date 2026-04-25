@@ -59,6 +59,8 @@ export async function GET() {
     }
 
     const rows = data || [];
+    const ownerIds = [...new Set((rows as any[]).map((r) => r?.owner_id).filter(Boolean).map(String))];
+
     const ownersMissingCodeOrAvatar = new Set<string>();
     for (const r of rows as any[]) {
       if (!r?.owner_id) continue;
@@ -72,15 +74,19 @@ export async function GET() {
 
     let codeByOwner: Record<string, string> = {};
     let avatarByOwner: Record<string, string> = {};
-    if (ownersMissingCodeOrAvatar.size > 0) {
-      const profileIds = [...ownersMissingCodeOrAvatar];
+    /** ISO de `profiles.legal_timestamp` (Smart-Legal); mismo concepto que “terms accepted at”. */
+    let termsAcceptedAtByOwner: Record<string, string> = {};
+
+    const profileIdsToFetch = [...new Set([...ownersMissingCodeOrAvatar, ...ownerIds])];
+    if (profileIdsToFetch.length > 0) {
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, unique_code, avatar_url')
-        .in('id', profileIds);
+        .select('id, unique_code, avatar_url, legal_timestamp')
+        .in('id', profileIdsToFetch);
       (profiles || []).forEach((p: any) => {
         if (p.unique_code) codeByOwner[p.id] = p.unique_code;
         if (p.avatar_url) avatarByOwner[p.id] = p.avatar_url;
+        if (p.legal_timestamp) termsAcceptedAtByOwner[p.id] = String(p.legal_timestamp);
       });
     }
 
@@ -90,6 +96,7 @@ export async function GET() {
         typeof light.uniqueCode === 'string' && light.uniqueCode.trim()
           ? light.uniqueCode.trim().toUpperCase()
           : null;
+      const oid = r.owner_id ? String(r.owner_id) : '';
       return {
         id: r.id,
         ownerId: r.owner_id,
@@ -97,6 +104,8 @@ export async function GET() {
         ...light,
         photo: light.photo || avatarByOwner[r.owner_id] || null,
         uniqueCode: fromRow || codeByOwner[r.owner_id] || null,
+        /** Alias útil en UI; viene de `profiles.legal_timestamp`. */
+        termsAcceptedAt: oid && termsAcceptedAtByOwner[oid] ? termsAcceptedAtByOwner[oid] : null,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
       };

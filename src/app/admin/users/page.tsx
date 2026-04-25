@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import { CANCHA_IDS, getCanchaLabel } from '@/lib/markerCanchas';
 import { formatDate } from '@/lib/formatters';
 import { rtdbService } from '@/lib/rtdbService';
+import { getAuthHeaders } from '@/lib/apiAuth';
 
 export default function AdminUsersPage() {
     const { profile, isAdmin, loading: authLoading, logout } = useAuth();
@@ -33,6 +34,34 @@ export default function AdminUsersPage() {
     const [deleteClickCount, setDeleteClickCount] = useState<Record<string, number>>({});
     /** id de fila (participant id o uid) cuyo código se acaba de copiar */
     const [copiedRowId, setCopiedRowId] = useState<string | null>(null);
+    const [downloadingContractUid, setDownloadingContractUid] = useState<string | null>(null);
+
+    const handleOpenContract = async (uid?: string) => {
+        const userId = String(uid || '').trim();
+        if (!userId) return;
+        setDownloadingContractUid(userId);
+        try {
+            const authHeaders = await getAuthHeaders();
+            const res = await fetch(`/api/admin/player-contract?uid=${encodeURIComponent(userId)}`, {
+                headers: authHeaders,
+            });
+            const data = await res.json().catch(() => ({} as any));
+            if (!res.ok) {
+                throw new Error(data?.error || `Error ${res.status}`);
+            }
+            const html = String(data?.html || '');
+            if (!html) throw new Error('No se pudo generar el contrato.');
+            const w = window.open('', '_blank', 'noopener,noreferrer');
+            if (!w) throw new Error('Tu navegador bloqueó la ventana emergente.');
+            w.document.open();
+            w.document.write(html);
+            w.document.close();
+        } catch (e: any) {
+            alert(e?.message || 'No se pudo abrir el contrato firmado.');
+        } finally {
+            setDownloadingContractUid(null);
+        }
+    };
 
     const handleCopyUniqueCode = async (rowId: string, code?: string) => {
         if (!code) return;
@@ -332,6 +361,7 @@ export default function AdminUsersPage() {
                         <div className="min-w-[5.5rem] flex-1 basis-0">APELLIDOS</div>
                         <div className="min-w-[6rem] flex-[1.15] basis-0">WHATSAPP</div>
                         <div className="w-[4.25rem] shrink-0 text-center">NIVEL</div>
+                        <div className="w-[6.75rem] shrink-0 text-center">CONTRATO</div>
                         <div className="ml-auto flex w-[13.5rem] shrink-0 justify-end">ACCIONES</div>
                     </div>
 
@@ -415,6 +445,19 @@ export default function AdminUsersPage() {
                                         </div>
                                     </div>
 
+                                    {/* Legal / contrato (profiles.legal_timestamp) */}
+                                    <div className="flex w-[6.75rem] shrink-0 items-center justify-center">
+                                        {u.termsAcceptedAt ? (
+                                            <span className="flex items-center gap-1 whitespace-nowrap text-xs font-bold text-[#CCFF00]">
+                                                ✅ CONTRATO OK
+                                            </span>
+                                        ) : (
+                                            <span className="whitespace-nowrap text-xs font-bold text-red-500">
+                                                ❌ SIN FIRMA
+                                            </span>
+                                        )}
+                                    </div>
+
                                     {/* Acciones */}
                                     <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-1.5 sm:gap-2">
                                         <button
@@ -490,6 +533,14 @@ export default function AdminUsersPage() {
                                         )}
                                         <p><span className="font-bold text-white">DNI:</span> {fichaModalUser.dni || '—'}</p>
                                         <p><span className="font-bold text-white">Fecha nac.:</span> {formatDate(fichaModalUser.birthDate)}</p>
+                                        <p className="flex flex-wrap items-center gap-2 pt-1">
+                                            <span className="font-bold text-white">Smart-Legal:</span>
+                                            {fichaModalUser.termsAcceptedAt ? (
+                                                <span className="text-xs font-bold text-[#CCFF00]">✅ CONTRATO OK</span>
+                                            ) : (
+                                                <span className="text-xs font-bold text-red-500">❌ SIN FIRMA</span>
+                                            )}
+                                        </p>
                                     </div>
                                 </div>
                                 {/* Tallas */}
@@ -538,6 +589,15 @@ export default function AdminUsersPage() {
                                     >
                                         <Edit2 size={16} /> Editar
                                     </Link>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleOpenContract(fichaModalUser.uid || fichaModalUser.owner_id)}
+                                        disabled={downloadingContractUid === (fichaModalUser.uid || fichaModalUser.owner_id)}
+                                        className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-padel-primary/15 border border-padel-primary/30 text-padel-primary font-bold text-xs uppercase tracking-widest hover:bg-padel-primary/25 transition-colors disabled:opacity-50"
+                                    >
+                                        <ExternalLink size={16} />
+                                        {downloadingContractUid === (fichaModalUser.uid || fichaModalUser.owner_id) ? 'Generando...' : 'Contrato'}
+                                    </button>
                                 </div>
                             </div>
                         </motion.div>

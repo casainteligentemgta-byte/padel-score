@@ -12,16 +12,12 @@ import {
     type LegalAcceptPayload,
     type LegalContainerRef,
 } from '@/components/legal/LegalContainer';
-import LegalModal from '@/components/legal/LegalModal';
 import PaymentInfo from '@/components/PaymentInfo';
 import AutoShrinkName from '@/components/AutoShrinkName';
 import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
-import { getSupabaseClient } from '@/lib/supabase/client';
-import { SMART_CONSENT_LEGAL_VERSION, SMART_CONSENT_STATUS_ACCEPTED } from '@/lib/legal/smartConsent';
 import {
     ArrowLeft,
     CheckCircle2,
-    FileText,
     Loader2,
     AlertCircle,
     CreditCard,
@@ -134,15 +130,11 @@ export default function InscribirmePage() {
     const tournamentId = useRouteSegment('id');
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { user, profile, loading: authLoading, refreshProfile } = useAuth();
+    const { user, profile, loading: authLoading } = useAuth();
     const [tournament, setTournament] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
-    const [acceptTerms, setAcceptTerms] = useState(false);
-    const [smartConsentAccepted, setSmartConsentAccepted] = useState(false);
-    const [smartConsentModalOpen, setSmartConsentModalOpen] = useState(false);
-    const [smartConsentSaving, setSmartConsentSaving] = useState(false);
     const [legalArtifacts, setLegalArtifacts] = useState<{
         signaturePath: string | null;
         biometricPath: string | null;
@@ -251,12 +243,6 @@ export default function InscribirmePage() {
         });
         return () => { cancelled = true; };
     }, [user?.uid]);
-
-    // Smart Consent: si el usuario ya aceptó, precargamos el checkbox.
-    useEffect(() => {
-        const ok = profile?.status_legal === 'accepted' || profile?.statusLegal === 'accepted';
-        if (ok) setSmartConsentAccepted(true);
-    }, [profile?.status_legal, profile?.statusLegal]);
 
     useEffect(() => {
         if (!tournamentId) return;
@@ -459,7 +445,6 @@ export default function InscribirmePage() {
     const prevWizardForLegal = useRef(wizardStep);
     useEffect(() => {
         if (wizardStep === termsStepIndex && prevWizardForLegal.current !== termsStepIndex) {
-            setAcceptTerms(false);
             setLegalArtifacts(null);
         }
         prevWizardForLegal.current = wizardStep;
@@ -572,11 +557,6 @@ export default function InscribirmePage() {
             setError('Debes completar firmar digitalmente o la validación facial, y aceptar el contrato (Smart Consent), antes de inscribirte.');
             return;
         }
-        if (!fromPad && !smartConsentAccepted) {
-            setError('Debes aceptar el Contrato de Adhesión (Smart Consent) antes de inscribirte.');
-            return;
-        }
-
         const needsRef = totalPrice > 0 && (paymentData.method === 'Pago Móvil' || paymentData.method === 'Transferencia Bancaria');
         if (needsRef && !paymentData.reference?.trim()) {
             setError('Indica la referencia o número de confirmación del pago (aparece en tu comprobante de Pago Móvil o transferencia).');
@@ -1373,34 +1353,6 @@ export default function InscribirmePage() {
 
                                     {wizardStep === termsStepIndex && (
                                         <section className="mb-4 min-w-0">
-                                            <div className="mb-6 rounded-2xl bg-white/5 p-4 border border-white/10">
-                                                <div className="flex items-start gap-4">
-                                                    <div 
-                                                        onClick={() => setSmartConsentAccepted((prev) => !prev)}
-                                                        className={`mt-1 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-lg border-2 transition-all ${
-                                                            smartConsentAccepted 
-                                                                ? 'border-[#ccff00] bg-[#ccff00] text-black' 
-                                                                : 'border-white/20 bg-transparent'
-                                                        }`}
-                                                    >
-                                                        {smartConsentAccepted && <Check size={14} strokeWidth={4} />}
-                                                    </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="text-xs font-medium leading-relaxed text-white/80">
-                                                            Confirmo que he leído y acepto los <span className="text-[#ccff00] underline font-bold cursor-pointer" onClick={() => setSmartConsentModalOpen(true)}>Términos y Condiciones</span> y la <span className="text-[#ccff00] underline font-bold cursor-pointer" onClick={() => setSmartConsentModalOpen(true)}>Política de Privacidad</span> de Padel Score Pro.
-                                                        </p>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setSmartConsentModalOpen(true)}
-                                                            className="mt-3 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-[11px] font-black uppercase tracking-widest text-[#ccff00] border-2 border-[#ccff00] hover:bg-[#ccff00]/10 transition-all"
-                                                        >
-                                                            <FileText size={14} />
-                                                            Ver contrato completo
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-
                                             <LegalContainer
                                                 ref={legalInscriptionRef}
                                                 type="inscription"
@@ -1419,24 +1371,6 @@ export default function InscribirmePage() {
                                                         biometricPath: p.biometricPath,
                                                         version: p.version,
                                                     });
-                                                    setAcceptTerms(true);
-                                                    // Auto-accept smart consent when signing the inscription (direct client update)
-                                                    if (!smartConsentAccepted && user?.uid) {
-                                                        try {
-                                                            const supabase = getSupabaseClient();
-                                                            if (supabase) {
-                                                                await supabase.from('profiles').update({
-                                                                    status_legal: SMART_CONSENT_STATUS_ACCEPTED,
-                                                                    legal_version: SMART_CONSENT_LEGAL_VERSION,
-                                                                    legal_timestamp: new Date().toISOString(),
-                                                                    updated_at: new Date().toISOString(),
-                                                                }).eq('id', user.uid);
-                                                            }
-                                                            setSmartConsentAccepted(true);
-                                                        } catch (e) {
-                                                            console.error('Auto-accept error:', e);
-                                                        }
-                                                    }
                                                 }}
                                             >
                                                 <div className="text-center py-4">
@@ -1448,40 +1382,6 @@ export default function InscribirmePage() {
                                                     </p>
                                                 </div>
                                             </LegalContainer>
-
-                                            <LegalModal
-                                                open={smartConsentModalOpen}
-                                                onClose={() => setSmartConsentModalOpen(false)}
-                                                loading={smartConsentSaving}
-                                                footerMode="dismiss"
-                                                onAccept={async () => {
-                                                    if (!user?.uid) {
-                                                        setError('Debes iniciar sesión para aceptar el contrato.');
-                                                        return;
-                                                    }
-                                                    setSmartConsentSaving(true);
-                                                    try {
-                                                        // Direct Supabase client update — bypasses Bearer token / API route entirely
-                                                        const supabase = getSupabaseClient();
-                                                        if (!supabase) throw new Error('Cliente Supabase no disponible.');
-                                                        const { error: sbError } = await supabase.from('profiles').update({
-                                                            status_legal: SMART_CONSENT_STATUS_ACCEPTED,
-                                                            legal_version: SMART_CONSENT_LEGAL_VERSION,
-                                                            legal_timestamp: new Date().toISOString(),
-                                                            updated_at: new Date().toISOString(),
-                                                        }).eq('id', user.uid);
-                                                        if (sbError) throw new Error(sbError.message);
-                                                        setSmartConsentAccepted(true);
-                                                        setSmartConsentModalOpen(false);
-                                                        setError(null);
-                                                        await refreshProfile();
-                                                    } catch (err: any) {
-                                                        setError(err?.message || 'Error al guardar el consentimiento.');
-                                                    } finally {
-                                                        setSmartConsentSaving(false);
-                                                    }
-                                                }}
-                                            />
                                         </section>
                                     )}
                                     </div>
