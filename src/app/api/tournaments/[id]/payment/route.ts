@@ -42,7 +42,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             : Number(String(body.amountBs).replace(',', '.'));
 
   if (!bankOrigin) return NextResponse.json({ error: 'Banco de origen requerido' }, { status: 400 });
-    if (!/^\d{6,}$/.test(referenceNumber)) return NextResponse.json({ error: 'Número de referencia inválido (mínimo 6 dígitos)' }, { status: 400 });
+  if (!/^\d{3,}$/.test(referenceNumber)) return NextResponse.json({ error: 'Número de referencia inválido (mínimo 3 dígitos)' }, { status: 400 });
     if (amountBs == null || !Number.isFinite(amountBs) || amountBs <= 0) {
         return NextResponse.json({ error: 'Monto en Bs requerido y debe ser > 0' }, { status: 400 });
     }
