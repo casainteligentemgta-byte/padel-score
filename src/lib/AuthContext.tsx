@@ -6,6 +6,7 @@ import { clearSupabaseBrowserStorage, isInvalidRefreshTokenError } from '@/lib/a
 import { dataService, ROLES } from '@/lib/dataService';
 import { isAdminAccess } from '@/lib/adminAccess';
 import type { AppUser } from '@/lib/types/auth';
+import { CURRENT_TERMS_VERSION } from '@/lib/legal/termsVersion';
 
 interface AuthContextType {
     user: AppUser | null;
@@ -261,6 +262,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 role: ROLES.PLAYER,
                 email,
                 name,
+                acceptedTermsVersion: CURRENT_TERMS_VERSION,
+                legalVersion: CURRENT_TERMS_VERSION,
+                statusLegal: 'accepted',
+                legalTimestamp: new Date().toISOString(),
                 createdAt: new Date().toISOString(),
             };
             await dataService.setUserProfile(data.user.id, newProfile);

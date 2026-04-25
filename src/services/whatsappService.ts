@@ -20,7 +20,8 @@ export type WhatsNotificationType =
   | 'partner_invitation'
   | 'match_reminder'
   | 'profile_welcome'
-  | 'tournament_cap_ceo';
+  | 'tournament_cap_ceo'
+  | 'payment_status_update';
 
 export type SendResult = { success: boolean; sid?: string; error?: string };
 
@@ -388,6 +389,50 @@ export async function sendMatchReminder(params: {
 }
 
 /**
+ * Aviso al jugador cuando tesorería cambia el estado de su pago.
+ */
+export async function sendPaymentStatusUpdateMessage(params: {
+  phone: string;
+  playerName: string;
+  tournamentName: string;
+  status: 'paid' | 'rechazado' | 'revision' | 'alert' | 'exonerado' | 'pending';
+  note?: string | null;
+  inscriptionId?: string;
+}): Promise<SendResult> {
+  const toAddress = normalizeWhatsAppAddress(params.phone);
+  if (!toAddress) {
+    await logNotification({
+      recipient: params.phone,
+      type: 'payment_status_update',
+      status: 'failed',
+      error_message: 'Número de teléfono inválido',
+      inscription_id: params.inscriptionId ?? null,
+    });
+    return { success: false, error: 'Número de teléfono inválido' };
+  }
+
+  const first = (params.playerName || 'Jugador').trim().split(/\s+/)[0] || 'Jugador';
+  const tournament = (params.tournamentName || 'tu torneo').trim();
+  const appUrl = `${getAppBaseUrl()}/dashboard`;
+  const note = (params.note || '').trim();
+  const extra = note ? `\nDetalle: ${note}` : '';
+
+  let stateLine = 'Tu pago está pendiente de revisión.';
+  if (params.status === 'paid') stateLine = '✅ Tu pago fue APROBADO.';
+  else if (params.status === 'rechazado') stateLine = '❌ Tu pago fue RECHAZADO.';
+  else if (params.status === 'revision') stateLine = '🕵️ Tu pago quedó EN REVISIÓN.';
+  else if (params.status === 'alert') stateLine = '⚠️ Tu pago quedó con ALERTA.';
+  else if (params.status === 'exonerado') stateLine = '🏅 Fuiste EXONERADO de pago.';
+
+  const body =
+    `Hola ${first}, actualización de tesorería para ${tournament}:\n` +
+    `${stateLine}${extra}\n` +
+    `Puedes revisar tu estado en: ${appUrl}`;
+
+  return sendWhatsAppMessage(toAddress, body, 'payment_status_update', params.inscriptionId ?? null);
+}
+
+/**
  * Objeto de conveniencia (mismo módulo que las funciones exportadas).
  * Las rutas API deben seguir importando las funciones async directamente.
  */
@@ -400,4 +445,5 @@ export const whatsappService = {
   sendPartnerInvitationMessage,
   sendPartnerInvitation,
   sendMatchReminder,
+  sendPaymentStatusUpdateMessage,
 };

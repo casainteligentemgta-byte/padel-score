@@ -1312,6 +1312,18 @@ export const dataService = {
         if (email !== undefined) {
             payload.email = email;
         }
+        if (data.acceptedTermsVersion !== undefined) {
+            payload.accepted_terms_version = data.acceptedTermsVersion;
+        }
+        if (data.legalVersion !== undefined) {
+            payload.legal_version = data.legalVersion;
+        }
+        if (data.statusLegal !== undefined) {
+            payload.status_legal = data.statusLegal;
+        }
+        if (data.legalTimestamp !== undefined) {
+            payload.legal_timestamp = data.legalTimestamp;
+        }
 
         // Si no se provee unique_code, intentamos mantener el existente o generar uno nuevo
         if (!data.uniqueCode) {
@@ -1333,6 +1345,7 @@ export const dataService = {
                 const cleanPayload = { ...payload };
                 delete cleanPayload.email;
                 delete cleanPayload.unique_code;
+                delete cleanPayload.accepted_terms_version;
                 const { error: retryError } = await supabase()
                     .from('profiles')
                     .upsert(cleanPayload, { onConflict: 'id' });
@@ -1836,6 +1849,21 @@ export const dataService = {
         if (!uid) {
             throw new Error('No se pudo determinar tu usuario. Cierra sesión, vuelve a entrar e intenta otra vez.');
         }
+        const tid = String(data.tournamentId ?? '').trim();
+        const catKey = sanitizeString(data.categoryKey);
+        if (tid && catKey) {
+            const existing = await this.getMyInscriptionsForTournament(uid, tid);
+            const blocking = existing.some(
+                (row) =>
+                    row.categoryKey === catKey &&
+                    String(row.paymentStatus || '').toLowerCase() !== 'rechazado',
+            );
+            if (blocking) {
+                throw new Error(
+                    'Ya tienes una inscripción activa en esta categoría. Si el club rechazó tu pago, podrás volver a intentar cuando el estado sea «Rechazado».',
+                );
+            }
+        }
         const { data: row, error } = await supabase()
             .from('inscriptions')
             .insert({
@@ -2002,6 +2030,26 @@ export const dataService = {
             }
         }
         return best ? { tournamentId: best.tournamentId, matchId: best.matchId, scheduledTime: best.scheduledTime, team1Name: best.team1Name, team2Name: best.team2Name, tournamentName: best.tournamentName } : null;
+    },
+
+    /**
+     * Inscripciones del usuario en un torneo (por `user_id` u `owner_id`).
+     * Sirve para impedir duplicar la misma categoría salvo que la anterior esté en `rechazado`.
+     */
+    async getMyInscriptionsForTournament(ownerId: string, tournamentId: string) {
+        const uid = String(ownerId ?? '').trim();
+        const tid = String(tournamentId ?? '').trim();
+        if (!uid || !tid) return [];
+        const { data, error } = await supabase()
+            .from('inscriptions')
+            .select('category_key, payment_status')
+            .eq('tournament_id', tid)
+            .or(`user_id.eq.${uid},owner_id.eq.${uid}`);
+        throwIfError(error);
+        return (data || []).map((r: any) => ({
+            categoryKey: r.category_key != null ? String(r.category_key) : '',
+            paymentStatus: r.payment_status != null ? String(r.payment_status) : '',
+        }));
     },
 
     async getInscriptionsByTournament(tournamentId: string) {

@@ -151,6 +151,32 @@ export default function AdminValidacionPagosPage() {
             if (selectedInscription?.id === id) {
                 setSelectedInscription({ ...selectedInscription, paymentStatus: status, alertMessage: message });
             }
+
+            if (inscription) {
+                const phone = getInscriptionWhatsPhone(inscription);
+                if (phone) {
+                    try {
+                        const res = await fetch('/api/admin/inscriptions/notify-payment-status-whatsapp', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+                            body: JSON.stringify({
+                                inscriptionId: inscription.id,
+                                phone,
+                                playerName: inscription.participantName || 'Jugador',
+                                tournamentName: inscription.tournamentName || 'Torneo',
+                                status,
+                                note: message || undefined,
+                            }),
+                        });
+                        if (!res.ok) {
+                            const j = await res.json().catch(() => ({}));
+                            console.warn('WhatsApp estado de pago no enviado:', (j as { error?: string })?.error || res.status);
+                        }
+                    } catch (waErr) {
+                        console.warn('Error enviando WhatsApp de estado de pago:', waErr);
+                    }
+                }
+            }
         } catch (e) {
             console.error(e);
             alert('Error al actualizar el estado.');
@@ -210,6 +236,42 @@ export default function AdminValidacionPagosPage() {
             ins?.paymentData?.telefono ??
             ''
         ).trim();
+
+    const getPaymentAmountMeta = (ins: any): { primary: string; secondary: string | null } => {
+        const raw = ins?.paymentData?.paymentAmount;
+        const n = raw != null ? Number(String(raw).replace(',', '.')) : NaN;
+        if (!Number.isFinite(n) || n <= 0) return { primary: '—', secondary: null };
+
+        const method = String(ins?.paymentData?.paymentMethod || '').toLowerCase();
+        const isUsdMethod =
+            method.includes('zelle') ||
+            method.includes('binance') ||
+            method.includes('bitcoin') ||
+            method.includes('dollar') ||
+            method.includes('dólar');
+        const isBsMethod =
+            method.includes('pago móvil') ||
+            method.includes('pagomóvil') ||
+            method.includes('pago movil') ||
+            method.includes('pagomovil') ||
+            method.includes('transferencia') ||
+            method.includes('bolívar') ||
+            method.includes('bolivar') ||
+            method.includes('bs');
+
+        if (isUsdMethod) {
+            const primary = `$ ${n.toFixed(2)}`;
+            const secondary =
+                bcvVesPerUsd && bcvVesPerUsd > 0
+                    ? `≈ Bs ${ (n * bcvVesPerUsd).toFixed(2) }`
+                    : null;
+            return { primary, secondary };
+        }
+        if (isBsMethod) {
+            return { primary: `Bs ${n.toFixed(2)}`, secondary: null };
+        }
+        return { primary: n.toFixed(2), secondary: null };
+    };
 
     const runAutoVerification = async () => {
         const pending = inscriptions.filter(ins => ins.paymentStatus === 'pending');
@@ -614,6 +676,7 @@ export default function AdminValidacionPagosPage() {
                             const sp = getStatusPresentation(ins.paymentStatus);
                             const whatsPhone = getInscriptionWhatsPhone(ins);
                             const whatsBusy = whatsStateByInscription[ins.id] === 'sending';
+                            const amountMeta = getPaymentAmountMeta(ins);
                             return (
                             <motion.div
                                 layout
@@ -641,6 +704,28 @@ export default function AdminValidacionPagosPage() {
                                             <div>
                                                 <h3 className="text-lg font-black uppercase italic tracking-tighter leading-none">{ins.participantName || 'Crack Sin Nombre'}</h3>
                                                 <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mt-1">{ins.participantEmail}</p>
+                                                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                                                    <p className="text-[10px] font-bold text-emerald-300/90 uppercase tracking-widest">
+                                                        WhatsApp: {whatsPhone || '—'}
+                                                    </p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleSendAdminWelcomeWhatsApp(ins)}
+                                                        disabled={whatsBusy || !whatsPhone}
+                                                        aria-busy={whatsBusy}
+                                                        className="h-7 px-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all border border-emerald-500/35 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 disabled:opacity-50 disabled:pointer-events-none"
+                                                        title={!whatsPhone ? 'Sin teléfono en los datos de pago' : 'Enviar WhatsApp al jugador'}
+                                                    >
+                                                        {whatsBusy ? (
+                                                            <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
+                                                        ) : whatsStateByInscription[ins.id] === 'success' ? (
+                                                            <CheckCircle className="w-3.5 h-3.5 text-[#22c55e]" aria-hidden />
+                                                        ) : (
+                                                            <MessageCircle className="w-3.5 h-3.5" aria-hidden />
+                                                        )}
+                                                        <span className="text-[9px] font-black uppercase tracking-widest">Mensaje</span>
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -658,8 +743,11 @@ export default function AdminValidacionPagosPage() {
                                             <p className="text-[8px] font-black text-white/30 uppercase tracking-widest">Monto Pagado</p>
                                             <div className="flex items-center gap-2">
                                                 <DollarSign className="w-3 h-3 text-emerald-500" />
-                                                <p className="text-sm font-black italic">{ins.paymentData?.paymentAmount || '—'}</p>
+                                                <p className="text-sm font-black italic">{amountMeta.primary}</p>
                                             </div>
+                                            {amountMeta.secondary && (
+                                                <p className="text-[9px] font-bold text-emerald-300/85 pl-5">{amountMeta.secondary}</p>
+                                            )}
                                             <p className="text-[9px] font-bold text-white/40 pl-5">{ins.paymentData?.paymentMethod || '—'}</p>
                                             {ins.paymentData?.paymentReference && (
                                                 <p className="text-[9px] font-mono text-padel-primary/90 pl-5 truncate" title={ins.paymentData.paymentReference}>Ref: {ins.paymentData.paymentReference}</p>
@@ -714,28 +802,6 @@ export default function AdminValidacionPagosPage() {
                                                 className="min-w-0 grow flex items-center justify-center gap-2 h-10 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all font-black text-[9px] sm:text-[10px] uppercase tracking-widest"
                                             >
                                                 <Eye className="w-4 h-4 shrink-0" /> Revisar
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleSendAdminWelcomeWhatsApp(ins)}
-                                                disabled={whatsBusy || !whatsPhone}
-                                                aria-busy={whatsBusy}
-                                                className="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center transition-all border border-emerald-500/35 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:shadow-[0_0_18px_rgba(34,197,94,0.45)] disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed"
-                                                title={
-                                                    !whatsPhone
-                                                        ? 'Sin teléfono en los datos de pago'
-                                                        : whatsBusy
-                                                          ? 'Enviando…'
-                                                          : 'WhatsApp bienvenida (jugador)'
-                                                }
-                                            >
-                                                {whatsBusy ? (
-                                                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
-                                                ) : whatsStateByInscription[ins.id] === 'success' ? (
-                                                    <CheckCircle className="w-5 h-5 text-[#22c55e]" aria-hidden />
-                                                ) : (
-                                                    <MessageCircle className="w-4 h-4" aria-hidden />
-                                                )}
                                             </button>
                                         </div>
                                         <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -854,6 +920,9 @@ export default function AdminValidacionPagosPage() {
                                     </div>
 
                                     <div className="space-y-6">
+                                        {(() => {
+                                            const amountMeta = getPaymentAmountMeta(selectedInscription);
+                                            return (
                                         <div className="p-6 bg-white/5 rounded-3xl border border-white/5 space-y-4">
                                             <div className="flex justify-between items-center">
                                                 <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">Referencia</p>
@@ -865,13 +934,21 @@ export default function AdminValidacionPagosPage() {
                                             </div>
                                             <div className="flex justify-between items-center">
                                                 <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">Monto</p>
-                                                <p className="text-lg font-black text-padel-primary italic">{selectedInscription.paymentData?.paymentAmount || '—'}</p>
+                                                <p className="text-lg font-black text-padel-primary italic">{amountMeta.primary}</p>
                                             </div>
+                                            {amountMeta.secondary && (
+                                                <div className="flex justify-between items-center">
+                                                    <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">Equivalente</p>
+                                                    <p className="text-sm font-black text-emerald-300 italic">{amountMeta.secondary}</p>
+                                                </div>
+                                            )}
                                             <div className="pt-4 border-t border-white/5 flex flex-col gap-1">
                                                 <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">Banco / Origen</p>
                                                 <p className="text-xs font-bold text-white">{selectedInscription.paymentData?.paymentBank || '—'}</p>
                                             </div>
                                         </div>
+                                            );
+                                        })()}
 
                                         {/* OCR + verificación automática del comprobante */}
                                         {selectedInscription.receiptUrl && (

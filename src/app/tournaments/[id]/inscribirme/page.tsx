@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -15,6 +15,7 @@ import {
 import PaymentInfo from '@/components/PaymentInfo';
 import AutoShrinkName from '@/components/AutoShrinkName';
 import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
+import { CURRENT_TERMS_VERSION, isProfileTermsStale } from '@/lib/legal/termsVersion';
 import {
     ArrowLeft,
     CheckCircle2,
@@ -144,6 +145,10 @@ export default function InscribirmePage() {
     const [success, setSuccess] = useState(false);
     const [playerProfile, setPlayerProfile] = useState<{ gender?: 'MALE' | 'FEMALE'; birthDate?: string } | null>(null);
     const [inscriptionCountByCategory, setInscriptionCountByCategory] = useState<Record<string, number>>({});
+    /** Mis filas en este torneo (para no duplicar la misma categoría). */
+    const [myInscriptionsInTournament, setMyInscriptionsInTournament] = useState<
+        { categoryKey: string; paymentStatus: string }[]
+    >([]);
     const [paymentData, setPaymentData] = useState({
         method: '',
         bank: '',
@@ -270,6 +275,12 @@ export default function InscribirmePage() {
                     });
                     if (!cancelled) setInscriptionCountByCategory(counts);
                 }
+                if (user?.uid) {
+                    const mine = await dataService.getMyInscriptionsForTournament(user.uid, tournamentId);
+                    if (!cancelled) setMyInscriptionsInTournament(mine);
+                } else if (!cancelled) {
+                    setMyInscriptionsInTournament([]);
+                }
             } catch (err) {
                 console.error("Error loading slot counts:", err);
             }
@@ -277,7 +288,7 @@ export default function InscribirmePage() {
 
         loadCounts();
         return () => { cancelled = true; };
-    }, [tournamentId, tournament?.inscriptionCategories]);
+    }, [tournamentId, tournament?.inscriptionCategories, user?.uid]);
 
     useEffect(() => {
         if (!authLoading && !user) {
@@ -377,7 +388,21 @@ export default function InscribirmePage() {
         }
         return teamOrInscriptionCount >= cat.maxSlots;
     };
-    const availableCategories = eligibleCategories.filter((cat) => !isCategoryFull(cat));
+    const alreadyInscribedCategoryKeys = useMemo(() => {
+        const s = new Set<string>();
+        for (const r of myInscriptionsInTournament) {
+            if (!r.categoryKey) continue;
+            if (String(r.paymentStatus || '').toLowerCase() !== 'rechazado') {
+                s.add(r.categoryKey);
+            }
+        }
+        return s;
+    }, [myInscriptionsInTournament]);
+
+    const selectableCategories = eligibleCategories.filter(
+        (cat) => !isCategoryFull(cat) && !alreadyInscribedCategoryKeys.has(cat.key),
+    );
+    const nonFullEligibleCategories = eligibleCategories.filter((cat) => !isCategoryFull(cat));
     const needsProfileForEligibility =
         categories.length > 0 &&
         eligibleCategories.length === 0 &&
@@ -386,6 +411,7 @@ export default function InscribirmePage() {
     const toggleCategory = (key: string) => {
         const cat = eligibleCategories.find((c) => c.key === key);
         if (cat && isCategoryFull(cat)) return;
+        if (alreadyInscribedCategoryKeys.has(key)) return;
         setSelectedCategories((prev) => {
             const next = new Set(prev);
             if (next.has(key)) next.delete(key);
@@ -446,8 +472,16 @@ export default function InscribirmePage() {
         return acc + (cat?.price || 0);
     }, 0);
 
-    /** Paso final: términos, firma y validación facial (3 si hay pago, 2 si es gratis). */
-    const termsStepIndex = totalPrice > 0 ? 3 : 2;
+    const acceptedProfileVersion =
+        profile?.acceptedTermsVersion ??
+        profile?.accepted_terms_version ??
+        profile?.legalVersion ??
+        profile?.legal_version ??
+        null;
+    const hasCurrentLegalAccepted = !isProfileTermsStale(acceptedProfileVersion);
+
+    /** Paso final: si ya aceptó términos vigentes no repetimos el paso legal. */
+    const termsStepIndex = hasCurrentLegalAccepted ? 2 : (totalPrice > 0 ? 3 : 2);
 
     useEffect(() => {
         setWizardStep((prev) => Math.min(prev, termsStepIndex));
@@ -463,11 +497,20 @@ export default function InscribirmePage() {
 
     const prevWizardForLegal = useRef(wizardStep);
     useEffect(() => {
-        if (wizardStep === termsStepIndex && prevWizardForLegal.current !== termsStepIndex) {
+        if (!hasCurrentLegalAccepted && wizardStep === termsStepIndex && prevWizardForLegal.current !== termsStepIndex) {
             setLegalArtifacts(null);
         }
         prevWizardForLegal.current = wizardStep;
-    }, [wizardStep, termsStepIndex]);
+    }, [wizardStep, termsStepIndex, hasCurrentLegalAccepted]);
+
+    useEffect(() => {
+        if (!hasCurrentLegalAccepted) return;
+        setLegalArtifacts({
+            signaturePath: profile?.signatureUrl ?? profile?.signature_url ?? null,
+            biometricPath: profile?.biometricPhotoUrl ?? profile?.biometric_photo_url ?? null,
+            version: acceptedProfileVersion || CURRENT_TERMS_VERSION,
+        });
+    }, [hasCurrentLegalAccepted, profile, acceptedProfileVersion]);
 
     const handleWizardNext = async () => {
         setError(null);
@@ -495,7 +538,7 @@ export default function InscribirmePage() {
             setWizardStep(2);
             return;
         }
-        if (wizardStep === 2 && totalPrice > 0) {
+        if (wizardStep === 2 && totalPrice > 0 && !hasCurrentLegalAccepted) {
             setWizardStep(3);
         }
     };
@@ -522,6 +565,13 @@ export default function InscribirmePage() {
         }
         if (selectedCategories.size === 0) {
             setError('Selecciona al menos una categoría.');
+            return;
+        }
+        const dupSel = [...selectedCategories].filter((k) => alreadyInscribedCategoryKeys.has(k));
+        if (dupSel.length > 0) {
+            setError(
+                'Ya tienes una inscripción activa en una o más categorías elegidas. Si el club rechazó tu solicitud, recarga la página para poder volver a intentar en esa categoría.',
+            );
             return;
         }
         const eligibleKeys = new Set(eligibleCategories.map((c) => c.key));
@@ -853,6 +903,12 @@ export default function InscribirmePage() {
                 console.error('Error sending inscription notification email:', emailError);
             }
 
+            try {
+                const mine = await dataService.getMyInscriptionsForTournament(user.uid, tournamentId);
+                setMyInscriptionsInTournament(mine);
+            } catch {
+                /* no bloquear éxito */
+            }
             setSuccess(true);
         } catch (e: any) {
             setError(e?.message || 'Error al registrar la inscripción.');
@@ -1001,11 +1057,13 @@ export default function InscribirmePage() {
                                         Volver al torneo
                                     </Link>
                                 </div>
-                            ) : availableCategories.length === 0 ? (
+                            ) : selectableCategories.length === 0 ? (
                                 <div className="rounded-2xl bg-white/5 border border-white/10 p-8 text-center">
                                     <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
                                     <p className="text-gray-400 text-sm">
-                                        Todas las categorías disponibles para tu perfil están completas (cupo lleno).
+                                        {nonFullEligibleCategories.length === 0
+                                            ? 'Todas las categorías disponibles para tu perfil están completas (cupo lleno).'
+                                            : 'Ya tienes una inscripción activa en cada categoría que aún tiene plazas (solo una por categoría). Si el club rechazó un pago, recarga esta página para volver a intentar en esa categoría.'}
                                     </p>
                                     <Link href={`/tournaments/${tournamentId}`} className="mt-4 inline-block text-[#ccff00] text-sm font-bold">
                                         Volver al torneo
@@ -1026,10 +1084,10 @@ export default function InscribirmePage() {
                                     {wizardStep === 0 && (
                                     <section className="mb-8">
                                         <h2 className="mb-3 text-xs font-black uppercase tracking-widest text-[#ccff00]">
-                                            Elige una o varias categorías (según tu edad y sexo)
+                                            Elige categorías (según tu edad y sexo)
                                         </h2>
                                         <p className="mb-4 text-[11px] leading-snug text-gray-500 sm:text-[10px]">
-                                            Solo se muestran categorías que corresponden a tu perfil. Puedes inscribirte en varias; el horario evitará choques.
+                                            Solo se muestran categorías que corresponden a tu perfil. Puedes elegir varias distintas, pero solo una inscripción por categoría (si el club rechazó un pago, podrás repetir en esa misma categoría tras recargar).
                                         </p>
                                         {isIndividual ? (
                                             <p className="mb-4 text-[10px] leading-snug text-gray-400 sm:text-[10px]">
@@ -1043,6 +1101,8 @@ export default function InscribirmePage() {
                                         <div className="space-y-3">
                                             {eligibleCategories.map((cat) => {
                                                 const full = isCategoryFull(cat);
+                                                const alreadyDup = alreadyInscribedCategoryKeys.has(cat.key);
+                                                const noSelect = full || alreadyDup;
                                                 const count = inscriptionCountByCategory[cat.key] ?? 0;
                                                 const maxPlazas = cat.maxSlots;
                                                 const capEquipos =
@@ -1060,10 +1120,10 @@ export default function InscribirmePage() {
                                                 return (
                                                     <label
                                                         key={cat.key}
-                                                        className={`flex flex-col gap-3 rounded-2xl border p-3 transition-all sm:flex-row sm:items-start sm:justify-between sm:p-4 ${full ? 'cursor-not-allowed bg-white/5 opacity-70 border-white/5' : 'cursor-pointer'} ${
+                                                        className={`flex flex-col gap-3 rounded-2xl border p-3 transition-all sm:flex-row sm:items-start sm:justify-between sm:p-4 ${noSelect ? 'cursor-not-allowed bg-white/5 opacity-70 border-white/5' : 'cursor-pointer'} ${
                                                             selectedCategories.has(cat.key)
                                                                 ? 'border-[#ccff00]/40 bg-[#ccff00]/10'
-                                                                : !full
+                                                                : !noSelect
                                                                   ? 'border-white/10 bg-white/5 hover:border-white/20'
                                                                   : ''
                                                         }`}
@@ -1073,11 +1133,11 @@ export default function InscribirmePage() {
                                                                 type="checkbox"
                                                                 checked={selectedCategories.has(cat.key)}
                                                                 onChange={() => toggleCategory(cat.key)}
-                                                                disabled={full}
+                                                                disabled={noSelect}
                                                                 className="mt-0.5 h-5 w-5 shrink-0 rounded border-2 border-[#ccff00] text-[#ccff00] focus:ring-[#ccff00] disabled:opacity-50"
                                                             />
                                                             <div className="min-w-0 flex-1 space-y-1.5">
-                                                                <span className={`block break-words text-sm font-bold leading-snug sm:text-base ${full ? 'text-gray-500' : ''}`}>
+                                                                <span className={`block break-words text-sm font-bold leading-snug sm:text-base ${noSelect ? 'text-gray-500' : ''}`}>
                                                                     {cat.name}
                                                                 </span>
                                                                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase text-gray-500">
@@ -1090,6 +1150,9 @@ export default function InscribirmePage() {
                                                                         </span>
                                                                     )}
                                                                     {full && <span className="font-bold text-amber-500">Completo</span>}
+                                                                    {alreadyDup && !full && (
+                                                                        <span className="font-bold text-sky-400">Ya inscrito</span>
+                                                                    )}
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -1098,7 +1161,7 @@ export default function InscribirmePage() {
                                                                 <span className="text-[10px] text-gray-500">{slotsLabel}</span>
                                                             )}
                                                             {cat.price > 0 && (
-                                                                <div className={`text-right text-base font-black sm:text-sm ${full ? 'text-gray-500' : 'text-[#ccff00]'}`}>
+                                                                <div className={`text-right text-base font-black sm:text-sm ${noSelect ? 'text-gray-500' : 'text-[#ccff00]'}`}>
                                                                     <span>${cat.price}</span>
                                                                     <span className="block text-[9px] font-bold uppercase text-gray-500 sm:text-[8px]">
                                                                         {isIndividual ? 'p. jugador' : 'p. equipo'}
@@ -1404,7 +1467,7 @@ export default function InscribirmePage() {
                                         </section>
                                     )}
 
-                                    {wizardStep === termsStepIndex && (
+                                    {wizardStep === termsStepIndex && !hasCurrentLegalAccepted && (
                                         <section className="mb-4 min-w-0">
                                             <p className="mb-2 text-center text-[10px] text-gray-500">
                                                 Para esta inscripción se requiere validación facial (foto) y firma en pantalla, además de leer el
@@ -1438,6 +1501,13 @@ export default function InscribirmePage() {
                                                     </p>
                                                 </div>
                                             </LegalContainer>
+                                        </section>
+                                    )}
+                                    {wizardStep === termsStepIndex && hasCurrentLegalAccepted && (
+                                        <section className="mb-4 min-w-0">
+                                            <p className="rounded-2xl border border-[#ccff00]/25 bg-[#ccff00]/10 px-4 py-3 text-center text-[10px] font-bold uppercase tracking-widest text-[#ccff00]">
+                                                Ya aceptaste términos y privacidad al crear tu cuenta.
+                                            </p>
                                         </section>
                                     )}
                                     </div>

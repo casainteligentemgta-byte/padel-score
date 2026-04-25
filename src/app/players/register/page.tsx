@@ -30,13 +30,14 @@ import Sidebar from '@/components/Sidebar';
 import { BackButton } from '@/components/BackButton';
 import LegalModal from '@/components/legal/LegalModal';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal/termsVersion';
+import { isProfileTermsStale } from '@/lib/legal/termsVersion';
 
 function RegistrationFormContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const editId = searchParams.get('edit');
     const fromMisDatos = searchParams.get('mis-datos') === '1';
-    const { user, loading: authLoading } = useAuth();
+    const { user, loading: authLoading, profile } = useAuth();
 
     const [loading, setLoading] = useState(false);
     const [fetching, setFetching] = useState(false);
@@ -111,6 +112,19 @@ function RegistrationFormContent() {
 
         if (!authLoading) loadPlayerData();
     }, [editId, authLoading, user]);
+
+    useEffect(() => {
+        const acceptedVersion =
+            profile?.acceptedTermsVersion ??
+            profile?.accepted_terms_version ??
+            profile?.legalVersion ??
+            profile?.legal_version ??
+            null;
+        if (!isProfileTermsStale(acceptedVersion)) {
+            setAcceptedTerms(true);
+            setShowTermsModal(false);
+        }
+    }, [profile]);
 
     const updateField = (field: string, value: any) => {
         if (field === 'dni') {
@@ -706,32 +720,44 @@ function RegistrationFormContent() {
                         </div>
 
                         {/* Terms and Conditions Checkbox */}
-                        <div className="px-4">
-                            <label className="flex items-center gap-3 cursor-pointer group">
-                                <div className="relative flex-shrink-0">
-                                    <input
-                                        type="checkbox"
-                                        className="sr-only"
-                                        checked={acceptedTerms}
-                                        onChange={e => setAcceptedTerms(e.target.checked)}
-                                    />
-                                    <div className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center bg-padel-primary border-padel-primary shadow-lg ${acceptedTerms ? 'shadow-padel-primary/40 scale-110' : 'shadow-padel-primary/10 opacity-90'}`}>
-                                        {acceptedTerms && <CircleDot className="w-4 h-4 text-black" strokeWidth={3} />}
+                        {isProfileTermsStale(
+                            profile?.acceptedTermsVersion ??
+                            profile?.accepted_terms_version ??
+                            profile?.legalVersion ??
+                            profile?.legal_version ??
+                            null
+                        ) ? (
+                            <div className="px-4">
+                                <label className="flex items-center gap-3 cursor-pointer group">
+                                    <div className="relative flex-shrink-0">
+                                        <input
+                                            type="checkbox"
+                                            className="sr-only"
+                                            checked={acceptedTerms}
+                                            onChange={e => setAcceptedTerms(e.target.checked)}
+                                        />
+                                        <div className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center bg-padel-primary border-padel-primary shadow-lg ${acceptedTerms ? 'shadow-padel-primary/40 scale-110' : 'shadow-padel-primary/10 opacity-90'}`}>
+                                            {acceptedTerms && <CircleDot className="w-4 h-4 text-black" strokeWidth={3} />}
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="flex-1 text-[9px] font-medium text-white tracking-tight leading-snug text-justify">
-                                    Acepto en un solo acto: contrato de la plataforma, privacidad y términos de inscripción a torneos (sin firma en pantalla;{' '}
-                                    <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); setShowTermsModal(true); }}
-                                        className="bg-transparent p-0 border-none inline text-white font-bold underline transition-all"
-                                    >
-                                        ver documento
-                                    </button>
-                                    ).
-                                </div>
-                            </label>
-                        </div>
+                                    <div className="flex-1 text-[9px] font-medium text-white tracking-tight leading-snug text-justify">
+                                        Acepto en un solo acto: contrato de la plataforma, privacidad y términos de inscripción a torneos (sin firma en pantalla;{' '}
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); setShowTermsModal(true); }}
+                                            className="bg-transparent p-0 border-none inline text-white font-bold underline transition-all"
+                                        >
+                                            ver documento
+                                        </button>
+                                        ).
+                                    </div>
+                                </label>
+                            </div>
+                        ) : (
+                            <div className="px-4 text-center text-[9px] font-bold uppercase tracking-widest text-padel-primary/85">
+                                Términos ya aceptados al crear tu cuenta.
+                            </div>
+                        )}
 
                         {/* Submit Button */}
                         <div className="pt-2 pb-10 px-4">

@@ -551,7 +551,7 @@ export default function AdminDashboard() {
       <header className="shrink-0 z-[200] w-full border-b border-padel-primary/20 bg-[#0a0a0a] shadow-lg shadow-black/40 -mx-3 md:-mx-4 px-3 md:px-4">
         <div className="max-w-7xl mx-auto py-2.5 md:py-3.5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
               <button
                 type="button"
                 onClick={handleGoBack}
@@ -561,7 +561,7 @@ export default function AdminDashboard() {
                 <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.5} />
                 Atrás
               </button>
-              <div className="min-w-0 flex-1 pt-0.5">
+              <div className="min-w-0 flex-1">
                 <h1 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight text-white leading-tight">
                   PADEL SCORE <span className="text-padel-primary">PRO</span>
                 </h1>
