@@ -908,8 +908,8 @@ export default function TournamentDashboard() {
                 setIsShareModalOpen(false);
             } else {
                 downloadPDF(pdf, fileName);
-                const url = encodeURIComponent(window.location.href);
-                window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ')}${url}`, '_blank');
+                const full = `${text} ${window.location.href}`;
+                window.open(`https://wa.me/?text=${encodeURIComponent(full)}`, '_blank');
             }
         } catch (e) {
             downloadPDF(pdf, fileName);

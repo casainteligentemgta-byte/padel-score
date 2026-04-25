@@ -5,6 +5,14 @@ import { dataService } from '@/lib/dataService';
 import { Wallet, Info, Copy, CheckCircle2, PhoneCall, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+/** Número real de soporte (Pampatar Base); override con NEXT_PUBLIC_SUPPORT_WHATSAPP. */
+const supportPhone =
+    (process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP || '584122117270').replace(/\D/g, '') || '584122117270';
+const supportMessage = encodeURIComponent(
+    'Epa, tengo un problema subiendo mi comprobante de pago en la Beta de Smart Padel 58.'
+);
+const whatsappLink = `https://wa.me/${supportPhone}?text=${supportMessage}`;
+
 interface PaymentMethod {
     id: string;
     name: string;
@@ -61,11 +69,13 @@ export default function PaymentInfo() {
                     No hay métodos de pago automáticos activos en este momento. Por favor, contáctanos directamente para coordinar tu inscripción.
                 </p>
                 <a
-                    href="https://wa.me/584120000000" // Cambiar por el número real si es necesario
-                    className="inline-flex items-center gap-2 bg-[#ccff00] text-black font-black px-6 py-3 rounded-xl hover:scale-105 transition-transform"
+                    href={whatsappLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 bg-[#CCFF00] text-black font-bold py-2 px-4 rounded-lg transition-transform hover:scale-105"
                 >
-                    <PhoneCall className="w-5 h-5" />
-                    CONTACTAR SOPORTE
+                    <PhoneCall className="w-5 h-5 shrink-0" />
+                    Contactar Soporte
                 </a>
             </motion.div>
         );
