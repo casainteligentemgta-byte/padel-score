@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type ComponentType } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, 
@@ -15,7 +15,9 @@ import {
   UserCheck,
   ShieldCheck,
   ArrowLeft,
-  UserPlus
+  UserPlus,
+  Server,
+  Database,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
@@ -29,6 +31,7 @@ interface StatCardProps {
   icon: any;
   trend?: string;
   color: string;
+  compact?: boolean;
 }
 
 function paymentStatusLabel(status: unknown) {
@@ -45,33 +48,90 @@ function inscriptionPaymentLabel(status: unknown) {
   return 'Pendiente';
 }
 
-const StatCard = ({ title, value, icon: Icon, trend, color }: StatCardProps) => (
-  <motion.div 
+type ServiceHealth = 'loading' | 'ok' | 'warn' | 'error';
+
+function HealthPill({
+  label,
+  status,
+  icon: Icon,
+  hint,
+}: {
+  label: string;
+  status: ServiceHealth;
+  icon: ComponentType<{ className?: string }>;
+  hint: string;
+}) {
+  const dotClass =
+    status === 'loading'
+      ? 'bg-white/50 animate-pulse'
+      : status === 'ok'
+        ? 'bg-emerald-400'
+        : status === 'warn'
+          ? 'bg-amber-400'
+          : 'bg-red-500';
+  const statusText =
+    status === 'loading' ? '…' : status === 'ok' ? 'OK' : status === 'warn' ? 'Parcial' : 'Error';
+
+  return (
+    <div
+      className="inline-flex items-center gap-1.5 pl-1.5 pr-2 py-0.5 rounded-md bg-white/5 border border-white/10"
+      title={`${hint} · ${statusText}`}
+    >
+      <Icon className="w-3.5 h-3.5 text-padel-primary/80 shrink-0" aria-hidden />
+      <span className="text-[9px] font-bold uppercase text-white/45 leading-none">{label}</span>
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} title={statusText} />
+    </div>
+  );
+}
+
+const StatCard = ({ title, value, icon: Icon, trend, color, compact }: StatCardProps) => (
+  <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    className="bg-[#111] border border-white/5 rounded-2xl p-4 relative overflow-hidden group"
+    className={
+      compact
+        ? 'bg-[#111] border border-white/5 rounded-xl p-2.5 sm:p-3 relative overflow-hidden group min-h-0'
+        : 'bg-[#111] border border-white/5 rounded-2xl p-4 relative overflow-hidden group'
+    }
   >
     <div className={`absolute top-0 right-0 w-32 h-32 bg-${color}/10 blur-3xl -mr-16 -mt-16 group-hover:bg-${color}/20 transition-colors`} />
     <div className="relative z-10">
-      <div className="flex justify-between items-start mb-3">
-        <div className={`p-2.5 rounded-xl bg-${color}/10 border border-${color}/20`}>
-          <Icon className={`w-5 h-5 text-${color}`} />
+      <div className={`flex justify-between items-start ${compact ? 'mb-1.5' : 'mb-3'}`}>
+        <div className={compact ? `p-1.5 rounded-lg bg-${color}/10 border border-${color}/20` : `p-2.5 rounded-xl bg-${color}/10 border border-${color}/20`}>
+          <Icon className={compact ? `w-4 h-4 text-${color}` : `w-5 h-5 text-${color}`} />
         </div>
         {trend && (
-          <span className="text-[10px] font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full flex items-center gap-1">
-            <ArrowUpRight className="w-3 h-3" />
+          <span
+            className={
+              compact
+                ? 'text-[8px] font-medium text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 max-w-[4.5rem] truncate'
+                : 'text-[10px] font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full flex items-center gap-1'
+            }
+            title={trend}
+          >
+            <ArrowUpRight className={compact ? 'w-2.5 h-2.5 shrink-0' : 'w-3 h-3'} />
             {trend}
           </span>
         )}
       </div>
-      <h3 className="text-white/50 text-xs font-medium mb-1">{title}</h3>
-      <div className="text-2xl font-bold text-white tracking-tight">{value}</div>
+      <h3
+        className={
+          compact
+            ? 'text-white/50 text-[9px] sm:text-[10px] font-medium mb-0.5 leading-tight line-clamp-2'
+            : 'text-white/50 text-xs font-medium mb-1'
+        }
+      >
+        {title}
+      </h3>
+      <div className={compact ? 'text-base sm:text-lg font-bold text-white tracking-tight tabular-nums' : 'text-2xl font-bold text-white tracking-tight'}>
+        {value}
+      </div>
     </div>
   </motion.div>
 );
 
 export default function AdminDashboard() {
-  const { isAdmin, loading: authLoading } = useAuth();
+  const { isAdmin, loading: authLoading, user, profile } = useAuth();
   const supabase = getSupabaseClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -86,7 +146,16 @@ export default function AdminDashboard() {
     capacity: 0,
   });
   const [activeTournamentVenue, setActiveTournamentVenue] = useState('—');
-  
+  const [serviceHealth, setServiceHealth] = useState<{
+    server: ServiceHealth;
+    clientDb: ServiceHealth;
+    apiAdmin: ServiceHealth;
+  }>({
+    server: 'loading',
+    clientDb: 'loading',
+    apiAdmin: 'loading',
+  });
+
   const [players, setPlayers] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
@@ -114,10 +183,6 @@ export default function AdminDashboard() {
   });
 
   const handleGoBack = useCallback(() => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      router.back();
-      return;
-    }
     router.push('/admin');
   }, [router]);
 
@@ -316,6 +381,43 @@ export default function AdminDashboard() {
     }, 350);
   }, [fetchData]);
 
+  const checkServicesHealth = useCallback(async () => {
+    let server: ServiceHealth = 'error';
+    let clientDb: ServiceHealth = 'error';
+    let apiAdmin: ServiceHealth = 'error';
+
+    try {
+      const hRes = await fetch('/api/health', { cache: 'no-store' });
+      if (hRes.ok) {
+        const j = (await hRes.json()) as { supabase?: string };
+        if (j.supabase === 'ok') server = 'ok';
+        else if (j.supabase === 'unconfigured') server = 'warn';
+        else server = 'error';
+      } else {
+        server = 'error';
+      }
+    } catch {
+      server = 'error';
+    }
+
+    if (supabase) {
+      const { error } = await supabase.from('tournaments').select('id').limit(1);
+      clientDb = error ? 'error' : 'ok';
+    }
+
+    try {
+      const authHeaders = await getAuthHeaders();
+      const pRes = await fetch('/api/admin/payment-logs', { headers: authHeaders, cache: 'no-store' });
+      if (pRes.ok) apiAdmin = 'ok';
+      else if (pRes.status === 501) apiAdmin = 'warn';
+      else apiAdmin = 'error';
+    } catch {
+      apiAdmin = 'error';
+    }
+
+    setServiceHealth({ server, clientDb, apiAdmin });
+  }, [supabase]);
+
   useEffect(() => {
     if (!authLoading && !isAdmin) {
       router.replace('/admin');
@@ -324,6 +426,11 @@ export default function AdminDashboard() {
 
     if (isAdmin) {
       fetchData();
+      void checkServicesHealth();
+
+      const healthInterval = setInterval(() => {
+        void checkServicesHealth();
+      }, 90_000);
 
       // Realtime subscriptions
       const channel = supabase!
@@ -336,6 +443,7 @@ export default function AdminDashboard() {
         .subscribe();
 
       return () => {
+        clearInterval(healthInterval);
         if (refreshTimerRef.current) {
           clearTimeout(refreshTimerRef.current);
           refreshTimerRef.current = null;
@@ -343,7 +451,7 @@ export default function AdminDashboard() {
         supabase!.removeChannel(channel);
       };
     }
-  }, [isAdmin, authLoading, fetchData, router, scheduleRefresh, supabase]);
+  }, [isAdmin, authLoading, checkServicesHealth, fetchData, router, scheduleRefresh, supabase]);
 
   /** Enlace desde pagos: abrir equipos inscritos y centrar la fila (URL limpia tras el scroll). */
   useEffect(() => {
@@ -381,6 +489,26 @@ export default function AdminDashboard() {
   const previewInscriptions = inscriptions.slice(0, 3);
   const previewLogs = logs.slice(0, 3);
 
+  const adminDisplayName = useMemo(() => {
+    const n = String(
+      (profile as { name?: string; full_name?: string } | null)?.name ||
+        (profile as { full_name?: string } | null)?.full_name ||
+        user?.displayName ||
+        '',
+    ).trim();
+    return n || 'Administrador';
+  }, [profile, user]);
+
+  const adminEmail = String(user?.email || (profile as { email?: string } | null)?.email || '').trim();
+  const adminInitials = useMemo(() => {
+    const parts = adminDisplayName.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
+    }
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return 'AD';
+  }, [adminDisplayName]);
+
   const handleApprovePaymentLog = async (id: string) => {
     if (!supabase || !id) return;
     setApprovingId(id);
@@ -416,110 +544,126 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-[#050505] text-white p-3 md:p-4">
-      <div className="sticky top-0 z-[200] w-full border-b border-padel-primary/20 bg-[#0a0a0a] shadow-lg shadow-black/40 -mx-3 md:-mx-4 px-3 md:px-4 mb-3 md:mb-4">
-        <div className="max-w-7xl mx-auto py-3 flex items-center">
-          <button
-            type="button"
-            onClick={handleGoBack}
-            className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 sm:px-5 rounded-xl bg-black border border-padel-primary/45 text-padel-primary font-black text-xs sm:text-sm uppercase tracking-widest hover:bg-padel-primary/10 active:scale-[0.98] transition-all"
-            aria-label="Volver al panel de administración"
-          >
-            <ArrowLeft className="w-5 h-5" strokeWidth={2.5} />
-            Atrás
-          </button>
-        </div>
-      </div>
-      {/* Header */}
-      <div className="max-w-7xl mx-auto mb-4 flex flex-col gap-3">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="px-2 py-1 bg-padel-primary/10 border border-padel-primary/20 rounded text-[10px] font-bold text-padel-primary uppercase tracking-wider">
-              Admin Dashboard
+    <div className="h-screen overflow-hidden bg-[#050505] text-white flex flex-col p-3 md:p-4 min-h-0">
+      <header className="shrink-0 z-[200] w-full border-b border-padel-primary/20 bg-[#0a0a0a] shadow-lg shadow-black/40 -mx-3 md:-mx-4 px-3 md:px-4">
+        <div className="max-w-7xl mx-auto py-2.5 md:py-3.5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={handleGoBack}
+                className="shrink-0 inline-flex items-center justify-center gap-2 min-h-[44px] px-3 sm:px-4 rounded-xl bg-black border border-padel-primary/45 text-padel-primary font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-padel-primary/10 active:scale-[0.98] transition-all"
+                aria-label="Volver al panel de administración"
+              >
+                <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.5} />
+                Atrás
+              </button>
+              <div className="min-w-0 flex-1 pt-0.5">
+                <h1 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight text-white leading-tight">
+                  PADEL SCORE <span className="text-padel-primary">PRO</span>
+                </h1>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className="px-2 py-0.5 bg-padel-primary/10 border border-padel-primary/20 rounded text-[10px] font-bold text-padel-primary uppercase tracking-wider">
+                    Admin Dashboard
+                  </span>
+                  <div className="flex items-center gap-1 text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Live
+                  </div>
+                </div>
+                <p className="text-white/50 text-xs sm:text-sm font-medium mt-1.5">
+                  Centro de control y monitoreo en tiempo real.
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-1 text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Live
+
+            <div className="w-full lg:w-auto lg:max-w-[22rem] shrink-0 flex flex-col items-stretch lg:items-end gap-2.5 self-stretch">
+              <div className="relative w-full">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-padel-primary/60" />
+                <input
+                  type="search"
+                  name="q"
+                  inputMode="search"
+                  autoComplete="off"
+                  placeholder="Buscar: referencia, nombre, email o teléfono (pagos)"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-[#111] border border-padel-primary/40 rounded-full py-2.5 pl-10 pr-4 text-xs sm:text-sm text-white placeholder:text-white/35 focus:outline-none focus:ring-2 focus:ring-padel-primary/50"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void fetchData();
+                    void checkServicesHealth();
+                  }}
+                  className="shrink-0 p-2.5 sm:p-3 bg-black border border-padel-primary/30 rounded-xl hover:bg-padel-primary/10 transition-colors group"
+                  title="Sincronizar ahora"
+                  aria-label="Sincronizar ahora"
+                >
+                  <RefreshCcw className="w-5 h-5 text-padel-primary/80 group-active:rotate-180 transition-transform duration-500" />
+                </button>
+                <div className="flex min-w-0 max-w-full items-center gap-2.5 sm:gap-3 bg-white/5 border border-white/10 p-2 sm:p-2.5 rounded-xl pl-2">
+                  <div
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-padel-primary flex items-center justify-center text-[10px] sm:text-xs font-black text-black shrink-0"
+                    aria-hidden
+                  >
+                    {adminInitials}
+                  </div>
+                  <div className="min-w-0 text-left sm:text-right">
+                    <p className="text-[11px] sm:text-xs font-bold text-white truncate" title={adminDisplayName}>
+                      {adminDisplayName}
+                    </p>
+                    {adminEmail ? (
+                      <p
+                        className="text-[9px] sm:text-[10px] text-white/45 truncate max-w-[11rem] sm:max-w-[14rem]"
+                        title={adminEmail}
+                      >
+                        {adminEmail}
+                      </p>
+                    ) : (
+                      <p className="text-[9px] sm:text-[10px] text-white/35">Sesión activa</p>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <h1 className="text-3xl md:text-4xl font-black tracking-tight text-white flex items-center gap-3">
-            Padel Score <span className="text-padel-primary">PRO</span>
-          </h1>
-          <p className="text-white/50 text-sm font-medium">Centro de control y monitoreo en tiempo real.</p>
-        </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-        {activeTab === 'payments' && (
-          <div className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-padel-primary/60" />
-            <input
-              type="text"
-              placeholder="Referencia, nombre, email o teléfono…"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-[#111] border border-padel-primary/40 rounded-full py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/35 focus:outline-none focus:ring-2 focus:ring-padel-primary/50"
+          <div
+            className="mt-2.5 pt-2.5 border-t border-white/10 flex flex-wrap items-center gap-1.5"
+            role="status"
+            aria-label="Estado de servicios"
+          >
+            <span className="w-full sm:w-auto text-[9px] font-bold text-white/35 uppercase tracking-wider sm:mr-0.5">
+              Servicios
+            </span>
+            <HealthPill
+              label="Servidor"
+              status={serviceHealth.server}
+              icon={Server}
+              hint="Conexión del backend a Supabase (service role)"
+            />
+            <HealthPill
+              label="Supabase"
+              status={serviceHealth.clientDb}
+              icon={Database}
+              hint="Lectura desde el navegador (anon, RLS)"
+            />
+            <HealthPill
+              label="API pagos"
+              status={serviceHealth.apiAdmin}
+              icon={CreditCard}
+              hint="Endpoint de administración de comprobantes"
             />
           </div>
-        )}
-        <div className="flex items-center gap-3 sm:ml-auto">
-          <button 
-            onClick={() => fetchData()}
-            className="p-3 bg-black border border-padel-primary/30 rounded-xl hover:bg-padel-primary/10 transition-colors group"
-            title="Sincronizar ahora"
-          >
-            <RefreshCcw className="w-5 h-5 text-padel-primary/80 group-active:rotate-180 transition-transform duration-500" />
-          </button>
-          <div className="h-10 w-[1px] bg-white/10 mx-2 hidden md:block" />
-          <div className="flex items-center gap-3 bg-white/5 border border-white/10 p-2 rounded-xl">
-            <div className="w-10 h-10 rounded-lg bg-padel-primary flex items-center justify-center font-bold text-black">
-              AD
-            </div>
-            <div className="hidden sm:block">
-              <div className="text-xs font-bold text-white">Administrador</div>
-              <div className="text-[10px] text-white/40">Sesión Activa</div>
-            </div>
-          </div>
         </div>
-        </div>
-        </div>
-      </div>
+      </header>
 
-      {/* Stats Grid */}
-      <div className="max-w-7xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-        <StatCard 
-          title={`Inscritos activos (${activeTournamentVenue})`} 
-          value={stats.capacity > 0 ? `${stats.totalUsers} / ${stats.capacity}` : stats.totalUsers} 
-          icon={Users} 
-          trend={stats.capacity > 0 ? `Faltan ${Math.max(0, stats.capacity - stats.totalUsers)}` : undefined} 
-          color="blue-500" 
-        />
-        <StatCard 
-          title="Inscripciones Pagas" 
-          value={stats.capacity > 0 ? `${stats.paidInscriptions} / ${stats.capacity}` : stats.paidInscriptions} 
-          icon={CheckCircle2} 
-          trend={stats.capacity > 0 ? `${Math.round((stats.paidInscriptions / Math.max(1, stats.capacity)) * 100)}%` : undefined} 
-          color="emerald-500" 
-        />
-        <StatCard 
-          title="Pagos Pendientes" 
-          value={stats.capacity > 0 ? `${stats.pendingPayments} / ${stats.capacity}` : stats.pendingPayments} 
-          icon={Clock} 
-          trend={stats.capacity > 0 ? `${Math.round((stats.pendingPayments / Math.max(1, stats.capacity)) * 100)}%` : undefined}
-          color="amber-500" 
-        />
-        <StatCard 
-          title="Alertas de Pago" 
-          value={stats.capacity > 0 ? `${stats.activeAlerts} / ${stats.capacity}` : stats.activeAlerts} 
-          icon={AlertTriangle} 
-          trend={stats.capacity > 0 ? `${Math.round((stats.activeAlerts / Math.max(1, stats.capacity)) * 100)}%` : undefined}
-          color="rose-500" 
-        />
-      </div>
-
-      {/* Listas compactas */}
-      <div className="max-w-7xl mx-auto h-[calc(100vh-290px)] md:h-[calc(100vh-305px)] grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
-        <div className="lg:col-span-2 min-h-0 overflow-auto pr-1 space-y-4">
+      <div className="max-w-7xl mx-auto w-full flex-1 min-h-0 flex flex-col gap-2 md:gap-3 pt-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4 flex-1 min-h-0">
+        <div className="order-1 lg:order-1 lg:col-span-2 min-h-0 flex flex-col overflow-y-auto pr-0.5 sm:pr-1 space-y-3 [scrollbar-gutter:stable]">
           <section className="bg-[#111] border border-white/5 rounded-3xl p-4">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold flex items-center gap-2"><CreditCard className="w-5 h-5 text-padel-primary" /> PAGOS</h2>
@@ -628,8 +772,43 @@ export default function AdminDashboard() {
           </section>
         </div>
 
-        <div className="min-h-0 overflow-auto pr-1 space-y-4">
-          <section className="bg-[#111] border border-white/5 rounded-3xl p-4">
+        <aside className="order-2 lg:order-2 min-h-0 flex flex-col gap-2.5 md:gap-3 overflow-y-auto pr-0.5 sm:pr-1 [scrollbar-gutter:stable]">
+          <div className="grid grid-cols-2 gap-2 shrink-0">
+            <StatCard
+              title={`Inscritos activos (${activeTournamentVenue})`}
+              value={stats.capacity > 0 ? `${stats.totalUsers} / ${stats.capacity}` : stats.totalUsers}
+              icon={Users}
+              trend={stats.capacity > 0 ? `Faltan ${Math.max(0, stats.capacity - stats.totalUsers)}` : undefined}
+              color="blue-500"
+              compact
+            />
+            <StatCard
+              title="Inscripciones pagas"
+              value={stats.capacity > 0 ? `${stats.paidInscriptions} / ${stats.capacity}` : stats.paidInscriptions}
+              icon={CheckCircle2}
+              trend={stats.capacity > 0 ? `${Math.round((stats.paidInscriptions / Math.max(1, stats.capacity)) * 100)}%` : undefined}
+              color="emerald-500"
+              compact
+            />
+            <StatCard
+              title="Pagos pendientes"
+              value={stats.capacity > 0 ? `${stats.pendingPayments} / ${stats.capacity}` : stats.pendingPayments}
+              icon={Clock}
+              trend={stats.capacity > 0 ? `${Math.round((stats.pendingPayments / Math.max(1, stats.capacity)) * 100)}%` : undefined}
+              color="amber-500"
+              compact
+            />
+            <StatCard
+              title="Alerta de pago"
+              value={stats.capacity > 0 ? `${stats.activeAlerts} / ${stats.capacity}` : stats.activeAlerts}
+              icon={AlertTriangle}
+              trend={stats.capacity > 0 ? `${Math.round((stats.activeAlerts / Math.max(1, stats.capacity)) * 100)}%` : undefined}
+              color="rose-500"
+              compact
+            />
+          </div>
+
+          <section className="bg-[#111] border border-white/5 rounded-3xl p-4 shrink-0">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-rose-500" /> Errores de pantalla</h2>
               <span className="bg-rose-500/20 text-rose-400 text-[10px] font-bold px-2 py-1 rounded-full">{errorLogs.length}</span>
@@ -660,6 +839,7 @@ export default function AdminDashboard() {
               {previewLogs.length === 0 && <p className="text-sm text-white/40">Sin logs recientes.</p>}
             </div>
           </section>
+        </aside>
         </div>
       </div>
 
