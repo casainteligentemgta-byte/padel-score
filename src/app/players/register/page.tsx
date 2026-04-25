@@ -28,7 +28,8 @@ import { useAuth } from '@/lib/AuthContext';
 import { formatDNI } from '@/lib/formatters';
 import Sidebar from '@/components/Sidebar';
 import { BackButton } from '@/components/BackButton';
-import { LegalContainer } from '@/components/legal/LegalContainer';
+import LegalModal from '@/components/legal/LegalModal';
+import { CURRENT_TERMS_VERSION } from '@/lib/legal/termsVersion';
 
 function RegistrationFormContent() {
     const router = useRouter();
@@ -199,6 +200,18 @@ function RegistrationFormContent() {
                     alert('Esta cédula ya está registrada con otro jugador.');
                     setLoading(false);
                     return;
+                }
+            }
+
+            if (acceptedTerms && user.uid) {
+                try {
+                    await dataService.updateProfileLegalAcceptance(user.uid, {
+                        acceptedTermsVersion: CURRENT_TERMS_VERSION,
+                        signaturePath: null,
+                        biometricPhotoPath: null,
+                    });
+                } catch (legalErr) {
+                    console.error('[Registration] No se pudo guardar el consentimiento legal:', legalErr);
                 }
             }
 
@@ -707,22 +720,15 @@ function RegistrationFormContent() {
                                     </div>
                                 </div>
                                 <div className="flex-1 text-[9px] font-medium text-white tracking-tight leading-snug text-justify">
-                                    Declaro haber leído, comprendido y aceptado los{' '}
+                                    Acepto en un solo acto: contrato de la plataforma, privacidad y términos de inscripción a torneos (sin firma en pantalla;{' '}
                                     <button
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); setShowTermsModal(true); }}
                                         className="bg-transparent p-0 border-none inline text-white font-bold underline transition-all"
                                     >
-                                        Términos y Condiciones
-                                    </button>{' '}
-                                    y la{' '}
-                                    <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); setShowTermsModal(true); }}
-                                        className="bg-transparent p-0 border-none inline text-white font-bold underline transition-all"
-                                    >
-                                        Política de Privacidad
+                                        ver documento
                                     </button>
+                                    ).
                                 </div>
                             </label>
                         </div>
@@ -748,52 +754,14 @@ function RegistrationFormContent() {
                     </motion.div>
                 </main>
 
-                {/* Terms and Conditions Modal */}
-                <AnimatePresence mode="wait">
-                    {showTermsModal && (
-                        <div className="fixed inset-0 z-[120] flex items-center justify-center px-6">
-                            <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                className="fixed inset-0 bg-black/95 backdrop-blur-2xl"
-                                onClick={() => setShowTermsModal(false)}
-                            />
-                            <motion.div
-                                initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                                animate={{ scale: 1, opacity: 1, y: 0 }}
-                                exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                                className="relative z-[130] w-full max-w-lg h-[min(88dvh,820px)] overflow-hidden rounded-[40px] border border-white/10 bg-[#0a0a0a] shadow-3xl"
-                            >
-                                <button
-                                    type="button"
-                                    onClick={() => setShowTermsModal(false)}
-                                    className="absolute right-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-zinc-300 hover:bg-white/10"
-                                    aria-label="Cerrar"
-                                >
-                                    <X className="h-5 w-5" />
-                                </button>
-                                <LegalContainer
-                                    type="pro_player"
-                                    userId={user?.uid}
-                                    title="Contrato Pro Smart"
-                                    className="h-full rounded-[40px] border-0 pt-2"
-                                    scrollAreaClassName="min-h-[140px] max-h-none"
-                                    onAccept={async (p) => {
-                                        if (!user?.uid) return;
-                                        await dataService.updateProfileLegalAcceptance(user.uid, {
-                                            acceptedTermsVersion: p.version,
-                                            signaturePath: p.signaturePath,
-                                            biometricPhotoPath: p.biometricPath,
-                                        });
-                                        setAcceptedTerms(true);
-                                        setShowTermsModal(false);
-                                    }}
-                                />
-                            </motion.div>
-                        </div>
-                    )}
-                </AnimatePresence>
+                <LegalModal
+                    open={showTermsModal}
+                    onClose={() => setShowTermsModal(false)}
+                    onAccept={() => {
+                        setAcceptedTerms(true);
+                        setShowTermsModal(false);
+                    }}
+                />
 
                 {/* Photo Selection Modal */}
                 <AnimatePresence>

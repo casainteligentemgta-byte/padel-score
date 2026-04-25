@@ -8,11 +8,23 @@ import { extractAmountFromReceipt } from '@/lib/ocrService';
 import { BouncingBall } from '@/components/BouncingBall';
 import {
     Receipt, RefreshCw, AlertTriangle, CheckCircle, Clock, X, Eye, DollarSign, User, Trophy, Calendar, Filter,
-    Zap, Loader2, Scan, ListChecks, ChevronDown, ChevronUp, MessageCircle, ArrowLeft
+    Zap, Loader2, Scan, ListChecks, ChevronDown, ChevronUp, MessageCircle, ArrowLeft, Ban, Search, BadgePercent,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getAuthHeaders } from '@/lib/apiAuth';
+
+type AdminInscriptionStatus = 'pending' | 'paid' | 'alert' | 'exonerado' | 'rechazado' | 'revision';
+
+function getStatusPresentation(status: string | undefined) {
+    const s = String(status || 'pending');
+    if (s === 'paid') return { label: 'Pagado', wrap: 'bg-emerald-500 text-white', Icon: CheckCircle };
+    if (s === 'exonerado') return { label: 'Exonerado', wrap: 'bg-violet-500 text-white', Icon: BadgePercent };
+    if (s === 'rechazado') return { label: 'Rechazado', wrap: 'bg-red-600 text-white', Icon: Ban };
+    if (s === 'revision') return { label: 'En revisión', wrap: 'bg-sky-600 text-white', Icon: Search };
+    if (s === 'alert') return { label: 'Alerta', wrap: 'bg-amber-500 text-white', Icon: AlertTriangle };
+    return { label: 'Pendiente', wrap: 'bg-padel-primary text-black', Icon: Clock };
+}
 
 export default function AdminValidacionPagosPage() {
     const { user, isAdmin, loading: authLoading } = useAuth();
@@ -20,12 +32,17 @@ export default function AdminValidacionPagosPage() {
     const [inscriptions, setInscriptions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedInscription, setSelectedInscription] = useState<any>(null);
-    const [filter, setFilter] = useState<'all' | 'pending' | 'paid' | 'alert'>('all');
+    const [filter, setFilter] = useState<
+        'all' | 'pending' | 'paid' | 'alert' | 'exonerado' | 'rechazado' | 'revision'
+    >('all');
     const [autoVerifying, setAutoVerifying] = useState(false);
     const [ocrLoading, setOcrLoading] = useState(false);
     const [ocrResult, setOcrResult] = useState<{ amount: number | null; suggestion: 'paid' | 'alert' | 'pending'; message: string } | null>(null);
     const [showReconcile, setShowReconcile] = useState(false);
     const [referencesText, setReferencesText] = useState('');
+    /** Búsqueda por referencia del formulario del jugador (no modifica estados de pago). */
+    const [refSearchInput, setRefSearchInput] = useState('');
+    const [refSearchNorm, setRefSearchNorm] = useState<string | null>(null);
     const [reconcileLoading, setReconcileLoading] = useState(false);
     const [whatsStateByInscription, setWhatsStateByInscription] = useState<Record<string, 'idle' | 'sending' | 'success' | 'error'>>({});
     /** Evita doble envío si el admin hace clic muy rápido antes de que React re-renderice. */
@@ -110,18 +127,19 @@ export default function AdminValidacionPagosPage() {
         }
     };
 
-    const handleUpdateStatus = async (id: string, status: 'paid' | 'alert' | 'pending', message: string | null = null) => {
+    const handleUpdateStatus = async (id: string, status: AdminInscriptionStatus, message: string | null = null) => {
         try {
-            const inscription = inscriptions.find(ins => ins.id === id);
+            const inscription = inscriptions.find((ins) => ins.id === id);
             await dataService.updateInscription(id, { paymentStatus: status, alertMessage: message || undefined });
-            
-            if (status === 'paid' && inscription) {
+
+            const roster = status === 'paid' || status === 'exonerado';
+            if (roster && inscription) {
                 try {
                     await dataService.assignPlayersToTournament(
-                        inscription.tournamentId, 
-                        inscription.categoryKey, 
-                        inscription.participantName, 
-                        inscription.partnerName
+                        inscription.tournamentId,
+                        inscription.categoryKey,
+                        inscription.participantName,
+                        inscription.partnerName,
                     );
                 } catch (assignError) {
                     console.error('[AssignPlayersError]:', assignError);
@@ -129,7 +147,7 @@ export default function AdminValidacionPagosPage() {
                 await checkTournamentPlayerCap(inscription.tournamentId);
             }
 
-            setInscriptions(prev => prev.map(ins => ins.id === id ? { ...ins, paymentStatus: status, alertMessage: message } : ins));
+            setInscriptions((prev) => prev.map((ins) => (ins.id === id ? { ...ins, paymentStatus: status, alertMessage: message } : ins)));
             if (selectedInscription?.id === id) {
                 setSelectedInscription({ ...selectedInscription, paymentStatus: status, alertMessage: message });
             }
@@ -139,9 +157,48 @@ export default function AdminValidacionPagosPage() {
         }
     };
 
-    const filteredInscriptions = inscriptions.filter(ins => {
-        if (filter === 'all') return true;
-        return ins.paymentStatus === filter;
+    /** Acciones con texto opcional (rechazo / exoneración / en revisión). */
+    const applyAdminStatus = (id: string, status: AdminInscriptionStatus) => {
+        if (status === 'rechazado') {
+            const msg = window.prompt('Motivo del rechazo:');
+            if (msg === null) return;
+            if (!String(msg).trim()) {
+                toast.error('Indica un motivo para el rechazo.');
+                return;
+            }
+            void handleUpdateStatus(id, 'rechazado', String(msg).trim());
+            return;
+        }
+        if (status === 'revision') {
+            const note = window.prompt('Nota (opcional). Deja vacío para “En revisión”:', 'En revisión');
+            if (note === null) return;
+            void handleUpdateStatus(id, 'revision', String(note).trim() || 'En revisión');
+            return;
+        }
+        if (status === 'exonerado') {
+            const note = window.prompt('Comentario (opcional) para exonerar:', 'Exonerado de pago (tesorería).');
+            if (note === null) return;
+            void handleUpdateStatus(id, 'exonerado', String(note).trim() || 'Exonerado (admin).');
+            return;
+        }
+        void handleUpdateStatus(id, status, null);
+    };
+
+    const normalizeRef = (s: string) => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+
+    const filteredInscriptions = inscriptions.filter((ins) => {
+        if (filter !== 'all' && ins.paymentStatus !== filter) return false;
+        if (refSearchNorm) {
+            const pr = ins.paymentData?.paymentReference;
+            if (pr == null || String(pr).trim() === '') return false;
+            const np = normalizeRef(String(pr));
+            return (
+                np === refSearchNorm ||
+                np.includes(refSearchNorm) ||
+                refSearchNorm.includes(np)
+            );
+        }
+        return true;
     });
 
     /** Teléfono para WhatsApp de bienvenida (admin) — misma fuente que la API notify-whatsapp. */
@@ -237,8 +294,6 @@ export default function AdminValidacionPagosPage() {
         setOcrResult(null);
     };
 
-    const normalizeRef = (s: string) => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
-
     const runReconcileByReferences = async () => {
         const lines = referencesText.split(/\n/).map(l => normalizeRef(l)).filter(Boolean);
         if (lines.length === 0) {
@@ -284,6 +339,31 @@ export default function AdminValidacionPagosPage() {
         } finally {
             setReconcileLoading(false);
         }
+    };
+
+    const applyReferenceSearch = () => {
+        const q = normalizeRef(refSearchInput);
+        if (!q) {
+            toast.error('Escribe una referencia para buscar.');
+            return;
+        }
+        setRefSearchNorm(q);
+        const n = inscriptions.filter((ins) => {
+            if (filter !== 'all' && ins.paymentStatus !== filter) return false;
+            const pr = ins.paymentData?.paymentReference;
+            if (pr == null || String(pr).trim() === '') return false;
+            const np = normalizeRef(String(pr));
+            return q === np || np.includes(q) || q.includes(np);
+        }).length;
+        if (n === 0) {
+            toast.error('Ninguna inscripción visible coincide con esa referencia (revisa el filtro de arriba).');
+        } else {
+            toast.success(`${n} inscripción(es) listada(s) con esa referencia.`);
+        }
+    };
+
+    const clearReferenceSearch = () => {
+        setRefSearchNorm(null);
     };
 
     /** Envía mensaje de bienvenida al jugador vía Twilio (`sendAdminWelcomeMessage` en servidor). */
@@ -369,15 +449,27 @@ export default function AdminValidacionPagosPage() {
                     </div>
 
                     <div className="flex items-center gap-3">
-                        <div className="flex bg-white/5 p-1 rounded-xl border border-white/5">
-                            {(['all', 'pending', 'paid', 'alert'] as const).map((f) => (
+                        <div className="flex flex-wrap max-w-2xl justify-end gap-1 bg-white/5 p-1 rounded-xl border border-white/5">
+                            {(
+                                [
+                                    ['all', 'Todos'],
+                                    ['pending', 'Pend.'],
+                                    ['paid', 'Pagados'],
+                                    ['exonerado', 'Exon.'],
+                                    ['revision', 'Revisión'],
+                                    ['rechazado', 'Rech.'],
+                                    ['alert', 'Alerta'],
+                                ] as const
+                            ).map(([f, label]) => (
                                 <button
                                     key={f}
+                                    type="button"
                                     onClick={() => setFilter(f)}
-                                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filter === f ? 'bg-white text-black' : 'text-white/40 hover:text-white'
-                                        }`}
+                                    className={`px-2.5 py-1.5 sm:px-3 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${
+                                        filter === f ? 'bg-white text-black' : 'text-white/40 hover:text-white'
+                                    }`}
                                 >
-                                    {f === 'all' ? 'Todos' : f === 'pending' ? 'Pendientes' : f === 'paid' ? 'Pagados' : 'Alertas'}
+                                    {label}
                                 </button>
                             ))}
                         </div>
@@ -417,10 +509,68 @@ export default function AdminValidacionPagosPage() {
                     </p>
                 )}
 
+                {refSearchNorm && !showReconcile ? (
+                    <div className="-mt-2 mb-6 flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-padel-primary/10 border border-padel-primary/25">
+                        <p className="text-xs text-white/75">
+                            Filtro por referencia:{' '}
+                            <code className="text-padel-primary/95 text-[11px] font-mono">{refSearchNorm}</code>
+                        </p>
+                        <button
+                            type="button"
+                            onClick={clearReferenceSearch}
+                            className="shrink-0 px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 text-[10px] font-black uppercase tracking-widest text-white/90 hover:bg-white/15"
+                        >
+                            Ver todas
+                        </button>
+                    </div>
+                ) : null}
+
                 {/* Conciliar por referencias (Pago Móvil / transferencias) */}
                 {showReconcile && (
                     <div className="mb-8 p-6 rounded-2xl bg-white/5 border border-white/10">
                         <p className="text-[10px] font-black uppercase tracking-widest text-white/50 mb-2">Pago Móvil / Transferencias</p>
+                        <div className="mb-4 p-4 rounded-xl bg-black/25 border border-padel-primary/20">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-padel-primary/90 mb-1.5">Buscar en el listado</p>
+                            <p className="text-xs text-white/55 mb-3">
+                                Referencia que el jugador escribió en su formulario de pago. Filtra la cuadrícula debajo; no cambia el estado de pago.
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <input
+                                    type="text"
+                                    value={refSearchInput}
+                                    onChange={(e) => setRefSearchInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') applyReferenceSearch();
+                                    }}
+                                    placeholder="Ej. referencia del formulario del jugador"
+                                    className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/35 focus:outline-none focus:border-padel-primary/50"
+                                />
+                                <div className="flex gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={applyReferenceSearch}
+                                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-padel-primary/25 border border-padel-primary/45 text-padel-primary hover:bg-padel-primary/35 transition-all"
+                                    >
+                                        <Search className="w-4 h-4" />
+                                        <span className="text-[10px] font-black uppercase tracking-widest">Buscar</span>
+                                    </button>
+                                    {refSearchNorm ? (
+                                        <button
+                                            type="button"
+                                            onClick={clearReferenceSearch}
+                                            className="px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white/80 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest"
+                                        >
+                                            Ver todas
+                                        </button>
+                                    ) : null}
+                                </div>
+                            </div>
+                            {refSearchNorm ? (
+                                <p className="text-[11px] text-white/45 mt-2">
+                                    Filtro por referencia activo — se combina con el filtro de pestaña (Todos, Pend., etc.).
+                                </p>
+                            ) : null}
+                        </div>
                         <p className="text-sm text-white/70 mb-3">Pega las referencias que ya aparecen en tu banco (una por línea). Se marcarán como pagadas las inscripciones pendientes cuya referencia coincida.</p>
                         <textarea
                             value={referencesText}
@@ -452,11 +602,16 @@ export default function AdminValidacionPagosPage() {
                             <Filter className="w-10 h-10 text-white/20" />
                         </div>
                         <h3 className="text-xl font-bold uppercase italic tracking-tighter">Sin resultados</h3>
-                        <p className="text-sm text-white/40 max-w-xs mt-2">No se encontraron inscripciones con el filtro seleccionado.</p>
+                        <p className="text-sm text-white/40 max-w-xs mt-2">
+                            {refSearchNorm
+                                ? 'Ninguna inscripción cumple el filtro de referencia (o no hay referencia guardada) con el filtro de pestaña actual. Prueba “Ver todas” o otro filtro.'
+                                : 'No se encontraron inscripciones con el filtro seleccionado.'}
+                        </p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                         {filteredInscriptions.map((ins) => {
+                            const sp = getStatusPresentation(ins.paymentStatus);
                             const whatsPhone = getInscriptionWhatsPhone(ins);
                             const whatsBusy = whatsStateByInscription[ins.id] === 'sending';
                             return (
@@ -469,13 +624,11 @@ export default function AdminValidacionPagosPage() {
                             >
                                 {/* Status Badge */}
                                 <div className="absolute top-0 right-0">
-                                    <div className={`px-6 py-2 rounded-bl-3xl font-black text-[9px] uppercase tracking-widest flex items-center gap-2 ${ins.paymentStatus === 'paid' ? 'bg-emerald-500 text-white' :
-                                            ins.paymentStatus === 'alert' ? 'bg-amber-500 text-white' : 'bg-padel-primary text-black'
-                                        }`}>
-                                        {ins.paymentStatus === 'paid' ? <CheckCircle className="w-3 h-3" /> :
-                                            ins.paymentStatus === 'alert' ? <AlertTriangle className="w-3 h-3" /> :
-                                                <Clock className="w-3 h-3" />}
-                                        {ins.paymentStatus === 'paid' ? 'Pagado' : ins.paymentStatus === 'alert' ? 'Alerta' : 'Pendiente'}
+                                    <div
+                                        className={`px-5 py-2 rounded-bl-3xl font-black text-[9px] uppercase tracking-widest flex items-center gap-2 ${sp.wrap}`}
+                                    >
+                                        <sp.Icon className="w-3 h-3 shrink-0" />
+                                        {sp.label}
                                     </div>
                                 </div>
 
@@ -515,50 +668,110 @@ export default function AdminValidacionPagosPage() {
                                     </div>
 
                                     {ins.alertMessage && (
-                                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-2">
-                                            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                                            <p className="text-[10px] font-medium text-amber-500/80 leading-tight">{ins.alertMessage}</p>
+                                        <div
+                                            className={`p-3 rounded-xl flex items-start gap-2 border ${
+                                                ins.paymentStatus === 'rechazado'
+                                                    ? 'bg-red-500/10 border-red-500/20'
+                                                    : ins.paymentStatus === 'revision'
+                                                      ? 'bg-sky-500/10 border-sky-500/20'
+                                                      : ins.paymentStatus === 'exonerado'
+                                                        ? 'bg-violet-500/10 border-violet-500/20'
+                                                        : 'bg-amber-500/10 border-amber-500/20'
+                                            }`}
+                                        >
+                                            <AlertTriangle
+                                                className={`w-4 h-4 shrink-0 ${
+                                                    ins.paymentStatus === 'rechazado'
+                                                        ? 'text-red-400'
+                                                        : ins.paymentStatus === 'revision'
+                                                          ? 'text-sky-400'
+                                                          : ins.paymentStatus === 'exonerado'
+                                                            ? 'text-violet-400'
+                                                            : 'text-amber-500'
+                                                }`}
+                                            />
+                                            <p
+                                                className={`text-[10px] font-medium leading-tight ${
+                                                    ins.paymentStatus === 'rechazado'
+                                                        ? 'text-red-200/90'
+                                                        : ins.paymentStatus === 'revision'
+                                                          ? 'text-sky-200/90'
+                                                          : ins.paymentStatus === 'exonerado'
+                                                            ? 'text-violet-200/90'
+                                                            : 'text-amber-500/80'
+                                                }`}
+                                            >
+                                                {ins.alertMessage}
+                                            </p>
                                         </div>
                                     )}
 
-                                    <div className="flex items-center gap-3 pt-2">
-                                        <button
-                                            onClick={() => { setOcrResult(null); setSelectedInscription(ins); }}
-                                            className="grow flex items-center justify-center gap-2 h-10 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all font-black text-[10px] uppercase tracking-widest"
-                                        >
-                                            <Eye className="w-4 h-4" /> Revisar Comprobante
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSendAdminWelcomeWhatsApp(ins)}
-                                            disabled={whatsBusy || !whatsPhone}
-                                            aria-busy={whatsBusy}
-                                            className="w-10 h-10 rounded-xl flex items-center justify-center transition-all border border-emerald-500/35 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:shadow-[0_0_18px_rgba(34,197,94,0.45)] disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed"
-                                            title={
-                                                !whatsPhone
-                                                    ? 'Sin teléfono en los datos de pago'
-                                                    : whatsBusy
-                                                      ? 'Enviando…'
-                                                      : 'WhatsApp bienvenida (jugador)'
-                                            }
-                                        >
-                                            {whatsBusy ? (
-                                                <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
-                                            ) : whatsStateByInscription[ins.id] === 'success' ? (
-                                                <CheckCircle className="w-5 h-5 text-[#22c55e]" aria-hidden />
-                                            ) : (
-                                                <MessageCircle className="w-4 h-4" aria-hidden />
-                                            )}
-                                        </button>
-                                        <button
-                                            onClick={() => handleUpdateStatus(ins.id, 'paid')}
-                                            disabled={ins.paymentStatus === 'paid'}
-                                            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${ins.paymentStatus === 'paid' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
-                                                    'bg-[#ccff00] text-black hover:scale-105 shadow-[0_0_15px_rgba(204,255,0,0.3)]'
-                                                }`}
-                                        >
-                                            <CheckCircle className="w-5 h-5" />
-                                        </button>
+                                    <div className="flex flex-col gap-2 pt-2">
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => { setOcrResult(null); setSelectedInscription(ins); }}
+                                                className="min-w-0 grow flex items-center justify-center gap-2 h-10 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all font-black text-[9px] sm:text-[10px] uppercase tracking-widest"
+                                            >
+                                                <Eye className="w-4 h-4 shrink-0" /> Revisar
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSendAdminWelcomeWhatsApp(ins)}
+                                                disabled={whatsBusy || !whatsPhone}
+                                                aria-busy={whatsBusy}
+                                                className="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center transition-all border border-emerald-500/35 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:shadow-[0_0_18px_rgba(34,197,94,0.45)] disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed"
+                                                title={
+                                                    !whatsPhone
+                                                        ? 'Sin teléfono en los datos de pago'
+                                                        : whatsBusy
+                                                          ? 'Enviando…'
+                                                          : 'WhatsApp bienvenida (jugador)'
+                                                }
+                                            >
+                                                {whatsBusy ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
+                                                ) : whatsStateByInscription[ins.id] === 'success' ? (
+                                                    <CheckCircle className="w-5 h-5 text-[#22c55e]" aria-hidden />
+                                                ) : (
+                                                    <MessageCircle className="w-4 h-4" aria-hidden />
+                                                )}
+                                            </button>
+                                        </div>
+                                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                            <button
+                                                type="button"
+                                                title="Marcar como pagado"
+                                                onClick={() => void handleUpdateStatus(ins.id, 'paid', null)}
+                                                className="w-9 h-9 rounded-lg flex items-center justify-center border border-emerald-500/30 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
+                                            >
+                                                <CheckCircle className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                title="Exonerado (sin pago, ingresa al torneo)"
+                                                onClick={() => applyAdminStatus(ins.id, 'exonerado')}
+                                                className="w-9 h-9 rounded-lg flex items-center justify-center border border-violet-500/30 bg-violet-500/15 text-violet-300 hover:bg-violet-500/25"
+                                            >
+                                                <BadgePercent className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                title="En revisión"
+                                                onClick={() => applyAdminStatus(ins.id, 'revision')}
+                                                className="w-9 h-9 rounded-lg flex items-center justify-center border border-sky-500/30 bg-sky-500/15 text-sky-300 hover:bg-sky-500/25"
+                                            >
+                                                <Search className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                title="Rechazado"
+                                                onClick={() => applyAdminStatus(ins.id, 'rechazado')}
+                                                className="w-9 h-9 rounded-lg flex items-center justify-center border border-red-500/35 bg-red-500/15 text-red-300 hover:bg-red-500/25"
+                                            >
+                                                <Ban className="w-4 h-4" />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </motion.div>
@@ -696,38 +909,64 @@ export default function AdminValidacionPagosPage() {
                                         )}
 
                                         <div className="space-y-2">
-                                            <p className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2">Acciones Rápidas</p>
-                                            <div className="grid grid-cols-2 gap-3">
+                                            <p className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2">Acciones (tesorería)</p>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                                 <button
-                                                    onClick={() => handleUpdateStatus(selectedInscription.id, 'paid')}
-                                                    className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all text-emerald-500 group"
+                                                    type="button"
+                                                    onClick={() => void handleUpdateStatus(selectedInscription.id, 'paid', null)}
+                                                    className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all text-emerald-500"
                                                 >
-                                                    <CheckCircle className="w-6 h-6 group-hover:scale-110 transition-transform" />
-                                                    <span className="text-[9px] font-black uppercase tracking-widest">Aprobar</span>
+                                                    <CheckCircle className="w-5 h-5" />
+                                                    <span className="text-[8px] font-black uppercase tracking-widest text-center">Pagado</span>
                                                 </button>
                                                 <button
-                                                    onClick={() => {
-                                                        const msg = prompt('Ingresa el motivo de la alerta:', 'El monto no coincide o la referencia no aparece.');
-                                                        if (msg) handleUpdateStatus(selectedInscription.id, 'alert', msg);
-                                                    }}
-                                                    className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all text-amber-500 group"
+                                                    type="button"
+                                                    onClick={() => applyAdminStatus(selectedInscription.id, 'exonerado')}
+                                                    className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 transition-all text-violet-300"
                                                 >
-                                                    <AlertTriangle className="w-6 h-6 group-hover:scale-110 transition-transform" />
-                                                    <span className="text-[9px] font-black uppercase tracking-widest">Alerta</span>
+                                                    <BadgePercent className="w-5 h-5" />
+                                                    <span className="text-[8px] font-black uppercase tracking-widest text-center">Exonerado</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => applyAdminStatus(selectedInscription.id, 'revision')}
+                                                    className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl bg-sky-500/10 border border-sky-500/20 hover:bg-sky-500/20 transition-all text-sky-200"
+                                                >
+                                                    <Search className="w-5 h-5" />
+                                                    <span className="text-[8px] font-black uppercase tracking-widest text-center">En revisión</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => applyAdminStatus(selectedInscription.id, 'rechazado')}
+                                                    className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all text-red-300"
+                                                >
+                                                    <Ban className="w-5 h-5" />
+                                                    <span className="text-[8px] font-black uppercase tracking-widest text-center">Rechazado</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const msg = window.prompt('Motivo de la alerta (monto / referencia):', 'El monto no coincide o la referencia no aparece.');
+                                                        if (msg) void handleUpdateStatus(selectedInscription.id, 'alert', msg);
+                                                    }}
+                                                    className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all text-amber-500"
+                                                >
+                                                    <AlertTriangle className="w-5 h-5" />
+                                                    <span className="text-[8px] font-black uppercase tracking-widest text-center">Alerta</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleUpdateStatus(selectedInscription.id, 'pending', null)}
+                                                    className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/70"
+                                                >
+                                                    <Clock className="w-5 h-5" />
+                                                    <span className="text-[8px] font-black uppercase tracking-widest text-center">Pendiente</span>
                                                 </button>
                                             </div>
                                         </div>
                                     </div>
                                 </section>
 
-                                <div className="mt-8">
-                                    <button
-                                        onClick={() => handleUpdateStatus(selectedInscription.id, 'pending')}
-                                        className="w-full h-12 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/40 hover:text-white transition-all text-[9px] font-black uppercase tracking-[0.2em]"
-                                    >
-                                        Marcar como Pendiente
-                                    </button>
-                                </div>
                             </div>
                         </motion.div>
                     </div>

@@ -103,7 +103,7 @@ export type InscriptionData = {
     participantId?: string;
     amountExtracted?: number | null;
     receiptUrl?: string | null;
-    paymentStatus: 'pending' | 'paid' | 'alert';
+    paymentStatus: 'pending' | 'paid' | 'alert' | 'exonerado' | 'rechazado' | 'revision';
     alertMessage?: string | null;
     // New payment details
     paymentMethod?: string;

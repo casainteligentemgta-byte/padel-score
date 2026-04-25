@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, X } from 'lucide-react';
 import { SMART_CONSENT_LEGAL_VERSION } from '@/lib/legal/smartConsent';
+import { LegalTermsInscriptionBody } from '@/components/legal/LegalTermsBodies';
 
 export type LegalModalProps = {
   open: boolean;
@@ -16,9 +17,9 @@ export type LegalModalProps = {
 };
 
 const LEGAL_TEXT = {
-  title: 'Contrato de Adhesión y Exoneración de Responsabilidad',
+  title: 'Términos, privacidad e inscripción a torneos (único contrato)',
   intro:
-    'Al marcar y aceptar este contrato, declaras haber leído y comprendido los términos de Smart Padel, y aceptas participar en los torneos y actividades de la plataforma bajo las condiciones aquí descritas.',
+    'Debes leer y aceptar, en un solo acto, (1) el contrato de adhesión y exoneración de responsabilidad de la plataforma, y (2) los términos de inscripción a torneos (incluida la veracidad de comprobantes y reglas de pago y conducta. Al aceptar, vinculamos tu cuenta y tus futuras inscripciones a esta versión, sin requerir otra firma o foto para cada torneo, salvo que se publique un cambio y debas aceptar la nueva versión.',
   sections: [
     {
       h: '1. Adhesión y participación',
@@ -126,6 +127,16 @@ export default function LegalModal({
                     </p>
                   </section>
                 ))}
+
+                <h4 className="mt-8 text-sm font-black uppercase tracking-tight text-white">
+                  Inscripción a torneos
+                </h4>
+                <p className="mt-1 text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+                  Parte integrante del mismo acuerdo (misma versión)
+                </p>
+                <div className="mt-3 max-w-none text-sm leading-relaxed text-zinc-400 [text-wrap:pretty] text-justify">
+                  <LegalTermsInscriptionBody />
+                </div>
               </div>
               {footerMode === 'save' && (
                 <div className="mt-6 border-t border-white/10 pt-4">

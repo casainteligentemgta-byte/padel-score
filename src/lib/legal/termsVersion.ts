@@ -1,5 +1,5 @@
-/** Versión canónica publicada de términos (Smart-Legal). */
-export const CURRENT_TERMS_VERSION = 'v2.0-2026';
+/** Versión canónica publicada: registro, política, e inscripción a torneos (un solo consentimiento). */
+export const CURRENT_TERMS_VERSION = 'v2.1-2026';
 
 function toSortable(version: string): number {
     const m = /^v(\d+)\.(\d+)-(\d+)$/.exec(version.trim());

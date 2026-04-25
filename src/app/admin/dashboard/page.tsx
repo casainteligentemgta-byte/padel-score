@@ -44,6 +44,9 @@ function paymentStatusLabel(status: unknown) {
 function inscriptionPaymentLabel(status: unknown) {
   const raw = String(status || 'pending').toLowerCase();
   if (raw === 'paid') return 'Pagado';
+  if (raw === 'exonerado') return 'Exonerado';
+  if (raw === 'rechazado') return 'Rechazado';
+  if (raw === 'revision') return 'En revisión';
   if (raw === 'alert') return 'Alerta';
   return 'Pendiente';
 }

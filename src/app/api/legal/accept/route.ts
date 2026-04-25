@@ -42,13 +42,15 @@ export async function POST(req: Request) {
         global: { headers: { Authorization: `Bearer ${token}` } },
     });
 
+    const ts = new Date().toISOString();
     const payload = {
         status_legal: SMART_CONSENT_STATUS_ACCEPTED,
         legal_version: SMART_CONSENT_LEGAL_VERSION,
-        legal_timestamp: new Date().toISOString(),
+        accepted_terms_version: SMART_CONSENT_LEGAL_VERSION,
+        legal_timestamp: ts,
         user_ip: ip,
-        updated_at: new Date().toISOString(),
-    };
+        updated_at: ts,
+    } as const;
 
     const { error } = await supabase.from('profiles').update(payload).eq('id', auth.uid);
     if (error) {

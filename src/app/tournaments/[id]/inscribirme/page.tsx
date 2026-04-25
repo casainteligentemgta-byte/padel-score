@@ -446,12 +446,12 @@ export default function InscribirmePage() {
         return acc + (cat?.price || 0);
     }, 0);
 
-    /** Paso final: términos + enviar (índice 3 si hay pago, 2 si es gratis). */
+    /** Paso final: términos, firma y validación facial (3 si hay pago, 2 si es gratis). */
     const termsStepIndex = totalPrice > 0 ? 3 : 2;
 
     useEffect(() => {
         setWizardStep((prev) => Math.min(prev, termsStepIndex));
-    }, [termsStepIndex]);
+    }, [termsStepIndex, totalPrice]);
 
     useEffect(() => {
         inscribirmeScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -511,7 +511,7 @@ export default function InscribirmePage() {
 
     const showWizardNext =
         wizardStep === 0 ||
-        wizardStep === 1 ||
+        (wizardStep === 1 && !isIndividual) ||
         (wizardStep === 2 && totalPrice > 0);
 
     const handleSubmit = async () => {
@@ -573,7 +573,9 @@ export default function InscribirmePage() {
                   }
                 : legalArtifacts;
         if (!effectiveLegal) {
-            setError('Debes completar firmar digitalmente o la validación facial, y aceptar el contrato (Smart Consent), antes de inscribirte.');
+            setError(
+                'Debes completar la firma digital, la validación facial y el botón «Aceptar y continuar» en el contrato antes de inscribirte.',
+            );
             return;
         }
         const needsRef = totalPrice > 0 && (paymentData.method === 'Pago Móvil' || paymentData.method === 'Transferencia Bancaria');
@@ -1404,6 +1406,10 @@ export default function InscribirmePage() {
 
                                     {wizardStep === termsStepIndex && (
                                         <section className="mb-4 min-w-0">
+                                            <p className="mb-2 text-center text-[10px] text-gray-500">
+                                                Para esta inscripción se requiere validación facial (foto) y firma en pantalla, además de leer el
+                                                documento.
+                                            </p>
                                             <LegalContainer
                                                 ref={legalInscriptionRef}
                                                 type="inscription"
@@ -1425,11 +1431,10 @@ export default function InscribirmePage() {
                                                 }}
                                             >
                                                 <div className="text-center py-4">
-                                                    <p className="text-xs font-bold uppercase tracking-widest text-[#ccff00]">
-                                                        Firma de Inscripción
-                                                    </p>
+                                                    <p className="text-xs font-bold uppercase tracking-widest text-[#ccff00]">Firma y rostro</p>
                                                     <p className="mt-2 text-[10px] text-white/50">
-                                                        Al firmar a continuación, confirmas tu inscripción y la aceptación de los términos visualizados anteriormente.
+                                                        Completa el desplazamiento de lectura, la validación facial y la firma. Luego pulsa
+                                                        «Inscribirme» abajo para enviar.
                                                     </p>
                                                 </div>
                                             </LegalContainer>

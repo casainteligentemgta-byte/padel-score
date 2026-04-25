@@ -114,7 +114,7 @@ export default function HomePage() {
                 await signInWithEmail(formData.email, formData.password);
             } else {
                 if (!smartConsentAccepted) {
-                    setError('Debes aceptar los Términos y Condiciones y la Política de Privacidad.');
+                    setError('Debes aceptar el acuerdo único (términos, privacidad e inscripción a torneos).');
                     setLoading(false);
                     return;
                 }
@@ -328,14 +328,14 @@ export default function HomePage() {
                                         />
                                         <div className="min-w-0">
                                             <p className="text-xs text-white/90 leading-snug font-normal">
-                                                Declaro haber leido, comprendido y aceptado los <span className="underline">Términos y Condiciones</span> y la <span className="underline">Politica de Privacidad</span>.
+                                                Con un solo check: declaro haber leído y aceptado el contrato de la plataforma, la Política de Privacidad y los términos de inscripción a torneos (incluido comprobantes y reglas de inscripción), versión unificada.
                                             </p>
                                             <button
                                                 type="button"
                                                 onClick={() => setSmartConsentModalOpen(true)}
                                                 className="mt-1 text-[11px] font-black uppercase tracking-widest text-padel-primary/90 hover:underline"
                                             >
-                                                Ver contrato
+                                                Ver documento completo
                                             </button>
                                         </div>
                                     </label>
