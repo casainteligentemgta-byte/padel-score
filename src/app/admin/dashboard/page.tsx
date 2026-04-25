@@ -20,7 +20,8 @@ import {
 import { useAuth } from '@/lib/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { getAuthHeaders } from '@/lib/apiAuth';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface StatCardProps {
   title: string;
@@ -28,6 +29,20 @@ interface StatCardProps {
   icon: any;
   trend?: string;
   color: string;
+}
+
+function paymentStatusLabel(status: unknown) {
+  const raw = String(status || 'pending').toLowerCase();
+  if (raw === 'paid') return 'Verificado';
+  if (raw === 'alert') return 'Rechazado';
+  return 'Comprobado';
+}
+
+function inscriptionPaymentLabel(status: unknown) {
+  const raw = String(status || 'pending').toLowerCase();
+  if (raw === 'paid') return 'Pagado';
+  if (raw === 'alert') return 'Alerta';
+  return 'Pendiente';
 }
 
 const StatCard = ({ title, value, icon: Icon, trend, color }: StatCardProps) => (
@@ -59,6 +74,7 @@ export default function AdminDashboard() {
   const { isAdmin, loading: authLoading } = useAuth();
   const supabase = getSupabaseClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
   
   const [activeTab, setActiveTab] = useState<'payments' | 'users' | 'logs' | 'inscriptions'>('payments');
   const [loading, setLoading] = useState(true);
@@ -207,8 +223,52 @@ export default function AdminDashboard() {
         capacity: totalCapacity,
       });
 
+      // Categoría / torneo de la inscripción más reciente por perfil (columnas nuevos usuarios)
+      let playersWithInscription: any[] = recentProfiles || [];
+      if (playersWithInscription.length > 0) {
+        const profileIds = playersWithInscription.map((p: any) => p?.id).filter(Boolean) as string[];
+        const { data: insForProfiles } = await supabase
+          .from('inscriptions')
+          .select('user_id, owner_id, category_key, tournament_name, created_at')
+          .or(
+            `user_id.in.(${profileIds.join(',')}),owner_id.in.(${profileIds.join(',')})`,
+          );
+        const bestByProfile = new Map<string, { category_key: string | null; tournament_name: string | null; created_at: string }>();
+        for (const row of insForProfiles || []) {
+          const r = row as {
+            user_id?: string | null;
+            owner_id?: string | null;
+            category_key?: string | null;
+            tournament_name?: string | null;
+            created_at?: string | null;
+          };
+          const created = String(r.created_at || '');
+          const candidates = [r.user_id, r.owner_id].filter(
+            (x): x is string => typeof x === 'string' && x.length > 0 && profileIds.includes(x)
+          );
+          for (const uid of new Set(candidates)) {
+            const prev = bestByProfile.get(uid);
+            if (!prev || created > (prev.created_at || '')) {
+              bestByProfile.set(uid, {
+                category_key: r.category_key ?? null,
+                tournament_name: r.tournament_name ?? null,
+                created_at: created,
+              });
+            }
+          }
+        }
+        playersWithInscription = playersWithInscription.map((p: any) => {
+          const hit = p?.id ? bestByProfile.get(p.id) : undefined;
+          return {
+            ...p,
+            inscriptionCategory: hit?.category_key ?? null,
+            inscriptionTournament: hit?.tournament_name ?? null,
+          };
+        });
+      }
+
       setPayments(payRows);
-      setPlayers(recentProfiles || []);
+      setPlayers(playersWithInscription);
       setLogs(recentLogs || []);
       setInscriptions(recentInscriptions || []);
       setErrorLogs(recentErrors || []);
@@ -285,6 +345,20 @@ export default function AdminDashboard() {
     }
   }, [isAdmin, authLoading, fetchData, router, scheduleRefresh, supabase]);
 
+  /** Enlace desde pagos: abrir equipos inscritos y centrar la fila (URL limpia tras el scroll). */
+  useEffect(() => {
+    const panel = searchParams.get('panel');
+    const focus = searchParams.get('focus')?.trim();
+    if (panel !== 'inscriptions' || !focus) return;
+
+    setFullViewTab('inscriptions');
+    const t = window.setTimeout(() => {
+      document.getElementById(`inscription-row-${focus}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      router.replace('/admin/dashboard', { scroll: false });
+    }, 500);
+    return () => window.clearTimeout(t);
+  }, [searchParams, router]);
+
   const filteredPayments = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return payments;
@@ -297,7 +371,9 @@ export default function AdminDashboard() {
         .toLowerCase();
       const ref = String(p.reference_number || '').toLowerCase();
       const phone = String(p.phone_emitter || '').toLowerCase();
-      return ref.includes(q) || name.includes(q) || phone.includes(q);
+      const payer =
+        [p.payerName, p.payerLastName, p.payerDni].filter(Boolean).join(' ').toLowerCase();
+      return ref.includes(q) || name.includes(q) || phone.includes(q) || payer.includes(q);
     });
   }, [payments, searchTerm]);
   const previewPayments = filteredPayments.slice(0, 3);
@@ -457,17 +533,29 @@ export default function AdminDashboard() {
                 <button onClick={() => setFullViewTab('payments')} className="rounded-lg border border-padel-primary/35 bg-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-padel-primary hover:bg-padel-primary/10">Abrir pantalla completa</button>
               </div>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 min-w-0 overflow-x-auto">
+              <div className="grid min-w-[640px] grid-cols-6 gap-2 px-3 text-[10px] font-black uppercase tracking-widest text-padel-primary/80">
+                <span>Nombre</span>
+                <span>Apellido</span>
+                <span>Cédula</span>
+                <span className="min-w-0">Referencia</span>
+                <span>Monto</span>
+                <span>Estado</span>
+              </div>
               {previewPayments.map((p: any, idx: number) => {
-                const rawStatus = String(p.status || 'pending').toLowerCase();
-                const statusLabel = rawStatus === 'paid' ? 'Verificado' : rawStatus === 'alert' ? 'Rechazado' : 'Comprobado';
+                const refShort = `#${p.reference_number || '—'}`;
+                const refTitle = `${refShort} · ${p.bank_origin || 'Banco'}`;
+                const statusLabel = paymentStatusLabel(p.status);
                 return (
-                  <div key={p.id} className={`rounded-lg border px-3 py-1.5 flex items-center justify-between gap-3 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
-                    <div className="min-w-0">
-                      <p className="text-[12px] font-bold truncate">#{p.reference_number} · {p.bank_origin || 'Banco'}</p>
-                      <p className="text-[10px] text-white/55 truncate">{p.phone_emitter || 'Sin teléfono'}</p>
+                  <div key={p.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
+                    <div className="grid min-w-[640px] grid-cols-6 gap-2 text-[10px] leading-tight">
+                      <p className="truncate font-bold">{p.payerName || '—'}</p>
+                      <p className="truncate text-white/80">{p.payerLastName || '—'}</p>
+                      <p className="truncate text-white/70 font-mono">{p.payerDni || '—'}</p>
+                      <p className="truncate font-bold min-w-0 text-padel-primary/90" title={refTitle}>{refShort}</p>
+                      <p className="truncate text-white/70">{p.amount_bs != null && p.amount_bs !== '' ? `${p.amount_bs} Bs.` : '—'}</p>
+                      <p className="truncate font-black uppercase text-padel-primary">{statusLabel}</p>
                     </div>
-                    <span className="text-[10px] font-black uppercase text-padel-primary">{statusLabel}</span>
                   </div>
                 );
               })}
@@ -481,22 +569,27 @@ export default function AdminDashboard() {
               <button onClick={() => setFullViewTab('users')} className="rounded-lg border border-padel-primary/35 bg-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-padel-primary hover:bg-padel-primary/10">Abrir pantalla completa</button>
             </div>
             <div className="space-y-1">
-              <div className="grid grid-cols-4 gap-2 px-3 text-[10px] font-black uppercase tracking-widest text-padel-primary/80">
+              <div className="grid grid-cols-5 gap-2 px-3 text-[10px] font-black uppercase tracking-widest text-padel-primary/80">
                 <span>Nombre</span>
                 <span>Apellido</span>
                 <span>Teléfono</span>
                 <span>Email</span>
+                <span className="min-w-0">Categoría</span>
               </div>
-              {previewUsers.map((u: any, idx: number) => (
+              {previewUsers.map((u: any, idx: number) => {
+                const catCell = [u.inscriptionTournament, u.inscriptionCategory].filter(Boolean).join(' · ') || '—';
+                return (
                 <div key={u.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
-                  <div className="grid grid-cols-4 gap-2 text-[10px] leading-tight">
+                  <div className="grid grid-cols-5 gap-2 text-[10px] leading-tight">
                     <p className="truncate font-bold">{String(u.name || u.full_name || 'Jugador').trim().split(' ')[0] || '—'}</p>
                     <p className="truncate text-white/80">{String(u.last_name || u.lastName || (u.full_name || '').split(' ').slice(1).join(' ') || '').trim() || '—'}</p>
                     <p className="truncate text-white/70">{u.phone || u.whatsapp || '—'}</p>
                     <p className="truncate text-white/70">{u.email || '—'}</p>
+                    <p className="truncate text-white/70 min-w-0" title={catCell}>{catCell}</p>
                   </div>
                 </div>
-              ))}
+                );
+              })}
               {previewUsers.length === 0 && <p className="text-sm text-white/40">Sin usuarios nuevos.</p>}
             </div>
           </section>
@@ -506,15 +599,27 @@ export default function AdminDashboard() {
               <h2 className="text-lg font-bold flex items-center gap-2"><UserPlus className="w-5 h-5 text-padel-primary" /> EQUIPOS INSCRITOS</h2>
               <button onClick={() => setFullViewTab('inscriptions')} className="rounded-lg border border-padel-primary/35 bg-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-padel-primary hover:bg-padel-primary/10">Abrir pantalla completa</button>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 min-w-0">
+              <div className="grid grid-cols-4 gap-2 px-3 text-[10px] font-black uppercase tracking-widest text-padel-primary/80">
+                <span className="min-w-0">Equipo</span>
+                <span className="min-w-0">Torneo</span>
+                <span>Categoría</span>
+                <span>Pago</span>
+              </div>
               {previewInscriptions.map((item: any, idx: number) => {
                 const d = (item.data || {}) as { partnerName?: string };
                 const partner = String(d.partnerName || '').trim();
                 const lead = String(item.participant_name || 'Jugador').trim();
+                const teamCell = partner ? `${lead} / ${partner}` : lead;
+                const payLabel = inscriptionPaymentLabel(item.payment_status);
                 return (
                   <div key={item.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
-                    <p className="text-[12px] font-bold truncate">{partner ? `${lead} / ${partner}` : lead}</p>
-                    <p className="text-[10px] text-white/55 truncate">{item.tournament_name || 'Torneo'} · {item.category_key || '—'}</p>
+                    <div className="grid grid-cols-4 gap-2 text-[10px] leading-tight">
+                      <p className="truncate font-bold min-w-0" title={teamCell}>{teamCell}</p>
+                      <p className="truncate text-white/70 min-w-0">{item.tournament_name || '—'}</p>
+                      <p className="truncate text-white/70">{item.category_key || '—'}</p>
+                      <p className="truncate font-black uppercase text-padel-primary">{payLabel}</p>
+                    </div>
                   </div>
                 );
               })}
@@ -573,40 +678,99 @@ export default function AdminDashboard() {
               </div>
               <div className="p-4 overflow-auto min-h-0">
                 {fullViewTab === 'payments' && (
-                  <div className="space-y-1">
-                    {filteredPayments.map((p: any, idx: number) => (
-                      <div key={p.id} className={`rounded-lg border px-3 py-1.5 flex items-center justify-between gap-3 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
-                        <div className="min-w-0">
-                          <p className="text-[12px] font-bold truncate">#{p.reference_number} · {p.bank_origin || 'Banco'}</p>
-                          <p className="text-[10px] text-white/55 truncate">{p.phone_emitter || 'Sin teléfono'} · {p.amount_bs ?? '—'} Bs.</p>
+                  <div className="space-y-1 min-w-0 overflow-x-auto">
+                    <div className="grid min-w-[720px] grid-cols-7 gap-2 px-3 text-[10px] font-black uppercase tracking-widest text-padel-primary/80">
+                      <span>Nombre</span>
+                      <span>Apellido</span>
+                      <span>Cédula</span>
+                      <span className="min-w-0">Referencia</span>
+                      <span>Monto</span>
+                      <span>Estado</span>
+                      <span className="min-w-0">Equipo</span>
+                    </div>
+                    {filteredPayments.map((p: any, idx: number) => {
+                      const refShort = `#${p.reference_number || '—'}`;
+                      const refTitle = `${refShort} · ${p.bank_origin || 'Banco'}`;
+                      const statusLabel = paymentStatusLabel(p.status);
+                      const insId = p.linkedInscriptionId ? String(p.linkedInscriptionId) : '';
+                      return (
+                        <div key={p.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
+                          <div className="grid min-w-[720px] grid-cols-7 gap-2 text-[10px] leading-tight">
+                            <p className="truncate font-bold">{p.payerName || '—'}</p>
+                            <p className="truncate text-white/80">{p.payerLastName || '—'}</p>
+                            <p className="truncate text-white/70 font-mono">{p.payerDni || '—'}</p>
+                            <p className="truncate font-bold min-w-0 text-padel-primary/90" title={refTitle}>{refShort}</p>
+                            <p className="truncate text-white/70">{p.amount_bs != null && p.amount_bs !== '' ? `${p.amount_bs} Bs.` : '—'}</p>
+                            <p className="truncate font-black uppercase text-padel-primary">{statusLabel}</p>
+                            <div className="min-w-0 truncate">
+                              {insId ? (
+                                <Link
+                                  href={`/admin/dashboard?panel=inscriptions&focus=${encodeURIComponent(insId)}`}
+                                  className="font-black uppercase text-padel-primary underline decoration-padel-primary/40 underline-offset-2 hover:text-white"
+                                >
+                                  Ver equipo
+                                </Link>
+                              ) : (
+                                <span className="text-white/35">—</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <span className="text-[10px] font-black uppercase text-padel-primary">{String(p.status || 'pending')}</span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {fullViewTab === 'users' && (
-                  <div className="space-y-1">
-                    {players.map((u: any, idx: number) => (
+                  <div className="space-y-1 min-w-0">
+                    <div className="grid grid-cols-5 gap-2 px-3 text-[10px] font-black uppercase tracking-widest text-padel-primary/80">
+                      <span>Nombre</span>
+                      <span>Apellido</span>
+                      <span>Teléfono</span>
+                      <span>Email</span>
+                      <span className="min-w-0">Categoría</span>
+                    </div>
+                    {players.map((u: any, idx: number) => {
+                      const catCell = [u.inscriptionTournament, u.inscriptionCategory].filter(Boolean).join(' · ') || '—';
+                      return (
                       <div key={u.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
-                        <p className="text-[12px] font-bold truncate">{u.full_name || u.name || 'Jugador'}</p>
-                        <p className="text-[10px] text-white/55 truncate">{u.email || 'Sin email'} · {u.role || 'player'}</p>
+                        <div className="grid grid-cols-5 gap-2 text-[10px] leading-tight">
+                          <p className="truncate font-bold">{String(u.name || u.full_name || 'Jugador').trim().split(' ')[0] || '—'}</p>
+                          <p className="truncate text-white/80">{String(u.last_name || u.lastName || (u.full_name || '').split(' ').slice(1).join(' ') || '').trim() || '—'}</p>
+                          <p className="truncate text-white/70">{u.phone || u.whatsapp || '—'}</p>
+                          <p className="truncate text-white/70">{u.email || '—'}</p>
+                          <p className="truncate text-white/70 min-w-0" title={catCell}>{catCell}</p>
+                        </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {fullViewTab === 'inscriptions' && (
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0">
+                    <div className="grid grid-cols-4 gap-2 px-3 text-[10px] font-black uppercase tracking-widest text-padel-primary/80">
+                      <span className="min-w-0">Equipo</span>
+                      <span className="min-w-0">Torneo</span>
+                      <span>Categoría</span>
+                      <span>Pago</span>
+                    </div>
                     {inscriptions.map((item: any, idx: number) => {
                       const d = (item.data || {}) as { partnerName?: string };
                       const partner = String(d.partnerName || '').trim();
                       const lead = String(item.participant_name || 'Jugador').trim();
+                      const teamCell = partner ? `${lead} / ${partner}` : lead;
+                      const payLabel = inscriptionPaymentLabel(item.payment_status);
                       return (
-                        <div key={item.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
-                          <p className="text-[12px] font-bold truncate">{partner ? `${lead} / ${partner}` : lead}</p>
-                          <p className="text-[10px] text-white/55 truncate">
-                            {item.tournament_name || 'Torneo'} · {item.category_key || '—'} · {item.payment_status || 'pending'}
-                          </p>
+                        <div
+                          id={`inscription-row-${item.id}`}
+                          key={item.id}
+                          className={`scroll-mt-4 rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}
+                        >
+                          <div className="grid grid-cols-4 gap-2 text-[10px] leading-tight">
+                            <p className="truncate font-bold min-w-0" title={teamCell}>{teamCell}</p>
+                            <p className="truncate text-white/70 min-w-0">{item.tournament_name || '—'}</p>
+                            <p className="truncate text-white/70">{item.category_key || '—'}</p>
+                            <p className="truncate font-black uppercase text-padel-primary">{payLabel}</p>
+                          </div>
                         </div>
                       );
                     })}
