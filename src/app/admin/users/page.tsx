@@ -335,13 +335,9 @@ export default function AdminUsersPage() {
                         <div className="ml-auto flex w-[13.5rem] shrink-0 justify-end">ACCIONES</div>
                     </div>
 
-                    <AnimatePresence>
-                        {filteredUsers.map((u, idx) => (
-                            <motion.div
+                    {filteredUsers.map((u, idx) => (
+                            <div
                                 key={u.id || u.uid}
-                                initial={{ opacity: 0, y: 6 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.18, delay: Math.min(idx, 12) * 0.015 }}
                                 className={`group relative backdrop-blur-3xl border rounded-2xl transition-all duration-300 min-w-0 ${
                                     idx % 2 === 0
                                         ? 'bg-white/[0.07] border-white/20 hover:bg-padel-primary/[0.14] hover:border-padel-primary/35'
@@ -445,9 +441,8 @@ export default function AdminUsersPage() {
                                         </Link>
                                     </div>
                                 </div>
-                            </motion.div>
+                            </div>
                         ))}
-                    </AnimatePresence>
                 </div>
             </main>
 
