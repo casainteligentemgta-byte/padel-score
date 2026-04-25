@@ -14,9 +14,10 @@ export async function GET(req: Request) {
     );
   }
 
+  // select('*') evita romper en proyectos con columnas distintas entre entornos.
   const { data, error } = await supabase
     .from('payment_logs')
-    .select('id, owner_id, user_id, tournament_id, reference_number, bank_origin, phone_emitter, amount_bs, status, created_at')
+    .select('*')
     .order('created_at', { ascending: false })
     .limit(120);
 
@@ -70,10 +71,23 @@ export async function GET(req: Request) {
       }
     }
 
-    const { data: insRows } = await supabase
+    let { data: insRows, error: insErr } = await supabase
       .from('inscriptions')
       .select('id, owner_id, user_id, tournament_id, created_at')
       .or(`owner_id.in.(${profileIds.join(',')}),user_id.in.(${profileIds.join(',')})`);
+
+    // Compatibilidad con esquemas donde inscriptions no tiene owner_id.
+    if (insErr && /owner_id|column/i.test(String(insErr.message || ''))) {
+      const retry = await supabase
+        .from('inscriptions')
+        .select('id, user_id, tournament_id, created_at')
+        .in('user_id', profileIds);
+      insRows = retry.data as any;
+      insErr = retry.error as any;
+    }
+    if (insErr) {
+      return NextResponse.json({ error: insErr.message }, { status: 500 });
+    }
 
     const bestInsByOwner = new Map<string, { id: string; created_at: string }>();
     const bestInsByOwnerTournament = new Map<string, { id: string; created_at: string }>();

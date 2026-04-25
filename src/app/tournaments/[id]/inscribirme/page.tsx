@@ -154,6 +154,7 @@ export default function InscribirmePage() {
     });
     const [uploading, setUploading] = useState(false);
     const [availableMethods, setAvailableMethods] = useState<any[]>([]);
+    const [bcvVesPerUsdUi, setBcvVesPerUsdUi] = useState<number | null>(null);
 
     const todayStr = new Date().toISOString().split('T')[0];
     const now = new Date();
@@ -330,6 +331,24 @@ export default function InscribirmePage() {
             }
         }
         fetchPaymentMethods();
+        return () => { cancelled = true; };
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        async function fetchBcvRate() {
+            try {
+                const res = await fetch('/api/fx/bcv');
+                if (!res.ok) return;
+                const payload = (await res.json()) as { vesPerUsd?: number };
+                if (!cancelled && typeof payload.vesPerUsd === 'number' && payload.vesPerUsd > 0) {
+                    setBcvVesPerUsdUi(payload.vesPerUsd);
+                }
+            } catch {
+                // Si falla, mantenemos null y mostramos marcador visual.
+            }
+        }
+        void fetchBcvRate();
         return () => { cancelled = true; };
     }, []);
 
@@ -583,6 +602,38 @@ export default function InscribirmePage() {
                 }
             } catch {
                 /* validación cae a solo cifra vs cifra */
+            }
+
+            // Registrar un único log antifraude por referencia para que aparezca en Admin/Pagos.
+            if (!isMercadoPago && totalPrice > 0 && paymentData.reference?.trim()) {
+                const amountInput = paymentData.amount
+                    ? parseFloat(String(paymentData.amount).replace(',', '.'))
+                    : undefined;
+                const usesUsd = getCurrency(paymentData.method) === '$';
+                const amountBsForLog =
+                    usesUsd
+                        ? (bcvVesPerUsd
+                            ? ((amountInput != null && Number.isFinite(amountInput) && amountInput > 0 ? amountInput : totalPrice) * bcvVesPerUsd)
+                            : undefined)
+                        : (amountInput != null && Number.isFinite(amountInput) && amountInput > 0 ? amountInput : totalPrice);
+
+                const paymentLogRes = await fetch(`/api/tournaments/${tournamentId}/payment`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(await getAuthHeaders()),
+                    },
+                    body: JSON.stringify({
+                        bankOrigin: paymentData.bank || 'No informado',
+                        phoneEmitter: (participantRecord as any)?.phone || (participantRecord as any)?.whatsapp || '',
+                        amountBs: amountBsForLog,
+                        referenceNumber: paymentData.reference,
+                    }),
+                });
+                if (!paymentLogRes.ok) {
+                    const j = await paymentLogRes.json().catch(() => ({} as { error?: string }));
+                    throw new Error(j?.error || 'No se pudo registrar el comprobante de pago.');
+                }
             }
 
             const createdInscriptionIds: string[] = [];
@@ -1159,24 +1210,24 @@ export default function InscribirmePage() {
                                                             <>
                                                                 Total:{' '}
                                                                 <span className="font-black text-white">
-                                                                    {getCurrency(paymentData.method) === '$' ? '$' : ''}
-                                                                    {totalPrice.toFixed(2)}
+                                                                    ${totalPrice.toFixed(2)}
                                                                 </span>
-                                                                {getCurrency(paymentData.method) !== '$' && (
-                                                                    <span className="text-white"> {getCurrency(paymentData.method).replace(/\.$/, '')}</span>
-                                                                )}
+                                                                {' '}a la conversión de la Tasa BCV son{' '}
+                                                                <span className="font-black text-white">
+                                                                    {bcvVesPerUsdUi ? `${(totalPrice * bcvVesPerUsdUi).toFixed(2)} Bs.` : '__________ Bs.'}
+                                                                </span>
                                                                 . Suma por categoría (precio por <strong>jugador</strong> en americano individual).
                                                             </>
                                                         ) : (
                                                             <>
                                                                 Total:{' '}
                                                                 <span className="font-black text-white">
-                                                                    {getCurrency(paymentData.method) === '$' ? '$' : ''}
-                                                                    {totalPrice.toFixed(2)}
+                                                                    ${totalPrice.toFixed(2)}
                                                                 </span>
-                                                                {getCurrency(paymentData.method) !== '$' && (
-                                                                    <span className="text-white"> {getCurrency(paymentData.method).replace(/\.$/, '')}</span>
-                                                                )}
+                                                                {' '}a la conversión de la Tasa BCV son{' '}
+                                                                <span className="font-black text-white">
+                                                                    {bcvVesPerUsdUi ? `${(totalPrice * bcvVesPerUsdUi).toFixed(2)} Bs.` : '__________ Bs.'}
+                                                                </span>
                                                                 . Categorías elegidas: <strong>precio por equipo (pareja)</strong>, un pago por inscripción de la pareja en cada categoría.
                                                             </>
                                                         )}
@@ -1189,7 +1240,7 @@ export default function InscribirmePage() {
                                                                 <select
                                                                     value={paymentData.method}
                                                                     onChange={(e) => setPaymentData({ ...paymentData, method: e.target.value })}
-                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all appearance-none cursor-pointer"
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-base sm:text-sm text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all appearance-none cursor-pointer"
                                                                 >
                                                                     {availableMethods.length > 0 ? (
                                                                         availableMethods.map((m) => (
@@ -1220,7 +1271,7 @@ export default function InscribirmePage() {
                                                                 <select
                                                                     value={paymentData.bank}
                                                                     onChange={(e) => setPaymentData({ ...paymentData, bank: e.target.value })}
-                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all appearance-none cursor-pointer"
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-base sm:text-sm text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all appearance-none cursor-pointer"
                                                                 >
                                                                     <option value="" disabled className="bg-[#111]">Seleccione un banco</option>
                                                                     {VENEZUELAN_BANKS.map((bank) => (
@@ -1245,7 +1296,7 @@ export default function InscribirmePage() {
                                                                     type="date"
                                                                     value={paymentData.date}
                                                                     onChange={(e) => setPaymentData({ ...paymentData, date: e.target.value })}
-                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-base sm:text-sm text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
                                                                 />
                                                             </div>
                                                         </div>
@@ -1267,7 +1318,7 @@ export default function InscribirmePage() {
                                                                     value={paymentData.amount}
                                                                     onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
                                                                     placeholder={getCurrency(paymentData.method) === '$' ? (totalPrice > 0 ? totalPrice.toString() : "0.00") : "0.00"}
-                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-base sm:text-sm text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
                                                                 />
                                                             </div>
                                                         </div>
@@ -1283,7 +1334,7 @@ export default function InscribirmePage() {
                                                                     value={paymentData.reference}
                                                                     onChange={(e) => setPaymentData({ ...paymentData, reference: e.target.value })}
                                                                     placeholder={(paymentData.method === 'Pago Móvil' || paymentData.method === 'Transferencia Bancaria') ? 'Ej.: REF123456 o el número del comprobante' : 'Número de referencia'}
-                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-base sm:text-sm text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
                                                                 />
                                                             </div>
                                                             {(paymentData.method === 'Pago Móvil' || paymentData.method === 'Transferencia Bancaria') && (

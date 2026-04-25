@@ -41,8 +41,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             ? null
             : Number(String(body.amountBs).replace(',', '.'));
 
-    if (!bankOrigin) return NextResponse.json({ error: 'Banco de origen requerido' }, { status: 400 });
-    if (!phoneEmitter) return NextResponse.json({ error: 'Teléfono emisor requerido' }, { status: 400 });
+  if (!bankOrigin) return NextResponse.json({ error: 'Banco de origen requerido' }, { status: 400 });
     if (!/^\d{6,}$/.test(referenceNumber)) return NextResponse.json({ error: 'Número de referencia inválido (mínimo 6 dígitos)' }, { status: 400 });
     if (amountBs == null || !Number.isFinite(amountBs) || amountBs <= 0) {
         return NextResponse.json({ error: 'Monto en Bs requerido y debe ser > 0' }, { status: 400 });
@@ -69,17 +68,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     // 2) Insertar en payment_logs con estado pending
-    const { error: insertErr } = await supabase.from('payment_logs').insert({
-        owner_id: userId, // compat con esquema actual
-        user_id: userId,
-        tournament_id: tournamentId,
-        reference_number: referenceNumber,
-        bank_origin: bankOrigin,
-        phone_emitter: phoneEmitter,
-        amount_bs: amountBs,
-        status: 'pending',
-        created_at: new Date().toISOString(),
-    });
+  const base = {
+    user_id: userId,
+    tournament_id: tournamentId,
+    reference_number: referenceNumber,
+    amount_bs: amountBs,
+    status: 'pending',
+    created_at: new Date().toISOString(),
+  };
+  const attempts = [
+    { owner_id: userId, bank_origin: bankOrigin, phone_emitter: phoneEmitter || null, ...base },
+    { bank_origin: bankOrigin, phone_emitter: phoneEmitter || null, ...base },
+    { bank_origin: bankOrigin, ...base },
+    { ...base },
+  ] as const;
+
+  let insertErr: any = null;
+  for (const payload of attempts) {
+    const res = await supabase.from('payment_logs').insert(payload as any);
+    insertErr = res.error;
+    if (!insertErr) break;
+    // En conflicto por referencia, no seguimos intentando variaciones.
+    if (String((insertErr as any)?.message || '').toLowerCase().includes('reference_number')) break;
+  }
 
     if (insertErr) {
         // Carrera: si el UNIQUE(reference_number) salta a último momento.
