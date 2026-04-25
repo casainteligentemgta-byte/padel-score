@@ -1355,14 +1355,7 @@ export const dataService = {
         const cleanedCode = code.trim().toUpperCase().replace(/\s/g, '');
         if (!/^[A-Z0-9]{6}$/.test(cleanedCode)) return null;
 
-        if (isTestPartnerCode(cleanedCode)) {
-            return {
-                id: TEST_PARTNER_USER_ID,
-                name: TEST_PARTNER_DISPLAY_NAME,
-                email: TEST_PARTNER_EMAIL,
-            };
-        }
-
+        // Con sesión, el API valida que el id exista en profiles (p. ej. 888888 y fichas con owner en profiles).
         try {
             const authHeaders = await getAuthHeaders();
             if (authHeaders.Authorization) {
@@ -1375,6 +1368,14 @@ export const dataService = {
             }
         } catch {
             /* fallback abajo */
+        }
+
+        if (isTestPartnerCode(cleanedCode)) {
+            return {
+                id: TEST_PARTNER_USER_ID,
+                name: TEST_PARTNER_DISPLAY_NAME,
+                email: TEST_PARTNER_EMAIL,
+            };
         }
 
         const { data, error } = await supabase()
@@ -1435,6 +1436,14 @@ export const dataService = {
             .select()
             .single();
 
+        const throwForeignKeyTeams = () => {
+            throw new Error(
+                'El compañero no tiene un perfil válido en el sistema (referencia a usuario inexistente). ' +
+                    'Si usas el código 888888, ejecuta en Supabase la migración 054_test_partner_888888. ' +
+                    'En otros casos, asegúrate de que el compañero tenga cuenta y perfil activo.'
+            );
+        };
+
         if (error) {
             const msg = String(error.message || '').toLowerCase();
             if (msg.includes('tournament_team_id') || msg.includes('column') && msg.includes('does not exist')) {
@@ -1442,11 +1451,13 @@ export const dataService = {
                 const retry = await supabase().from('teams').insert(row).select().single();
                 if (retry.error) {
                     if (retry.error.code === '23505') throw new Error('Ya existe una inscripción o invitación para esta pareja en esta categoría.');
+                    if (retry.error.code === '23503') throwForeignKeyTeams();
                     throw retry.error;
                 }
                 data = retry.data;
             } else {
                 if (error.code === '23505') throw new Error('Ya existe una inscripción o invitación para esta pareja en esta categoría.');
+                if (error.code === '23503') throwForeignKeyTeams();
                 throw error;
             }
         }

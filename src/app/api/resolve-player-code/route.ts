@@ -40,10 +40,28 @@ export async function GET(req: Request) {
   }
 
   if (isTestPartnerCode(raw)) {
+    // teams.player_b_id hace referencia a profiles.id; sin esta fila, insert a teams falla (23503).
+    const { data: testRow, error: testErr } = await supabase
+      .from('profiles')
+      .select('id, name, email')
+      .eq('id', TEST_PARTNER_USER_ID)
+      .maybeSingle();
+    if (testErr) {
+      return NextResponse.json({ error: testErr.message }, { status: 500 });
+    }
+    if (!testRow) {
+      return NextResponse.json(
+        {
+          error:
+            'Cuenta de prueba 888888 no creada en el servidor. Ejecuta en Supabase la migración 054_test_partner_888888.sql o crea el perfil con el UUID de prueba.',
+        },
+        { status: 404 }
+      );
+    }
     return NextResponse.json({
-      id: TEST_PARTNER_USER_ID,
-      name: TEST_PARTNER_DISPLAY_NAME,
-      email: TEST_PARTNER_EMAIL,
+      id: testRow.id,
+      name: testRow.name || TEST_PARTNER_DISPLAY_NAME,
+      email: testRow.email ?? TEST_PARTNER_EMAIL,
     });
   }
 
@@ -76,14 +94,36 @@ export async function GET(req: Request) {
   }
 
   const row = parts?.[0];
-  if (!row) {
-    return NextResponse.json({ error: 'No encontrado.' }, { status: 404 });
+  if (!row?.owner_id) {
+    return NextResponse.json(
+      { error: 'Código de ficha sin dueño. La pareja no puede inscribirse con este dato.' },
+      { status: 404 }
+    );
+  }
+
+  const { data: ownerProfile, error: ownerErr } = await supabase
+    .from('profiles')
+    .select('id, name, email')
+    .eq('id', row.owner_id)
+    .maybeSingle();
+
+  if (ownerErr) {
+    return NextResponse.json({ error: ownerErr.message }, { status: 500 });
+  }
+  if (!ownerProfile) {
+    return NextResponse.json(
+      {
+        error:
+          'Este código está en una ficha cuya cuenta no tiene perfil activo. Pide a tu compañero que inicie sesión o complete el registro.',
+      },
+      { status: 404 }
+    );
   }
 
   const d = (row.data || {}) as Record<string, unknown>;
   return NextResponse.json({
-    id: row.owner_id,
-    name: displayNameFromParticipantData(d),
-    email: (d.email as string) || null,
+    id: ownerProfile.id,
+    name: ownerProfile.name?.trim() || displayNameFromParticipantData(d),
+    email: ownerProfile.email != null && String(ownerProfile.email).trim() !== '' ? ownerProfile.email : (d.email as string) || null,
   });
 }
