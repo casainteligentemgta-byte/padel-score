@@ -35,6 +35,15 @@ function throwIfError(error: any): void {
 
 const now = () => new Date().toISOString();
 
+/**
+ * Fila con `data` JSONB: el contenido embebido no debe pisar el `owner_id` real de la fila
+ * (si no, inscripciones/placeholders insertan con user_id nulo y Postgres falla con NOT NULL).
+ */
+function mergeDataRow(r: { id: string; owner_id?: string | null; data?: any; created_at?: string; updated_at?: string }) {
+    const d = r.data || {};
+    return { id: r.id, ...d, ownerId: r.owner_id ?? d.ownerId, createdAt: r.created_at, updatedAt: r.updated_at };
+}
+
 /** Valida UUID v4 (y variantes comunes en Supabase) para IDs de inscripción en URL. */
 export function isValidInscriptionId(id: string | null | undefined): boolean {
     if (!id || typeof id !== 'string') return false;
@@ -440,19 +449,19 @@ export const dataService = {
             .eq('owner_id', ownerId)
             .order('created_at', { ascending: false });
         throwIfError(error);
-        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+        return (data || []).map((r: any) => mergeDataRow(r));
     },
 
     async listAllTournaments() {
         const { data, error } = await supabase().from('tournaments').select('*').order('created_at', { ascending: false });
         throwIfError(error);
-        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+        return (data || []).map((r: any) => mergeDataRow(r));
     },
 
     async getTournament(id: string) {
         const { data, error } = await supabase().from('tournaments').select('*').eq('id', id).single();
         if (error || !data) return null;
-        return { id: data.id, ownerId: data.owner_id, ...data.data, createdAt: data.created_at, updatedAt: data.updated_at };
+        return mergeDataRow(data as any);
     },
 
     async deleteTournament(id: string) {
@@ -906,7 +915,7 @@ export const dataService = {
             .eq('owner_id', ownerId)
             .order('created_at', { ascending: false });
         throwIfError(error);
-        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+        return (data || []).map((r: any) => mergeDataRow(r));
     },
 
     async listAllExpenses() {
@@ -915,7 +924,7 @@ export const dataService = {
             .select('*')
             .order('created_at', { ascending: false });
         throwIfError(error);
-        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+        return (data || []).map((r: any) => mergeDataRow(r));
     },
 
     async addParticipant(data: any, ownerId: string) {
@@ -986,13 +995,13 @@ export const dataService = {
             .eq('owner_id', ownerId)
             .order('created_at', { ascending: false });
         throwIfError(error);
-        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+        return (data || []).map((r: any) => mergeDataRow(r));
     },
 
     async getAllParticipants() {
         const { data, error } = await supabase().from('participants').select('*').order('created_at', { ascending: false });
         throwIfError(error);
-        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+        return (data || []).map((r: any) => mergeDataRow(r));
     },
 
     async searchParticipants(query: string, limit = 10) {
@@ -1007,7 +1016,7 @@ export const dataService = {
             .order('created_at', { ascending: false })
             .limit(Math.max(1, Math.min(25, limit)));
         throwIfError(error);
-        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+        return (data || []).map((r: any) => mergeDataRow(r));
     },
 
     async updateParticipant(id: string, data: any) {
@@ -1184,7 +1193,7 @@ export const dataService = {
             .eq('owner_id', ownerId)
             .order('created_at', { ascending: false });
         throwIfError(error);
-        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+        return (data || []).map((r: any) => mergeDataRow(r));
     },
 
     async deleteGroup(id: string) {
@@ -1675,7 +1684,7 @@ export const dataService = {
     async getAds() {
         const { data, error } = await supabase().from('ads').select('*').order('created_at', { ascending: false });
         throwIfError(error);
-        return (data || []).map((r: any) => ({ id: r.id, ownerId: r.owner_id, ...(r.data || {}), createdAt: r.created_at, updatedAt: r.updated_at }));
+        return (data || []).map((r: any) => mergeDataRow(r));
     },
 
     async deleteAd(id: string) {
@@ -1776,10 +1785,15 @@ export const dataService = {
     },
 
     async addInscription(data: InscriptionData, ownerId: string) {
+        const uid = String(ownerId ?? '').trim();
+        if (!uid) {
+            throw new Error('No se pudo determinar tu usuario. Cierra sesión, vuelve a entrar e intenta otra vez.');
+        }
         const { data: row, error } = await supabase()
             .from('inscriptions')
             .insert({
-                owner_id: ownerId,
+                user_id: uid,
+                owner_id: uid,
                 tournament_id: data.tournamentId || null,
                 tournament_name: sanitizeString(data.tournamentName),
                 category_key: sanitizeString(data.categoryKey),
@@ -2048,7 +2062,7 @@ export const dataService = {
 
         const tournamentId = row.tournament_id as string | null;
         const categoryKey = row.category_key as string | null;
-        const ownerId = String(row.owner_id);
+        const ownerId = String(row.user_id || row.owner_id || '');
 
         if (tournamentId && categoryKey) {
             const { data: team } = await db
@@ -2116,7 +2130,7 @@ export const dataService = {
 
         // Aviso por email al anfitrión (player1) sin WhatsApp/costos extra.
         try {
-            const ownerProfile = await this.getUserProfile(String(u.owner_id));
+            const ownerProfile = await this.getUserProfile(String(u.user_id || u.owner_id));
             const ownerEmail = player1EmailFromEmbed || (ownerProfile?.email || '').trim();
             if (ownerEmail) {
                 fetch('/api/partner-confirmed-email', {
@@ -2136,7 +2150,7 @@ export const dataService = {
 
         return {
             id: u.id,
-            ownerId: String(u.owner_id),
+            ownerId: String(u.user_id || u.owner_id || ''),
             tournamentId: u.tournament_id ?? null,
             tournamentName: u.tournament_name ?? null,
             tournamentLiveName: tournamentNameFromEmbed,
@@ -2241,7 +2255,7 @@ export const dataService = {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments', filter: `id=eq.${id}` }, (payload) => {
                 const r = payload.new as any;
                 if (!r) return;
-                callback({ id: r.id, ownerId: r.owner_id, ...r.data, createdAt: r.created_at, updatedAt: r.updated_at });
+                callback(mergeDataRow(r));
             })
             .subscribe();
 

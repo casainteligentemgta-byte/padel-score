@@ -11,6 +11,8 @@ export type LegalModalProps = {
   onAccept: () => Promise<void> | void;
   loading?: boolean;
   title?: string;
+  /** 'save' = botón Aceptar que persiste. 'dismiss' = solo Cerrar; el envío se hace con Inscribirme. */
+  footerMode?: 'save' | 'dismiss';
 };
 
 const LEGAL_TEXT = {
@@ -51,6 +53,7 @@ export default function LegalModal({
   onAccept,
   loading = false,
   title,
+  footerMode = 'save',
 }: LegalModalProps) {
   const [localLoading, setLocalLoading] = useState(false);
 
@@ -126,25 +129,43 @@ export default function LegalModal({
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-white/10 p-5">
-              <p className="text-[10px] text-zinc-500 leading-relaxed">
-                Al aceptar, se registra tu consentimiento en la tabla <span className="text-zinc-300">profiles</span>.
-              </p>
-              <button
-                type="button"
-                disabled={effectiveLoading}
-                onClick={() => void handleAccept()}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#ccff00] px-5 py-3 text-sm font-black uppercase italic tracking-wide text-black shadow-[0_0_24px_rgba(204,255,0,0.25)] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {effectiveLoading ? (
-                  'Guardando…'
-                ) : (
-                  <>
-                    <Check className="h-4 w-4" />
-                    Aceptar
-                  </>
-                )}
-              </button>
+            <div className="flex flex-col gap-3 border-t border-white/10 p-5 sm:flex-row sm:items-center sm:justify-between">
+              {footerMode === 'save' ? (
+                <>
+                  <p className="text-[10px] text-zinc-500 leading-relaxed sm:max-w-[60%]">
+                    Al aceptar, se registra tu consentimiento en la tabla <span className="text-zinc-300">profiles</span>.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={effectiveLoading}
+                    onClick={() => void handleAccept()}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ccff00] px-5 py-3 text-sm font-black uppercase italic tracking-wide text-black shadow-[0_0_24px_rgba(204,255,0,0.25)] disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
+                  >
+                    {effectiveLoading ? (
+                      'Guardando…'
+                    ) : (
+                      <>
+                        <Check className="h-4 w-4" />
+                        Aceptar
+                      </>
+                    )}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-[10px] text-zinc-500 leading-relaxed">
+                    Cierra y pulsa <span className="text-[#ccff00] font-bold">Inscribirme</span> abajo para confirmar tu
+                    inscripción y registrar el consentimiento.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-black uppercase tracking-wide text-white hover:bg-white/10 sm:w-auto"
+                  >
+                    Cerrar
+                  </button>
+                </>
+              )}
             </div>
           </motion.div>
         </div>

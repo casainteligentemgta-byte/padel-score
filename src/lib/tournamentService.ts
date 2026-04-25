@@ -60,6 +60,11 @@ export async function initializeTournamentWithPlaceholders(
   }
 
   const ownerId = tournament.ownerId;
+  if (ownerId == null || String(ownerId).trim() === '') {
+    throw new Error(
+      'Este torneo no tiene dueño (owner) asociado en el sistema. Contacta a un administrador o vuelve a crear el torneo.',
+    );
+  }
   const tournamentName = (tournament as any).name ?? (tournament as any).eventName ?? 'Torneo';
   const inscriptionCategories = (tournament as any).inscriptionCategories as Array<{ key: string; name?: string; price?: number }> | undefined;
   const categoryPrice = (key: string) => {
@@ -92,6 +97,7 @@ export async function initializeTournamentWithPlaceholders(
     const gsForInsert = defaultGroupSize < maxTeams ? defaultGroupSize : maxTeams;
     const rows = Array.from({ length: maxTeams }, (_, i) => ({
       owner_id: ownerId,
+      user_id: ownerId,
       tournament_id: tournamentId,
       tournament_name: tournamentName,
       category_key: categoryKey,

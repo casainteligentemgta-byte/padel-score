@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    useCallback,
+    useEffect,
+    useImperativeHandle,
+    useRef,
+    useState,
+    forwardRef,
+} from 'react';
 import type SignatureCanvas from 'react-signature-canvas';
 import { motion } from 'framer-motion';
 import { type LegalFlowType } from '@/components/legal/PuntitoIA';
@@ -16,6 +23,11 @@ export type LegalAcceptPayload = {
     version: string;
 };
 
+export type LegalContainerRef = {
+    /** Guarda firma/biometría y ejecuta onAccept. Devuelve el payload o null si falta validación. */
+    submitSignature: () => Promise<LegalAcceptPayload | null>;
+};
+
 export type LegalContainerProps = {
     type: LegalFlowType;
     userId: string | null | undefined;
@@ -23,9 +35,14 @@ export type LegalContainerProps = {
     title?: string;
     children?: React.ReactNode;
     className?: string;
+    /** false = el padre dispara el envío (p. ej. solo «Inscribirme») */
+    showPrimaryButton?: boolean;
 };
 
-export function LegalContainer({ type, userId, onAccept, title, children, className = '' }: LegalContainerProps) {
+const LegalContainerInner = forwardRef<LegalContainerRef, LegalContainerProps>(function LegalContainer(
+    { type, userId, onAccept, title, children, className = '', showPrimaryButton = true },
+    ref,
+) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [scrollPct, setScrollPct] = useState(0);
     const [scrollComplete, setScrollComplete] = useState(false);
@@ -74,8 +91,8 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
         setSigEmpty(true);
     };
 
-    const handleAccept = async () => {
-        if (!canSubmit || !userId) return;
+    const buildAndSaveSignature = useCallback(async (): Promise<LegalAcceptPayload | null> => {
+        if (!canSubmit || !userId) return null;
         setSubmitting(true);
         try {
             let signaturePath: string | null = null;
@@ -86,19 +103,37 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
                     signaturePath = await uploadToLegalVault(userId, 'signature.png', blob, 'image/png');
                 }
             }
-            await onAccept({
+            const payload: LegalAcceptPayload = {
                 signaturePath,
                 biometricPath: bioPath,
                 version: CURRENT_TERMS_VERSION,
-            });
+            };
+            await onAccept(payload);
+            return payload;
         } catch (e) {
             console.error(e);
             const msg = e instanceof Error ? e.message : String(e);
-            alert(`Error al guardar la firma. ${msg}`);
+            if (showPrimaryButton) {
+                alert(`Error al guardar la firma. ${msg}`);
+                return null;
+            }
+            throw e instanceof Error ? e : new Error(msg);
         } finally {
             setSubmitting(false);
         }
+    }, [canSubmit, userId, bioPath, onAccept, showPrimaryButton]);
+
+    const handleAccept = async () => {
+        await buildAndSaveSignature();
     };
+
+    useImperativeHandle(
+        ref,
+        () => ({
+            submitSignature: buildAndSaveSignature,
+        }),
+        [buildAndSaveSignature],
+    );
 
     return (
         <div
@@ -169,17 +204,26 @@ export function LegalContainer({ type, userId, onAccept, title, children, classN
                 </div>
             </div>
 
-            <div className="border-t border-white/10 px-5 py-4">
-                <button
-                    type="button"
-                    disabled={!canSubmit || submitting}
-                    onClick={() => void handleAccept()}
-                    className="w-full rounded-2xl border-2 border-[#ccff00] bg-[#ccff00] py-3.5 text-sm font-black uppercase italic tracking-wide text-black shadow-[0_0_24px_rgba(204,255,0,0.25)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:shadow-none"
-                >
-                    {submitting ? 'Guardando…' : 'Aceptar y firmar'}
-                </button>
-                {!userId && <p className="text-center text-[10px] text-amber-200">Inicia sesión para completar la firma.</p>}
-            </div>
+            {showPrimaryButton && (
+                <div className="border-t border-white/10 px-5 py-4">
+                    <button
+                        type="button"
+                        disabled={!canSubmit || submitting}
+                        onClick={() => void handleAccept()}
+                        className="w-full rounded-2xl border-2 border-[#ccff00] bg-[#ccff00] py-3.5 text-sm font-black uppercase italic tracking-wide text-black shadow-[0_0_24px_rgba(204,255,0,0.25)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:shadow-none"
+                    >
+                        {submitting ? 'Guardando…' : 'Aceptar y firmar'}
+                    </button>
+                    {!userId && <p className="text-center text-[10px] text-amber-200">Inicia sesión para completar la firma.</p>}
+                </div>
+            )}
+            {!showPrimaryButton && !userId && (
+                <p className="border-t border-white/10 px-5 py-4 text-center text-[10px] text-amber-200">
+                    Inicia sesión para completar la firma.
+                </p>
+            )}
         </div>
     );
-}
+});
+
+export const LegalContainer = LegalContainerInner;

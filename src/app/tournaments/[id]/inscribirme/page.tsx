@@ -7,7 +7,11 @@ import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import Sidebar from '@/components/Sidebar';
 import { BackButton } from '@/components/BackButton';
-import { LegalContainer } from '@/components/legal/LegalContainer';
+import {
+    LegalContainer,
+    type LegalAcceptPayload,
+    type LegalContainerRef,
+} from '@/components/legal/LegalContainer';
 import LegalModal from '@/components/legal/LegalModal';
 import PaymentInfo from '@/components/PaymentInfo';
 import AutoShrinkName from '@/components/AutoShrinkName';
@@ -41,6 +45,7 @@ import {
     Check
 } from 'lucide-react';
 import { useRouteSegment } from '@/lib/useRouteSegment';
+import { TournamentType } from '@/types/tournament';
 
 /** Categorías de inscripción que el organizador puede configurar en el torneo (tournament.inscriptionCategories). */
 export type InscriptionCategoryOption = {
@@ -157,6 +162,7 @@ export default function InscribirmePage() {
     const now = new Date();
     const is1600OrLater = now.getHours() > 16 || (now.getHours() === 16 && now.getMinutes() >= 0);
     const registrationStatus = tournament?.registrationStatus || 'open';
+    const isIndividual = tournament?.type === TournamentType.AMERICANO_INDIVIDUAL;
     const inscriptionClosed = registrationStatus === 'closed' || (tournament?.startDate && (tournament.startDate < todayStr || (tournament.startDate === todayStr && is1600OrLater)));
 
     // Partner search state (puede venir de URL ?code= cuando se llega desde Hub / compañeros recientes)
@@ -172,6 +178,7 @@ export default function InscribirmePage() {
     const [wizardStep, setWizardStep] = useState(0);
     /** Un solo scroll (contenedor principal); no hay región interna fija + scroll. */
     const inscribirmeScrollRef = useRef<HTMLDivElement>(null);
+    const legalInscriptionRef = useRef<LegalContainerRef | null>(null);
 
     // Retorno de Mercado Pago (mp=success | failure | pending)
     useEffect(() => {
@@ -466,7 +473,11 @@ export default function InscribirmePage() {
                 setError('Selecciona al menos una categoría.');
                 return;
             }
-            setWizardStep(1);
+            if (isIndividual) {
+                setWizardStep(2); // Saltar paso de pareja
+            } else {
+                setWizardStep(1);
+            }
             return;
         }
         if (wizardStep === 1) {
@@ -488,7 +499,11 @@ export default function InscribirmePage() {
 
     const handleWizardPrev = () => {
         setError(null);
-        setWizardStep((s) => Math.max(0, s - 1));
+        if (wizardStep === 2 && isIndividual) {
+            setWizardStep(0);
+        } else {
+            setWizardStep((s) => Math.max(0, s - 1));
+        }
     };
 
     const showWizardNext =
@@ -497,7 +512,11 @@ export default function InscribirmePage() {
         (wizardStep === 2 && totalPrice > 0);
 
     const handleSubmit = async () => {
-        if (!user?.uid || !tournament) return;
+        if (!tournament) return;
+        if (!user?.uid) {
+            setError('Debes iniciar sesión para inscribirte. Si ya iniciaste, recarga la página e intenta de nuevo.');
+            return;
+        }
         if (selectedCategories.size === 0) {
             setError('Selecciona al menos una categoría.');
             return;
@@ -530,12 +549,32 @@ export default function InscribirmePage() {
             }
         }
 
-        if (selectedCategories.size > 0 && !currentPartner) {
+        if (!isIndividual && selectedCategories.size > 0 && !currentPartner) {
             setError(partnerError || 'Debes buscar y confirmar a tu pareja usando su código de 6 dígitos.');
             return;
         }
-        if (!acceptTerms || !legalArtifacts || !smartConsentAccepted) {
-            setError('Debes completar lectura, firma (o validación facial) y aceptación del Contrato de Adhesión (Smart Consent).');
+
+        let fromPad: LegalAcceptPayload | null = null;
+        try {
+            fromPad = (await legalInscriptionRef.current?.submitSignature()) ?? null;
+        } catch (e: any) {
+            setError(e?.message || 'Error al guardar la firma o el consentimiento legal.');
+            return;
+        }
+        const effectiveLegal =
+            fromPad != null
+                ? {
+                      signaturePath: fromPad.signaturePath,
+                      biometricPath: fromPad.biometricPath,
+                      version: fromPad.version,
+                  }
+                : legalArtifacts;
+        if (!effectiveLegal) {
+            setError('Debes completar firmar digitalmente o la validación facial, y aceptar el contrato (Smart Consent), antes de inscribirte.');
+            return;
+        }
+        if (!fromPad && !smartConsentAccepted) {
+            setError('Debes aceptar el Contrato de Adhesión (Smart Consent) antes de inscribirte.');
             return;
         }
 
@@ -586,9 +625,9 @@ export default function InscribirmePage() {
                         receiptUrl: paymentData.receiptUrl || undefined,
                         partnerId: currentPartner?.id,
                         partnerName: currentPartner?.name,
-                        legalSignaturePath: legalArtifacts.signaturePath,
-                        legalBiometricPath: legalArtifacts.biometricPath,
-                        acceptedTermsVersion: legalArtifacts.version,
+                        legalSignaturePath: effectiveLegal.signaturePath,
+                        legalBiometricPath: effectiveLegal.biometricPath,
+                        acceptedTermsVersion: effectiveLegal.version,
                     },
                     user.uid
                 );
@@ -627,7 +666,7 @@ export default function InscribirmePage() {
                 }
 
                 // Also create a team record/invitation (solo si el compañero tiene id real), enlazando el equipo del torneo
-                if (currentPartner && currentPartner.id) {
+                if (!isIndividual && currentPartner && currentPartner.id) {
                     const inv = await dataService.createTeamInvitation(
                         tournamentId,
                         cat.key,
@@ -833,7 +872,7 @@ export default function InscribirmePage() {
                                         Volver al torneo
                                     </Link>
                                 </div>
-                            ) : needsProfileForEligibility ? (
+) : needsProfileForEligibility ? (
                                 <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-8 text-center">
                                     <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
                                     <p className="text-gray-300 text-sm font-bold mb-2">Completa tu ficha de jugador</p>
@@ -873,7 +912,7 @@ export default function InscribirmePage() {
                             ) : (
                                 <div className="flex flex-col gap-3">
                                     <p className="text-center text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                                        Paso {wizardStep + 1} de {termsStepIndex + 1}
+                                        Paso {(isIndividual && wizardStep >= 2) ? wizardStep : wizardStep + 1} de {isIndividual ? termsStepIndex : termsStepIndex + 1}
                                     </p>
                                     <div className="flex flex-col pr-0.5">
                                     {error && (
@@ -1249,9 +1288,11 @@ export default function InscribirmePage() {
                                             </div>
 
                                             <LegalContainer
+                                                ref={legalInscriptionRef}
                                                 type="inscription"
                                                 userId={user?.uid}
                                                 className="border-[#ccff00]/25"
+                                                showPrimaryButton={false}
                                                 onAccept={async (p) => {
                                                     if (!user?.uid) return;
                                                     await dataService.updateProfileLegalAcceptance(user.uid, {
@@ -1298,6 +1339,7 @@ export default function InscribirmePage() {
                                                 open={smartConsentModalOpen}
                                                 onClose={() => setSmartConsentModalOpen(false)}
                                                 loading={smartConsentSaving}
+                                                footerMode="dismiss"
                                                 onAccept={async () => {
                                                     if (!user?.uid) {
                                                         setError('Debes iniciar sesión para aceptar el contrato.');
@@ -1359,7 +1401,7 @@ export default function InscribirmePage() {
                                                     <button
                                                         type="button"
                                                         onClick={() => void handleSubmit()}
-                                                        disabled={submitting || selectedCategories.size === 0 || !acceptTerms || !legalArtifacts || !smartConsentAccepted}
+                                                        disabled={submitting || selectedCategories.size === 0}
                                                         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ccff00] py-3.5 text-sm font-black uppercase text-black disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[220px]"
                                                     >
                                                         {submitting ? (

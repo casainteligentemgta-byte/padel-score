@@ -98,6 +98,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // 3) Registrar el log de antifraude
     const { error: logInsertErr } = await supabase.from('payment_logs').insert({
         owner_id: uid,
+        user_id: uid,
         tournament_id: tournamentId,
         inscription_id: firstTargetId || null,
         reference_number: referenceNumber,

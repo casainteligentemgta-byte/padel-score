@@ -229,14 +229,22 @@ export async function POST(request: Request) {
     }
 
     if (!insExisting.data?.id) {
+      const pid = String(profileId || '').trim();
+      if (!pid) {
+        return NextResponse.json(
+          { error: 'No se pudo determinar el id de perfil para la inscripción.' },
+          { status: 500 },
+        );
+      }
       const ins = await supabase.from('inscriptions').insert({
-        owner_id: profileId,
+        owner_id: pid,
+        user_id: pid,
         tournament_id: tournamentId,
         tournament_name: (tournament as any).name || 'Torneo',
         category_key: categoryKey || null,
         participant_name: fullName,
         participant_email: email,
-        participant_id: profileId,
+        participant_id: pid,
         payment_status: 'pending',
         is_placeholder: false,
         data: {

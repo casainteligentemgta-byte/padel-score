@@ -102,6 +102,15 @@ export default function AdminHubPage() {
             iconColor: "text-pink-400"
         },
         {
+            title: "Tablero Central",
+            desc: "Métricas y logs en tiempo real",
+            icon: BarChart3,
+            href: "/admin/dashboard",
+            color: "from-blue-600/20 to-blue-600/5",
+            borderColor: "border-blue-600/30",
+            iconColor: "text-blue-400"
+        },
+        {
             title: "Ajustes del Club",
             desc: "Configuración general y parámetros",
             icon: Settings2,
