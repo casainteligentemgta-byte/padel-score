@@ -5,11 +5,10 @@ import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
 import { extractAmountFromReceipt } from '@/lib/ocrService';
-import Sidebar from '@/components/Sidebar';
 import { BouncingBall } from '@/components/BouncingBall';
 import {
     Receipt, RefreshCw, AlertTriangle, CheckCircle, Clock, X, Eye, DollarSign, User, Trophy, Calendar, Filter,
-    Zap, Loader2, Scan, ListChecks, ChevronDown, ChevronUp, MessageCircle
+    Zap, Loader2, Scan, ListChecks, ChevronDown, ChevronUp, MessageCircle, ArrowLeft
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -275,17 +274,30 @@ export default function AdminValidacionPagosPage() {
 
     return (
         <div className="min-h-screen bg-[#050505] text-white font-outfit relative">
-            <Sidebar />
+            {/* Barra siempre visible: Atrás (fija bajo el borde del viewport) */}
+            <div className="sticky top-0 z-[200] w-full border-b border-padel-primary/20 bg-[#0a0a0a] shadow-lg shadow-black/40">
+                <div className="px-3 sm:px-4 md:px-6 py-3 max-w-[1600px] mx-auto flex items-center">
+                    <button
+                        type="button"
+                        onClick={() => router.push('/admin/dashboard')}
+                        className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 sm:px-5 rounded-xl bg-padel-primary text-black font-black text-xs sm:text-sm uppercase tracking-widest shadow-[0_0_20px_rgba(204,255,0,0.25)] hover:brightness-110 active:scale-[0.98] transition-all"
+                        aria-label="Volver al panel de administración"
+                    >
+                        <ArrowLeft className="w-5 h-5 sm:w-5 sm:h-5" strokeWidth={2.5} />
+                        Atrás
+                    </button>
+                </div>
+            </div>
 
-            <div className="pl-20 md:pl-28 pr-4 pt-10 pb-20">
+            <div className="px-4 md:px-8 pt-4 md:pt-8 pb-20 max-w-[1600px] mx-auto">
                 {/* Header Section */}
                 <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-padel-primary/10 rounded-2xl border border-padel-primary/20">
-                            <Receipt className="w-8 h-8 text-padel-primary" />
+                    <div className="flex items-center gap-3 md:gap-4 min-w-0">
+                        <div className="p-2.5 md:p-3 bg-padel-primary/10 rounded-2xl border border-padel-primary/20 shrink-0">
+                            <Receipt className="w-6 h-6 md:w-8 md:h-8 text-padel-primary" />
                         </div>
-                        <div>
-                            <h1 className="text-3xl font-black italic uppercase tracking-tighter text-white">
+                        <div className="min-w-0">
+                            <h1 className="text-xl sm:text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white truncate sm:whitespace-normal">
                                 Validación de <span className="text-padel-primary">Pagos</span>
                             </h1>
                             <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/40">Panel administrativo de tesorería</p>
