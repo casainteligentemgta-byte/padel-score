@@ -346,7 +346,7 @@ export default function AdminDashboard() {
           <button
             type="button"
             onClick={handleGoBack}
-            className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 sm:px-5 rounded-xl bg-padel-primary text-black font-black text-xs sm:text-sm uppercase tracking-widest shadow-[0_0_20px_rgba(204,255,0,0.25)] hover:brightness-110 active:scale-[0.98] transition-all"
+            className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 sm:px-5 rounded-xl bg-black border border-padel-primary/45 text-padel-primary font-black text-xs sm:text-sm uppercase tracking-widest hover:bg-padel-primary/10 active:scale-[0.98] transition-all"
             aria-label="Volver al panel de administración"
           >
             <ArrowLeft className="w-5 h-5" strokeWidth={2.5} />
@@ -389,10 +389,10 @@ export default function AdminDashboard() {
         <div className="flex items-center gap-3 sm:ml-auto">
           <button 
             onClick={() => fetchData()}
-            className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors group"
+            className="p-3 bg-black border border-padel-primary/30 rounded-xl hover:bg-padel-primary/10 transition-colors group"
             title="Sincronizar ahora"
           >
-            <RefreshCcw className="w-5 h-5 text-white/70 group-active:rotate-180 transition-transform duration-500" />
+            <RefreshCcw className="w-5 h-5 text-padel-primary/80 group-active:rotate-180 transition-transform duration-500" />
           </button>
           <div className="h-10 w-[1px] bg-white/10 mx-2 hidden md:block" />
           <div className="flex items-center gap-3 bg-white/5 border border-white/10 p-2 rounded-xl">
@@ -454,7 +454,7 @@ export default function AdminDashboard() {
                 >
                   Validación de pagos
                 </a>
-                <button onClick={() => setFullViewTab('payments')} className="text-[10px] font-black uppercase tracking-wider text-padel-primary hover:underline">Abrir pantalla completa</button>
+                <button onClick={() => setFullViewTab('payments')} className="rounded-lg border border-padel-primary/35 bg-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-padel-primary hover:bg-padel-primary/10">Abrir pantalla completa</button>
               </div>
             </div>
             <div className="space-y-2">
@@ -478,13 +478,23 @@ export default function AdminDashboard() {
           <section className="bg-[#111] border border-white/5 rounded-3xl p-4">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold flex items-center gap-2"><UserCheck className="w-5 h-5 text-padel-primary" /> NUEVOS USUARIOS</h2>
-              <button onClick={() => setFullViewTab('users')} className="text-[10px] font-black uppercase tracking-wider text-padel-primary hover:underline">Abrir pantalla completa</button>
+              <button onClick={() => setFullViewTab('users')} className="rounded-lg border border-padel-primary/35 bg-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-padel-primary hover:bg-padel-primary/10">Abrir pantalla completa</button>
             </div>
             <div className="space-y-2">
+              <div className="grid grid-cols-4 gap-2 px-3 text-[10px] font-black uppercase tracking-widest text-padel-primary/80">
+                <span>Nombre</span>
+                <span>Apellido</span>
+                <span>Teléfono</span>
+                <span>Email</span>
+              </div>
               {previewUsers.map((u: any) => (
                 <div key={u.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-                  <p className="text-sm font-bold truncate">{u.full_name || u.name || 'Jugador'}</p>
-                  <p className="text-[11px] text-white/45 truncate">{u.email || 'Sin email'}</p>
+                  <div className="grid grid-cols-4 gap-2 text-[11px]">
+                    <p className="truncate font-bold">{String(u.name || u.full_name || 'Jugador').trim().split(' ')[0] || '—'}</p>
+                    <p className="truncate text-white/80">{String(u.last_name || u.lastName || (u.full_name || '').split(' ').slice(1).join(' ') || '').trim() || '—'}</p>
+                    <p className="truncate text-white/70">{u.phone || u.whatsapp || '—'}</p>
+                    <p className="truncate text-white/70">{u.email || '—'}</p>
+                  </div>
                 </div>
               ))}
               {previewUsers.length === 0 && <p className="text-sm text-white/40">Sin usuarios nuevos.</p>}
@@ -494,7 +504,7 @@ export default function AdminDashboard() {
           <section className="bg-[#111] border border-white/5 rounded-3xl p-4">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold flex items-center gap-2"><UserPlus className="w-5 h-5 text-padel-primary" /> EQUIPOS INSCRITOS</h2>
-              <button onClick={() => setFullViewTab('inscriptions')} className="text-[10px] font-black uppercase tracking-wider text-padel-primary hover:underline">Abrir pantalla completa</button>
+              <button onClick={() => setFullViewTab('inscriptions')} className="rounded-lg border border-padel-primary/35 bg-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-padel-primary hover:bg-padel-primary/10">Abrir pantalla completa</button>
             </div>
             <div className="space-y-2">
               {previewInscriptions.map((item: any) => {
@@ -533,7 +543,7 @@ export default function AdminDashboard() {
           <section className="bg-[#111] border border-white/5 rounded-3xl p-4">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold flex items-center gap-2"><Activity className="w-5 h-5 text-padel-primary" /> Logs del sistema</h2>
-              <button onClick={() => setFullViewTab('logs')} className="text-[10px] font-black uppercase tracking-wider text-padel-primary hover:underline">Abrir pantalla completa</button>
+              <button onClick={() => setFullViewTab('logs')} className="rounded-lg border border-padel-primary/35 bg-black px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-padel-primary hover:bg-padel-primary/10">Abrir pantalla completa</button>
             </div>
             <div className="space-y-2">
               {previewLogs.map((l: any) => (
@@ -559,7 +569,7 @@ export default function AdminDashboard() {
                   {fullViewTab === 'inscriptions' && 'Equipos inscritos'}
                   {fullViewTab === 'logs' && 'Logs del sistema'}
                 </h3>
-                <button onClick={() => setFullViewTab(null)} className="px-3 py-1.5 rounded-lg bg-padel-primary text-black text-xs font-black uppercase">Cerrar</button>
+                <button onClick={() => setFullViewTab(null)} className="px-3 py-1.5 rounded-lg bg-black border border-padel-primary/45 text-padel-primary text-xs font-black uppercase hover:bg-padel-primary/10">Cerrar</button>
               </div>
               <div className="p-4 overflow-auto min-h-0">
                 {fullViewTab === 'payments' && (

@@ -17,12 +17,19 @@ export function TermsReacceptanceGate({ children }: { children: React.ReactNode 
     const pathname = usePathname();
     const { user, profile, profileLoading, isAdmin } = useAuth();
 
+    const resolvedAcceptedVersion =
+        profile?.acceptedTermsVersion ??
+        profile?.accepted_terms_version ??
+        profile?.legalVersion ??
+        profile?.legal_version ??
+        null;
+
     useEffect(() => {
         if (user && !profileLoading) {
-            const stale = isProfileTermsStale(profile?.acceptedTermsVersion);
-            console.log('[TermsGate] User:', user.email, 'ProfileVersion:', profile?.acceptedTermsVersion, 'Stale:', stale);
+            const stale = isProfileTermsStale(resolvedAcceptedVersion);
+            console.log('[TermsGate] User:', user.email, 'ProfileVersion:', resolvedAcceptedVersion, 'Stale:', stale);
         }
-    }, [user, profile, profileLoading]);
+    }, [user, profileLoading, resolvedAcceptedVersion]);
 
     if (!user || profileLoading || shouldBypassTermsGate(pathname)) {
         return <>{children}</>;
@@ -33,7 +40,7 @@ export function TermsReacceptanceGate({ children }: { children: React.ReactNode 
         return <>{children}</>;
     }
 
-    const stale = isProfileTermsStale(profile?.acceptedTermsVersion);
+    const stale = isProfileTermsStale(resolvedAcceptedVersion);
     if (!stale) {
         return <>{children}</>;
     }

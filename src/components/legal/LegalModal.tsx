@@ -127,19 +127,16 @@ export default function LegalModal({
                   </section>
                 ))}
               </div>
-            </div>
-
-            <div className="flex flex-col gap-3 border-t border-white/10 p-5 sm:flex-row sm:items-center sm:justify-between">
-              {footerMode === 'save' ? (
-                <>
-                  <p className="text-[10px] text-zinc-500 leading-relaxed sm:max-w-[60%]">
+              {footerMode === 'save' && (
+                <div className="mt-6 border-t border-white/10 pt-4">
+                  <p className="text-[10px] text-zinc-500 leading-relaxed">
                     Al aceptar, se registra tu consentimiento en la tabla <span className="text-zinc-300">profiles</span>.
                   </p>
                   <button
                     type="button"
                     disabled={effectiveLoading}
                     onClick={() => void handleAccept()}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ccff00] px-5 py-3 text-sm font-black uppercase italic tracking-wide text-black shadow-[0_0_24px_rgba(204,255,0,0.25)] disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
+                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ccff00] px-5 py-3 text-sm font-black uppercase italic tracking-wide text-black shadow-[0_0_24px_rgba(204,255,0,0.25)] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {effectiveLoading ? (
                       'Guardando…'
@@ -150,8 +147,12 @@ export default function LegalModal({
                       </>
                     )}
                   </button>
-                </>
-              ) : (
+                </div>
+              )}
+            </div>
+
+            {footerMode === 'dismiss' && (
+              <div className="flex flex-col gap-3 border-t border-white/10 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <>
                   <p className="text-[10px] text-zinc-500 leading-relaxed">
                     Cierra y pulsa <span className="text-[#ccff00] font-bold">Inscribirme</span> abajo para confirmar tu
@@ -165,8 +166,8 @@ export default function LegalModal({
                     Cerrar
                   </button>
                 </>
-              )}
-            </div>
+              </div>
+            )}
           </motion.div>
         </div>
       )}

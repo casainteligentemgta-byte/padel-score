@@ -28,7 +28,8 @@ import {
     Loader2,
     Upload,
     Link as LinkIcon,
-    DollarSign
+    DollarSign,
+    Download
 } from 'lucide-react';
 import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournament';
 import { MasterScheduleEngine, MasterScheduleConfig, CategoryConfig } from '@/services/MasterScheduleEngine';
@@ -232,6 +233,17 @@ export default function MasterGeneratorPage() {
     // Edición de tiempo de partidos (Semis/Finales)
     const [editingMatchIdx, setEditingMatchIdx] = useState<number | null>(null);
     const [newMatchTime, setNewMatchTime] = useState<string>('');
+    const [posterData, setPosterData] = useState({
+        title: '',
+        date: '',
+        time: '',
+        venue: '',
+        category: '',
+        prize: '',
+        cta: 'Inscríbete ahora',
+    });
+    const [posterImage, setPosterImage] = useState<string | null>(null);
+    const [isGeneratingPoster, setIsGeneratingPoster] = useState(false);
 
     // ── Reset al montar: siempre empieza en blanco ────────────────────────
     useEffect(() => {
@@ -886,6 +898,94 @@ export default function MasterGeneratorPage() {
         TIE_BREAK: { label: 'Tie-Break', desc: '6-6 → Tie-break a 7', icon: '🎾' },
         SUPER_TIE_BREAK: { label: 'Super Tie-Break', desc: '6-6 → Super TB a 10', icon: '⚡' },
         NO_TIE_BREAK: { label: 'Sin Tie-Break', desc: 'Hasta ganar por 2 games', icon: '🔁' },
+    };
+
+    const handleGeneratePoster = async () => {
+        if (!posterData.title.trim()) {
+            alert('Indica el título del torneo para generar el póster.');
+            return;
+        }
+        setIsGeneratingPoster(true);
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1080;
+            canvas.height = 1350;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('No se pudo crear el lienzo del póster.');
+
+            // Background
+            ctx.fillStyle = '#050505';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const grad = ctx.createRadialGradient(860, 260, 120, 860, 260, 700);
+            grad.addColorStop(0, 'rgba(204,255,0,0.30)');
+            grad.addColorStop(1, 'rgba(204,255,0,0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Frame
+            ctx.strokeStyle = '#ccff00';
+            ctx.lineWidth = 8;
+            ctx.strokeRect(28, 28, canvas.width - 56, canvas.height - 56);
+
+            // Header
+            ctx.fillStyle = '#ccff00';
+            ctx.font = '900 36px Inter, Arial, sans-serif';
+            ctx.fillText('SMART PADEL · MEDIA MASTER', 74, 110);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 84px Inter, Arial, sans-serif';
+            const title = posterData.title.toUpperCase().slice(0, 42);
+            ctx.fillText(title, 74, 230);
+
+            // Meta blocks
+            const drawMeta = (label: string, value: string, y: number) => {
+                ctx.fillStyle = '#8a8a8a';
+                ctx.font = '700 24px Inter, Arial, sans-serif';
+                ctx.fillText(label.toUpperCase(), 74, y);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '800 42px Inter, Arial, sans-serif';
+                ctx.fillText((value || 'Por definir').slice(0, 28), 74, y + 52);
+            };
+            drawMeta('Fecha', posterData.date || eventData.startDate || '', 360);
+            drawMeta('Horario', posterData.time || eventData.dailyStartTime || '', 510);
+            drawMeta('Sede', posterData.venue || eventData.complexName || '', 660);
+            drawMeta('Categoría', posterData.category || 'Open', 810);
+
+            // Bottom CTA strip
+            ctx.fillStyle = 'rgba(255,255,255,0.06)';
+            ctx.fillRect(74, 980, canvas.width - 148, 210);
+            ctx.strokeStyle = 'rgba(204,255,0,0.35)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(74, 980, canvas.width - 148, 210);
+
+            if (posterData.prize.trim()) {
+                ctx.fillStyle = '#ccff00';
+                ctx.font = '800 32px Inter, Arial, sans-serif';
+                ctx.fillText(`PREMIO: ${posterData.prize.toUpperCase().slice(0, 36)}`, 110, 1055);
+            }
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 52px Inter, Arial, sans-serif';
+            ctx.fillText((posterData.cta || 'Inscríbete ahora').toUpperCase().slice(0, 28), 110, 1138);
+            ctx.fillStyle = '#8a8a8a';
+            ctx.font = '700 24px Inter, Arial, sans-serif';
+            ctx.fillText('www.smartpadel58.com', 110, 1185);
+
+            const dataUrl = canvas.toDataURL('image/png');
+            setPosterImage(dataUrl);
+        } catch (err: any) {
+            alert(err?.message || 'No se pudo generar el póster.');
+        } finally {
+            setIsGeneratingPoster(false);
+        }
+    };
+
+    const handleDownloadPoster = () => {
+        if (!posterImage) return;
+        const a = document.createElement('a');
+        const safeTitle = (posterData.title || eventData.tournamentName || 'poster').toLowerCase().replace(/[^a-z0-9]+/gi, '-');
+        a.href = posterImage;
+        a.download = `${safeTitle}-smartpadel-poster.png`;
+        a.click();
     };
 
     if (authLoading || !isAdmin) {
@@ -1673,6 +1773,96 @@ export default function MasterGeneratorPage() {
                                                         return Math.floor(totalMins / (eventData.matchDurationMinutes + eventData.bufferMinutes)) * eventData.numCourts;
                                                     })()} partidos/día
                                                 </span>
+                                            </div>
+
+                                            <div className="rounded-2xl border border-padel-primary/20 bg-padel-primary/5 p-4 md:p-5 space-y-4">
+                                                <div className="flex items-center gap-2">
+                                                    <ImageIcon className="w-4 h-4 text-padel-primary" />
+                                                    <h3 className="text-sm font-black uppercase tracking-widest text-padel-primary">Generador de póster</h3>
+                                                </div>
+                                                <p className="text-[11px] text-zinc-400">
+                                                    Completa los datos clave del torneo y genera una imagen lista para publicar.
+                                                </p>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Título del torneo"
+                                                        value={posterData.title}
+                                                        onChange={(e) => setPosterData((p) => ({ ...p, title: e.target.value }))}
+                                                        className={STEP1_CONTROL_H}
+                                                    />
+                                                    <input
+                                                        type="date"
+                                                        value={posterData.date}
+                                                        onChange={(e) => setPosterData((p) => ({ ...p, date: e.target.value }))}
+                                                        className={STEP1_CONTROL_H}
+                                                    />
+                                                    <input
+                                                        type="time"
+                                                        value={posterData.time}
+                                                        onChange={(e) => setPosterData((p) => ({ ...p, time: e.target.value }))}
+                                                        className={STEP1_CONTROL_H}
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Sede"
+                                                        value={posterData.venue}
+                                                        onChange={(e) => setPosterData((p) => ({ ...p, venue: e.target.value }))}
+                                                        className={STEP1_CONTROL_H}
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Categoría"
+                                                        value={posterData.category}
+                                                        onChange={(e) => setPosterData((p) => ({ ...p, category: e.target.value }))}
+                                                        className={STEP1_CONTROL_H}
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Premio (opcional)"
+                                                        value={posterData.prize}
+                                                        onChange={(e) => setPosterData((p) => ({ ...p, prize: e.target.value }))}
+                                                        className={STEP1_CONTROL_H}
+                                                    />
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Llamado a la acción (ej: Inscríbete ya)"
+                                                    value={posterData.cta}
+                                                    onChange={(e) => setPosterData((p) => ({ ...p, cta: e.target.value }))}
+                                                    className={STEP1_CONTROL_H}
+                                                />
+
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleGeneratePoster}
+                                                        disabled={isGeneratingPoster}
+                                                        className="h-11 px-4 rounded-xl bg-padel-primary text-black font-black uppercase text-[11px] tracking-wider hover:brightness-110 disabled:opacity-60"
+                                                    >
+                                                        {isGeneratingPoster ? 'Generando…' : 'Generar póster'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleDownloadPoster}
+                                                        disabled={!posterImage}
+                                                        className="h-11 px-4 rounded-xl border border-zinc-700 bg-black/40 text-white font-black uppercase text-[11px] tracking-wider hover:border-padel-primary/40 disabled:opacity-40 inline-flex items-center gap-2"
+                                                    >
+                                                        <Download className="w-4 h-4" />
+                                                        Descargar PNG
+                                                    </button>
+                                                </div>
+
+                                                {posterImage && (
+                                                    <div className="rounded-xl border border-zinc-800 bg-black/50 p-3">
+                                                        <img
+                                                            src={posterImage}
+                                                            alt="Vista previa del póster generado"
+                                                            className="w-full max-w-[360px] mx-auto rounded-lg border border-zinc-700"
+                                                        />
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

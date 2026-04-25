@@ -1376,13 +1376,7 @@ export default function InscribirmePage() {
                                             <div className="mb-6 rounded-2xl bg-white/5 p-4 border border-white/10">
                                                 <div className="flex items-start gap-4">
                                                     <div 
-                                                        onClick={() => {
-                                                            if (!smartConsentAccepted) {
-                                                                setSmartConsentModalOpen(true);
-                                                            } else {
-                                                                setSmartConsentAccepted(false);
-                                                            }
-                                                        }}
+                                                        onClick={() => setSmartConsentAccepted((prev) => !prev)}
                                                         className={`mt-1 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-lg border-2 transition-all ${
                                                             smartConsentAccepted 
                                                                 ? 'border-[#ccff00] bg-[#ccff00] text-black' 

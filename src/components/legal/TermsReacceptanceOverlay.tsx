@@ -5,51 +5,19 @@ import { motion } from 'framer-motion';
 import { LegalContainer } from '@/components/legal/LegalContainer';
 import { dataService } from '@/lib/dataService';
 import { useAuth } from '@/lib/AuthContext';
-import { CheckCircle2, ArrowRight } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 export function TermsReacceptanceOverlay() {
     const { user, refreshProfile } = useAuth();
-    const [accepted, setAccepted] = useState(false);
+    const [accepting, setAccepting] = useState(false);
     const uid = user?.uid;
 
-    if (accepted) {
-        return (
-            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0a0a0a]/90 backdrop-blur-md p-4">
-                <motion.div 
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="bg-[#111] border border-green-500/30 p-8 rounded-2xl text-center max-w-sm w-full shadow-2xl shadow-green-500/10"
-                >
-                    <div className="flex justify-center mb-6">
-                        <div className="bg-green-500/20 p-4 rounded-full">
-                            <CheckCircle2 className="w-12 h-12 text-green-500" />
-                        </div>
-                    </div>
-                    <h2 className="text-2xl font-bold text-white mb-2">¡Términos Aceptados!</h2>
-                    <p className="text-zinc-400 mb-8">Tu registro ha sido actualizado correctamente. Ya puedes acceder a todas las funciones.</p>
-                    
-                    <button
-                        onClick={() => window.location.href = '/dashboard'}
-                        className="w-full py-4 bg-green-500 hover:bg-green-600 text-black font-bold rounded-xl flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
-                    >
-                        Ingresar a la App
-                        <ArrowRight className="w-5 h-5" />
-                    </button>
-                    
-                    <p className="mt-4 text-xs text-zinc-500 italic">
-                        Redirigiendo automáticamente...
-                    </p>
-                </motion.div>
-            </div>
-        );
-    }
-
     return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0a0a0a]/80 backdrop-blur-sm p-4 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="smart-legal-title">
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center bg-[#0a0a0a]/80 backdrop-blur-sm px-4 py-6 sm:px-6 sm:py-10" role="dialog" aria-modal="true" aria-labelledby="smart-legal-title">
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="w-full max-w-xl"
+                className="w-full max-w-2xl"
             >
                 <span id="smart-legal-title" className="sr-only">
                     Actualización de términos y condiciones
@@ -57,8 +25,12 @@ export function TermsReacceptanceOverlay() {
                 <LegalContainer
                     type="inscription"
                     userId={uid}
+                    className="max-h-[calc(100dvh-3rem)] sm:max-h-[calc(100dvh-5rem)]"
+                    scrollAreaClassName="max-h-none min-h-0"
+                    controlsInsideScroll
                     onAccept={async (p) => {
                         if (!uid) return;
+                        setAccepting(true);
                         console.log('[TermsOverlay] Aceptando términos...', p.version);
                         try {
                             await dataService.updateProfileLegalAcceptance(uid, {
@@ -68,27 +40,26 @@ export function TermsReacceptanceOverlay() {
                             });
                             console.log('[TermsOverlay] Guardado en DB exitoso. Refrescando perfil...');
                             await refreshProfile();
-                            console.log('[TermsOverlay] Perfil refrescado. Marcando como aceptado.');
-                            setAccepted(true);
-                            
-                            // Autoredirect fallback after 1.5s if gate doesn't catch it
-                            setTimeout(() => {
-                                if (window.location.pathname === '/' || window.location.pathname === '/login') {
-                                    window.location.href = '/dashboard';
-                                }
-                            }, 2000);
+                            console.log('[TermsOverlay] Perfil refrescado. Continuando flujo.');
                         } catch (err: any) {
                             console.error('[TermsOverlay] Error en onAccept:', err);
                             const isMissingCol = String(err.message).includes('COLUMNA_FALTANTE');
                             if (isMissingCol) {
                                 alert('ATENCIÓN: Se guardó tu firma pero la base de datos no tiene la columna "accepted_terms_version". Por favor, pide al administrador que ejecute la migración 051 en Supabase.');
-                                setAccepted(true); // Permitimos avanzar si al menos se guardó la firma
                             } else {
                                 throw err; // Re-throw para que LegalContainer lo muestre
                             }
+                        } finally {
+                            setAccepting(false);
                         }
                     }}
                 />
+                {accepting && (
+                    <div className="mt-3 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest text-zinc-400">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Continuando a la siguiente fase...
+                    </div>
+                )}
             </motion.div>
         </div>
     );

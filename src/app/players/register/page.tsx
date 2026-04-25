@@ -763,7 +763,7 @@ function RegistrationFormContent() {
                                 initial={{ scale: 0.9, opacity: 0, y: 20 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
                                 exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                                className="relative z-[130] w-full max-w-lg max-h-[min(88dvh,820px)] overflow-hidden rounded-[40px] border border-white/10 bg-[#0a0a0a] shadow-3xl"
+                                className="relative z-[130] w-full max-w-lg h-[min(88dvh,820px)] overflow-hidden rounded-[40px] border border-white/10 bg-[#0a0a0a] shadow-3xl"
                             >
                                 <button
                                     type="button"
@@ -777,7 +777,8 @@ function RegistrationFormContent() {
                                     type="pro_player"
                                     userId={user?.uid}
                                     title="Contrato Pro Smart"
-                                    className="max-h-[min(88dvh,820px)] rounded-[40px] border-0 pt-2"
+                                    className="h-full rounded-[40px] border-0 pt-2"
+                                    scrollAreaClassName="min-h-[140px] max-h-none"
                                     onAccept={async (p) => {
                                         if (!user?.uid) return;
                                         await dataService.updateProfileLegalAcceptance(user.uid, {

@@ -1236,9 +1236,13 @@ export const dataService = {
             biometricPhotoPath?: string | null;
         }
     ) {
+        const acceptedAt = now();
         const row: Record<string, unknown> = {
             accepted_terms_version: payload.acceptedTermsVersion,
-            updated_at: now(),
+            legal_version: payload.acceptedTermsVersion,
+            status_legal: 'accepted',
+            legal_timestamp: acceptedAt,
+            updated_at: acceptedAt,
         };
         if (payload.signaturePath !== undefined) {
             row.signature_url = payload.signaturePath;
@@ -1259,18 +1263,19 @@ export const dataService = {
             /accepted terms version/i.test(msg);
 
         if (missingAcceptedTermsCol) {
-            const fallback: Record<string, unknown> = { updated_at: now() };
+            const fallback: Record<string, unknown> = {
+                legal_version: payload.acceptedTermsVersion,
+                status_legal: 'accepted',
+                legal_timestamp: acceptedAt,
+                updated_at: acceptedAt,
+            };
             if (payload.signaturePath !== undefined) fallback.signature_url = payload.signaturePath;
             if (payload.biometricPhotoPath !== undefined) fallback.biometric_photo_url = payload.biometricPhotoPath;
             
-            // Intentamos guardar al menos firma/foto
+            // Intentamos guardar legal_version/status + evidencia aunque no exista accepted_terms_version
             const { error: err2 } = await supabase().from('profiles').update(fallback).eq('id', uid);
-            
-            // Llevamos el error de "columna faltante" a la superficie para que el UI pueda avisar
-            throw new Error(
-                'COLUMNA_FALTANTE: La base de datos no tiene la columna accepted_terms_version. ' +
-                'Se guardó la evidencia pero no la aceptación. Por favor contacta al administrador para aplicar la migración 051.'
-            );
+            throwIfError(err2);
+            return;
         }
         throwIfError(error);
     },
