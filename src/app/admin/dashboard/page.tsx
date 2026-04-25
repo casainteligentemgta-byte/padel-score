@@ -22,6 +22,7 @@ import {
 import { useAuth } from '@/lib/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { getAuthHeaders } from '@/lib/apiAuth';
+import { type ParticipantDataSlice } from '@/lib/participantDataExtract';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -49,6 +50,16 @@ function inscriptionPaymentLabel(status: unknown) {
   if (raw === 'revision') return 'En revisión';
   if (raw === 'alert') return 'Alerta';
   return 'Pendiente';
+}
+
+function firstNameToken(full: string): string {
+  const t = full.trim().split(/\s+/).filter(Boolean);
+  return t[0] || '';
+}
+
+function nameTokensAfterFirst(full: string): string {
+  const t = full.trim().split(/\s+/).filter(Boolean);
+  return t.slice(1).join(' ').trim();
 }
 
 type ServiceHealth = 'loading' | 'ok' | 'warn' | 'error';
@@ -291,26 +302,77 @@ export default function AdminDashboard() {
         capacity: totalCapacity,
       });
 
-      // Categoría / torneo de la inscripción más reciente por perfil (columnas nuevos usuarios)
+      // Ficha (nombre/apellido/tel) vive en `participants.data`; `profiles` suele traer solo `name` y email.
+      // Categoría/torneo: inscripción más reciente por `user_id` o `owner_id` (el filtro `.in.(uuid,…)` en PostgREST
+      // no es fiable; usamos varias cláusulas `.eq` unidas con OR).
       let playersWithInscription: any[] = recentProfiles || [];
       if (playersWithInscription.length > 0) {
         const profileIds = playersWithInscription.map((p: any) => p?.id).filter(Boolean) as string[];
-        const { data: insForProfiles } = await supabase
-          .from('inscriptions')
-          .select('user_id, owner_id, category_key, tournament_name, created_at')
-          .or(
-            `user_id.in.(${profileIds.join(',')}),owner_id.in.(${profileIds.join(',')})`,
-          );
-        const bestByProfile = new Map<string, { category_key: string | null; tournament_name: string | null; created_at: string }>();
+
+        const participantByProfileId = new Map<string, ParticipantDataSlice>();
+        if (profileIds.length > 0) {
+          try {
+            const partRes = await fetch('/api/admin/dashboard-user-row-data', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...authHeaders },
+              body: JSON.stringify({ profileIds }),
+            });
+            if (partRes.ok) {
+              const partJson = (await partRes.json().catch(() => ({}))) as {
+                byProfileId?: Record<string, ParticipantDataSlice>;
+              };
+              for (const [k, v] of Object.entries(partJson.byProfileId || {})) {
+                if (k) participantByProfileId.set(k, v);
+              }
+            } else {
+              const t = await partRes.text().catch(() => '');
+              console.warn('[dashboard] dashboard-user-row-data:', partRes.status, t);
+            }
+          } catch (e) {
+            console.warn('[dashboard] dashboard-user-row-data', e);
+          }
+        }
+
+        const orInscription = profileIds.flatMap((id) => [`user_id.eq.${id}`, `owner_id.eq.${id}`]).join(',');
+        const { data: insForProfiles, error: insOrErr } = orInscription
+          ? await supabase
+              .from('inscriptions')
+              .select('user_id, owner_id, category_key, tournament_name, data, created_at')
+              .or(orInscription)
+          : { data: null, error: null as any };
+
+        if (insOrErr) {
+          console.warn('[dashboard] inscriptions (nuevos usuarios):', insOrErr.message);
+        }
+
+        const bestByProfile = new Map<
+          string,
+          { category_key: string | null; tournament_name: string | null; created_at: string }
+        >();
         for (const row of insForProfiles || []) {
           const r = row as {
             user_id?: string | null;
             owner_id?: string | null;
             category_key?: string | null;
             tournament_name?: string | null;
+            data?: unknown;
             created_at?: string | null;
           };
           const created = String(r.created_at || '');
+          const insData =
+            r.data && typeof r.data === 'object' && !Array.isArray(r.data)
+              ? (r.data as Record<string, unknown>)
+              : {};
+          const catKey =
+            (r.category_key && String(r.category_key)) ||
+            (typeof insData.category_key === 'string' ? insData.category_key : null) ||
+            (typeof insData.categoryKey === 'string' ? insData.categoryKey : null) ||
+            null;
+          const tName =
+            (r.tournament_name && String(r.tournament_name)) ||
+            (typeof insData.tournament_name === 'string' ? insData.tournament_name : null) ||
+            (typeof insData.tournamentName === 'string' ? insData.tournamentName : null) ||
+            null;
           const candidates = [r.user_id, r.owner_id].filter(
             (x): x is string => typeof x === 'string' && x.length > 0 && profileIds.includes(x)
           );
@@ -318,8 +380,8 @@ export default function AdminDashboard() {
             const prev = bestByProfile.get(uid);
             if (!prev || created > (prev.created_at || '')) {
               bestByProfile.set(uid, {
-                category_key: r.category_key ?? null,
-                tournament_name: r.tournament_name ?? null,
+                category_key: catKey,
+                tournament_name: tName,
                 created_at: created,
               });
             }
@@ -327,10 +389,14 @@ export default function AdminDashboard() {
         }
         playersWithInscription = playersWithInscription.map((p: any) => {
           const hit = p?.id ? bestByProfile.get(p.id) : undefined;
+          const part = p?.id ? participantByProfileId.get(p.id) : undefined;
           return {
             ...p,
             inscriptionCategory: hit?.category_key ?? null,
             inscriptionTournament: hit?.tournament_name ?? null,
+            participantName: part?.name,
+            participantLastName: part?.lastName,
+            participantPhone: part?.phone,
           };
         });
       }
@@ -725,12 +791,18 @@ export default function AdminDashboard() {
               </div>
               {previewUsers.map((u: any, idx: number) => {
                 const catCell = [u.inscriptionTournament, u.inscriptionCategory].filter(Boolean).join(' · ') || '—';
+                const full = String(u.name || u.full_name || '');
+                const firstN = String(u.participantName || firstNameToken(full) || 'Jugador').trim() || 'Jugador';
+                const lastN = String(
+                  u.participantLastName || u.last_name || u.lastName || nameTokensAfterFirst(full)
+                ).trim() || '—';
+                const phoneN = String(u.participantPhone || u.phone || u.whatsapp || '').trim() || '—';
                 return (
                 <div key={u.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
                   <div className="grid grid-cols-5 gap-2 text-[10px] leading-tight">
-                    <p className="truncate font-bold">{String(u.name || u.full_name || 'Jugador').trim().split(' ')[0] || '—'}</p>
-                    <p className="truncate text-white/80">{String(u.last_name || u.lastName || (u.full_name || '').split(' ').slice(1).join(' ') || '').trim() || '—'}</p>
-                    <p className="truncate text-white/70">{u.phone || u.whatsapp || '—'}</p>
+                    <p className="truncate font-bold" title={firstN}>{firstN}</p>
+                    <p className="truncate text-white/80" title={lastN}>{lastN}</p>
+                    <p className="truncate text-white/70" title={phoneN}>{phoneN}</p>
                     <p className="truncate text-white/70">{u.email || '—'}</p>
                     <p className="truncate text-white/70 min-w-0" title={catCell}>{catCell}</p>
                   </div>
@@ -914,12 +986,18 @@ export default function AdminDashboard() {
                     </div>
                     {players.map((u: any, idx: number) => {
                       const catCell = [u.inscriptionTournament, u.inscriptionCategory].filter(Boolean).join(' · ') || '—';
+                      const full = String(u.name || u.full_name || '');
+                      const firstN = String(u.participantName || firstNameToken(full) || 'Jugador').trim() || 'Jugador';
+                      const lastN = String(
+                        u.participantLastName || u.last_name || u.lastName || nameTokensAfterFirst(full)
+                      ).trim() || '—';
+                      const phoneN = String(u.participantPhone || u.phone || u.whatsapp || '').trim() || '—';
                       return (
                       <div key={u.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
                         <div className="grid grid-cols-5 gap-2 text-[10px] leading-tight">
-                          <p className="truncate font-bold">{String(u.name || u.full_name || 'Jugador').trim().split(' ')[0] || '—'}</p>
-                          <p className="truncate text-white/80">{String(u.last_name || u.lastName || (u.full_name || '').split(' ').slice(1).join(' ') || '').trim() || '—'}</p>
-                          <p className="truncate text-white/70">{u.phone || u.whatsapp || '—'}</p>
+                          <p className="truncate font-bold" title={firstN}>{firstN}</p>
+                          <p className="truncate text-white/80" title={lastN}>{lastN}</p>
+                          <p className="truncate text-white/70" title={phoneN}>{phoneN}</p>
                           <p className="truncate text-white/70">{u.email || '—'}</p>
                           <p className="truncate text-white/70 min-w-0" title={catCell}>{catCell}</p>
                         </div>

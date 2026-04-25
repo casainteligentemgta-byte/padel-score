@@ -231,9 +231,10 @@ export default function MasterGeneratorPage() {
     // Config usado en la última generación (con equipos ya ordenados/sorteados) para guardar grupos coherentes
     const [lastGeneratedConfig, setLastGeneratedConfig] = useState<MasterScheduleConfig | null>(null);
 
-    // Edición de tiempo de partidos (Semis/Finales)
+    // Edición de horario/cancha de partidos (Semis/Finales)
     const [editingMatchIdx, setEditingMatchIdx] = useState<number | null>(null);
     const [newMatchTime, setNewMatchTime] = useState<string>('');
+    const [newMatchCourt, setNewMatchCourt] = useState<string>('');
     const [posterData, setPosterData] = useState({
         title: '',
         date: '',
@@ -610,9 +611,13 @@ export default function MasterGeneratorPage() {
         }, 1200);
     };
 
-    const updateMatchTime = (idx: number, newTime: string) => {
+    const updateMatchSchedule = (idx: number, newTime: string, courtName: string) => {
         const updated = [...generatedMatches];
-        updated[idx] = { ...updated[idx], scheduledTime: new Date(newTime).toISOString() };
+        updated[idx] = {
+            ...updated[idx],
+            scheduledTime: new Date(newTime).toISOString(),
+            courtName: courtName || updated[idx]?.courtName || 'Pista 1',
+        };
         setGeneratedMatches(updated);
     };
 
@@ -1052,7 +1057,7 @@ export default function MasterGeneratorPage() {
     return (
         <div className="h-dvh flex flex-col bg-[#0a0a0b] text-white selection:bg-padel-primary/30 overflow-hidden">
 
-            {/* ─── Modal Editar Horario de Partido ─── */}
+            {/* ─── Modal Editar Horario y Cancha de Partido ─── */}
             <AnimatePresence>
                 {editingMatchIdx !== null && (
                     <motion.div
@@ -1075,7 +1080,7 @@ export default function MasterGeneratorPage() {
                                         <Clock className="w-5 h-5 text-padel-primary" />
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-black italic uppercase text-white leading-none">Editar Horario</h3>
+                                        <h3 className="text-lg font-black italic uppercase text-white leading-none">Editar Partido</h3>
                                         <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">
                                             {generatedMatches[editingMatchIdx]?.roundName}
                                         </p>
@@ -1099,6 +1104,20 @@ export default function MasterGeneratorPage() {
                                         <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none" />
                                     </div>
                                 </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Cancha</label>
+                                    <select
+                                        value={newMatchCourt}
+                                        onChange={(e) => setNewMatchCourt(e.target.value)}
+                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 text-sm font-bold text-white focus:border-padel-primary focus:ring-1 focus:ring-padel-primary outline-none transition-all"
+                                    >
+                                        {(eventData.courtNames?.length ? eventData.courtNames : ['Pista 1']).map((court) => (
+                                            <option key={court} value={court}>
+                                                {court}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
 
                                 <div className="grid grid-cols-2 gap-3 pt-2">
                                     <button
@@ -1109,7 +1128,7 @@ export default function MasterGeneratorPage() {
                                     </button>
                                     <button
                                         onClick={() => {
-                                            updateMatchTime(editingMatchIdx!, newMatchTime);
+                                            updateMatchSchedule(editingMatchIdx!, newMatchTime, newMatchCourt);
                                             setEditingMatchIdx(null);
                                         }}
                                         className="h-12 rounded-2xl bg-padel-primary hover:bg-padel-primary/90 text-black font-black text-sm uppercase italic transition-all active:scale-[0.98] shadow-lg shadow-padel-primary/20"
@@ -2322,9 +2341,10 @@ export default function MasterGeneratorPage() {
                                                                                 const hh = String(dateObj.getHours()).padStart(2, '0');
                                                                                 const min = String(dateObj.getMinutes()).padStart(2, '0');
                                                                                 setNewMatchTime(`${yyyy}-${mm}-${dd}T${hh}:${min}`);
+                                                                                setNewMatchCourt(m.courtName || (eventData.courtNames?.[0] ?? 'Pista 1'));
                                                                             }
                                                                         }}
-                                                                        title={(m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF') ? 'Doble clic para editar horario del partido' : ''}
+                                                                        title={(m.roundName?.toUpperCase() || '').includes('FINAL') || (m.roundName?.toUpperCase() || '').includes('SF') ? 'Doble clic para editar horario y cancha del partido' : ''}
                                                                     >
                                                                         <span className="text-padel-primary font-black italic text-base leading-none tracking-tighter">
                                                                             {new Date(m.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
