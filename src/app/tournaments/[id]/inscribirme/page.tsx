@@ -595,6 +595,17 @@ export default function InscribirmePage() {
             const participantRecord = myParticipants?.[0];
             const participantId = participantRecord?.id ?? undefined;
 
+            let bcvVesPerUsd: number | undefined;
+            try {
+                const br = await fetch('/api/fx/bcv');
+                if (br.ok) {
+                    const bj = (await br.json()) as { vesPerUsd?: number };
+                    if (typeof bj.vesPerUsd === 'number' && bj.vesPerUsd > 0) bcvVesPerUsd = bj.vesPerUsd;
+                }
+            } catch {
+                /* validación cae a solo cifra vs cifra */
+            }
+
             const createdInscriptionIds: string[] = [];
 
             for (const key of selectedCategories) {
@@ -603,7 +614,11 @@ export default function InscribirmePage() {
 
                 const amountPaid = paymentData.amount ? parseFloat(String(paymentData.amount).replace(',', '.')) : undefined;
                 const verification = !isMercadoPago && cat.price > 0 && amountPaid != null
-                    ? validatePaymentAgainstCategoryPrice({ amountExtracted: amountPaid, categoryPrice: cat.price })
+                    ? validatePaymentAgainstCategoryPrice({
+                          amountExtracted: amountPaid,
+                          categoryPrice: cat.price,
+                          bcvVesPerUsd: bcvVesPerUsd ?? undefined,
+                      })
                     : cat.price === 0 ? { paymentStatus: 'paid' as const, alertMessage: null } : { paymentStatus: 'pending' as const, alertMessage: null };
 
                 const { id: inscriptionId } = await dataService.addInscription(

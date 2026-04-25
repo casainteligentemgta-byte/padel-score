@@ -62,6 +62,28 @@ export default function AdminValidacionPagosPage() {
         if (isAdmin) loadInscriptions();
     }, [isAdmin]);
 
+    const [bcvVesPerUsd, setBcvVesPerUsd] = useState<number | null>(null);
+    const [bcvError, setBcvError] = useState<string | null>(null);
+    useEffect(() => {
+        if (!isAdmin) return;
+        (async () => {
+            try {
+                const r = await fetch('/api/fx/bcv');
+                const j = await r.json();
+                if (j.vesPerUsd && typeof j.vesPerUsd === 'number' && j.vesPerUsd > 0) {
+                    setBcvVesPerUsd(j.vesPerUsd);
+                    setBcvError(null);
+                } else {
+                    setBcvVesPerUsd(null);
+                    setBcvError(String(j.error || 'tasa no disponible'));
+                }
+            } catch {
+                setBcvVesPerUsd(null);
+                setBcvError('red');
+            }
+        })();
+    }, [isAdmin]);
+
     const handleUpdateStatus = async (id: string, status: 'paid' | 'alert' | 'pending', message: string | null = null) => {
         try {
             const inscription = inscriptions.find(ins => ins.id === id);
@@ -120,6 +142,7 @@ export default function AdminValidacionPagosPage() {
                 const result = validatePaymentAgainstCategoryPrice({
                     amountExtracted: amount ?? undefined,
                     categoryPrice,
+                    bcvVesPerUsd: bcvVesPerUsd != null ? bcvVesPerUsd : undefined,
                 });
                 if (result.paymentStatus === 'paid') {
                     await dataService.updateInscription(ins.id, { paymentStatus: 'paid', alertMessage: null });
@@ -158,11 +181,15 @@ export default function AdminValidacionPagosPage() {
             const validation = validatePaymentAgainstCategoryPrice({
                 amountExtracted: result.amountExtracted ?? undefined,
                 categoryPrice,
+                bcvVesPerUsd: bcvVesPerUsd != null ? bcvVesPerUsd : undefined,
             });
             setOcrResult({
                 amount: result.amountExtracted ?? null,
                 suggestion: validation.paymentStatus,
-                message: validation.alertMessage || (validation.paymentStatus === 'paid' ? 'Monto coincide con el precio de la categoría.' : ''),
+                message:
+                    validation.matchNote ||
+                    validation.alertMessage ||
+                    (validation.paymentStatus === 'paid' ? 'Monto coincide con el precio de la categoría.' : ''),
             });
         } catch (e) {
             console.error(e);
@@ -341,6 +368,17 @@ export default function AdminValidacionPagosPage() {
                         </button>
                     </div>
                 </header>
+                {bcvVesPerUsd != null ? (
+                    <p className="text-[9px] font-bold text-white/45 -mt-4 mb-8 pl-0.5">
+                        Tasa BCV aprox. (OCR y verificación auto): <span className="text-padel-primary/90">~{bcvVesPerUsd.toFixed(2)} Bs. / 1 USD</span> — compara
+                        monto en bolívares del comprobante con el precio de categoría en USD.
+                    </p>
+                ) : (
+                    <p className="text-[9px] text-amber-500/80 -mt-4 mb-8 pl-0.5">
+                        Sin tasa BCV: comparación solo cifra vs cifra. Configura <code className="text-white/50">BCV_VES_PER_USD</code> o revisa red.
+                        {bcvError && ` (${bcvError})`}
+                    </p>
+                )}
 
                 {/* Conciliar por referencias (Pago Móvil / transferencias) */}
                 {showReconcile && (
