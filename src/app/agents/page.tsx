@@ -33,6 +33,13 @@ interface DocFormProps {
     saving: boolean;
 }
 
+const DOC_SOURCE_PRESETS = [
+    { value: 'smartpadel58', label: 'smartpadel58' },
+    { value: 'reglamento-fip', label: 'Reglamento FIP' },
+    { value: 'manual-interno', label: 'Manual Interno' },
+    { value: 'web-oficial', label: 'Web Oficial' },
+] as const;
+
 function DocForm({ initial, onSave, onCancel, saving }: DocFormProps) {
     const [title, setTitle] = useState(initial?.title || '');
     const [content, setContent] = useState(initial?.content || '');
@@ -111,10 +118,22 @@ function DocForm({ initial, onSave, onCancel, saving }: DocFormProps) {
 
             <div>
                 <label className="text-[9px] font-black uppercase tracking-widest text-gray-500 block mb-1.5">Fuente</label>
+                <select
+                    value={DOC_SOURCE_PRESETS.some(p => p.value === source) ? source : ''}
+                    onChange={(e) => setSource(e.target.value)}
+                    className="w-full mb-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-padel-primary/50"
+                >
+                    <option value="" className="bg-black">Seleccionar fuente…</option>
+                    {DOC_SOURCE_PRESETS.map((opt) => (
+                        <option key={opt.value} value={opt.value} className="bg-black">
+                            {opt.label}
+                        </option>
+                    ))}
+                </select>
                 <input
                     value={source}
                     onChange={e => setSource(e.target.value)}
-                    placeholder="URL o descripción"
+                    placeholder="URL o descripción (ej: smartpadel58)"
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-gray-700 focus:outline-none focus:border-padel-primary/50"
                 />
             </div>

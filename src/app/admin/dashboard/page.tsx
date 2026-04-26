@@ -22,6 +22,7 @@ import {
 import { useAuth } from '@/lib/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { getAuthHeaders } from '@/lib/apiAuth';
+import { formatPersonNameForAdminList, formatPhoneForAdminList } from '@/lib/formatters';
 import { type ParticipantDataSlice } from '@/lib/participantDataExtract';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -60,6 +61,12 @@ function firstNameToken(full: string): string {
 function nameTokensAfterFirst(full: string): string {
   const t = full.trim().split(/\s+/).filter(Boolean);
   return t.slice(1).join(' ').trim();
+}
+
+/** Iguala mayúsc/minúsc en UUID al cruzar `profiles.id` con `participants.owner_id` y la respuesta JSON de la API. */
+function profileRowKey(id: unknown): string {
+  if (id == null || id === '') return '';
+  return String(id).trim().toLowerCase();
 }
 
 type ServiceHealth = 'loading' | 'ok' | 'warn' | 'error';
@@ -307,14 +314,22 @@ export default function AdminDashboard() {
       // no es fiable; usamos varias cláusulas `.eq` unidas con OR).
       let playersWithInscription: any[] = recentProfiles || [];
       if (playersWithInscription.length > 0) {
-        const profileIds = playersWithInscription.map((p: any) => p?.id).filter(Boolean) as string[];
+        const profileIds = playersWithInscription
+          .map((p: any) => profileRowKey(p?.id))
+          .filter((id): id is string => id.length > 0);
+        const profileIdSet = new Set(profileIds);
 
         const participantByProfileId = new Map<string, ParticipantDataSlice>();
         if (profileIds.length > 0) {
           try {
+            let partFetchHeaders = await getAuthHeaders();
+            if (!partFetchHeaders.Authorization) {
+              await supabase.auth.refreshSession();
+              partFetchHeaders = await getAuthHeaders();
+            }
             const partRes = await fetch('/api/admin/dashboard-user-row-data', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...authHeaders },
+              headers: { 'Content-Type': 'application/json', ...partFetchHeaders },
               body: JSON.stringify({ profileIds }),
             });
             if (partRes.ok) {
@@ -322,7 +337,8 @@ export default function AdminDashboard() {
                 byProfileId?: Record<string, ParticipantDataSlice>;
               };
               for (const [k, v] of Object.entries(partJson.byProfileId || {})) {
-                if (k) participantByProfileId.set(k, v);
+                const key = profileRowKey(k);
+                if (key) participantByProfileId.set(key, v);
               }
             } else {
               const t = await partRes.text().catch(() => '');
@@ -373,9 +389,9 @@ export default function AdminDashboard() {
             (typeof insData.tournament_name === 'string' ? insData.tournament_name : null) ||
             (typeof insData.tournamentName === 'string' ? insData.tournamentName : null) ||
             null;
-          const candidates = [r.user_id, r.owner_id].filter(
-            (x): x is string => typeof x === 'string' && x.length > 0 && profileIds.includes(x)
-          );
+          const candidates = [r.user_id, r.owner_id]
+            .map((x) => profileRowKey(x))
+            .filter((x): x is string => x.length > 0 && profileIdSet.has(x));
           for (const uid of new Set(candidates)) {
             const prev = bestByProfile.get(uid);
             if (!prev || created > (prev.created_at || '')) {
@@ -388,8 +404,9 @@ export default function AdminDashboard() {
           }
         }
         playersWithInscription = playersWithInscription.map((p: any) => {
-          const hit = p?.id ? bestByProfile.get(p.id) : undefined;
-          const part = p?.id ? participantByProfileId.get(p.id) : undefined;
+          const pk = profileRowKey(p?.id);
+          const hit = pk ? bestByProfile.get(pk) : undefined;
+          const part = pk ? participantByProfileId.get(pk) : undefined;
           return {
             ...p,
             inscriptionCategory: hit?.category_key ?? null,
@@ -792,11 +809,16 @@ export default function AdminDashboard() {
               {previewUsers.map((u: any, idx: number) => {
                 const catCell = [u.inscriptionTournament, u.inscriptionCategory].filter(Boolean).join(' · ') || '—';
                 const full = String(u.name || u.full_name || '');
-                const firstN = String(u.participantName || firstNameToken(full) || 'Jugador').trim() || 'Jugador';
-                const lastN = String(
-                  u.participantLastName || u.last_name || u.lastName || nameTokensAfterFirst(full)
-                ).trim() || '—';
-                const phoneN = String(u.participantPhone || u.phone || u.whatsapp || '').trim() || '—';
+                const firstN = formatPersonNameForAdminList(
+                  String(u.participantName || firstNameToken(full) || 'Jugador').trim() || 'Jugador'
+                );
+                const lastN = formatPersonNameForAdminList(
+                  String(
+                    u.participantLastName || u.last_name || u.lastName || nameTokensAfterFirst(full)
+                  ).trim() || '—'
+                );
+                const rawPhone = String(u.participantPhone || u.phone || u.whatsapp || '').trim();
+                const phoneN = formatPhoneForAdminList(rawPhone || null);
                 return (
                 <div key={u.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
                   <div className="grid grid-cols-5 gap-2 text-[10px] leading-tight">
@@ -987,11 +1009,16 @@ export default function AdminDashboard() {
                     {players.map((u: any, idx: number) => {
                       const catCell = [u.inscriptionTournament, u.inscriptionCategory].filter(Boolean).join(' · ') || '—';
                       const full = String(u.name || u.full_name || '');
-                      const firstN = String(u.participantName || firstNameToken(full) || 'Jugador').trim() || 'Jugador';
-                      const lastN = String(
-                        u.participantLastName || u.last_name || u.lastName || nameTokensAfterFirst(full)
-                      ).trim() || '—';
-                      const phoneN = String(u.participantPhone || u.phone || u.whatsapp || '').trim() || '—';
+                      const firstN = formatPersonNameForAdminList(
+                        String(u.participantName || firstNameToken(full) || 'Jugador').trim() || 'Jugador'
+                      );
+                      const lastN = formatPersonNameForAdminList(
+                        String(
+                          u.participantLastName || u.last_name || u.lastName || nameTokensAfterFirst(full)
+                        ).trim() || '—'
+                      );
+                      const rawPhone = String(u.participantPhone || u.phone || u.whatsapp || '').trim();
+                      const phoneN = formatPhoneForAdminList(rawPhone || null);
                       return (
                       <div key={u.id} className={`rounded-lg border px-3 py-1.5 ${idx % 2 === 0 ? 'border-zinc-500/30 bg-zinc-200/10' : 'border-zinc-800 bg-black'}`}>
                         <div className="grid grid-cols-5 gap-2 text-[10px] leading-tight">

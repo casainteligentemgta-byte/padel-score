@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/authServerSupabase';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { extractParticipantDisplayFromData, type ParticipantDataSlice } from '@/lib/participantDataExtract';
+import { mergeParticipantRowsForDisplay, type ParticipantDataSlice } from '@/lib/participantDataExtract';
 
 const MAX_IDS = 40;
 
@@ -32,7 +32,9 @@ export async function POST(request: Request) {
 
   const raw = body.profileIds;
   const profileIds = Array.isArray(raw)
-    ? raw.filter((x): x is string => typeof x === 'string' && x.length > 0)
+    ? raw
+        .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+        .map((x) => x.trim().toLowerCase())
     : [];
 
   if (profileIds.length === 0) {
@@ -52,15 +54,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const byProfileId: Record<string, ParticipantDataSlice> = {};
+  const byOwnerLists = new Map<string, Array<{ data: unknown; created_at?: string | null }>>();
   for (const row of data || []) {
-    const oid = row?.owner_id as string | null | undefined;
-    if (!oid || byProfileId[oid]) continue;
-    byProfileId[oid] = extractParticipantDisplayFromData(
-      (row?.data && typeof row.data === 'object' && !Array.isArray(row.data)
-        ? (row.data as Record<string, unknown>)
-        : {}) as Record<string, unknown>
-    );
+    const oid = row?.owner_id != null ? String(row.owner_id).trim().toLowerCase() : '';
+    if (!oid) continue;
+    if (!byOwnerLists.has(oid)) byOwnerLists.set(oid, []);
+    byOwnerLists.get(oid)!.push({ data: row.data, created_at: row.created_at ?? null });
+  }
+
+  const byProfileId: Record<string, ParticipantDataSlice> = {};
+  for (const [oid, list] of byOwnerLists) {
+    byProfileId[oid] = mergeParticipantRowsForDisplay(list);
   }
 
   return NextResponse.json({ byProfileId });

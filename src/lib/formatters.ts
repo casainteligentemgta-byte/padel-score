@@ -50,3 +50,47 @@ export const formatDateTime = (value: string | Date | number | null | undefined)
     return `${date.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${date.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
 };
 
+/**
+ * Teléfono para listas admin: mismo aspecto siempre (+ y grupos de 3 dígitos).
+ * Normaliza entradas típicas VE (0414…, 414… sin país, +58…).
+ */
+export function formatPhoneForAdminList(raw: string | null | undefined): string {
+    const trimmed = String(raw ?? '').trim();
+    if (!trimmed) return '—';
+
+    let d = trimmed.replace(/\D/g, '');
+    if (!d) return trimmed;
+
+    while (d.startsWith('00')) d = d.slice(2);
+
+    if (d.startsWith('0') && d.length >= 11) {
+        d = '58' + d.slice(1);
+    }
+    if (d.length === 10 && /^4\d{9}$/.test(d)) {
+        d = '58' + d;
+    }
+
+    const parts: string[] = [];
+    for (let i = 0; i < d.length; i += 3) {
+        parts.push(d.slice(i, i + 3));
+    }
+    return `+${parts.join(' ')}`;
+}
+
+/**
+ * Nombre/apellido en listas admin: primera letra de cada palabra en mayúscula (resto en minúsculas, locale es-VE).
+ */
+export function formatPersonNameForAdminList(raw: string | null | undefined): string {
+    const s = String(raw ?? '').trim();
+    if (!s || s === '—') return s || '—';
+
+    return s
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((word) => {
+            const lower = word.toLocaleLowerCase('es-VE');
+            return lower.charAt(0).toLocaleUpperCase('es-VE') + lower.slice(1);
+        })
+        .join(' ');
+}
+
