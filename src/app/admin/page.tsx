@@ -20,6 +20,7 @@ import {
     Brain,
     Sparkles,
     Building2,
+    Zap,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -73,6 +74,15 @@ export default function AdminHubPage() {
             color: "from-purple-500/20 to-purple-500/5",
             borderColor: "border-purple-500/30",
             iconColor: "text-purple-400"
+        },
+        {
+            title: "Express · Publicidad",
+            desc: "Playlists para pantallas fast-N (partidos informales)",
+            icon: Zap,
+            href: "/admin/express/publicidad",
+            color: "from-lime-500/20 to-lime-500/5",
+            borderColor: "border-lime-500/30",
+            iconColor: "text-padel-primary"
         },
         {
             title: "Gestión de Sedes",

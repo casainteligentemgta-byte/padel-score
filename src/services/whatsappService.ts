@@ -6,13 +6,10 @@
  */
 
 import Twilio from 'twilio';
+import { getAppBaseUrl } from '@/lib/brand';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
 const LOG = '[Smart Padel · WhatsApp]';
-
-function getAppBaseUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL || 'https://smartpadel.app').replace(/\/+$/, '');
-}
 
 export type WhatsNotificationType =
   | 'admin_welcome'

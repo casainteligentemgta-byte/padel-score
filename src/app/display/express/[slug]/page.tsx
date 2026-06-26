@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { notFound } from 'next/navigation';
+import { notFound, useSearchParams } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
+import { Megaphone, Zap } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import {
   ExpressMatch,
@@ -10,21 +11,82 @@ import {
   isValidExpressSlug,
   normalizeExpressMatch,
 } from '@/types/expressMatch';
+import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
+import { useCourtDisplayHeartbeat } from '@/lib/courtDisplayHeartbeat';
+import { buildCourtHeadline } from '@/lib/pizarraHeaderLabels';
+import {
+  expressBaseVenueFromPublicidadVenue,
+  expressPublicidadVenueName,
+} from '@/lib/expressPublicidad';
+import {
+  canchaIdFromExpressSlug,
+  courtNumFromExpressSlug,
+  expressMatchToMarcador,
+} from '@/lib/expressMatchToMarcador';
+import {
+  PistaTopBar,
+  PizarraDisplayGlobalStyles,
+  PizarraPublicidadFooter,
+  PizarraScoreboardFit,
+  PizarraTableScoreboard,
+} from '@/components/pizarra/PizarraDisplayParts';
 import { BouncingBall } from '@/components/BouncingBall';
+import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 
 type LoadState = 'loading' | 'ready' | 'error';
 
+function expressScoringMeta(match: ExpressMatch): { levelLine: string; genderLine: string } {
+  const levelLine = 'EXPRESS MATCH';
+  let genderLine = match.punto_de_oro ? 'Punto de oro' : 'Ventaja clásica';
+  if (match.modo_puntos === 'tiebreak') {
+    genderLine = 'Tie-break';
+  }
+  return { levelLine, genderLine };
+}
+
 export default function ExpressTvDisplay({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = React.use(params);
+
+  if (!isValidExpressSlug(slug)) {
+    notFound();
+  }
+
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => getSupabaseClient(), []);
+
+  const complexParam = (searchParams.get('complex') || '').trim();
+  const venueParam = (searchParams.get('venue') || '').trim();
+  const baseVenue =
+    complexParam ||
+    (venueParam ? expressBaseVenueFromPublicidadVenue(venueParam) : '');
+  const playlistVenue =
+    (venueParam && venueParam.includes('Express')
+      ? venueParam
+      : baseVenue
+        ? expressPublicidadVenueName(baseVenue)
+        : null) || null;
+  const minimalMode =
+    searchParams.get('minimal') === '1' || searchParams.get('minimal') === 'true';
+
+  const courtNum = courtNumFromExpressSlug(slug);
+  const canchaId = canchaIdFromExpressSlug(slug);
+  const courtHeadline = useMemo(() => {
+    const base = buildCourtHeadline(baseVenue || null, courtNum);
+    return base.includes('Express') ? base : `${base} · Express`;
+  }, [baseVenue, courtNum]);
+
+  const playlists = useCourtPlaylists(canchaId, playlistVenue);
+  useCourtDisplayHeartbeat(canchaId, playlistVenue);
+  useThreeFingerDragExit('/');
 
   const [match, setMatch] = useState<ExpressMatch | null>(null);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  if (!isValidExpressSlug(slug)) {
-    notFound();
-  }
+  const marcador = useMemo(
+    () => (match?.is_active ? expressMatchToMarcador(match) : null),
+    [match],
+  );
 
   useEffect(() => {
     if (!supabase) {
@@ -60,23 +122,42 @@ export default function ExpressTvDisplay({ params }: { params: Promise<{ slug: s
         return;
       }
 
-      const { data: created, error: insertError } = await supabase
-        .from('express_matches')
-        .insert([{ cancha_code: slug }])
-        .select('*')
-        .single();
+      try {
+        const res = await fetch(`/api/express-matches/${encodeURIComponent(slug)}`);
+        const json = await res.json();
+        if (cancelled) return;
 
-      if (cancelled) return;
+        if (!res.ok || !json.match) {
+          const { data: created, error: insertError } = await supabase
+            .from('express_matches')
+            .insert([{ cancha_code: slug }])
+            .select('*')
+            .single();
 
-      if (insertError || !created) {
-        console.error('[ExpressTv] insert error:', insertError);
-        setErrorMessage(insertError?.message || 'No se pudo inicializar la cancha express.');
+          if (cancelled) return;
+
+          if (insertError || !created) {
+            setErrorMessage(
+              String(json.error || insertError?.message || 'No se pudo crear la cancha express.') +
+                ' — Ejecuta 056_express_matches.sql en Supabase.',
+            );
+            setLoadState('error');
+            return;
+          }
+
+          setMatch(normalizeExpressMatch(created));
+          setLoadState('ready');
+          return;
+        }
+
+        setMatch(normalizeExpressMatch(json.match as Record<string, unknown>));
+        setLoadState('ready');
+      } catch (e) {
+        if (cancelled) return;
+        console.error('[ExpressTv] provision error:', e);
+        setErrorMessage('Error de red al inicializar la cancha.');
         setLoadState('error');
-        return;
       }
-
-      setMatch(normalizeExpressMatch(created));
-      setLoadState('ready');
     };
 
     initMatch();
@@ -108,7 +189,7 @@ export default function ExpressTvDisplay({ params }: { params: Promise<{ slug: s
 
   if (loadState === 'loading') {
     return (
-      <div className="flex h-screen items-center justify-center bg-surface">
+      <div className="flex h-screen items-center justify-center bg-[#050505]">
         <BouncingBall />
       </div>
     );
@@ -116,10 +197,8 @@ export default function ExpressTvDisplay({ params }: { params: Promise<{ slug: s
 
   if (loadState === 'error' || !match) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center bg-surface px-6 text-center text-white">
-        <p className="mb-2 text-sm font-bold uppercase tracking-widest text-padel-primary">
-          Express Match
-        </p>
+      <div className="flex h-screen flex-col items-center justify-center bg-[#050505] px-6 text-center text-white">
+        <p className="mb-2 text-sm font-bold uppercase tracking-widest text-padel-primary">Express Match</p>
         <p className="max-w-md text-sm text-neutral-400">
           {errorMessage || 'No se pudo cargar el marcador de esta cancha.'}
         </p>
@@ -127,100 +206,86 @@ export default function ExpressTvDisplay({ params }: { params: Promise<{ slug: s
     );
   }
 
-  const courtNum = slug.replace('fast-', '');
+  const { levelLine, genderLine } = expressScoringMeta(match);
 
   if (!match.is_active) {
     const controlUrl = `${getExpressAppBaseUrl()}/express/control/${match.session_id}`;
+
     return (
-      <div className="flex h-screen flex-col items-center justify-center bg-surface px-6 text-white">
-        <h1 className="mb-4 text-6xl font-black uppercase text-padel-primary">
-          Cancha {courtNum}
-        </h1>
-        <p className="mb-10 text-xl font-medium text-neutral-400">
-          Escanea para iniciar el marcador
-        </p>
-        <div className="rounded-3xl bg-white p-6 shadow-[0_0_60px_rgba(204,255,0,0.15)]">
-          <QRCodeSVG value={controlUrl} size={320} level="H" />
+      <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-hidden bg-[#050505] font-outfit text-white">
+        <div className="pointer-events-none absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_center,_#ccff00_0%,_transparent_70%)]" />
+
+        <PistaTopBar
+          courtHeadline={courtHeadline}
+          levelLine={levelLine}
+          genderLine="Escanea el QR para jugar"
+          mode="wait"
+        />
+
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-4 py-4">
+          <div className="text-center">
+            <h1 className="mb-2 text-4xl font-black italic uppercase tracking-tighter sm:text-5xl">
+              {slug.toUpperCase()}
+            </h1>
+            <p className="text-sm font-bold uppercase tracking-[0.35em] text-gray-500">
+              Escanea para iniciar el marcador
+            </p>
+          </div>
+
+          <div className="rounded-3xl bg-white p-5 shadow-[0_0_60px_rgba(204,255,0,0.15)] sm:p-6">
+            <QRCodeSVG value={controlUrl} size={280} level="H" />
+          </div>
+
+          <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-6 py-3">
+            <Megaphone className="h-5 w-5 shrink-0 text-padel-primary" />
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+              Sin registro · Plug &amp; Play
+            </p>
+          </div>
         </div>
-        <p className="mt-8 font-mono text-xs uppercase tracking-widest text-neutral-500">
-          Sin registros · Plug &amp; Play
-        </p>
+
+        <div className="relative z-10 flex w-full min-w-0 max-w-none flex-shrink-0 flex-col items-stretch border-t border-white/10">
+          <PizarraPublicidadFooter
+            canchaId={canchaId}
+            playlists={playlists}
+            minimalMode={minimalMode}
+          />
+        </div>
+
+        <PizarraDisplayGlobalStyles />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen select-none flex-col bg-surface p-8 text-white">
-      <div className="mb-4 flex items-center justify-between border-b border-neutral-800 pb-4 text-sm font-bold uppercase tracking-widest text-neutral-500">
-        <span className="text-padel-primary">SMART PADEL 58</span>
-        <span
-          className={
-            match.modo_puntos === 'tiebreak'
-              ? 'animate-pulse text-red-500'
-              : 'text-padel-primary'
-          }
-        >
-          {match.modo_puntos === 'tiebreak'
-            ? 'TIE-BREAK'
-            : match.punto_de_oro
-              ? 'PUNTO DE ORO'
-              : 'VENTAJA'}
-        </span>
-        <span>PISTA {courtNum}</span>
+    <div className="flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-hidden bg-[#050505] font-outfit text-white select-none">
+      <PistaTopBar
+        courtHeadline={courtHeadline}
+        levelLine={levelLine}
+        genderLine={genderLine}
+        mode="live"
+        goldenPoint={match.punto_de_oro}
+        liveCenter="badge"
+      />
+
+      {match.modo_puntos === 'tiebreak' && (
+        <div className="flex shrink-0 items-center justify-center gap-2 border-b border-red-500/20 bg-red-500/10 py-1">
+          <Zap className="h-3.5 w-3.5 text-red-400" />
+          <span className="text-[9px] font-black uppercase tracking-[0.3em] text-red-400">Tie-break</span>
+        </div>
+      )}
+
+      <PizarraScoreboardFit>
+        <div className="flex w-full min-h-0 flex-col items-center gap-2 overflow-x-hidden px-1 pt-0">
+          {marcador ? <PizarraTableScoreboard marcador={marcador} /> : null}
+        </div>
+      </PizarraScoreboardFit>
+
+      <div className="relative z-10 w-full min-w-0 max-w-none flex-shrink-0 overflow-hidden border-t border-white/10">
+        <PizarraPublicidadFooter canchaId={canchaId} playlists={playlists} minimalMode={minimalMode} />
       </div>
 
-      <div className="flex flex-1 gap-8">
-        <div className="flex flex-1 flex-col items-center justify-between rounded-[2rem] border border-neutral-800 bg-neutral-900 p-10">
-          <h2 className="w-full truncate text-center text-5xl font-black uppercase">
-            {match.team_a_name}
-          </h2>
-          <div className="text-[20rem] font-black leading-none text-padel-primary">
-            {match.team_a_points}
-          </div>
-          <div className="text-4xl font-bold uppercase tracking-widest text-neutral-400">
-            Juegos:{' '}
-            <span className="ml-3 text-6xl text-white">{match.team_a_games}</span>
-          </div>
-        </div>
-
-        <div className="flex w-40 flex-col justify-center gap-6">
-          {[0, 1, 2].map((idx) => {
-            const isCurrent = match.current_set === idx + 1;
-            return (
-              <div
-                key={idx}
-                className={`flex flex-col items-center rounded-2xl border py-6 ${
-                  isCurrent
-                    ? 'border-padel-primary/30 bg-padel-primary/10'
-                    : 'border-neutral-800 bg-neutral-900'
-                }`}
-              >
-                <span className="mb-3 text-xs font-bold text-neutral-500">SET {idx + 1}</span>
-                <span
-                  className={`text-4xl font-black ${
-                    isCurrent ? 'text-padel-primary' : 'text-neutral-300'
-                  }`}
-                >
-                  {match.sets_a?.[idx] ?? 0} - {match.sets_b?.[idx] ?? 0}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="flex flex-1 flex-col items-center justify-between rounded-[2rem] border border-neutral-800 bg-neutral-900 p-10">
-          <h2 className="w-full truncate text-center text-5xl font-black uppercase">
-            {match.team_b_name}
-          </h2>
-          <div className="text-[20rem] font-black leading-none text-padel-primary">
-            {match.team_b_points}
-          </div>
-          <div className="text-4xl font-bold uppercase tracking-widest text-neutral-400">
-            Juegos:{' '}
-            <span className="ml-3 text-6xl text-white">{match.team_b_games}</span>
-          </div>
-        </div>
-      </div>
+      <PizarraDisplayGlobalStyles />
     </div>
   );
 }

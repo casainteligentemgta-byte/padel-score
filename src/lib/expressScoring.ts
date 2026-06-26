@@ -1,4 +1,8 @@
 import {
+  emptyExpressPlayerFields,
+  syncExpressTeamNameFields,
+} from '@/lib/expressPlayerNames';
+import {
   EXPRESS_SET_SLOTS,
   type ExpressMatch,
   type ExpressPoint,
@@ -47,8 +51,15 @@ function winsTiebreakPoints(pts: number, rivalPts: number): boolean {
 export function pickScorePatch(state: ExpressMatch): Partial<ExpressMatch> {
   return {
     session_id: state.session_id,
-    team_a_name: state.team_a_name,
-    team_b_name: state.team_b_name,
+    ...syncExpressTeamNameFields(state),
+    team_a_p1_first: state.team_a_p1_first,
+    team_a_p1_last: state.team_a_p1_last,
+    team_a_p2_first: state.team_a_p2_first,
+    team_a_p2_last: state.team_a_p2_last,
+    team_b_p1_first: state.team_b_p1_first,
+    team_b_p1_last: state.team_b_p1_last,
+    team_b_p2_first: state.team_b_p2_first,
+    team_b_p2_last: state.team_b_p2_last,
     team_a_avatar: state.team_a_avatar,
     team_b_avatar: state.team_b_avatar,
     team_a_points: state.team_a_points,
@@ -68,8 +79,7 @@ export function pickScorePatch(state: ExpressMatch): Partial<ExpressMatch> {
 export function buildExpressSessionReset(sessionId: string): Partial<ExpressMatch> {
   return {
     session_id: sessionId,
-    team_a_name: 'EQUIPO A',
-    team_b_name: 'EQUIPO B',
+    ...emptyExpressPlayerFields(),
     team_a_avatar: null,
     team_b_avatar: null,
     team_a_points: '0',

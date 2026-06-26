@@ -4,6 +4,7 @@ import {
   PuntitoLegalUpdateEmail,
   PUNTITO_LEGAL_UPDATE_EMAIL_SUBJECT,
 } from '@/emails/PuntitoLegalUpdateEmail';
+import { getAppBaseUrl } from '@/lib/brand';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal/termsVersion';
 
 /**
@@ -36,11 +37,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Email destino inválido' }, { status: 400 });
   }
 
-  const base =
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ||
-    (typeof process.env.VERCEL_URL === 'string' && process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'https://smartpadel.app');
+  const base = getAppBaseUrl();
   const profileSignUrl =
     typeof body.profileSignUrl === 'string' && body.profileSignUrl.startsWith('http')
       ? body.profileSignUrl

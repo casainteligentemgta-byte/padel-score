@@ -24,7 +24,8 @@ import {
     Receipt,
     LayoutGrid,
     ChevronRight,
-    Bell
+    Bell,
+    Zap,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -85,6 +86,7 @@ export default function Sidebar({ menuOpensUserHub = false }: SidebarProps) {
         { name: 'Agentes AI', href: '/agents', icon: Brain },
         { name: 'Jugadores', href: '/players', icon: Users },
         { name: 'Publicidad', href: '/admin/publicidad', icon: Megaphone },
+        { name: 'Express · Ads', href: '/admin/express/publicidad', icon: Zap },
     ];
 
     const otherItems = [

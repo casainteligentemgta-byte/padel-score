@@ -706,6 +706,13 @@ export default function AdminPublicidadPage() {
 
             <div className="flex flex-wrap gap-2">
               <Link
+                href="/admin/express/publicidad"
+                className="px-4 py-2 rounded-xl bg-zinc-900 border border-padel-primary/30 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 hover:bg-padel-primary/10 hover:border-padel-primary/50 transition-all"
+              >
+                <Monitor className="w-4 h-4 text-padel-primary" />
+                Express · Publicidad
+              </Link>
+              <Link
                 href="/admin/publicidad/manual"
                 className="px-4 py-2 rounded-xl bg-zinc-900 border border-[#ccff00]/25 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 hover:bg-[#ccff00]/10 hover:border-[#ccff00]/45 transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-black/20"
               >

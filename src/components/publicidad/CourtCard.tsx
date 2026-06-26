@@ -58,6 +58,13 @@ type CourtCardProps = {
   /** Si hay partido/torneo, la URL corta conserva contexto al abrir /s1/c1 */
   linkTournamentId?: string | null;
   linkMatchId?: string | null;
+  /** Sustituye la URL corta de pizarra torneo (p. ej. Express TV). */
+  openDisplayHref?: string | null;
+  openDisplayHrefLabel?: string;
+  /** Vista previa embebida distinta a /dev/pizarra-concept. */
+  previewIframeSrcOverride?: string | null;
+  /** Etiqueta junto al wifi (p. ej. fast-1). */
+  courtKeyBadge?: string;
 };
 
 function statusStyle(status: CourtHealthStatus): { wifi: string } {
@@ -103,6 +110,10 @@ export default function CourtCard({
   isSaving,
   linkTournamentId,
   linkMatchId,
+  openDisplayHref,
+  openDisplayHrefLabel,
+  previewIframeSrcOverride,
+  courtKeyBadge,
 }: CourtCardProps) {
   const status = healthStatusFromLastSeen(lastSeenIso ?? null);
   const { wifi } = statusStyle(status);
@@ -170,6 +181,7 @@ export default function CourtCard({
    * si no hay partido en la cancha, solo complex+courtId (sin pasar por /display → redirect incompleto).
    */
   const previewIframeSrc = useMemo(() => {
+    if (previewIframeSrcOverride) return previewIframeSrcOverride;
     const venue = venueName.trim();
     const tid = String(linkTournamentId ?? '').trim();
     const mid = String(linkMatchId ?? '').trim();
@@ -180,8 +192,8 @@ export default function CourtCard({
     q.set('courtId', String(displayCourtNum));
     if (minimalMode) q.set('minimal', '1');
     return `/dev/pizarra-concept?${q.toString()}`;
-  }, [venueName, displayCourtNum, minimalMode, linkTournamentId, linkMatchId]);
-  const shortHref = pizarraShortPath
+  }, [venueName, displayCourtNum, minimalMode, linkTournamentId, linkMatchId, previewIframeSrcOverride]);
+  const shortHref = openDisplayHref ?? (pizarraShortPath
     ? (() => {
         const q = new URLSearchParams();
         if (minimalMode) q.set('minimal', '1');
@@ -192,7 +204,10 @@ export default function CourtCard({
         const qs = q.toString();
         return `/${pizarraShortPath}${qs ? `?${qs}` : ''}`;
       })()
-    : null;
+    : null);
+  const shortHrefLabel =
+    openDisplayHrefLabel ??
+    (pizarraShortPath ? `smartpadel58.com/${pizarraShortPath}` : null);
 
   const videoById = (id: string) => libraryVideos.find((m) => m.id === id);
   const imageById = (id: string) => libraryImages.find((m) => m.id === id);
@@ -225,7 +240,7 @@ export default function CourtCard({
           <h3 className="text-sm font-black uppercase leading-tight text-white/95 truncate">{title}</h3>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
-          <span className="text-[10px] text-white/40 font-mono">{courtKey}</span>
+          <span className="text-[10px] text-white/40 font-mono">{courtKeyBadge ?? courtKey}</span>
         </div>
       </div>
 
@@ -247,15 +262,15 @@ export default function CourtCard({
           }}
         />
       </div>
-      {shortHref && (
+      {shortHref && shortHrefLabel && (
         <a
           href={shortHref}
           target="_blank"
           rel="noreferrer"
           className="mt-2 block text-center text-[9px] font-black uppercase tracking-widest text-white/45 hover:text-white/70 underline-offset-2 hover:underline truncate px-1"
-          title="Abrir URL corta de pizarra"
+          title="Abrir pantalla TV"
         >
-          smartpadel58.com/{pizarraShortPath}
+          {shortHrefLabel}
         </a>
       )}
 

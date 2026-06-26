@@ -3,6 +3,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+
+function revalidatePublicidadAdminPaths() {
+  revalidatePublicidadAdminPaths();
+  revalidatePath('/admin/express/publicidad');
+}
 import {
   canchaIdCandidates,
   canchaIdStoredForPublicidadTables,
@@ -113,7 +118,7 @@ export async function addMediaContentAction(
     const row = sanitizeMediaContentInsert(payload);
     const { error, data } = await supabase.from('media_content').insert([row]).select().single();
     if (error) return { ok: false, error: error.message || 'No se pudo crear el contenido.' };
-    revalidatePath('/admin/publicidad');
+    revalidatePublicidadAdminPaths();
     return { ok: true, data: data as Record<string, unknown> };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error al crear contenido.' };
@@ -126,7 +131,7 @@ export async function deleteMediaAction(id: string): Promise<{ ok: true } | Err>
   try {
     const { error } = await supabase.from('media_content').delete().eq('id', id);
     if (error) return { ok: false, error: error.message || 'No se pudo eliminar.' };
-    revalidatePath('/admin/publicidad');
+    revalidatePublicidadAdminPaths();
     return { ok: true };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error al eliminar.' };
@@ -142,7 +147,7 @@ export async function renameMediaAction(id: string, nombre: string): Promise<{ o
       .update({ nombre, nombre_sponsor: nombre.replace(/\.[^/.]+$/, '') })
       .eq('id', id);
     if (error) return { ok: false, error: error.message || 'No se pudo renombrar.' };
-    revalidatePath('/admin/publicidad');
+    revalidatePublicidadAdminPaths();
     return { ok: true };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error al renombrar.' };
@@ -156,7 +161,7 @@ export async function addTickerAction(mensaje: string, orden: number): Promise<{
   try {
     const { error } = await supabase.from('tira_informativa').insert({ mensaje, orden: ordenInt, activo: true });
     if (error) return { ok: false, error: error.message || 'No se pudo añadir el mensaje.' };
-    revalidatePath('/admin/publicidad');
+    revalidatePublicidadAdminPaths();
     return { ok: true };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error al añadir tira.' };
@@ -169,7 +174,7 @@ export async function deleteTickerAction(id: string): Promise<{ ok: true } | Err
   try {
     const { error } = await supabase.from('tira_informativa').delete().eq('id', id);
     if (error) return { ok: false, error: error.message || 'No se pudo eliminar el mensaje.' };
-    revalidatePath('/admin/publicidad');
+    revalidatePublicidadAdminPaths();
     return { ok: true };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error al eliminar tira.' };
@@ -275,7 +280,7 @@ export async function savePlaylistAction(
       }
     }
 
-    revalidatePath('/admin/publicidad');
+    revalidatePublicidadAdminPaths();
     return { ok: true };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error al guardar playlist.' };
@@ -316,7 +321,7 @@ export async function saveTiraPlaylistAction(
       if (insErr) return { ok: false, error: insErr.message || 'No se pudo guardar la tira.' };
     }
 
-    revalidatePath('/admin/publicidad');
+    revalidatePublicidadAdminPaths();
     return { ok: true };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error al guardar tira.' };
@@ -349,7 +354,7 @@ export async function upsertPlaylistConfigAction(
     );
 
     if (error) return { ok: false, error: error.message || 'No se pudo guardar la configuración.' };
-    revalidatePath('/admin/publicidad');
+    revalidatePublicidadAdminPaths();
     return { ok: true };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error al guardar configuración.' };

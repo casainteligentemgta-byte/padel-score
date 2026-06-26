@@ -1,3 +1,5 @@
+import { hydrateExpressPlayerFields } from '@/lib/expressPlayerNames';
+
 export type ExpressPoint = '0' | '15' | '30' | '40' | 'AD';
 
 export type ExpressScoreMode = 'normal' | 'tiebreak';
@@ -10,6 +12,14 @@ export interface ExpressMatch {
   session_id: string;
   team_a_name: string;
   team_b_name: string;
+  team_a_p1_first: string;
+  team_a_p1_last: string;
+  team_a_p2_first: string;
+  team_a_p2_last: string;
+  team_b_p1_first: string;
+  team_b_p1_last: string;
+  team_b_p2_first: string;
+  team_b_p2_last: string;
   team_a_avatar: string | null;
   team_b_avatar: string | null;
   team_a_points: ExpressPoint | string;
@@ -29,16 +39,23 @@ export interface ExpressMatch {
 export function normalizeExpressMatch(row: Record<string, unknown>): ExpressMatch {
   const setsA = row.sets_a as number[] | null | undefined;
   const setsB = row.sets_b as number[] | null | undefined;
+  const hydrated = hydrateExpressPlayerFields(row);
   return {
-    ...(row as unknown as ExpressMatch),
+    ...(hydrated as unknown as ExpressMatch),
+    team_a_p1_first: String(hydrated.team_a_p1_first ?? ''),
+    team_a_p1_last: String(hydrated.team_a_p1_last ?? ''),
+    team_a_p2_first: String(hydrated.team_a_p2_first ?? ''),
+    team_a_p2_last: String(hydrated.team_a_p2_last ?? ''),
+    team_b_p1_first: String(hydrated.team_b_p1_first ?? ''),
+    team_b_p1_last: String(hydrated.team_b_p1_last ?? ''),
+    team_b_p2_first: String(hydrated.team_b_p2_first ?? ''),
+    team_b_p2_last: String(hydrated.team_b_p2_last ?? ''),
     sets_a: setsA?.length === EXPRESS_SET_SLOTS ? setsA : [0, 0, 0],
     sets_b: setsB?.length === EXPRESS_SET_SLOTS ? setsB : [0, 0, 0],
   };
 }
 
-export function getExpressAppBaseUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL || 'https://smartpadel.app').replace(/\/+$/, '');
-}
+export { getAppBaseUrl as getExpressAppBaseUrl } from '@/lib/brand';
 
 export function isValidExpressSlug(slug: string): boolean {
   return /^fast-\d+$/.test(slug);
