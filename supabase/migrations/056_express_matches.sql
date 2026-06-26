@@ -92,3 +92,16 @@ CREATE TRIGGER express_matches_updated_at
   BEFORE UPDATE ON public.express_matches
   FOR EACH ROW
   EXECUTE FUNCTION public.set_updated_at();
+
+-- Realtime: sincronización TV ↔ móvil (idempotente si ya está en la publicación)
+DO $body$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'express_matches'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.express_matches;
+  END IF;
+END $body$;
