@@ -251,29 +251,29 @@ export default function ExpressTvDisplay() {
           mode="wait"
         />
 
-        <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-4 py-4">
-          <div className="text-center">
-            <h1 className="mb-2 text-4xl font-black italic uppercase tracking-tighter sm:text-5xl">
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden px-4 py-2 sm:gap-3">
+          <div className="shrink-0 text-center">
+            <h1 className="mb-1 text-2xl font-black italic uppercase tracking-tighter sm:text-3xl">
               {slug.toUpperCase()}
             </h1>
-            <p className="text-sm font-bold uppercase tracking-[0.35em] text-gray-500">
+            <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-gray-500 sm:text-xs sm:tracking-[0.35em]">
               Escanea para iniciar el marcador
             </p>
           </div>
 
-          <div className="rounded-3xl bg-white p-5 shadow-[0_0_60px_rgba(204,255,0,0.15)] sm:p-6">
-            <QRCodeSVG value={controlUrl} size={280} level="H" />
+          <div className="shrink-0 rounded-2xl bg-white p-2.5 shadow-[0_0_40px_rgba(204,255,0,0.12)] sm:rounded-3xl sm:p-3">
+            <QRCodeSVG value={controlUrl} size={148} level="H" className="block h-auto w-[148px] max-w-[min(36vw,148px)]" />
           </div>
 
-          <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-6 py-3">
-            <Megaphone className="h-5 w-5 shrink-0 text-padel-primary" />
-            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+          <div className="hidden shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 sm:flex">
+            <Megaphone className="h-4 w-4 shrink-0 text-padel-primary" />
+            <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">
               Sin registro · Plug &amp; Play
             </p>
           </div>
         </div>
 
-        <div className="relative z-10 flex w-full min-w-0 max-w-none flex-shrink-0 flex-col items-stretch border-t border-white/10">
+        <div className="relative z-20 flex w-full min-w-0 max-w-none shrink-0 flex-col items-stretch border-t border-white/10">
           <PizarraPublicidadFooter
             canchaId={canchaId}
             playlists={playlists}
