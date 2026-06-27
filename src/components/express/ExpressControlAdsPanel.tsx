@@ -145,26 +145,30 @@ export function ExpressControlAdsPanel({ match, sessionId, onVenueSaved }: Props
   };
 
   return (
-    <div className="mt-2 rounded-2xl border border-neutral-800 bg-neutral-900">
+    <div className="mt-3 rounded-2xl border-2 border-neutral-600 bg-neutral-800 shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
+        className="flex w-full items-center justify-between px-4 py-4 text-left transition-colors active:bg-neutral-700/60"
       >
-        <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-neutral-300">
-          <Video className="h-4 w-4 text-padel-primary" />
+        <span className="flex items-center gap-2.5 text-sm font-black uppercase tracking-widest text-white">
+          <Video className="h-5 w-5 text-padel-primary" />
           Publicidad en TV
         </span>
-        {open ? <ChevronUp className="h-4 w-4 text-neutral-500" /> : <ChevronDown className="h-4 w-4 text-neutral-500" />}
+        {open ? (
+          <ChevronUp className="h-5 w-5 text-neutral-200" />
+        ) : (
+          <ChevronDown className="h-5 w-5 text-neutral-200" />
+        )}
       </button>
 
       {open && (
-        <div className="space-y-4 border-t border-neutral-800 px-4 pb-4 pt-3">
+        <div className="space-y-4 border-t-2 border-neutral-600 px-4 pb-4 pt-3">
           {error && <p className="text-xs text-red-400">{error}</p>}
           {okMsg && <p className="text-xs text-padel-primary">{okMsg}</p>}
 
           <div className="space-y-2">
-            <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-neutral-500">
+            <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-neutral-200">
               <MapPin className="h-3 w-3" /> Sede (misma que la TV: ?complex=)
             </label>
             <div className="flex gap-2">
@@ -172,13 +176,13 @@ export function ExpressControlAdsPanel({ match, sessionId, onVenueSaved }: Props
                 value={venueDraft}
                 onChange={(e) => setVenueDraft(e.target.value)}
                 placeholder="Ej. El Bodeguero"
-                className="min-w-0 flex-1 rounded-xl border border-neutral-700 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-padel-primary focus:outline-none"
+                className="min-w-0 flex-1 rounded-xl border-2 border-neutral-500 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:border-padel-primary focus:outline-none"
               />
               <button
                 type="button"
                 disabled={savingVenue}
                 onClick={() => void saveVenue()}
-                className="shrink-0 rounded-xl bg-neutral-800 px-3 py-2 text-[10px] font-black uppercase text-white disabled:opacity-50"
+                className="shrink-0 rounded-xl border-2 border-padel-primary bg-padel-primary px-4 py-2 text-[10px] font-black uppercase text-black disabled:opacity-50"
               >
                 {savingVenue ? '…' : 'OK'}
               </button>
@@ -196,7 +200,7 @@ export function ExpressControlAdsPanel({ match, sessionId, onVenueSaved }: Props
 
           {baseVenue && (
             <>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-200">
                 Vídeos disponibles
               </p>
               {loadingVideos ? (
@@ -216,15 +220,15 @@ export function ExpressControlAdsPanel({ match, sessionId, onVenueSaved }: Props
                         <button
                           type="button"
                           onClick={() => toggleVideo(v.id)}
-                          className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                          className={`flex w-full items-center gap-3 rounded-xl border-2 px-3 py-2.5 text-left transition-colors ${
                             on
-                              ? 'border-padel-primary/50 bg-padel-primary/10'
-                              : 'border-neutral-800 bg-black/30'
+                              ? 'border-padel-primary bg-padel-primary/15'
+                              : 'border-neutral-500 bg-neutral-950'
                           }`}
                         >
                           <span
                             className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
-                              on ? 'border-padel-primary bg-padel-primary text-black' : 'border-neutral-600'
+                              on ? 'border-padel-primary bg-padel-primary text-black' : 'border-neutral-400 bg-neutral-900'
                             }`}
                           >
                             {on && <Check className="h-3 w-3" strokeWidth={3} />}
@@ -243,7 +247,7 @@ export function ExpressControlAdsPanel({ match, sessionId, onVenueSaved }: Props
                 type="button"
                 disabled={savingPlaylist || loadingVideos}
                 onClick={() => void applyVideos()}
-                className="w-full rounded-xl bg-padel-primary py-3 text-xs font-black uppercase tracking-widest text-surface disabled:opacity-50"
+                className="w-full rounded-xl border-2 border-padel-primary bg-padel-primary py-3.5 text-xs font-black uppercase tracking-widest text-black shadow-[0_0_16px_rgba(204,255,0,0.3)] disabled:opacity-50"
               >
                 {savingPlaylist ? 'Guardando…' : 'Aplicar vídeos a la pantalla'}
               </button>

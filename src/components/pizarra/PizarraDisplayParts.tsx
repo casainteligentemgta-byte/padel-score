@@ -7,7 +7,17 @@ import { visibleSetNumbersForScoreboard } from '@/lib/displaySetColumns';
 import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { inferStbFromSetScoresOnly } from '@/lib/matchFinishedScoreDisplay';
 import { logDisplayVideoError } from '@/lib/logDisplayVideoError';
-import { expressPlayerNameFontSize } from '@/lib/expressDisplayNameScale';
+import {
+  EXPRESS_POINTS_HEADER_BASE_REM,
+  EXPRESS_PTS_COL_WIDTH_REM,
+  EXPRESS_SCORE_CELL_BASE_REM,
+  EXPRESS_SET_COL_WIDTH_REM,
+  EXPRESS_SET_HEADER_BASE_REM,
+  expressPizarraColWidth,
+  expressPizarraFontSize,
+  expressPlayerNameFontSize,
+  normalizeExpressDisplayNameScale,
+} from '@/lib/expressDisplayNameScale';
 import { normalizeExpressDisplayMediaScale } from '@/lib/expressDisplayMediaScale';
 import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
 import { SmartPadelBallIcon } from '@/components/SmartPadelBallIcon';
@@ -268,15 +278,44 @@ export function PizarraCenterChrono({
   );
 }
 
-function ScoreCell({ children, color }: { children: React.ReactNode; color: string }) {
+function ScoreCell({
+  children,
+  color,
+  displayScale,
+}: {
+  children: React.ReactNode;
+  color: string;
+  /** Solo Express: misma escala que nombres de jugadores. */
+  displayScale?: number;
+}) {
+  const scaled = displayScale != null && displayScale > 0;
   return (
     <span
-      className="inline-flex w-full min-w-0 max-w-full items-center justify-center rounded border border-white/20 bg-black/50 px-1 py-0.5 font-mono text-[11px] font-black tabular-nums sm:px-1.5 sm:text-xs md:text-sm"
-      style={{ color }}
+      className={
+        scaled
+          ? 'inline-flex w-full min-w-0 max-w-full items-center justify-center rounded border border-white/20 bg-black/50 px-1 py-0.5 font-mono font-black tabular-nums sm:px-1.5'
+          : 'inline-flex w-full min-w-0 max-w-full items-center justify-center rounded border border-white/20 bg-black/50 px-1 py-0.5 font-mono text-[11px] font-black tabular-nums sm:px-1.5 sm:text-xs md:text-sm'
+      }
+      style={{
+        color,
+        ...(scaled
+          ? { fontSize: expressPizarraFontSize(EXPRESS_SCORE_CELL_BASE_REM, displayScale) }
+          : {}),
+      }}
     >
       {children}
     </span>
   );
+}
+
+function expressColSetStyle(scale: number): React.CSSProperties {
+  const w = expressPizarraColWidth(EXPRESS_SET_COL_WIDTH_REM, scale);
+  return { width: w, minWidth: w, maxWidth: w };
+}
+
+function expressColPtsStyle(scale: number): React.CSSProperties {
+  const w = expressPizarraColWidth(EXPRESS_PTS_COL_WIDTH_REM, scale);
+  return { width: w, minWidth: w, maxWidth: w };
 }
 
 export function PizarraTableScoreboard({
@@ -329,6 +368,8 @@ export function PizarraTableScoreboard({
   const c2 = marcador?.equipo_2?.color || '#FF5500';
   const ptsL = String(marcador.puntos?.local ?? '0');
   const ptsV = String(marcador.puntos?.visitante ?? '0');
+  const scaledBoard = playerNameScale != null && playerNameScale > 0;
+  const boardScale = scaledBoard ? normalizeExpressDisplayNameScale(playerNameScale) : 1;
   const colSet =
     'w-[2.1rem] min-w-[2.1rem] max-w-[2.1rem] shrink-0 sm:w-[2.35rem] sm:min-w-[2.35rem] sm:max-w-[2.35rem]';
   const colPts = 'w-[3rem] min-w-[3rem] max-w-[3.25rem] shrink-0 sm:w-[3.1rem]';
@@ -338,13 +379,24 @@ export function PizarraTableScoreboard({
       {visible.map((s) => {
         const v = courtSetCell(s, side, marcador, currentSet);
         return (
-          <div key={`${side}-${s}`} className={`flex justify-center ${colSet}`}>
-            <ScoreCell color={color}>{v}</ScoreCell>
+          <div
+            key={`${side}-${s}`}
+            className={scaledBoard ? 'flex shrink-0 justify-center' : `flex justify-center ${colSet}`}
+            style={scaledBoard ? expressColSetStyle(boardScale) : undefined}
+          >
+            <ScoreCell color={color} displayScale={playerNameScale}>
+              {v}
+            </ScoreCell>
           </div>
         );
       })}
-      <div className={`flex justify-center ${colPts}`}>
-        <ScoreCell color={color}>{pts}</ScoreCell>
+      <div
+        className={scaledBoard ? 'flex shrink-0 justify-center' : `flex justify-center ${colPts}`}
+        style={scaledBoard ? expressColPtsStyle(boardScale) : undefined}
+      >
+        <ScoreCell color={color} displayScale={playerNameScale}>
+          {pts}
+        </ScoreCell>
       </div>
     </div>
   );
@@ -357,13 +409,37 @@ export function PizarraTableScoreboard({
           {visible.map((s) => (
             <div
               key={`h-${s}`}
-              className={`${colSet} text-center text-[8px] font-black uppercase leading-tight tracking-wider text-gray-500 sm:text-[9px] sm:tracking-[0.2em]`}
+              className={
+                scaledBoard
+                  ? 'shrink-0 text-center font-black uppercase leading-tight tracking-wider text-gray-500 sm:tracking-[0.2em]'
+                  : `${colSet} text-center text-[8px] font-black uppercase leading-tight tracking-wider text-gray-500 sm:text-[9px] sm:tracking-[0.2em]`
+              }
+              style={
+                scaledBoard
+                  ? {
+                      ...expressColSetStyle(boardScale),
+                      fontSize: expressPizarraFontSize(EXPRESS_SET_HEADER_BASE_REM, boardScale),
+                    }
+                  : undefined
+              }
             >
               {setColumnLabel(s)}
             </div>
           ))}
           <div
-            className={`${colPts} text-center text-[7px] font-black uppercase leading-tight tracking-[0.12em] text-padel-primary sm:text-[8px] sm:tracking-[0.18em]`}
+            className={
+              scaledBoard
+                ? 'shrink-0 text-center font-black uppercase leading-tight tracking-[0.12em] text-padel-primary sm:tracking-[0.18em]'
+                : `${colPts} text-center text-[7px] font-black uppercase leading-tight tracking-[0.12em] text-padel-primary sm:text-[8px] sm:tracking-[0.18em]`
+            }
+            style={
+              scaledBoard
+                ? {
+                    ...expressColPtsStyle(boardScale),
+                    fontSize: expressPizarraFontSize(EXPRESS_POINTS_HEADER_BASE_REM, boardScale),
+                  }
+                : undefined
+            }
           >
             POINTS
           </div>

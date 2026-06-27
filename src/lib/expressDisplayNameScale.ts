@@ -34,6 +34,26 @@ export function expressPlayerNameFontSize(scale: number): string {
   return `calc(${EXPRESS_PLAYER_NAME_BASE_REM}rem * ${s})`;
 }
 
+/** Base celdas de juegos/puntos (~11px a escala 1). */
+export const EXPRESS_SCORE_CELL_BASE_REM = 0.6875;
+/** Base cabeceras SET (~9px a escala 1). */
+export const EXPRESS_SET_HEADER_BASE_REM = 0.5625;
+/** Base cabecera POINTS (~8px a escala 1). */
+export const EXPRESS_POINTS_HEADER_BASE_REM = 0.5;
+/** Ancho columna set / points (rem a escala 1). */
+export const EXPRESS_SET_COL_WIDTH_REM = 2.35;
+export const EXPRESS_PTS_COL_WIDTH_REM = 3.1;
+
+export function expressPizarraFontSize(baseRem: number, scale: number): string {
+  const s = normalizeExpressDisplayNameScale(scale);
+  return `calc(${baseRem}rem * ${s})`;
+}
+
+export function expressPizarraColWidth(baseRem: number, scale: number): string {
+  const s = normalizeExpressDisplayNameScale(scale);
+  return `calc(${baseRem}rem * ${s})`;
+}
+
 export function nearestExpressNameScalePresetId(scale: number): ExpressNameScalePresetId {
   const s = normalizeExpressDisplayNameScale(scale);
   let best = EXPRESS_NAME_SCALE_PRESETS[0];

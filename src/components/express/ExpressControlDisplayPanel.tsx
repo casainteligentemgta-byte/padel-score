@@ -49,14 +49,14 @@ function ScalePresetGrid<T extends string>({
             type="button"
             disabled={busy || isSaving}
             onClick={() => onSelect(preset.id)}
-            className={`rounded-xl border py-3 text-center transition-colors disabled:opacity-50 ${
+            className={`rounded-xl border-2 py-3 text-center transition-colors disabled:opacity-50 ${
               on
-                ? 'border-padel-primary bg-padel-primary/15 text-padel-primary'
-                : 'border-neutral-700 bg-neutral-950 text-neutral-400 active:bg-neutral-800'
+                ? 'border-padel-primary bg-padel-primary text-black shadow-[0_0_14px_rgba(204,255,0,0.35)]'
+                : 'border-neutral-500 bg-neutral-950 text-white active:bg-neutral-700'
             }`}
           >
             <span className="block text-sm font-black">{preset.shortLabel}</span>
-            <span className="mt-0.5 block text-[8px] font-bold uppercase tracking-wide opacity-80">
+            <span className="mt-0.5 block text-[8px] font-bold uppercase tracking-wide opacity-90">
               {preset.label}
             </span>
           </button>
@@ -134,26 +134,30 @@ export function ExpressControlDisplayPanel({
   const mediaPreviewHeight = `${Math.round(48 * currentMediaScale)}px`;
 
   return (
-    <div className="mt-2 rounded-2xl border border-neutral-800 bg-neutral-900">
+    <div className="mt-3 rounded-2xl border-2 border-neutral-600 bg-neutral-800 shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
+        className="flex w-full items-center justify-between px-4 py-4 text-left transition-colors active:bg-neutral-700/60"
       >
-        <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-neutral-300">
-          <Type className="h-4 w-4 text-padel-primary" />
+        <span className="flex items-center gap-2.5 text-sm font-black uppercase tracking-widest text-white">
+          <Type className="h-5 w-5 text-padel-primary" />
           Ajustes de pantalla TV
         </span>
-        {open ? <ChevronUp className="h-4 w-4 text-neutral-500" /> : <ChevronDown className="h-4 w-4 text-neutral-500" />}
+        {open ? (
+          <ChevronUp className="h-5 w-5 text-neutral-200" />
+        ) : (
+          <ChevronDown className="h-5 w-5 text-neutral-200" />
+        )}
       </button>
 
       {open && (
-        <div className="space-y-5 border-t border-neutral-800 px-4 pb-4 pt-3">
+        <div className="space-y-5 border-t-2 border-neutral-600 px-4 pb-4 pt-3">
           {error && <p className="text-xs text-red-400">{error}</p>}
 
           <section className="space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Nombres en pizarra</p>
-            <p className="text-[10px] leading-relaxed text-neutral-500">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-200">Nombres en pizarra</p>
+            <p className="text-[10px] leading-relaxed text-neutral-400">
               Tamaño de los nombres de jugadores en el marcador.
             </p>
             <div className="rounded-xl border border-neutral-800 bg-black/40 px-3 py-3">
@@ -174,12 +178,12 @@ export function ExpressControlDisplayPanel({
             />
           </section>
 
-          <section className="space-y-3 border-t border-neutral-800 pt-4">
-            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+          <section className="space-y-3 border-t border-neutral-600 pt-4">
+            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-neutral-200">
               <MonitorPlay className="h-3.5 w-3.5 text-padel-primary" />
               Vídeo e imágenes
             </p>
-            <p className="text-[10px] leading-relaxed text-neutral-500">
+            <p className="text-[10px] leading-relaxed text-neutral-400">
               Altura de la franja de publicidad (vídeo e imágenes) en la parte inferior de la TV.
             </p>
             <div className="rounded-xl border border-neutral-800 bg-black/40 px-3 py-3">
