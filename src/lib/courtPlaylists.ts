@@ -182,7 +182,7 @@ export async function fetchCanchaPlaylistRows(
   const r = await q;
   if (!r.error && ((r.data as unknown[]) || []).length > 0) {
     const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r.data as unknown[]) || []));
-    if (hasPlayableRows(norm) || norm.length > 0) return { ...r, data: norm };
+    if (hasPlayableRows(norm)) return { ...r, data: norm };
   }
 
   // Algunas BD exponen la relación como `publicidad` en lugar de `media_content`.
@@ -195,7 +195,7 @@ export async function fetchCanchaPlaylistRows(
   const rRelFallback = await qRelFallback;
   if (!rRelFallback.error && ((rRelFallback.data as unknown[]) || []).length > 0) {
     const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((rRelFallback.data as unknown[]) || []));
-    if (hasPlayableRows(norm) || norm.length > 0) return { ...rRelFallback, data: norm };
+    if (hasPlayableRows(norm)) return { ...rRelFallback, data: norm };
   }
 
   // Fallback: sin filtro sede en SQL; acotamos por sede en cliente si hace falta.
@@ -208,7 +208,7 @@ export async function fetchCanchaPlaylistRows(
   if (!r2.error) {
     let norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r2.data as unknown[]) || []));
     norm = filterPlaylistRowsByVenueLoose(norm, vn);
-    if (hasPlayableRows(norm) || norm.length > 0) return { ...r2, data: norm };
+    if (hasPlayableRows(norm)) return { ...r2, data: norm };
   }
 
   let q3 = supabase
@@ -237,7 +237,7 @@ export async function fetchCanchaPlaylistRows(
   if (!r4.error) {
     let norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r4.data as unknown[]) || []));
     norm = filterPlaylistRowsByVenueLoose(norm, vn);
-    if (hasPlayableRows(norm) || norm.length > 0) return { ...r4, data: norm };
+    if (hasPlayableRows(norm)) return { ...r4, data: norm };
   }
 
   const r5 = await supabase
@@ -251,6 +251,26 @@ export async function fetchCanchaPlaylistRows(
     return { ...r5, data: norm };
   }
   return r3;
+}
+
+/** Prueba varias sedes hasta encontrar filas con URL reproducible (Express + fallback torneo). */
+export async function fetchCanchaPlaylistRowsForVenues(
+  supabase: SupabaseClient,
+  canchaId: string,
+  venueNames: (string | null | undefined)[],
+) {
+  const tried = new Set<string>();
+  for (const raw of venueNames) {
+    const vn = String(raw ?? '').trim();
+    if (!vn || tried.has(vn.toLowerCase())) continue;
+    tried.add(vn.toLowerCase());
+    const r = await fetchCanchaPlaylistRows(supabase, canchaId, vn);
+    if (r.error) continue;
+    const rows = (r.data as CourtPlaylistRowDb[] | null) ?? [];
+    if (rows.some((x) => Boolean(x.media_content?.url))) return r;
+  }
+  const first = venueNames.map((v) => String(v ?? '').trim()).find(Boolean);
+  return fetchCanchaPlaylistRows(supabase, canchaId, first || null);
 }
 
 export async function fetchCanchaPlaylistConfig(

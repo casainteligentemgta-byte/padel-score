@@ -3,16 +3,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-
-function revalidatePublicidadAdminPaths() {
-  revalidatePublicidadAdminPaths();
-  revalidatePath('/admin/express/publicidad');
-}
 import {
   canchaIdCandidates,
   canchaIdStoredForPublicidadTables,
   normalizeCanchaIdKey,
 } from '@/lib/courtPlaylists';
+
+function revalidatePublicidadAdminPaths() {
+  revalidatePath('/admin/publicidad');
+  revalidatePath('/admin/express/publicidad');
+}
 
 type Err = { ok: false; error: string };
 

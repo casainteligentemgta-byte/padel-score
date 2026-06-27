@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import {
   fetchCanchaPlaylistConfig,
-  fetchCanchaPlaylistRows,
+  fetchCanchaPlaylistRowsForVenues,
   fetchCanchaTiraMessages,
   normalizeCourtPlaylistRows,
   partitionPlaylistRows,
@@ -35,8 +35,13 @@ export type CourtPlaylistsState = {
 /**
  * Playlists separadas (vídeo secuencial, imágenes con duración + loop/pausa) y tira por cancha.
  * `venueName`: filtro por sede (misma URL que query `complex` o `venue` en /display/court).
+ * `venueFallbacks`: sedes alternativas si la principal no tiene medios (p. ej. Express → torneo).
  */
-export function useCourtPlaylists(canchaId: string, venueName: string | null | undefined): CourtPlaylistsState {
+export function useCourtPlaylists(
+  canchaId: string,
+  venueName: string | null | undefined,
+  venueFallbacks?: (string | null | undefined)[],
+): CourtPlaylistsState {
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [rows, setRows] = useState<CourtPlaylistRowDb[]>([]);
   const [imagenLoop, setImagenLoop] = useState(true);
@@ -47,21 +52,40 @@ export function useCourtPlaylists(canchaId: string, venueName: string | null | u
   const [videoIndex, setVideoIndex] = useState(0);
   const [imageIndex, setImageIndex] = useState(0);
 
+  const venueCandidates = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const add = (v: string | null | undefined) => {
+      const t = String(v ?? '').trim();
+      if (!t) return;
+      const k = t.toLowerCase();
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push(t);
+    };
+    add(venueName);
+    for (const f of venueFallbacks ?? []) add(f);
+    return out;
+  }, [venueName, venueFallbacks]);
+
+  const resolvedVenueName = venueCandidates[0] ?? venueName ?? null;
+
   const load = useCallback(async () => {
     if (!supabase || !canchaId) {
       setRows([]);
       setTickerMessages([]);
       return;
     }
-    const { data, error } = await fetchCanchaPlaylistRows(supabase, canchaId, venueName);
+    const { data, error } = await fetchCanchaPlaylistRowsForVenues(supabase, canchaId, venueCandidates);
     if (error) {
       setRows([]);
     } else {
       setRows(normalizeCourtPlaylistRows((data as unknown[]) || []));
     }
 
-    if (venueName?.trim()) {
-      const cfg = await fetchCanchaPlaylistConfig(supabase, canchaId, venueName);
+    const cfgVenue = resolvedVenueName?.trim();
+    if (cfgVenue) {
+      const cfg = await fetchCanchaPlaylistConfig(supabase, canchaId, cfgVenue);
       if (cfg) {
         setImagenLoop(cfg.imagen_loop !== false);
         setImagenPausa(Math.max(0, Math.floor(Number(cfg.imagen_pausa_entre_segundos) || 0)));
@@ -80,9 +104,9 @@ export function useCourtPlaylists(canchaId: string, venueName: string | null | u
       setImagenCambioMinutos(0);
     }
 
-    const msgs = await fetchCanchaTiraMessages(supabase, canchaId, venueName);
+    const msgs = await fetchCanchaTiraMessages(supabase, canchaId, resolvedVenueName);
     setTickerMessages(msgs);
-  }, [supabase, canchaId, venueName]);
+  }, [supabase, canchaId, venueCandidates, resolvedVenueName]);
 
   useEffect(() => {
     void load();
@@ -92,7 +116,7 @@ export function useCourtPlaylists(canchaId: string, venueName: string | null | u
     if (!supabase || !canchaId) return;
 
     const ch = supabase
-      .channel(`court_pl_${canchaId}_${venueName || 'all'}`)
+      .channel(`court_pl_${canchaId}_${resolvedVenueName || 'all'}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cancha_publicidad' }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'media_content' }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cancha_playlist_config' }, load)
@@ -103,7 +127,7 @@ export function useCourtPlaylists(canchaId: string, venueName: string | null | u
     return () => {
       ch.unsubscribe();
     };
-  }, [supabase, canchaId, venueName, load]);
+  }, [supabase, canchaId, resolvedVenueName, load]);
 
   const { video, imagen } = useMemo(() => partitionPlaylistRows(rows), [rows]);
 

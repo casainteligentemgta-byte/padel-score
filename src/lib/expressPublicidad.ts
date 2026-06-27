@@ -104,3 +104,31 @@ export function expressCourtCountForVenue(baseVenue: string): number {
   if (stored && stored >= 1) return stored;
   return DEFAULT_EXPRESS_COURT_COUNT;
 }
+
+/** Orden de búsqueda de playlist en TV Express (Express · sede, luego sede torneo). */
+export function expressPlaylistVenueCandidates(
+  baseVenue: string,
+  explicitVenueParam?: string | null,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (raw: string) => {
+    const v = String(raw || '').trim();
+    if (!v) return;
+    const key = v.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(v);
+  };
+
+  const explicit = String(explicitVenueParam || '').trim();
+  if (explicit.includes('Express')) add(explicit);
+
+  const base = String(baseVenue || '').trim();
+  if (base) {
+    add(expressPublicidadVenueName(base));
+    add(base);
+  }
+
+  return out;
+}

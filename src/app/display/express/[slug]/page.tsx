@@ -17,6 +17,7 @@ import { useCourtDisplayHeartbeat } from '@/lib/courtDisplayHeartbeat';
 import { buildCourtHeadline } from '@/lib/pizarraHeaderLabels';
 import {
   expressBaseVenueFromPublicidadVenue,
+  expressPlaylistVenueCandidates,
   expressPublicidadVenueName,
 } from '@/lib/expressPublicidad';
 import {
@@ -68,20 +69,28 @@ export default function ExpressTvDisplay() {
 
   const effectiveBaseVenue =
     urlBaseVenue || String(match?.base_venue ?? '').trim();
-  const playlistVenue =
-    (venueParam && venueParam.includes('Express')
-      ? venueParam
-      : effectiveBaseVenue
-        ? expressPublicidadVenueName(effectiveBaseVenue)
-        : null) || null;
+  const playlistVenueCandidates = useMemo(
+    () =>
+      expressPlaylistVenueCandidates(
+        effectiveBaseVenue,
+        venueParam.includes('Express') ? venueParam : null,
+      ),
+    [effectiveBaseVenue, venueParam],
+  );
+  const playlistVenue = playlistVenueCandidates[0] ?? null;
+  const playlistVenueFallbacks = playlistVenueCandidates.slice(1);
+  const heartbeatVenue =
+    effectiveBaseVenue.trim()
+      ? expressPublicidadVenueName(effectiveBaseVenue)
+      : playlistVenue;
 
   const courtHeadline = useMemo(() => {
     const base = buildCourtHeadline(effectiveBaseVenue || null, courtNum);
     return base.includes('Express') ? base : `${base} · Express`;
   }, [effectiveBaseVenue, courtNum]);
 
-  const playlists = useCourtPlaylists(canchaId, playlistVenue);
-  useCourtDisplayHeartbeat(canchaId, playlistVenue);
+  const playlists = useCourtPlaylists(canchaId, playlistVenue, playlistVenueFallbacks);
+  useCourtDisplayHeartbeat(canchaId, heartbeatVenue);
   useThreeFingerDragExit('/');
 
   const marcador = useMemo(
