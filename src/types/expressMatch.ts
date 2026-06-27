@@ -1,4 +1,6 @@
 import { hydrateExpressPlayerFields } from '@/lib/expressPlayerNames';
+import { normalizeExpressDisplayNameScale } from '@/lib/expressDisplayNameScale';
+import { normalizeExpressDisplayMediaScale } from '@/lib/expressDisplayMediaScale';
 
 export type ExpressPoint = '0' | '15' | '30' | '40' | 'AD';
 
@@ -33,6 +35,10 @@ export interface ExpressMatch {
   punto_de_oro: boolean;
   is_active: boolean;
   base_venue: string;
+  /** Multiplicador tamaño nombres en TV (0.85–1.6). */
+  display_name_scale: number;
+  /** Multiplicador altura vídeo + imágenes en TV (0.5–1.75). */
+  display_media_scale: number;
   created_at: string;
   updated_at: string;
 }
@@ -52,6 +58,8 @@ export function normalizeExpressMatch(row: Record<string, unknown>): ExpressMatc
     team_b_p2_first: String(hydrated.team_b_p2_first ?? ''),
     team_b_p2_last: String(hydrated.team_b_p2_last ?? ''),
     base_venue: String(hydrated.base_venue ?? ''),
+    display_name_scale: normalizeExpressDisplayNameScale(hydrated.display_name_scale),
+    display_media_scale: normalizeExpressDisplayMediaScale(hydrated.display_media_scale),
     sets_a: setsA?.length === EXPRESS_SET_SLOTS ? setsA : [0, 0, 0],
     sets_b: setsB?.length === EXPRESS_SET_SLOTS ? setsB : [0, 0, 0],
   };

@@ -20,6 +20,7 @@ import {
   type ExpressPlayerSlot,
 } from '@/lib/expressPlayerNames';
 import { ExpressControlAdsPanel } from '@/components/express/ExpressControlAdsPanel';
+import { ExpressControlDisplayPanel } from '@/components/express/ExpressControlDisplayPanel';
 import { BouncingBall } from '@/components/BouncingBall';
 
 type PageStatus = 'loading' | 'ready' | 'missing' | 'config_error';
@@ -354,6 +355,27 @@ export default function MobileExpressControl() {
       >
         {match.punto_de_oro ? '⚡ Desactivar Punto de Oro' : 'Activar Punto de Oro'}
       </button>
+
+      <ExpressControlDisplayPanel
+        match={match}
+        sessionId={sessionId}
+        onNameScaleSaved={(scale) => {
+          if (!matchRef.current) return;
+          const next = normalizeExpressMatch({
+            ...(matchRef.current as unknown as Record<string, unknown>),
+            display_name_scale: scale,
+          });
+          applyMatch(next);
+        }}
+        onMediaScaleSaved={(scale) => {
+          if (!matchRef.current) return;
+          const next = normalizeExpressMatch({
+            ...(matchRef.current as unknown as Record<string, unknown>),
+            display_media_scale: scale,
+          });
+          applyMatch(next);
+        }}
+      />
 
       <ExpressControlAdsPanel
         match={match}

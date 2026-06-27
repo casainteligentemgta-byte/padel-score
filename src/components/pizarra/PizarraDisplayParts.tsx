@@ -7,6 +7,8 @@ import { visibleSetNumbersForScoreboard } from '@/lib/displaySetColumns';
 import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { inferStbFromSetScoresOnly } from '@/lib/matchFinishedScoreDisplay';
 import { logDisplayVideoError } from '@/lib/logDisplayVideoError';
+import { expressPlayerNameFontSize } from '@/lib/expressDisplayNameScale';
+import { normalizeExpressDisplayMediaScale } from '@/lib/expressDisplayMediaScale';
 import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
 import { SmartPadelBallIcon } from '@/components/SmartPadelBallIcon';
 import { useTripleTap } from '@/lib/useTripleTap';
@@ -79,14 +81,32 @@ function pairPlayerNames(marcador: any, side: 'local' | 'visitante'): [string, s
 
 const PIZARRA_SAQUE_BALL_PX = 12;
 
+function teamNamesClass(playerNameScale?: number): string {
+  return 'font-black italic uppercase leading-snug tracking-tight break-words [overflow-wrap:anywhere]';
+}
+
+function teamNamesStyle(color: string, playerNameScale?: number): React.CSSProperties {
+  if (playerNameScale != null && playerNameScale > 0) {
+    return { color, fontSize: expressPlayerNameFontSize(playerNameScale) };
+  }
+  return { color };
+}
+
+function teamNamesTailwind(playerNameScale?: number): string {
+  if (playerNameScale != null && playerNameScale > 0) return teamNamesClass(playerNameScale);
+  return `${teamNamesClass()} text-[11px] sm:text-xs md:text-sm`;
+}
+
 function TeamNamesWithServe({
   marcador,
   side,
   color,
+  playerNameScale,
 }: {
   marcador: any;
   side: 'local' | 'visitante';
   color: string;
+  playerNameScale?: number;
 }) {
   const eqNum = side === 'local' ? 1 : 2;
   const saqueEq = Number(marcador?.saque?.equipo);
@@ -99,8 +119,8 @@ function TeamNamesWithServe({
   if (!pair) {
     return (
       <span
-        className="text-[11px] font-black italic uppercase leading-snug tracking-tight break-words [overflow-wrap:anywhere] sm:text-xs md:text-sm"
-        style={{ color }}
+        className={teamNamesTailwind(playerNameScale)}
+        style={teamNamesStyle(color, playerNameScale)}
       >
         {teamLineCompact(marcador, side)}
       </span>
@@ -108,13 +128,14 @@ function TeamNamesWithServe({
   }
   const [p1, p2] = pair;
   const same = p1 === p2;
-  const cls =
-    'inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] font-black italic uppercase leading-snug tracking-tight break-words [overflow-wrap:anywhere] sm:text-xs md:text-sm';
+  const cls = `inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 ${teamNamesTailwind(playerNameScale)}`;
+  const nameStyle = teamNamesStyle(color, playerNameScale);
+
   const ball = <SmartPadelBallIcon size={PIZARRA_SAQUE_BALL_PX} title="Saque" />;
 
   if (same) {
     return (
-      <span className={cls} style={{ color }}>
+      <span className={cls} style={nameStyle}>
         {(j1 || j2) && ball}
         <span>{p1}</span>
       </span>
@@ -122,7 +143,7 @@ function TeamNamesWithServe({
   }
 
   return (
-    <span className={cls} style={{ color }}>
+    <span className={cls} style={nameStyle}>
       {j1 ? (
         <>
           {ball}
@@ -258,7 +279,14 @@ function ScoreCell({ children, color }: { children: React.ReactNode; color: stri
   );
 }
 
-export function PizarraTableScoreboard({ marcador }: { marcador: any }) {
+export function PizarraTableScoreboard({
+  marcador,
+  playerNameScale,
+}: {
+  marcador: any;
+  /** Solo Express: multiplicador tamaño nombres (0.85–1.6). */
+  playerNameScale?: number;
+}) {
   const setsL = Number(marcador.sets?.local ?? 0) || 0;
   const setsV = Number(marcador.sets?.visitante ?? 0) || 0;
   const currentSet = setsL + setsV + 1;
@@ -344,14 +372,14 @@ export function PizarraTableScoreboard({ marcador }: { marcador: any }) {
 
       <div className="flex w-full min-w-0 items-start gap-2 border-b border-white/20 pb-3 sm:gap-3 sm:pb-3.5">
         <div className="min-w-0 flex-1 text-left">
-          <TeamNamesWithServe marcador={marcador} side="local" color={c1} />
+          <TeamNamesWithServe marcador={marcador} side="local" color={c1} playerNameScale={playerNameScale} />
         </div>
         {scoreBlock('local', c1, ptsL)}
       </div>
 
       <div className="mt-3 flex w-full min-w-0 items-start gap-2 sm:mt-3.5 sm:gap-3">
         <div className="min-w-0 flex-1 text-left">
-          <TeamNamesWithServe marcador={marcador} side="visitante" color={c2} />
+          <TeamNamesWithServe marcador={marcador} side="visitante" color={c2} playerNameScale={playerNameScale} />
         </div>
         {scoreBlock('visitante', c2, ptsV)}
       </div>
@@ -452,6 +480,7 @@ export function DualPlaylistStrip({
   singleVideoLoop,
   asistenciaMedicaActiva,
   mesaTecnicaActiva,
+  mediaScale,
 }: {
   canchaId: string;
   currentVideoUrl: string | null;
@@ -462,6 +491,8 @@ export function DualPlaylistStrip({
   singleVideoLoop: boolean;
   asistenciaMedicaActiva?: boolean;
   mesaTecnicaActiva?: boolean;
+  /** Solo Express: multiplicador altura franja vídeo/imágenes. */
+  mediaScale?: number;
 }) {
   const hasVideo = Boolean(currentVideoUrl);
   const hasImage = Boolean(currentImageUrl);
@@ -479,8 +510,20 @@ export function DualPlaylistStrip({
     ? 'border-red-400/70 bg-red-500/20 text-red-200'
     : 'border-padel-primary/60 bg-padel-primary/16 text-padel-primary';
 
+  const scaledMedia = mediaScale != null && mediaScale > 0;
+  const normalizedMediaScale = scaledMedia ? normalizeExpressDisplayMediaScale(mediaScale) : 1;
+  const stripHeightClass = scaledMedia
+    ? 'h-[min(calc(22vh*var(--ems)),calc(10rem*var(--ems)))] sm:h-[min(calc(26vh*var(--ems)),calc(12rem*var(--ems)))]'
+    : 'h-[min(22vh,10rem)] sm:h-[min(26vh,12rem)]';
+  const stripStyle = scaledMedia
+    ? ({ '--ems': normalizedMediaScale } as React.CSSProperties)
+    : undefined;
+
   return (
-    <div className="grid h-[min(22vh,10rem)] w-full grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-px overflow-hidden bg-white/10 sm:h-[min(26vh,12rem)] sm:grid-cols-2 sm:grid-rows-1 sm:[grid-template-columns:50%_50%]">
+    <div
+      className={`grid w-full grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-px overflow-hidden bg-white/10 sm:grid-cols-2 sm:grid-rows-1 sm:[grid-template-columns:50%_50%] ${stripHeightClass}`}
+      style={stripStyle}
+    >
       <div className="relative flex h-full min-h-0 w-full min-w-0 items-center justify-center overflow-hidden bg-black">
         {criticalText ? (
           <div
@@ -666,6 +709,7 @@ export function PizarraPublicidadFooter({
   canchaId,
   playlists,
   minimalMode,
+  mediaScale,
 }: {
   canchaId: string;
   playlists: {
@@ -679,6 +723,8 @@ export function PizarraPublicidadFooter({
     tickerMessages: { id: string; mensaje: string }[];
   };
   minimalMode?: boolean;
+  /** Solo Express: multiplicador altura franja vídeo/imágenes. */
+  mediaScale?: number;
 }) {
   if (minimalMode) return null;
   return (
@@ -691,6 +737,7 @@ export function PizarraPublicidadFooter({
         imageKey={playlists.imageKey}
         onVideoEnded={playlists.videoAdvanceByTimer ? () => {} : playlists.onVideoEnded}
         singleVideoLoop={playlists.videoUrls.length <= 1 || playlists.videoAdvanceByTimer}
+        mediaScale={mediaScale}
       />
       <TickerMarquee messages={playlists.tickerMessages} />
     </>

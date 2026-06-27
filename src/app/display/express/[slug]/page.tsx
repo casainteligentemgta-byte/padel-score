@@ -20,6 +20,7 @@ import {
   expressPlaylistVenueCandidates,
   expressPublicidadVenueName,
 } from '@/lib/expressPublicidad';
+import { expressQrDockPaddingBottom } from '@/lib/expressDisplayMediaScale';
 import {
   canchaIdFromExpressSlug,
   courtNumFromExpressSlug,
@@ -47,23 +48,21 @@ function expressScoringMeta(match: ExpressMatch): { levelLine: string; genderLin
   return { levelLine, genderLine };
 }
 
-/** Reserva espacio para vídeo + imágenes + tira sin solapar el QR. */
-const EXPRESS_QR_CONTENT_PB =
-  'pb-[calc(min(26vh,12rem)+min(4.5rem,8vh)+0.75rem)] sm:pb-[calc(min(26vh,12rem)+5rem)]';
-
 function ExpressTvPublicidadDock({
   canchaId,
   playlists,
   minimalMode,
+  mediaScale,
 }: {
   canchaId: string;
   playlists: CourtPlaylistsState;
   minimalMode?: boolean;
+  mediaScale?: number;
 }) {
   if (minimalMode) return null;
   return (
     <div className="absolute bottom-0 left-0 right-0 z-20 flex w-full min-w-0 max-w-none flex-col items-stretch border-t border-white/10 bg-[#050505]">
-      <PizarraPublicidadFooter canchaId={canchaId} playlists={playlists} />
+      <PizarraPublicidadFooter canchaId={canchaId} playlists={playlists} mediaScale={mediaScale} />
     </div>
   );
 }
@@ -238,6 +237,11 @@ export default function ExpressTvDisplay() {
     notFound();
   }
 
+  const displayMediaScale = match?.display_media_scale ?? 1;
+  const qrContentPaddingStyle = minimalMode
+    ? undefined
+    : { paddingBottom: expressQrDockPaddingBottom(displayMediaScale) };
+
   if (loadState === 'loading') {
     return (
       <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-hidden bg-[#050505] font-outfit text-white">
@@ -248,11 +252,17 @@ export default function ExpressTvDisplay() {
           mode="wait"
         />
         <div
-          className={`relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center ${EXPRESS_QR_CONTENT_PB}`}
+          className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center"
+          style={qrContentPaddingStyle}
         >
           <BouncingBall />
         </div>
-        <ExpressTvPublicidadDock canchaId={canchaId} playlists={playlists} minimalMode={minimalMode} />
+        <ExpressTvPublicidadDock
+          canchaId={canchaId}
+          playlists={playlists}
+          minimalMode={minimalMode}
+          mediaScale={displayMediaScale}
+        />
         <PizarraDisplayGlobalStyles />
       </div>
     );
@@ -286,7 +296,8 @@ export default function ExpressTvDisplay() {
         />
 
         <div
-          className={`relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden px-4 py-2 sm:gap-3 ${EXPRESS_QR_CONTENT_PB}`}
+          className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden px-4 py-2 sm:gap-3"
+          style={qrContentPaddingStyle}
         >
           <div className="shrink-0 text-center">
             <h1 className="mb-1 text-2xl font-black italic uppercase tracking-tighter sm:text-3xl">
@@ -309,7 +320,12 @@ export default function ExpressTvDisplay() {
           </div>
         </div>
 
-        <ExpressTvPublicidadDock canchaId={canchaId} playlists={playlists} minimalMode={minimalMode} />
+        <ExpressTvPublicidadDock
+          canchaId={canchaId}
+          playlists={playlists}
+          minimalMode={minimalMode}
+          mediaScale={displayMediaScale}
+        />
 
         <PizarraDisplayGlobalStyles />
       </div>
@@ -336,12 +352,19 @@ export default function ExpressTvDisplay() {
 
       <PizarraScoreboardFit>
         <div className="flex w-full min-h-0 flex-col items-center gap-2 overflow-x-hidden px-1 pt-0">
-          {marcador ? <PizarraTableScoreboard marcador={marcador} /> : null}
+          {marcador ? (
+            <PizarraTableScoreboard marcador={marcador} playerNameScale={match.display_name_scale} />
+          ) : null}
         </div>
       </PizarraScoreboardFit>
 
       <div className="relative z-10 w-full min-w-0 max-w-none flex-shrink-0 overflow-hidden border-t border-white/10">
-        <PizarraPublicidadFooter canchaId={canchaId} playlists={playlists} minimalMode={minimalMode} />
+        <PizarraPublicidadFooter
+          canchaId={canchaId}
+          playlists={playlists}
+          minimalMode={minimalMode}
+          mediaScale={match.display_media_scale}
+        />
       </div>
 
       <PizarraDisplayGlobalStyles />
