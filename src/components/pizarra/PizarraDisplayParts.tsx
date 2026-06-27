@@ -20,17 +20,21 @@ function matchStubFromMarcadorHistorico(marcador: any) {
   return { setScores };
 }
 
+function formatMarcadorPlayerPart(part: string): string {
+  return formatPlayerFichaName((part || '').trim());
+}
+
 function formatMarcadorTeamNombre(nombre: string): string {
   const raw = (nombre || '').trim();
   if (!raw) return nombre;
   if (raw.includes('/')) {
     const parts = raw
       .split(/\s*\/\s*/)
-      .map((p) => formatPlayerFichaName(p.trim()))
+      .map((p) => formatMarcadorPlayerPart(p))
       .filter(Boolean);
     return parts.length ? parts.join(' / ') : raw;
   }
-  return formatPlayerFichaName(raw);
+  return formatMarcadorPlayerPart(raw);
 }
 
 function teamDisplayFromRaw(rawName: string, fallbackId: string): string {
@@ -50,7 +54,7 @@ function teamLineCompact(marcador: any, side: 'local' | 'visitante'): string {
   if (rawStr.includes('/')) {
     const parts = rawStr
       .split(/\s*\/\s*/)
-      .map((p: string) => formatMarcadorTeamNombre(p.trim()))
+      .map((p: string) => formatMarcadorPlayerPart(p.trim()))
       .filter(Boolean);
     return parts.length ? parts.join(' / ') : teamDisplayFromRaw(rawStr, fb);
   }
@@ -64,7 +68,7 @@ function pairPlayerNames(marcador: any, side: 'local' | 'visitante'): [string, s
   if (rawStr.includes('/')) {
     const parts = rawStr
       .split(/\s*\/\s*/)
-      .map((p: string) => formatMarcadorTeamNombre(p.trim()))
+      .map((p: string) => formatMarcadorPlayerPart(p.trim()))
       .filter(Boolean);
     if (parts.length >= 2) return [parts[0], parts[1]];
     if (parts.length === 1) return [parts[0], parts[0]];

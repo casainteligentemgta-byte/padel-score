@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { notFound, useSearchParams } from 'next/navigation';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 import { QRCodeSVG } from 'qrcode.react';
 import { Megaphone, Zap } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
@@ -44,13 +45,8 @@ function expressScoringMeta(match: ExpressMatch): { levelLine: string; genderLin
   return { levelLine, genderLine };
 }
 
-export default function ExpressTvDisplay({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = React.use(params);
-
-  if (!isValidExpressSlug(slug)) {
-    notFound();
-  }
-
+export default function ExpressTvDisplay() {
+  const slug = useRouteSegment('slug');
   const searchParams = useSearchParams();
   const supabase = useMemo(() => getSupabaseClient(), []);
 
@@ -68,6 +64,7 @@ export default function ExpressTvDisplay({ params }: { params: Promise<{ slug: s
   const [match, setMatch] = useState<ExpressMatch | null>(null);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const syncedBaseVenueRef = useRef<string | null>(null);
 
   const effectiveBaseVenue =
     urlBaseVenue || String(match?.base_venue ?? '').trim();
@@ -193,13 +190,22 @@ export default function ExpressTvDisplay({ params }: { params: Promise<{ slug: s
 
   useEffect(() => {
     if (!supabase || !match?.id || !urlBaseVenue.trim()) return;
+    const target = urlBaseVenue.trim();
     const current = String(match.base_venue ?? '').trim();
-    if (current === urlBaseVenue.trim()) return;
+    if (current === target || syncedBaseVenueRef.current === target) return;
+    syncedBaseVenueRef.current = target;
     void supabase
       .from('express_matches')
-      .update({ base_venue: urlBaseVenue.trim() })
-      .eq('cancha_code', slug);
+      .update({ base_venue: target })
+      .eq('cancha_code', slug)
+      .then(({ error }) => {
+        if (error) syncedBaseVenueRef.current = null;
+      });
   }, [supabase, match?.id, match?.base_venue, urlBaseVenue, slug]);
+
+  if (!isValidExpressSlug(slug)) {
+    notFound();
+  }
 
   if (loadState === 'loading') {
     return (

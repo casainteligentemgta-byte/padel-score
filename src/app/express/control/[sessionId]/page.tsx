@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useRouteSegment } from '@/lib/useRouteSegment';
 import { Plus, Minus, Power } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { ExpressMatch, normalizeExpressMatch } from '@/types/expressMatch';
@@ -68,8 +69,8 @@ function PlayerNameFields({
   );
 }
 
-export default function MobileExpressControl({ params }: { params: Promise<{ sessionId: string }> }) {
-  const { sessionId } = React.use(params);
+export default function MobileExpressControl() {
+  const sessionId = useRouteSegment('sessionId');
   const router = useRouter();
   const supabase = useMemo(() => getSupabaseClient(), []);
 
