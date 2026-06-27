@@ -56,32 +56,36 @@ export default function ExpressTvDisplay({ params }: { params: Promise<{ slug: s
 
   const complexParam = (searchParams.get('complex') || '').trim();
   const venueParam = (searchParams.get('venue') || '').trim();
-  const baseVenue =
+  const urlBaseVenue =
     complexParam ||
     (venueParam ? expressBaseVenueFromPublicidadVenue(venueParam) : '');
-  const playlistVenue =
-    (venueParam && venueParam.includes('Express')
-      ? venueParam
-      : baseVenue
-        ? expressPublicidadVenueName(baseVenue)
-        : null) || null;
   const minimalMode =
     searchParams.get('minimal') === '1' || searchParams.get('minimal') === 'true';
 
   const courtNum = courtNumFromExpressSlug(slug);
   const canchaId = canchaIdFromExpressSlug(slug);
-  const courtHeadline = useMemo(() => {
-    const base = buildCourtHeadline(baseVenue || null, courtNum);
-    return base.includes('Express') ? base : `${base} · Express`;
-  }, [baseVenue, courtNum]);
-
-  const playlists = useCourtPlaylists(canchaId, playlistVenue);
-  useCourtDisplayHeartbeat(canchaId, playlistVenue);
-  useThreeFingerDragExit('/');
 
   const [match, setMatch] = useState<ExpressMatch | null>(null);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const effectiveBaseVenue =
+    urlBaseVenue || String(match?.base_venue ?? '').trim();
+  const playlistVenue =
+    (venueParam && venueParam.includes('Express')
+      ? venueParam
+      : effectiveBaseVenue
+        ? expressPublicidadVenueName(effectiveBaseVenue)
+        : null) || null;
+
+  const courtHeadline = useMemo(() => {
+    const base = buildCourtHeadline(effectiveBaseVenue || null, courtNum);
+    return base.includes('Express') ? base : `${base} · Express`;
+  }, [effectiveBaseVenue, courtNum]);
+
+  const playlists = useCourtPlaylists(canchaId, playlistVenue);
+  useCourtDisplayHeartbeat(canchaId, playlistVenue);
+  useThreeFingerDragExit('/');
 
   const marcador = useMemo(
     () => (match?.is_active ? expressMatchToMarcador(match) : null),
@@ -186,6 +190,16 @@ export default function ExpressTvDisplay({ params }: { params: Promise<{ slug: s
       supabase.removeChannel(channel);
     };
   }, [slug, supabase]);
+
+  useEffect(() => {
+    if (!supabase || !match?.id || !urlBaseVenue.trim()) return;
+    const current = String(match.base_venue ?? '').trim();
+    if (current === urlBaseVenue.trim()) return;
+    void supabase
+      .from('express_matches')
+      .update({ base_venue: urlBaseVenue.trim() })
+      .eq('cancha_code', slug);
+  }, [supabase, match?.id, match?.base_venue, urlBaseVenue, slug]);
 
   if (loadState === 'loading') {
     return (

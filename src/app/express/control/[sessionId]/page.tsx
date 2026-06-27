@@ -18,6 +18,7 @@ import {
   syncExpressTeamNameFields,
   type ExpressPlayerSlot,
 } from '@/lib/expressPlayerNames';
+import { ExpressControlAdsPanel } from '@/components/express/ExpressControlAdsPanel';
 import { BouncingBall } from '@/components/BouncingBall';
 
 type PageStatus = 'loading' | 'ready' | 'missing' | 'config_error';
@@ -288,6 +289,7 @@ export default function MobileExpressControl({ params }: { params: Promise<{ ses
             )}
           </h1>
           <p className="text-xs uppercase text-neutral-400">{match.cancha_code}</p>
+          <p className="mt-1 text-[10px] text-neutral-500">Edita los 4 jugadores (nombre + apellido)</p>
         </div>
         <button
           type="button"
@@ -351,6 +353,19 @@ export default function MobileExpressControl({ params }: { params: Promise<{ ses
       >
         {match.punto_de_oro ? '⚡ Desactivar Punto de Oro' : 'Activar Punto de Oro'}
       </button>
+
+      <ExpressControlAdsPanel
+        match={match}
+        sessionId={sessionId}
+        onVenueSaved={(baseVenue) => {
+          if (!matchRef.current) return;
+          const next = normalizeExpressMatch({
+            ...(matchRef.current as unknown as Record<string, unknown>),
+            base_venue: baseVenue,
+          });
+          applyMatch(next);
+        }}
+      />
     </div>
   );
 }

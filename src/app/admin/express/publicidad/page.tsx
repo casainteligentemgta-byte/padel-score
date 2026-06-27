@@ -27,15 +27,24 @@ import {
   Loader2,
   Megaphone,
   Monitor,
+  Trash2,
+  Upload,
   Zap,
 } from 'lucide-react';
+import { useDropzone } from 'react-dropzone';
 import type { MediaContent, TiraInformativa } from '@/lib/supabase/publicidad';
 import {
+  addMediaContentAction,
+  addTickerAction,
+  deleteTickerAction,
   fetchAssignmentsAction,
   savePlaylistAction,
   saveTiraPlaylistAction,
   upsertPlaylistConfigAction,
 } from '@/app/admin/publicidad/actions';
+
+const isVideoFile = (f: File) => f.type.startsWith('video/');
+const isImageFile = (f: File) => f.type.startsWith('image/');
 
 function venueMatches(rowVenue: string | null | undefined, selectedVenue: string | null | undefined): boolean {
   return String(rowVenue || '').trim().toLowerCase() === String(selectedVenue || '').trim().toLowerCase();
@@ -73,6 +82,8 @@ export default function AdminExpressPublicidadPage() {
   >({});
   const [canchasHealth, setCanchasHealth] = useState<Record<string, string | null>>({});
   const [savingCourtKey, setSavingCourtKey] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [nuevoTicker, setNuevoTicker] = useState('');
 
   const expressVenue = useMemo(
     () => expressPublicidadVenueName(selectedBaseVenue),
@@ -251,6 +262,86 @@ export default function AdminExpressPublicidadPage() {
   const carrusel = useMemo(() => mediaList.filter((m) => m.tipo === 'imagen'), [mediaList]);
   const appOrigin = useMemo(() => getAppBaseUrl(), []);
 
+  const uploadFiles = async (files: File[]) => {
+    if (!files.length) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const tryUploadToBuckets = async (path: string, file: File) => {
+        const buckets = ['publicidad', 'ads', 'media'];
+        let lastErr: unknown = null;
+        for (const bucket of buckets) {
+          const up = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
+          if (!up.error) {
+            const pub = supabase.storage.from(bucket).getPublicUrl(path);
+            return pub.data.publicUrl;
+          }
+          lastErr = up.error;
+          const msg = String(up.error?.message || '').toLowerCase();
+          if (!msg.includes('bucket') || !msg.includes('not found')) break;
+        }
+        throw lastErr;
+      };
+
+      for (const file of files) {
+        const fileExt = file.name.split('.').pop() || 'bin';
+        const path = `ads/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+        const publicUrl = await tryUploadToBuckets(path, file);
+        const tipo = isVideoFile(file) ? 'video_file' : isImageFile(file) ? 'imagen' : 'video_file';
+        const addRes = await addMediaContentAction({
+          tipo,
+          url: publicUrl,
+          nombre: file.name,
+          nombre_sponsor: file.name.replace(/\.[^/.]+$/, ''),
+          file_size_bytes: file.size,
+          duracion_segundos: tipo === 'imagen' ? 10 : null,
+          activa: true,
+        });
+        if (!addRes.ok) {
+          setError(addRes.error);
+          return;
+        }
+      }
+      await fetchMedia();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'No se pudo subir el archivo.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const drop = useDropzone({
+    onDrop: uploadFiles,
+    accept: {
+      'video/*': ['.mp4', '.webm', '.mov'],
+      'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.gif'],
+    },
+    disabled: uploading,
+  });
+
+  const addTicker = async () => {
+    const msg = nuevoTicker.trim();
+    if (!msg) return;
+    const r = await addTickerAction(msg, tiraList.length);
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+    setNuevoTicker('');
+    await fetchTicker();
+  };
+
+  const deleteTicker = async (id: string) => {
+    if (!confirm('¿Eliminar este mensaje?')) return;
+    const r = await deleteTickerAction(id);
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+    await fetchTicker();
+    await fetchAssignments();
+  };
+
   const saveVideoPlaylistForCourt = async (courtKey: string, orderedMediaIds: string[], cambioMin: number) => {
     if (!expressVenue) return;
     setSavingCourtKey(courtKey);
@@ -392,19 +483,74 @@ export default function AdminExpressPublicidadPage() {
             <h2 className="mb-2 text-sm font-black uppercase tracking-wider text-white/90">Cómo funciona</h2>
             <ul className="space-y-1.5 text-xs leading-relaxed text-white/55">
               <li>
-                Las playlists Express usan la clave de sede{' '}
-                <span className="font-mono text-white/75">{expressVenue || 'Sede · Express'}</span> — separada del
-                torneo en la misma pista.
+                Los <strong className="text-white/80">nombres de jugadores</strong> se editan en el móvil al
+                escanear el QR (4 jugadores: nombre + apellido).
               </li>
               <li>
-                Sube vídeos e imágenes en{' '}
-                <Link href="/admin/publicidad" className="text-padel-primary underline-offset-2 hover:underline">
-                  Biblioteca global
-                </Link>
-                ; aquí las asignas a cada <span className="font-mono">fast-N</span>.
+                Sube vídeos/imágenes aquí abajo; en cada tarjeta <span className="font-mono">fast-N</span> elige{' '}
+                <strong className="text-white/80">Video</strong>, <strong className="text-white/80">Imagen</strong>{' '}
+                o <strong className="text-white/80">Texto</strong> (tira inferior).
               </li>
-              <li>El marcador móvil no gestiona publicidad: solo el administrador precarga el contenido.</li>
+              <li>
+                También puedes elegir vídeos desde el móvil: control Express →{' '}
+                <strong className="text-white/80">Publicidad en TV</strong>.
+              </li>
             </ul>
+          </section>
+
+          <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 md:p-5 space-y-4">
+            <h2 className="text-lg font-black uppercase tracking-wider">Biblioteca Express</h2>
+            <div className="flex flex-wrap items-center gap-3">
+              <div {...drop.getRootProps()} className="cursor-pointer">
+                <input {...drop.getInputProps()} />
+                <button type="button" className="flex items-center gap-2 rounded-xl bg-padel-primary px-4 py-2 text-xs font-black uppercase tracking-wider text-black">
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  Subir vídeo o imagen
+                </button>
+              </div>
+              <p className="text-xs text-white/50">
+                {videos.length} vídeos · {carrusel.length} imágenes en biblioteca
+              </p>
+            </div>
+
+            <div>
+              <h3 className="mb-2 text-sm font-black uppercase tracking-wider text-white/80">Tira inferior (textos)</h3>
+              <div className="mb-3 flex gap-2">
+                <input
+                  value={nuevoTicker}
+                  onChange={(e) => setNuevoTicker(e.target.value)}
+                  placeholder="Nuevo mensaje para la tira"
+                  className="flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/45 outline-none focus:border-white/25"
+                />
+                <button
+                  type="button"
+                  onClick={() => void addTicker()}
+                  className="rounded-xl bg-padel-primary px-4 py-2 text-xs font-black uppercase text-black"
+                >
+                  Agregar
+                </button>
+              </div>
+              <ul className="max-h-36 space-y-1 overflow-y-auto">
+                {tiraList.map((t) => (
+                  <li
+                    key={t.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm"
+                  >
+                    <span className="truncate text-white/90">{t.mensaje}</span>
+                    <button
+                      type="button"
+                      onClick={() => void deleteTicker(t.id)}
+                      className="shrink-0 rounded-lg p-1.5 text-red-400 hover:bg-red-500/10"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+                {tiraList.length === 0 && (
+                  <li className="py-4 text-center text-xs text-white/40">Sin mensajes — créalos arriba</li>
+                )}
+              </ul>
+            </div>
           </section>
 
           <section className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4 md:p-5">

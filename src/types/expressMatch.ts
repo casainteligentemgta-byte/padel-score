@@ -32,6 +32,7 @@ export interface ExpressMatch {
   modo_puntos: ExpressScoreMode;
   punto_de_oro: boolean;
   is_active: boolean;
+  base_venue: string;
   created_at: string;
   updated_at: string;
 }
@@ -50,6 +51,7 @@ export function normalizeExpressMatch(row: Record<string, unknown>): ExpressMatc
     team_b_p1_last: String(hydrated.team_b_p1_last ?? ''),
     team_b_p2_first: String(hydrated.team_b_p2_first ?? ''),
     team_b_p2_last: String(hydrated.team_b_p2_last ?? ''),
+    base_venue: String(hydrated.base_venue ?? ''),
     sets_a: setsA?.length === EXPRESS_SET_SLOTS ? setsA : [0, 0, 0],
     sets_b: setsB?.length === EXPRESS_SET_SLOTS ? setsB : [0, 0, 0],
   };
