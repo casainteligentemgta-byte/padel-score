@@ -32,6 +32,7 @@ import {
   PizarraScoreboardFit,
   PizarraTableScoreboard,
 } from '@/components/pizarra/PizarraDisplayParts';
+import type { CourtPlaylistsState } from '@/lib/useCourtPlaylists';
 import { BouncingBall } from '@/components/BouncingBall';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 
@@ -44,6 +45,27 @@ function expressScoringMeta(match: ExpressMatch): { levelLine: string; genderLin
     genderLine = 'Tie-break';
   }
   return { levelLine, genderLine };
+}
+
+/** Reserva espacio para vídeo + imágenes + tira sin solapar el QR. */
+const EXPRESS_QR_CONTENT_PB =
+  'pb-[calc(min(26vh,12rem)+min(4.5rem,8vh)+0.75rem)] sm:pb-[calc(min(26vh,12rem)+5rem)]';
+
+function ExpressTvPublicidadDock({
+  canchaId,
+  playlists,
+  minimalMode,
+}: {
+  canchaId: string;
+  playlists: CourtPlaylistsState;
+  minimalMode?: boolean;
+}) {
+  if (minimalMode) return null;
+  return (
+    <div className="absolute bottom-0 left-0 right-0 z-20 flex w-full min-w-0 max-w-none flex-col items-stretch border-t border-white/10 bg-[#050505]">
+      <PizarraPublicidadFooter canchaId={canchaId} playlists={playlists} />
+    </div>
+  );
 }
 
 export default function ExpressTvDisplay() {
@@ -218,8 +240,20 @@ export default function ExpressTvDisplay() {
 
   if (loadState === 'loading') {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#050505]">
-        <BouncingBall />
+      <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-hidden bg-[#050505] font-outfit text-white">
+        <PistaTopBar
+          courtHeadline={courtHeadline}
+          levelLine="EXPRESS MATCH"
+          genderLine="Cargando cancha…"
+          mode="wait"
+        />
+        <div
+          className={`relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center ${EXPRESS_QR_CONTENT_PB}`}
+        >
+          <BouncingBall />
+        </div>
+        <ExpressTvPublicidadDock canchaId={canchaId} playlists={playlists} minimalMode={minimalMode} />
+        <PizarraDisplayGlobalStyles />
       </div>
     );
   }
@@ -251,7 +285,9 @@ export default function ExpressTvDisplay() {
           mode="wait"
         />
 
-        <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden px-4 py-2 sm:gap-3">
+        <div
+          className={`relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden px-4 py-2 sm:gap-3 ${EXPRESS_QR_CONTENT_PB}`}
+        >
           <div className="shrink-0 text-center">
             <h1 className="mb-1 text-2xl font-black italic uppercase tracking-tighter sm:text-3xl">
               {slug.toUpperCase()}
@@ -273,13 +309,7 @@ export default function ExpressTvDisplay() {
           </div>
         </div>
 
-        <div className="relative z-20 flex w-full min-w-0 max-w-none shrink-0 flex-col items-stretch border-t border-white/10">
-          <PizarraPublicidadFooter
-            canchaId={canchaId}
-            playlists={playlists}
-            minimalMode={minimalMode}
-          />
-        </div>
+        <ExpressTvPublicidadDock canchaId={canchaId} playlists={playlists} minimalMode={minimalMode} />
 
         <PizarraDisplayGlobalStyles />
       </div>
