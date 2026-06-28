@@ -1,33 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
+import {
+  applyExpressBoardReset,
+  applyExpressQrActivation,
+  buildExpressStaffTelegramKeyboard,
+  resolveExpressCourtNumbersForClub,
+} from '@/lib/expressTelegramActions';
 import { answerTelegramCallbackQuery, sendTelegramMessage } from '@/lib/telegramBot';
-import { expressCanchaCodeFromCourtNumber } from '@/lib/tvDeviceAuth';
-
-const QR_WINDOW_MS = 60_000;
-
-async function buildStaffKeyboard(supabase: NonNullable<ReturnType<typeof getSupabaseServiceClient>>, clubSlug: string) {
-  const { data: devices } = await supabase
-    .from('tv_devices')
-    .select('court_number')
-    .eq('club_slug', clubSlug)
-    .eq('is_authorized', true)
-    .order('court_number');
-
-  const courts =
-    devices?.map((d) => String(d.court_number)).filter(Boolean) ??
-    ['1', '2', '3', '4'];
-
-  const unique = Array.from(new Set(courts));
-
-  return {
-    inline_keyboard: unique.map((courtNumber) => [
-      {
-        text: `🎾 Habilitar Cancha ${courtNumber}`,
-        callback_data: `activate_${courtNumber}`,
-      },
-    ]),
-  };
-}
 
 export async function POST(req: Request) {
   try {
@@ -67,11 +46,12 @@ export async function POST(req: Request) {
           .update({ telegram_chat_id: chatId })
           .eq('id', staff.id);
 
-        const keyboard = await buildStaffKeyboard(supabase, String(staff.club_slug));
+        const courtNumbers = await resolveExpressCourtNumbersForClub(supabase, String(staff.club_slug));
+        const keyboard = buildExpressStaffTelegramKeyboard(courtNumbers);
 
         await sendTelegramMessage(
           chatId,
-          `✅ *Bienvenido ${staff.name}*\nSede vinculada: \`${staff.club_slug}\`\n\nToca un botón para mostrar el QR en la pantalla durante 1 minuto:`,
+          `✅ *Bienvenido ${staff.name}*\nSede vinculada: \`${staff.club_slug}\`\n\nPor cancha:\n• *QR* — muestra el código en la TV (1 min)\n• *Reset* — limpia marcador y vuelve a pantalla de espera`,
           keyboard,
         );
       }
@@ -100,61 +80,20 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
 
+      const clubSlug = String(staff.club_slug);
+
       if (data.startsWith('activate_')) {
         const courtNumber = data.replace('activate_', '');
-        const canchaCode = expressCanchaCodeFromCourtNumber(courtNumber);
+        const result = await applyExpressQrActivation(supabase, clubSlug, courtNumber);
+        await answerTelegramCallbackQuery(callbackQuery.id, result.message);
+        return NextResponse.json({ ok: true });
+      }
 
-        if (!canchaCode) {
-          await answerTelegramCallbackQuery(callbackQuery.id, 'Cancha inválida.');
-          return NextResponse.json({ ok: true });
-        }
-
-        const sessionId = crypto.randomUUID();
-        const expiresAt = new Date(Date.now() + QR_WINDOW_MS).toISOString();
-
-        const { data: existing } = await supabase
-          .from('express_matches')
-          .select('id')
-          .eq('cancha_code', canchaCode)
-          .maybeSingle();
-
-        if (!existing) {
-          const { error: insertError } = await supabase.from('express_matches').insert([
-            {
-              cancha_code: canchaCode,
-              session_id: sessionId,
-              base_venue: staff.club_slug,
-              qr_expires_at: expiresAt,
-              is_active: false,
-            },
-          ]);
-          if (insertError) {
-            console.error('[telegram/webhook] insert express_match:', insertError);
-            await answerTelegramCallbackQuery(callbackQuery.id, 'Error al activar la cancha.');
-            return NextResponse.json({ ok: true });
-          }
-        } else {
-          const { error: updateError } = await supabase
-            .from('express_matches')
-            .update({
-              session_id: sessionId,
-              qr_expires_at: expiresAt,
-              base_venue: staff.club_slug,
-              is_active: false,
-            })
-            .eq('cancha_code', canchaCode);
-
-          if (updateError) {
-            console.error('[telegram/webhook] update express_match:', updateError);
-            await answerTelegramCallbackQuery(callbackQuery.id, 'Error al activar la cancha.');
-            return NextResponse.json({ ok: true });
-          }
-        }
-
-        await answerTelegramCallbackQuery(
-          callbackQuery.id,
-          `✅ Cancha ${courtNumber} activada por 1 min`,
-        );
+      if (data.startsWith('reset_')) {
+        const courtNumber = data.replace('reset_', '');
+        const result = await applyExpressBoardReset(supabase, clubSlug, courtNumber);
+        await answerTelegramCallbackQuery(callbackQuery.id, result.message);
+        return NextResponse.json({ ok: true });
       }
 
       return NextResponse.json({ ok: true });
