@@ -91,6 +91,7 @@ export function buildExpressSessionReset(sessionId: string): Partial<ExpressMatc
     current_set: 1,
     modo_puntos: 'normal',
     is_active: false,
+    qr_expires_at: null,
   };
 }
 

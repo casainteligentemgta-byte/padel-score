@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { notFound, useSearchParams } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { QRCodeSVG } from 'qrcode.react';
@@ -21,6 +21,7 @@ import {
   expressPublicidadVenueName,
 } from '@/lib/expressPublicidad';
 import { expressQrDockPaddingBottom } from '@/lib/expressDisplayMediaScale';
+import { expressQrWindowSecondsLeft, isExpressQrWindowOpen } from '@/lib/expressQrWindow';
 import {
   canchaIdFromExpressSlug,
   courtNumFromExpressSlug,
@@ -35,6 +36,7 @@ import {
 } from '@/components/pizarra/PizarraDisplayParts';
 import type { CourtPlaylistsState } from '@/lib/useCourtPlaylists';
 import { BouncingBall } from '@/components/BouncingBall';
+import { ExpressTvDeviceGate } from '@/components/express/ExpressTvDeviceGate';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -117,6 +119,20 @@ export default function ExpressTvDisplay() {
   const marcador = useMemo(
     () => (match?.is_active ? expressMatchToMarcador(match) : null),
     [match],
+  );
+
+  const [qrTick, setQrTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!match?.qr_expires_at || match.is_active) return;
+    const id = setInterval(() => setQrTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [match?.qr_expires_at, match?.is_active]);
+
+  const wrapGate = (node: ReactNode) => (
+    <ExpressTvDeviceGate clubSlug={effectiveBaseVenue} expressSlug={slug}>
+      {node}
+    </ExpressTvDeviceGate>
   );
 
   useEffect(() => {
@@ -243,7 +259,7 @@ export default function ExpressTvDisplay() {
     : { paddingBottom: expressQrDockPaddingBottom(displayMediaScale) };
 
   if (loadState === 'loading') {
-    return (
+    return wrapGate(
       <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-hidden bg-[#050505] font-outfit text-white">
         <PistaTopBar
           courtHeadline={courtHeadline}
@@ -264,34 +280,36 @@ export default function ExpressTvDisplay() {
           mediaScale={displayMediaScale}
         />
         <PizarraDisplayGlobalStyles />
-      </div>
+      </div>,
     );
   }
 
   if (loadState === 'error' || !match) {
-    return (
+    return wrapGate(
       <div className="flex h-screen flex-col items-center justify-center bg-[#050505] px-6 text-center text-white">
         <p className="mb-2 text-sm font-bold uppercase tracking-widest text-padel-primary">Express Match</p>
         <p className="max-w-md text-sm text-neutral-400">
           {errorMessage || 'No se pudo cargar el marcador de esta cancha.'}
         </p>
-      </div>
+      </div>,
     );
   }
 
   const { levelLine, genderLine } = expressScoringMeta(match);
+  const qrWindowOpen = isExpressQrWindowOpen(match, qrTick);
+  const qrSecondsLeft = expressQrWindowSecondsLeft(match, qrTick);
 
   if (!match.is_active) {
     const controlUrl = `${getExpressAppBaseUrl()}/express/control/${match.session_id}`;
 
-    return (
+    return wrapGate(
       <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-hidden bg-[#050505] font-outfit text-white">
         <div className="pointer-events-none absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_center,_#ccff00_0%,_transparent_70%)]" />
 
         <PistaTopBar
           courtHeadline={courtHeadline}
           levelLine={levelLine}
-          genderLine="Escanea el QR para jugar"
+          genderLine={qrWindowOpen ? 'Escanea el QR para jugar' : 'Pantalla en espera'}
           mode="wait"
         />
 
@@ -299,25 +317,51 @@ export default function ExpressTvDisplay() {
           className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden px-4 py-2 sm:gap-3"
           style={qrContentPaddingStyle}
         >
-          <div className="shrink-0 text-center">
-            <h1 className="mb-1 text-2xl font-black italic uppercase tracking-tighter sm:text-3xl">
-              {slug.toUpperCase()}
-            </h1>
-            <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-gray-500 sm:text-xs sm:tracking-[0.35em]">
-              Escanea para iniciar el marcador
-            </p>
-          </div>
+          {qrWindowOpen ? (
+            <>
+              <div className="shrink-0 text-center">
+                <h1 className="mb-1 text-2xl font-black italic uppercase tracking-tighter sm:text-3xl">
+                  {slug.toUpperCase()}
+                </h1>
+                <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-gray-500 sm:text-xs sm:tracking-[0.35em]">
+                  Escanea para iniciar el marcador
+                </p>
+                {qrSecondsLeft != null && (
+                  <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-padel-primary">
+                    QR activo · {qrSecondsLeft}s
+                  </p>
+                )}
+              </div>
 
-          <div className="shrink-0 rounded-2xl bg-white p-2.5 shadow-[0_0_40px_rgba(204,255,0,0.12)] sm:rounded-3xl sm:p-3">
-            <QRCodeSVG value={controlUrl} size={148} level="H" className="block h-auto w-[148px] max-w-[min(36vw,148px)]" />
-          </div>
+              <div className="shrink-0 rounded-2xl bg-white p-2.5 shadow-[0_0_40px_rgba(204,255,0,0.12)] sm:rounded-3xl sm:p-3">
+                <QRCodeSVG
+                  value={controlUrl}
+                  size={148}
+                  level="H"
+                  className="block h-auto w-[148px] max-w-[min(36vw,148px)]"
+                />
+              </div>
 
-          <div className="hidden shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 sm:flex">
-            <Megaphone className="h-4 w-4 shrink-0 text-padel-primary" />
-            <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-              Sin registro · Plug &amp; Play
-            </p>
-          </div>
+              <div className="hidden shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 sm:flex">
+                <Megaphone className="h-4 w-4 shrink-0 text-padel-primary" />
+                <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">
+                  Sin registro · Plug &amp; Play
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="max-w-md shrink-0 px-4 text-center">
+              <h1 className="text-2xl font-black italic uppercase tracking-tighter sm:text-3xl">
+                {slug.toUpperCase()}
+              </h1>
+              <p className="mt-4 text-sm font-bold uppercase tracking-widest text-neutral-400">
+                Pantalla lista
+              </p>
+              <p className="mt-2 text-xs leading-relaxed text-neutral-500">
+                El staff puede habilitar el QR desde Telegram durante 1 minuto para iniciar un partido.
+              </p>
+            </div>
+          )}
         </div>
 
         <ExpressTvPublicidadDock
@@ -328,11 +372,11 @@ export default function ExpressTvDisplay() {
         />
 
         <PizarraDisplayGlobalStyles />
-      </div>
+      </div>,
     );
   }
 
-  return (
+  return wrapGate(
     <div className="flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-hidden bg-[#050505] font-outfit text-white select-none">
       <PistaTopBar
         courtHeadline={courtHeadline}
@@ -368,6 +412,6 @@ export default function ExpressTvDisplay() {
       </div>
 
       <PizarraDisplayGlobalStyles />
-    </div>
+    </div>,
   );
 }

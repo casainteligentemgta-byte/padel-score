@@ -39,6 +39,8 @@ export interface ExpressMatch {
   display_name_scale: number;
   /** Multiplicador altura vídeo + imágenes en TV (0.5–1.75). */
   display_media_scale: number;
+  /** Ventana temporal QR (Telegram). Null = QR siempre en standby. */
+  qr_expires_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -60,6 +62,7 @@ export function normalizeExpressMatch(row: Record<string, unknown>): ExpressMatc
     base_venue: String(hydrated.base_venue ?? ''),
     display_name_scale: normalizeExpressDisplayNameScale(hydrated.display_name_scale),
     display_media_scale: normalizeExpressDisplayMediaScale(hydrated.display_media_scale),
+    qr_expires_at: hydrated.qr_expires_at ? String(hydrated.qr_expires_at) : null,
     sets_a: setsA?.length === EXPRESS_SET_SLOTS ? setsA : [0, 0, 0],
     sets_b: setsB?.length === EXPRESS_SET_SLOTS ? setsB : [0, 0, 0],
   };

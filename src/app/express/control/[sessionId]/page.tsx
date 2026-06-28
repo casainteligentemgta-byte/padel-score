@@ -115,7 +115,7 @@ export default function MobileExpressControl() {
       setStatus('loading');
       const { data, error } = await supabase
         .from('express_matches')
-        .update({ is_active: true })
+        .update({ is_active: true, qr_expires_at: null })
         .eq('session_id', sessionId)
         .select('*')
         .maybeSingle();
