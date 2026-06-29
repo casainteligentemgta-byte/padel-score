@@ -58,15 +58,24 @@ export async function applyExpressQrActivation(
     return { ok: false, message: 'Cancha inválida.' };
   }
 
-  const sessionId = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + QR_WINDOW_MS).toISOString();
   const slug = normalizeExpressClubSlug(clubSlug);
 
   const { data: existing } = await supabase
     .from('express_matches')
-    .select('id')
+    .select('id, is_active, session_id')
     .eq('cancha_code', canchaCode)
     .maybeSingle();
+
+  if (existing?.is_active) {
+    return {
+      ok: true,
+      courtNumber,
+      message: `⚠️ Cancha ${courtNumber} · partido en curso. Usa Reset para limpiar la pizarra.`,
+    };
+  }
+
+  const expiresAt = new Date(Date.now() + QR_WINDOW_MS).toISOString();
+  const sessionId = existing?.session_id || crypto.randomUUID();
 
   if (!existing) {
     const { error } = await supabase.from('express_matches').insert([
@@ -86,10 +95,8 @@ export async function applyExpressQrActivation(
     const { error } = await supabase
       .from('express_matches')
       .update({
-        session_id: sessionId,
         qr_expires_at: expiresAt,
         base_venue: slug,
-        is_active: false,
       })
       .eq('cancha_code', canchaCode);
 
@@ -118,6 +125,7 @@ export async function applyExpressBoardReset(
 
   const slug = normalizeExpressClubSlug(clubSlug);
   const reset = buildExpressSessionReset(crypto.randomUUID());
+  const qrExpiresAt = new Date(Date.now() + QR_WINDOW_MS).toISOString();
 
   const { data: existing } = await supabase
     .from('express_matches')
@@ -130,6 +138,7 @@ export async function applyExpressBoardReset(
       {
         cancha_code: canchaCode,
         base_venue: slug,
+        qr_expires_at: qrExpiresAt,
         ...reset,
       },
     ]);
@@ -143,6 +152,7 @@ export async function applyExpressBoardReset(
       .update({
         ...reset,
         base_venue: slug,
+        qr_expires_at: qrExpiresAt,
       })
       .eq('cancha_code', canchaCode);
 
@@ -155,7 +165,7 @@ export async function applyExpressBoardReset(
   return {
     ok: true,
     courtNumber,
-    message: `🔄 Cancha ${courtNumber} reseteada · pantalla en espera`,
+    message: `🔄 Cancha ${courtNumber} reseteada · QR activo 1 min`,
   };
 }
 

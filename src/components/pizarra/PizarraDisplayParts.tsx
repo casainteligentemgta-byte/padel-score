@@ -739,7 +739,7 @@ export function DualPlaylistStrip({
           <CourtAdVideoOrIframe
             url={currentVideoUrl!}
             videoKey={videoKey}
-            className="h-full w-full max-h-full max-w-full object-contain object-center opacity-95"
+            className="pointer-events-none h-full w-full max-h-full max-w-full object-contain object-center opacity-95"
             loop={singleVideoLoop}
             onEnded={onVideoEnded}
             onNativeVideoError={() => logDisplayVideoError(canchaId, currentVideoUrl!)}
