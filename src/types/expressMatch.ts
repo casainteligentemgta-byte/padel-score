@@ -1,6 +1,7 @@
 import { hydrateExpressPlayerFields } from '@/lib/expressPlayerNames';
 import { normalizeExpressDisplayNameScale } from '@/lib/expressDisplayNameScale';
 import { normalizeExpressDisplayMediaScale } from '@/lib/expressDisplayMediaScale';
+import { normalizeExpressTickerPhrases } from '@/lib/expressTickerMessages';
 
 export type ExpressPoint = '0' | '15' | '30' | '40' | 'AD';
 
@@ -41,6 +42,8 @@ export interface ExpressMatch {
   display_media_scale: number;
   /** Ventana temporal QR (Telegram). Null = QR siempre en standby. */
   qr_expires_at: string | null;
+  /** Frases propias en tira informativa (además de mensajes admin). */
+  display_ticker_phrases: string[];
   created_at: string;
   updated_at: string;
 }
@@ -63,6 +66,7 @@ export function normalizeExpressMatch(row: Record<string, unknown>): ExpressMatc
     display_name_scale: normalizeExpressDisplayNameScale(hydrated.display_name_scale),
     display_media_scale: normalizeExpressDisplayMediaScale(hydrated.display_media_scale),
     qr_expires_at: hydrated.qr_expires_at ? String(hydrated.qr_expires_at) : null,
+    display_ticker_phrases: normalizeExpressTickerPhrases(hydrated.display_ticker_phrases),
     sets_a: setsA?.length === EXPRESS_SET_SLOTS ? setsA : [0, 0, 0],
     sets_b: setsB?.length === EXPRESS_SET_SLOTS ? setsB : [0, 0, 0],
   };

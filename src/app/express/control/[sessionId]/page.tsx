@@ -20,6 +20,7 @@ import {
   type ExpressPlayerSlot,
 } from '@/lib/expressPlayerNames';
 import { ExpressControlAdsPanel } from '@/components/express/ExpressControlAdsPanel';
+import { ExpressControlTickerPanel } from '@/components/express/ExpressControlTickerPanel';
 import { ExpressControlDisplayPanel } from '@/components/express/ExpressControlDisplayPanel';
 import { BouncingBall } from '@/components/BouncingBall';
 
@@ -385,6 +386,18 @@ export default function MobileExpressControl() {
           const next = normalizeExpressMatch({
             ...(matchRef.current as unknown as Record<string, unknown>),
             base_venue: baseVenue,
+          });
+          applyMatch(next);
+        }}
+      />
+
+      <ExpressControlTickerPanel
+        match={match}
+        onPhrasesSaved={(phrases) => {
+          if (!matchRef.current) return;
+          const next = normalizeExpressMatch({
+            ...(matchRef.current as unknown as Record<string, unknown>),
+            display_ticker_phrases: phrases,
           });
           applyMatch(next);
         }}

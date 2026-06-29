@@ -463,33 +463,99 @@ export function PizarraTableScoreboard({
   );
 }
 
-export function TickerMarquee({ messages }: { messages: { id: string; mensaje: string }[] }) {
+function CarouselImagePanel({
+  url,
+  imageKey,
+  expressMode,
+  index,
+  total,
+}: {
+  url: string;
+  imageKey: string;
+  expressMode?: boolean;
+  index?: number;
+  total?: number;
+}) {
+  const [visible, setVisible] = useState(true);
+  const [shownUrl, setShownUrl] = useState(url);
+
+  useEffect(() => {
+    if (!url || url === shownUrl) return;
+    setVisible(false);
+    const img = new window.Image();
+    img.onload = () => {
+      setShownUrl(url);
+      requestAnimationFrame(() => setVisible(true));
+    };
+    img.onerror = () => {
+      setShownUrl(url);
+      setVisible(true);
+    };
+    img.src = url;
+  }, [url, shownUrl]);
+
+  const fitClass = expressMode ? 'object-cover object-center' : 'object-contain object-center';
+
+  return (
+    <div className="relative h-full w-full min-h-0 min-w-0 overflow-hidden bg-[#0a0a0a]">
+      {expressMode ? (
+        <div
+          className="pointer-events-none absolute inset-0 scale-110 opacity-30 blur-2xl"
+          style={{ backgroundImage: `url(${shownUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+          aria-hidden
+        />
+      ) : null}
+      <img
+        key={imageKey}
+        src={shownUrl}
+        alt=""
+        className={`relative z-[1] mx-auto h-full w-full max-h-full max-w-full ${fitClass} transition-opacity duration-700 ease-in-out ${
+          visible ? 'opacity-100' : 'opacity-0'
+        }`}
+      />
+      {expressMode && total != null && total > 1 ? (
+        <div className="absolute bottom-1.5 left-1/2 z-[2] flex -translate-x-1/2 gap-1">
+          {Array.from({ length: total }).map((_, i) => (
+            <div
+              key={i}
+              className={`h-1 rounded-full transition-all duration-300 ${
+                i === (index ?? 0) ? 'w-4 bg-padel-primary shadow-[0_0_6px_rgba(204,255,0,0.5)]' : 'w-1 bg-white/30'
+              }`}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function TickerMarquee({
+  messages,
+}: {
+  messages: { id: string; mensaje: string; highlight?: boolean }[];
+}) {
   if (!messages.length) return null;
+  const renderMsg = (msg: { id: string; mensaje: string; highlight?: boolean }, suffix = '') => (
+    <span
+      key={`${msg.id}${suffix}`}
+      className={`mx-10 shrink-0 whitespace-nowrap text-lg font-black uppercase tracking-[0.2em] sm:text-xl md:text-2xl ${
+        msg.highlight ? 'text-white' : 'text-padel-primary/90'
+      }`}
+    >
+      {msg.mensaje}
+    </span>
+  );
   return (
     <div className="pizarra-ticker-bleed pizarra-ticker-bleed--flush relative z-0 box-border flex min-h-[4rem] min-w-0 flex-row items-center border-b border-white/10 bg-black/60 py-4 backdrop-blur-md sm:min-h-[4.5rem]">
       <div className="marquee-ticker-viewport">
         <div className="marquee-track animate-marquee">
           <div className="marquee-half">
             <span className="marquee-enter-gap" aria-hidden />
-            {messages.map((msg) => (
-              <span
-                key={msg.id}
-                className="mx-10 shrink-0 whitespace-nowrap text-lg font-black uppercase tracking-[0.2em] text-padel-primary/90 sm:text-xl md:text-2xl"
-              >
-                {msg.mensaje}
-              </span>
-            ))}
+            {messages.map((msg) => renderMsg(msg))}
           </div>
           <div className="marquee-half">
             <span className="marquee-enter-gap" aria-hidden />
-            {messages.map((msg) => (
-              <span
-                key={`${msg.id}-d`}
-                className="mx-10 shrink-0 whitespace-nowrap text-lg font-black uppercase tracking-[0.2em] text-padel-primary/90 sm:text-xl md:text-2xl"
-              >
-                {msg.mensaje}
-              </span>
-            ))}
+            {messages.map((msg) => renderMsg(msg, '-d'))}
           </div>
         </div>
       </div>
@@ -557,6 +623,9 @@ export function DualPlaylistStrip({
   asistenciaMedicaActiva,
   mesaTecnicaActiva,
   mediaScale,
+  expressImageCarousel,
+  imageCarouselIndex,
+  imageCarouselTotal,
 }: {
   canchaId: string;
   currentVideoUrl: string | null;
@@ -569,6 +638,9 @@ export function DualPlaylistStrip({
   mesaTecnicaActiva?: boolean;
   /** Solo Express: multiplicador altura franja vídeo/imágenes. */
   mediaScale?: number;
+  expressImageCarousel?: boolean;
+  imageCarouselIndex?: number;
+  imageCarouselTotal?: number;
 }) {
   const hasVideo = Boolean(currentVideoUrl);
   const hasImage = Boolean(currentImageUrl);
@@ -595,11 +667,12 @@ export function DualPlaylistStrip({
     ? ({ '--ems': normalizedMediaScale } as React.CSSProperties)
     : undefined;
 
+  const gridClass = expressImageCarousel
+    ? `grid w-full grid-cols-2 grid-rows-1 gap-px overflow-hidden bg-white/10 [grid-template-columns:50%_50%] ${stripHeightClass}`
+    : `grid w-full grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-px overflow-hidden bg-white/10 sm:grid-cols-2 sm:grid-rows-1 sm:[grid-template-columns:50%_50%] ${stripHeightClass}`;
+
   return (
-    <div
-      className={`grid w-full grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-px overflow-hidden bg-white/10 sm:grid-cols-2 sm:grid-rows-1 sm:[grid-template-columns:50%_50%] ${stripHeightClass}`}
-      style={stripStyle}
-    >
+    <div className={gridClass} style={stripStyle}>
       <div className="relative flex h-full min-h-0 w-full min-w-0 items-center justify-center overflow-hidden bg-black">
         {criticalText ? (
           <div
@@ -636,11 +709,12 @@ export function DualPlaylistStrip({
             <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white/85">{criticalSub}</p>
           </div>
         ) : hasImage ? (
-          <img
-            key={imageKey}
-            src={currentImageUrl!}
-            alt=""
-            className="h-full w-full max-h-full max-w-full object-contain object-center opacity-95"
+          <CarouselImagePanel
+            url={currentImageUrl!}
+            imageKey={imageKey}
+            expressMode={expressImageCarousel}
+            index={imageCarouselIndex}
+            total={imageCarouselTotal}
           />
         ) : (
           <span className="text-[10px] font-black uppercase tracking-widest text-white/25">Sin imágenes</span>
@@ -786,6 +860,8 @@ export function PizarraPublicidadFooter({
   playlists,
   minimalMode,
   mediaScale,
+  expressImageCarousel,
+  tickerMessagesOverride,
 }: {
   canchaId: string;
   playlists: {
@@ -797,12 +873,18 @@ export function PizarraPublicidadFooter({
     videoUrls: string[];
     videoAdvanceByTimer: boolean;
     tickerMessages: { id: string; mensaje: string }[];
+    imageItems?: { url: string; duracionSeg: number }[];
+    imageIndex?: number;
   };
   minimalMode?: boolean;
   /** Solo Express: multiplicador altura franja vídeo/imágenes. */
   mediaScale?: number;
+  expressImageCarousel?: boolean;
+  tickerMessagesOverride?: { id: string; mensaje: string }[];
 }) {
   if (minimalMode) return null;
+  const tickerMessages = tickerMessagesOverride ?? playlists.tickerMessages;
+  const imageTotal = playlists.imageItems?.length ?? 0;
   return (
     <>
       <DualPlaylistStrip
@@ -814,8 +896,11 @@ export function PizarraPublicidadFooter({
         onVideoEnded={playlists.videoAdvanceByTimer ? () => {} : playlists.onVideoEnded}
         singleVideoLoop={playlists.videoUrls.length <= 1 || playlists.videoAdvanceByTimer}
         mediaScale={mediaScale}
+        expressImageCarousel={expressImageCarousel}
+        imageCarouselIndex={playlists.imageIndex}
+        imageCarouselTotal={imageTotal}
       />
-      <TickerMarquee messages={playlists.tickerMessages} />
+      <TickerMarquee messages={tickerMessages} />
     </>
   );
 }

@@ -181,6 +181,15 @@ export function useCourtPlaylists(
     return () => window.clearTimeout(t);
   }, [imageItems, imageIndex, imagenLoop, imagenPausa]);
 
+  useEffect(() => {
+    if (!imageItems.length) return;
+    const nextIdx = (imageIndex + 1) % imageItems.length;
+    const nextUrl = imageItems[nextIdx]?.url;
+    if (!nextUrl) return;
+    const img = new window.Image();
+    img.src = nextUrl;
+  }, [imageItems, imageIndex]);
+
   const videoAdvanceByTimer = videoCambioMinutos > 0 && videoUrls.length > 0;
 
   useEffect(() => {

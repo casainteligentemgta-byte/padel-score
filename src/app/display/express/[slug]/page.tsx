@@ -37,6 +37,7 @@ import {
 import type { CourtPlaylistsState } from '@/lib/useCourtPlaylists';
 import { BouncingBall } from '@/components/BouncingBall';
 import { ExpressTvDeviceGate } from '@/components/express/ExpressTvDeviceGate';
+import { mergeExpressTickerMessages } from '@/lib/expressTickerMessages';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -55,16 +56,24 @@ function ExpressTvPublicidadDock({
   playlists,
   minimalMode,
   mediaScale,
+  tickerMessages,
 }: {
   canchaId: string;
   playlists: CourtPlaylistsState;
   minimalMode?: boolean;
   mediaScale?: number;
+  tickerMessages: { id: string; mensaje: string }[];
 }) {
   if (minimalMode) return null;
   return (
     <div className="absolute bottom-0 left-0 right-0 z-20 flex w-full min-w-0 max-w-none flex-col items-stretch border-t border-white/10 bg-[#050505]">
-      <PizarraPublicidadFooter canchaId={canchaId} playlists={playlists} mediaScale={mediaScale} />
+      <PizarraPublicidadFooter
+        canchaId={canchaId}
+        playlists={playlists}
+        mediaScale={mediaScale}
+        expressImageCarousel
+        tickerMessagesOverride={tickerMessages}
+      />
     </div>
   );
 }
@@ -115,6 +124,11 @@ export default function ExpressTvDisplay() {
   const playlists = useCourtPlaylists(canchaId, playlistVenue, playlistVenueFallbacks);
   useCourtDisplayHeartbeat(canchaId, heartbeatVenue);
   useThreeFingerDragExit('/');
+
+  const tickerMessages = useMemo(
+    () => mergeExpressTickerMessages(playlists.tickerMessages, match?.display_ticker_phrases ?? []),
+    [playlists.tickerMessages, match?.display_ticker_phrases],
+  );
 
   const marcador = useMemo(
     () => (match?.is_active ? expressMatchToMarcador(match) : null),
@@ -278,6 +292,7 @@ export default function ExpressTvDisplay() {
           playlists={playlists}
           minimalMode={minimalMode}
           mediaScale={displayMediaScale}
+          tickerMessages={tickerMessages}
         />
         <PizarraDisplayGlobalStyles />
       </div>,
@@ -369,6 +384,7 @@ export default function ExpressTvDisplay() {
           playlists={playlists}
           minimalMode={minimalMode}
           mediaScale={displayMediaScale}
+          tickerMessages={tickerMessages}
         />
 
         <PizarraDisplayGlobalStyles />
@@ -408,6 +424,8 @@ export default function ExpressTvDisplay() {
           playlists={playlists}
           minimalMode={minimalMode}
           mediaScale={match.display_media_scale}
+          expressImageCarousel
+          tickerMessagesOverride={tickerMessages}
         />
       </div>
 
