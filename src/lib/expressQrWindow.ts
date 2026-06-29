@@ -1,12 +1,12 @@
 import type { ExpressMatch } from '@/types/expressMatch';
 
-/** QR visible en standby: legacy (sin expires) o ventana activa vía Telegram. */
+/** QR visible en standby solo durante la ventana activa (Telegram, 60 s). */
 export function isExpressQrWindowOpen(match: ExpressMatch, nowMs = Date.now()): boolean {
   if (match.is_active) return false;
   const exp = match.qr_expires_at;
-  if (!exp) return true;
+  if (!exp) return false;
   const t = new Date(exp).getTime();
-  if (Number.isNaN(t)) return true;
+  if (Number.isNaN(t)) return false;
   return t > nowMs;
 }
 

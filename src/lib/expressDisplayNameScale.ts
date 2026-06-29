@@ -4,7 +4,8 @@ export const EXPRESS_PLAYER_NAME_BASE_REM = 0.8125;
 export const EXPRESS_DISPLAY_NAME_SCALE_DEFAULT = 1.25;
 
 export const EXPRESS_DISPLAY_NAME_SCALE_MIN = 0.85;
-export const EXPRESS_DISPLAY_NAME_SCALE_MAX = 1.6;
+export const EXPRESS_DISPLAY_NAME_SCALE_MAX = 2.5;
+export const EXPRESS_DISPLAY_NAME_SCALE_STEP = 0.05;
 
 export type ExpressNameScalePresetId = 'S' | 'M' | 'L' | 'XL';
 
@@ -20,12 +21,24 @@ export const EXPRESS_NAME_SCALE_PRESETS: {
   { id: 'XL', label: 'Muy grande', shortLabel: 'XL', value: 1.5 },
 ];
 
+function snapExpressScaleStep(
+  n: number,
+  min: number,
+  max: number,
+  step: number,
+): number {
+  const snapped = Math.round(n / step) * step;
+  return Math.min(max, Math.max(min, Number(snapped.toFixed(2))));
+}
+
 export function normalizeExpressDisplayNameScale(raw: unknown): number {
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) return EXPRESS_DISPLAY_NAME_SCALE_DEFAULT;
-  return Math.min(
+  return snapExpressScaleStep(
+    n,
+    EXPRESS_DISPLAY_NAME_SCALE_MIN,
     EXPRESS_DISPLAY_NAME_SCALE_MAX,
-    Math.max(EXPRESS_DISPLAY_NAME_SCALE_MIN, Math.round(n * 100) / 100),
+    EXPRESS_DISPLAY_NAME_SCALE_STEP,
   );
 }
 

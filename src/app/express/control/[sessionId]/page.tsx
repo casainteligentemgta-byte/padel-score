@@ -22,6 +22,8 @@ import {
 import { ExpressControlAdsPanel } from '@/components/express/ExpressControlAdsPanel';
 import { ExpressControlTickerPanel } from '@/components/express/ExpressControlTickerPanel';
 import { ExpressControlDisplayPanel } from '@/components/express/ExpressControlDisplayPanel';
+import { ExpressControlThirdSetPanel } from '@/components/express/ExpressControlThirdSetPanel';
+import { EXPRESS_TV_BRAND } from '@/lib/expressSlug';
 import { BouncingBall } from '@/components/BouncingBall';
 
 type PageStatus = 'loading' | 'ready' | 'missing' | 'config_error';
@@ -134,6 +136,12 @@ export default function MobileExpressControl() {
 
       applyMatch(data);
       setStatus('ready');
+
+      void fetch('/api/express/session-started', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      }).catch(() => {});
     };
 
     activateControl();
@@ -286,7 +294,10 @@ export default function MobileExpressControl() {
       <div className="mb-4 flex items-center justify-between border-b border-neutral-800 pb-4">
         <div>
           <h1 className="flex items-center gap-2 text-sm font-bold tracking-widest text-padel-primary">
-            SCAN&GO
+            {EXPRESS_TV_BRAND}
+            {match.modo_puntos === 'super_tiebreak' && (
+              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">SÚPER TB</span>
+            )}
             {match.modo_puntos === 'tiebreak' && (
               <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] text-red-500">TIE-BREAK</span>
             )}
@@ -356,6 +367,19 @@ export default function MobileExpressControl() {
       >
         {match.punto_de_oro ? '⚡ Desactivar Punto de Oro' : 'Activar Punto de Oro'}
       </button>
+
+      <ExpressControlThirdSetPanel
+        match={match}
+        sessionId={sessionId}
+        onModeSaved={(mode) => {
+          if (!matchRef.current) return;
+          const next = normalizeExpressMatch({
+            ...(matchRef.current as unknown as Record<string, unknown>),
+            third_set_mode: mode,
+          });
+          applyMatch(next);
+        }}
+      />
 
       <ExpressControlDisplayPanel
         match={match}

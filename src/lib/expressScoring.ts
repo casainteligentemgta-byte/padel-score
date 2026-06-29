@@ -3,6 +3,11 @@ import {
   syncExpressTeamNameFields,
 } from '@/lib/expressPlayerNames';
 import {
+  isExpressThirdSetDeciderMode,
+  normalizeExpressThirdSetMode,
+} from '@/lib/expressThirdSetMode';
+import { winsTiebreakPoints } from '@/lib/matchScoringRules';
+import {
   EXPRESS_SET_SLOTS,
   type ExpressMatch,
   type ExpressPoint,
@@ -43,8 +48,33 @@ function prevRegularPoint(current: ExpressPoint | string): ExpressPoint | null {
   return REGULAR_POINTS[idx - 1];
 }
 
-function winsTiebreakPoints(pts: number, rivalPts: number): boolean {
-  return pts >= 7 && pts - rivalPts >= 2;
+function isNumericScoreMode(state: ExpressMatch): boolean {
+  return state.modo_puntos === 'tiebreak' || state.modo_puntos === 'super_tiebreak';
+}
+
+function tiebreakTarget(state: ExpressMatch): number {
+  return state.modo_puntos === 'super_tiebreak' ? 10 : 7;
+}
+
+function isThirdSetDeciderPlay(state: ExpressMatch): boolean {
+  if (state.current_set !== 3) return false;
+  return isExpressThirdSetDeciderMode(normalizeExpressThirdSetMode(state.third_set_mode));
+}
+
+function applyThirdSetEntry(state: ExpressMatch): void {
+  const mode = normalizeExpressThirdSetMode(state.third_set_mode);
+  state.team_a_games = 0;
+  state.team_b_games = 0;
+  state.team_a_points = '0';
+  state.team_b_points = '0';
+
+  if (mode === 'tiebreak') {
+    state.modo_puntos = 'tiebreak';
+  } else if (mode === 'super') {
+    state.modo_puntos = 'super_tiebreak';
+  } else {
+    state.modo_puntos = 'normal';
+  }
 }
 
 /** Campos mutables para UPDATE en Supabase (sin id, created_at, cancha_code). */
@@ -70,6 +100,7 @@ export function pickScorePatch(state: ExpressMatch): Partial<ExpressMatch> {
     sets_b: state.sets_b,
     current_set: state.current_set,
     modo_puntos: state.modo_puntos,
+    third_set_mode: normalizeExpressThirdSetMode(state.third_set_mode),
     punto_de_oro: state.punto_de_oro,
     is_active: state.is_active,
   };
@@ -90,6 +121,7 @@ export function buildExpressSessionReset(sessionId: string): Partial<ExpressMatc
     sets_b: [0, 0, 0],
     current_set: 1,
     modo_puntos: 'normal',
+    third_set_mode: 'full',
     is_active: false,
     qr_expires_at: null,
   };
@@ -114,7 +146,7 @@ export function calculateNextState(
   const rivalGamesKey = teamGamesKey(rival);
 
   if (action === 'decrement') {
-    if (state.modo_puntos === 'tiebreak') {
+    if (isNumericScoreMode(state)) {
       const currentPts = parseInt(String(state[pointsKey]), 10) || 0;
       state[pointsKey] = Math.max(0, currentPts - 1).toString();
     } else {
@@ -127,13 +159,25 @@ export function calculateNextState(
   const currentPts = state[pointsKey];
   const rivalPts = state[rivalPointsKey];
   let wonGame = false;
+  let wonSetDirect = false;
 
-  if (state.modo_puntos === 'tiebreak') {
+  if (isNumericScoreMode(state)) {
+    const target = tiebreakTarget(state);
     const pts = (parseInt(String(currentPts), 10) || 0) + 1;
     const rPts = parseInt(String(rivalPts), 10) || 0;
     state[pointsKey] = pts.toString();
-    if (winsTiebreakPoints(pts, rPts)) {
-      wonGame = true;
+
+    if (winsTiebreakPoints(pts, rPts, target)) {
+      if (isThirdSetDeciderPlay(state)) {
+        const setIdx = 2;
+        state.sets_a[setIdx] = team === 'a' ? pts : rPts;
+        state.sets_b[setIdx] = team === 'b' ? pts : rPts;
+        state.team_a_points = String(team === 'a' ? pts : rPts);
+        state.team_b_points = String(team === 'b' ? pts : rPts);
+        wonSetDirect = true;
+      } else {
+        wonGame = true;
+      }
     }
   } else if (state.punto_de_oro) {
     if (currentPts === '40') {
@@ -157,6 +201,11 @@ export function calculateNextState(
       const next = nextRegularPoint(currentPts);
       if (next) state[pointsKey] = next;
     }
+  }
+
+  if (wonSetDirect) {
+    state.is_active = false;
+    return pickScorePatch(state);
   }
 
   if (wonGame) {
@@ -195,8 +244,13 @@ export function calculateNextState(
         state.is_active = false;
       } else {
         state.current_set = Math.min(EXPRESS_SET_SLOTS, state.current_set + 1);
-        state.team_a_games = 0;
-        state.team_b_games = 0;
+        if (state.current_set === 3) {
+          applyThirdSetEntry(state);
+        } else {
+          state.team_a_games = 0;
+          state.team_b_games = 0;
+          state.modo_puntos = 'normal';
+        }
       }
     }
   }

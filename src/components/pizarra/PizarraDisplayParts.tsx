@@ -19,6 +19,7 @@ import {
   normalizeExpressDisplayNameScale,
 } from '@/lib/expressDisplayNameScale';
 import { normalizeExpressDisplayMediaScale } from '@/lib/expressDisplayMediaScale';
+import { expressThirdSetModeTvLabel } from '@/lib/expressThirdSetMode';
 import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
 import { SmartPadelBallIcon } from '@/components/SmartPadelBallIcon';
 import { useTripleTap } from '@/lib/useTripleTap';
@@ -323,7 +324,7 @@ export function PizarraTableScoreboard({
   playerNameScale,
 }: {
   marcador: any;
-  /** Solo Express: multiplicador tamaño nombres (0.85–1.6). */
+  /** Solo Express: multiplicador tamaño nombres (0.85–2.5). */
   playerNameScale?: number;
 }) {
   const setsL = Number(marcador.sets?.local ?? 0) || 0;
@@ -370,6 +371,11 @@ export function PizarraTableScoreboard({
   const ptsV = String(marcador.puntos?.visitante ?? '0');
   const scaledBoard = playerNameScale != null && playerNameScale > 0;
   const boardScale = scaledBoard ? normalizeExpressDisplayNameScale(playerNameScale) : 1;
+  const expressThirdSetMode = marcador.express_third_set_mode as string | undefined;
+  const expressCurrentSet = Number(marcador.express_current_set ?? 0);
+  const showThirdSetModeLabel =
+    expressThirdSetMode &&
+    (expressCurrentSet === 3 || (setsL === 1 && setsV === 1));
   const colSet =
     'w-[2.1rem] min-w-[2.1rem] max-w-[2.1rem] shrink-0 sm:w-[2.35rem] sm:min-w-[2.35rem] sm:max-w-[2.35rem]';
   const colPts = 'w-[3rem] min-w-[3rem] max-w-[3.25rem] shrink-0 sm:w-[3.1rem]';
@@ -402,7 +408,8 @@ export function PizarraTableScoreboard({
   );
 
   return (
-    <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-black/45 px-3 py-3 shadow-[0_0_40px_rgba(0,0,0,0.5)] backdrop-blur-sm sm:px-5 sm:py-4">
+    <div className="w-full max-w-5xl">
+      <div className="w-full rounded-2xl border border-white/10 bg-black/45 px-3 py-3 shadow-[0_0_40px_rgba(0,0,0,0.5)] backdrop-blur-sm sm:px-5 sm:py-4">
       <div className="flex w-full min-w-0 items-end gap-2 pb-2 sm:gap-3">
         <div className="min-w-0 flex-1" />
         <div className="flex shrink-0 items-end gap-0.5 sm:gap-1">
@@ -459,6 +466,14 @@ export function PizarraTableScoreboard({
         </div>
         {scoreBlock('visitante', c2, ptsV)}
       </div>
+      </div>
+      {showThirdSetModeLabel ? (
+        <p className="mt-1.5 text-center text-[9px] font-black uppercase tracking-[0.28em] text-padel-primary/90 sm:text-[10px] sm:tracking-[0.32em]">
+          {expressThirdSetModeTvLabel(
+            expressThirdSetMode as 'full' | 'tiebreak' | 'super',
+          )}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -563,7 +578,14 @@ export function TickerMarquee({
   );
 }
 
-export function PizarraScoreboardFit({ children }: { children: React.ReactNode }) {
+export function PizarraScoreboardFit({
+  children,
+  expressMode = false,
+}: {
+  children: React.ReactNode;
+  /** Express TV: no reducir zoom por altura para que display_name_scale se note en pantalla. */
+  expressMode?: boolean;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -578,9 +600,11 @@ export function PizarraScoreboardFit({ children }: { children: React.ReactNode }
     const mw = inner.scrollWidth;
     const mh = inner.scrollHeight;
     if (mw < 1 || mh < 1) return;
-    const s = Math.min(1, (cw - 4) / mw, (ch - 4) / mh);
+    const s = expressMode
+      ? Math.min(1, (cw - 4) / mw)
+      : Math.min(1, (cw - 4) / mw, (ch - 4) / mh);
     setScale((prev) => (Math.abs(prev - s) < 0.002 ? prev : s));
-  }, []);
+  }, [expressMode]);
 
   useLayoutEffect(() => {
     updateScale();
@@ -599,7 +623,9 @@ export function PizarraScoreboardFit({ children }: { children: React.ReactNode }
   return (
     <div
       ref={containerRef}
-      className="flex min-h-0 w-full flex-1 flex-col items-stretch justify-start overflow-hidden px-3 pt-1 pb-2 sm:px-6 sm:pt-2"
+      className={`flex min-h-0 w-full flex-1 flex-col items-stretch justify-start px-3 pt-1 pb-2 sm:px-6 sm:pt-2 ${
+        expressMode ? 'overflow-x-hidden overflow-y-auto' : 'overflow-hidden'
+      }`}
     >
       <div
         ref={contentRef}
@@ -727,6 +753,7 @@ export function DualPlaylistStrip({
 export function PistaTopBar({
   courtHeadline,
   levelLine,
+  levelLineClassName,
   genderLine,
   mode,
   goldenPoint,
@@ -736,6 +763,8 @@ export function PistaTopBar({
 }: {
   courtHeadline: string;
   levelLine: string;
+  /** Override de estilo para la línea de marca (p. ej. SmartPadel58 en Express). */
+  levelLineClassName?: string;
   genderLine: string;
   mode: 'live' | 'wait';
   goldenPoint?: boolean;
@@ -777,6 +806,7 @@ export function PistaTopBar({
   });
   const tempStr = tempC != null && Number.isFinite(tempC) ? `${tempC}°C` : '—';
   const metaMuted = 'text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500';
+  const levelLineClass = levelLineClassName ?? metaMuted;
 
   return (
     <div className="relative z-20 grid w-full flex-shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-3 border-b border-white/10 bg-black/60 px-4 py-2.5 backdrop-blur-xl sm:gap-4 sm:px-8 sm:py-3">
@@ -784,7 +814,7 @@ export function PistaTopBar({
         <span className="truncate text-[11px] font-black uppercase tracking-[0.12em] text-white sm:text-xs">
           {courtHeadline}
         </span>
-        {levelLine ? <span className={metaMuted}>{levelLine}</span> : null}
+        {levelLine ? <span className={levelLineClass}>{levelLine}</span> : null}
         {genderLine ? <span className={metaMuted}>{genderLine}</span> : null}
       </div>
 

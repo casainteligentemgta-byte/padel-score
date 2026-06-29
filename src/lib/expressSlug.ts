@@ -1,4 +1,4 @@
-/** Prefijo URL/DB para pistas Express (scan-go-3 → pantalla muestra SCAN&GO 3). */
+/** Prefijo URL/DB para pistas Express (scan-go-3 → slug de ruta, sin cambiar branding TV). */
 export const EXPRESS_CANCHA_PREFIX = 'scan-go';
 
 const LEGACY_PREFIX = 'fast';
@@ -33,10 +33,13 @@ export function isLegacyExpressSlug(slug: string): boolean {
   return /^fast-\d+$/i.test(String(slug ?? '').trim());
 }
 
-/** Etiqueta en TV / control: SCAN&GO 3 */
+/** Marca visible en pantallas TV Express (/display/express/[slug]). */
+export const EXPRESS_TV_BRAND = 'SmartPadel58';
+
+/** Etiqueta de cancha en TV / control (p. ej. CANCHA 3). */
 export function expressSlugDisplayLabel(slug: string): string {
   const n = courtNumFromExpressSlug(slug);
-  return n ? `SCAN&GO ${n}` : 'SCAN&GO';
+  return n ? `CANCHA ${n}` : EXPRESS_TV_BRAND;
 }
 
 export function expressDisplayPath(displayNum: number): string {

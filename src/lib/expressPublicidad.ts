@@ -4,15 +4,24 @@
  */
 
 import { expressCourtCountForClub } from '@/lib/expressVenueCourts';
-import { expressDisplayPath, expressSlugFromDisplayNum } from '@/lib/expressSlug';
+import { EXPRESS_TV_BRAND, expressDisplayPath, expressSlugFromDisplayNum } from '@/lib/expressSlug';
 
-export const EXPRESS_PUBLICIDAD_VENUE_SUFFIX = ' · Express';
+/** Punto medio Unicode U+00B7 — debe coincidir con venue_name en cancha_publicidad (admin Express). */
+const EXPRESS_VENUE_MIDDLE_DOT = '\u00B7';
+
+/** Sufijo playlist Express: espacio + · + espacio + Express (no guión). */
+export const EXPRESS_PUBLICIDAD_VENUE_SUFFIX = ` ${EXPRESS_VENUE_MIDDLE_DOT} Express`;
 
 export function expressPublicidadVenueName(baseVenue: string): string {
   const base = String(baseVenue || '').trim();
   if (!base) return 'Express';
   if (base.endsWith(EXPRESS_PUBLICIDAD_VENUE_SUFFIX)) return base;
-  return `${base}${EXPRESS_PUBLICIDAD_VENUE_SUFFIX}`;
+  // Normaliza variantes erróneas guardadas con guión o bullet distinto
+  const normalized = base
+    .replace(/\s*[-–]\s*Express\s*$/i, EXPRESS_PUBLICIDAD_VENUE_SUFFIX)
+    .replace(/\s*•\s*Express\s*$/i, EXPRESS_PUBLICIDAD_VENUE_SUFFIX);
+  if (normalized.endsWith(EXPRESS_PUBLICIDAD_VENUE_SUFFIX)) return normalized;
+  return `${normalized}${EXPRESS_PUBLICIDAD_VENUE_SUFFIX}`;
 }
 
 /** Sede real a partir del venue de playlist Express. */
@@ -57,7 +66,7 @@ export function buildExpressCourts(count: number): ExpressCourtDef[] {
     const slug = expressSlugFromDisplayNum(displayNum);
     return {
       key: String(displayNum),
-      label: `Scan&Go ${displayNum}`,
+      label: `${EXPRESS_TV_BRAND} ${displayNum}`,
       displayNum,
       slug,
     };

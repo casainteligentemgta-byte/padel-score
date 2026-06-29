@@ -2,10 +2,15 @@ import { hydrateExpressPlayerFields } from '@/lib/expressPlayerNames';
 import { normalizeExpressDisplayNameScale } from '@/lib/expressDisplayNameScale';
 import { normalizeExpressDisplayMediaScale } from '@/lib/expressDisplayMediaScale';
 import { normalizeExpressTickerPhrases } from '@/lib/expressTickerMessages';
+import {
+  EXPRESS_THIRD_SET_MODE_DEFAULT,
+  normalizeExpressThirdSetMode,
+  type ExpressThirdSetMode,
+} from '@/lib/expressThirdSetMode';
 
 export type ExpressPoint = '0' | '15' | '30' | '40' | 'AD';
 
-export type ExpressScoreMode = 'normal' | 'tiebreak';
+export type ExpressScoreMode = 'normal' | 'tiebreak' | 'super_tiebreak';
 
 export const EXPRESS_SET_SLOTS = 3 as const;
 
@@ -34,11 +39,13 @@ export interface ExpressMatch {
   current_set: number;
   modo_puntos: ExpressScoreMode;
   punto_de_oro: boolean;
+  /** Formato del 3er set (full | tiebreak | super). */
+  third_set_mode: ExpressThirdSetMode;
   is_active: boolean;
   base_venue: string;
-  /** Multiplicador tamaño nombres en TV (0.85–1.6). */
+  /** Multiplicador tamaño nombres en TV (0.85–2.5). */
   display_name_scale: number;
-  /** Multiplicador altura vídeo + imágenes en TV (0.5–1.75). */
+  /** Multiplicador altura vídeo + imágenes en TV (0.5–2.5). */
   display_media_scale: number;
   /** Ventana temporal QR (Telegram). Null = QR siempre en standby. */
   qr_expires_at: string | null;
@@ -67,6 +74,7 @@ export function normalizeExpressMatch(row: Record<string, unknown>): ExpressMatc
     display_media_scale: normalizeExpressDisplayMediaScale(hydrated.display_media_scale),
     qr_expires_at: hydrated.qr_expires_at ? String(hydrated.qr_expires_at) : null,
     display_ticker_phrases: normalizeExpressTickerPhrases(hydrated.display_ticker_phrases),
+    third_set_mode: normalizeExpressThirdSetMode(hydrated.third_set_mode),
     sets_a: setsA?.length === EXPRESS_SET_SLOTS ? setsA : [0, 0, 0],
     sets_b: setsB?.length === EXPRESS_SET_SLOTS ? setsB : [0, 0, 0],
   };

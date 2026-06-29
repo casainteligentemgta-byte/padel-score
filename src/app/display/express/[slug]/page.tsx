@@ -30,16 +30,17 @@ import {
 import {
   PistaTopBar,
   PizarraDisplayGlobalStyles,
-  PizarraPublicidadFooter,
   PizarraScoreboardFit,
   PizarraTableScoreboard,
 } from '@/components/pizarra/PizarraDisplayParts';
 import type { CourtPlaylistsState } from '@/lib/useCourtPlaylists';
 import { BouncingBall } from '@/components/BouncingBall';
 import { ExpressTvDeviceGate } from '@/components/express/ExpressTvDeviceGate';
+import { ExpressTvPublicidadDock } from '@/components/express/ExpressTvPublicidadDock';
 import { ExpressPlaylistDebug } from '@/components/express/ExpressPlaylistDebug';
 import { mergeExpressTickerMessages } from '@/lib/expressTickerMessages';
 import {
+  EXPRESS_TV_BRAND,
   expressSlugDisplayLabel,
   isLegacyExpressSlug,
   normalizeExpressSlug,
@@ -49,39 +50,14 @@ import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 type LoadState = 'loading' | 'ready' | 'error';
 
 function expressScoringMeta(match: ExpressMatch): { levelLine: string; genderLine: string } {
-  const levelLine = 'SCAN&GO';
+  const levelLine = EXPRESS_TV_BRAND;
   let genderLine = match.punto_de_oro ? 'Punto de oro' : 'Ventaja clásica';
-  if (match.modo_puntos === 'tiebreak') {
+  if (match.modo_puntos === 'super_tiebreak') {
+    genderLine = 'Súper tie-break';
+  } else if (match.modo_puntos === 'tiebreak') {
     genderLine = 'Tie-break';
   }
   return { levelLine, genderLine };
-}
-
-function ExpressTvPublicidadDock({
-  canchaId,
-  playlists,
-  minimalMode,
-  mediaScale,
-  tickerMessages,
-}: {
-  canchaId: string;
-  playlists: CourtPlaylistsState;
-  minimalMode?: boolean;
-  mediaScale?: number;
-  tickerMessages: { id: string; mensaje: string }[];
-}) {
-  if (minimalMode) return null;
-  return (
-    <div className="absolute bottom-0 left-0 right-0 z-20 flex w-full min-w-0 max-w-none flex-col items-stretch border-t border-white/10 bg-[#050505]">
-      <PizarraPublicidadFooter
-        canchaId={canchaId}
-        playlists={playlists}
-        mediaScale={mediaScale}
-        expressImageCarousel
-        tickerMessagesOverride={tickerMessages}
-      />
-    </div>
-  );
 }
 
 export default function ExpressTvDisplay() {
@@ -104,6 +80,7 @@ export default function ExpressTvDisplay() {
   const courtNum = courtNumFromExpressSlug(slug);
   const canchaId = canchaIdFromExpressSlug(slug);
   const boardLabel = expressSlugDisplayLabel(slug);
+  const expressBrandClassName = 'font-outfit text-lg font-bold tracking-widest text-white';
 
   useEffect(() => {
     if (!isValidExpressSlug(slugRaw) || !isLegacyExpressSlug(slugRaw)) return;
@@ -156,8 +133,23 @@ export default function ExpressTvDisplay() {
 
   useEffect(() => {
     if (!match?.qr_expires_at || match.is_active) return;
-    const id = setInterval(() => setQrTick(Date.now()), 1000);
-    return () => clearInterval(id);
+
+    const tick = () => setQrTick(Date.now());
+    tick();
+
+    const expMs = new Date(match.qr_expires_at).getTime();
+    if (Number.isNaN(expMs)) return;
+
+    const msLeft = expMs - Date.now();
+    if (msLeft <= 0) return;
+
+    const id = setInterval(tick, 1000);
+    const timeoutId = setTimeout(tick, msLeft + 50);
+
+    return () => {
+      clearInterval(id);
+      clearTimeout(timeoutId);
+    };
   }, [match?.qr_expires_at, match?.is_active]);
 
   const wrapGate = (node: ReactNode) => (
@@ -303,7 +295,8 @@ export default function ExpressTvDisplay() {
       <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-hidden bg-[#050505] font-outfit text-white">
         <PistaTopBar
           courtHeadline={courtHeadline}
-          levelLine="SCAN&GO"
+          levelLine={EXPRESS_TV_BRAND}
+          levelLineClassName={expressBrandClassName}
           genderLine="Cargando cancha…"
           mode="wait"
         />
@@ -315,6 +308,8 @@ export default function ExpressTvDisplay() {
         </div>
         <ExpressTvPublicidadDock
           canchaId={canchaId}
+          baseVenue={effectiveBaseVenue}
+          playlistVenue={playlistVenue}
           playlists={playlists}
           minimalMode={minimalMode}
           mediaScale={displayMediaScale}
@@ -350,6 +345,7 @@ export default function ExpressTvDisplay() {
         <PistaTopBar
           courtHeadline={courtHeadline}
           levelLine={levelLine}
+          levelLineClassName={expressBrandClassName}
           genderLine={qrWindowOpen ? 'Escanea el QR para jugar' : 'Pantalla en espera'}
           mode="wait"
         />
@@ -407,6 +403,8 @@ export default function ExpressTvDisplay() {
 
         <ExpressTvPublicidadDock
           canchaId={canchaId}
+          baseVenue={effectiveBaseVenue}
+          playlistVenue={playlistVenue}
           playlists={playlists}
           minimalMode={minimalMode}
           mediaScale={displayMediaScale}
@@ -423,6 +421,7 @@ export default function ExpressTvDisplay() {
       <PistaTopBar
         courtHeadline={courtHeadline}
         levelLine={levelLine}
+        levelLineClassName={expressBrandClassName}
         genderLine={genderLine}
         mode="live"
         goldenPoint={match.punto_de_oro}
@@ -436,24 +435,33 @@ export default function ExpressTvDisplay() {
         </div>
       )}
 
-      <PizarraScoreboardFit>
-        <div className="flex w-full min-h-0 flex-col items-center gap-2 overflow-x-hidden px-1 pt-0">
+      {match.modo_puntos === 'super_tiebreak' && (
+        <div className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-500/20 bg-amber-500/10 py-1">
+          <Zap className="h-3.5 w-3.5 text-amber-400" />
+          <span className="text-[9px] font-black uppercase tracking-[0.3em] text-amber-400">
+            Súper tie-break
+          </span>
+        </div>
+      )}
+
+      <PizarraScoreboardFit expressMode>
+        <div className="flex w-full min-h-0 flex-col items-center gap-2 overflow-visible px-1 pt-0">
           {marcador ? (
             <PizarraTableScoreboard marcador={marcador} playerNameScale={match.display_name_scale} />
           ) : null}
         </div>
       </PizarraScoreboardFit>
 
-      <div className="relative z-10 w-full min-w-0 max-w-none flex-shrink-0 overflow-hidden border-t border-white/10">
-        <PizarraPublicidadFooter
-          canchaId={canchaId}
-          playlists={playlists}
-          minimalMode={minimalMode}
-          mediaScale={match.display_media_scale}
-          expressImageCarousel
-          tickerMessagesOverride={tickerMessages}
-        />
-      </div>
+      <ExpressTvPublicidadDock
+        layout="inline"
+        canchaId={canchaId}
+        baseVenue={effectiveBaseVenue}
+        playlistVenue={playlistVenue}
+        playlists={playlists}
+        minimalMode={minimalMode}
+        mediaScale={match.display_media_scale}
+        tickerMessages={tickerMessages}
+      />
 
       <PizarraDisplayGlobalStyles />
     </div>,

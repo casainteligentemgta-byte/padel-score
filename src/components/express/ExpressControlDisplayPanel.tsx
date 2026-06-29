@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, MonitorPlay, Type } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import type { ExpressMatch } from '@/types/expressMatch';
 import {
+  EXPRESS_DISPLAY_NAME_SCALE_MAX,
+  EXPRESS_DISPLAY_NAME_SCALE_MIN,
+  EXPRESS_DISPLAY_NAME_SCALE_STEP,
   EXPRESS_NAME_SCALE_PRESETS,
   expressPlayerNameFontSize,
   nearestExpressNameScalePresetId,
@@ -12,6 +15,9 @@ import {
   type ExpressNameScalePresetId,
 } from '@/lib/expressDisplayNameScale';
 import {
+  EXPRESS_DISPLAY_MEDIA_SCALE_MAX,
+  EXPRESS_DISPLAY_MEDIA_SCALE_MIN,
+  EXPRESS_DISPLAY_MEDIA_SCALE_STEP,
   EXPRESS_MEDIA_SCALE_PRESETS,
   nearestExpressMediaScalePresetId,
   normalizeExpressDisplayMediaScale,
@@ -66,6 +72,68 @@ function ScalePresetGrid<T extends string>({
   );
 }
 
+function DisplayScaleSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">{label}</span>
+        <span className="font-mono text-xs font-black tabular-nums text-padel-primary">{value.toFixed(2)}×</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-neutral-700 accent-padel-primary disabled:opacity-50"
+        aria-label={label}
+      />
+      <div className="flex justify-between text-[9px] font-bold tabular-nums text-neutral-500">
+        <span>{min.toFixed(2)}×</span>
+        <span>{max.toFixed(2)}×</span>
+      </div>
+    </div>
+  );
+}
+
+function useDebouncedScaleSave(saveFn: (scale: number) => Promise<void>, delayMs = 350) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveRef = useRef(saveFn);
+  saveRef.current = saveFn;
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  return useCallback((scale: number) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      void saveRef.current(scale);
+    }, delayMs);
+  }, [delayMs]);
+}
+
 export function ExpressControlDisplayPanel({
   match,
   sessionId,
@@ -74,8 +142,8 @@ export function ExpressControlDisplayPanel({
 }: Props) {
   const supabase = getSupabaseClient();
   const [open, setOpen] = useState(false);
-  const [savingName, setSavingName] = useState<ExpressNameScalePresetId | null>(null);
-  const [savingMedia, setSavingMedia] = useState<ExpressMediaScalePresetId | null>(null);
+  const [savingName, setSavingName] = useState<ExpressNameScalePresetId | 'slider' | null>(null);
+  const [savingMedia, setSavingMedia] = useState<ExpressMediaScalePresetId | 'slider' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const currentNameScale = normalizeExpressDisplayNameScale(match.display_name_scale);
@@ -83,6 +151,70 @@ export function ExpressControlDisplayPanel({
   const currentMediaScale = normalizeExpressDisplayMediaScale(match.display_media_scale);
   const activeMediaPreset = nearestExpressMediaScalePresetId(currentMediaScale);
   const isSaving = savingName !== null || savingMedia !== null;
+
+  const [nameDraft, setNameDraft] = useState(currentNameScale);
+  const [mediaDraft, setMediaDraft] = useState(currentMediaScale);
+
+  useEffect(() => {
+    setNameDraft(currentNameScale);
+  }, [currentNameScale]);
+
+  useEffect(() => {
+    setMediaDraft(currentMediaScale);
+  }, [currentMediaScale]);
+
+  const persistNameScale = useCallback(
+    async (raw: number) => {
+      if (!supabase) {
+        setError('Supabase no configurado.');
+        return;
+      }
+      const scale = normalizeExpressDisplayNameScale(raw);
+      setSavingName('slider');
+      setError(null);
+      const { error: upErr } = await supabase
+        .from('express_matches')
+        .update({ display_name_scale: scale })
+        .eq('session_id', sessionId);
+
+      setSavingName(null);
+      if (upErr) {
+        setError(upErr.message);
+        setNameDraft(currentNameScale);
+        return;
+      }
+      onNameScaleSaved(scale);
+    },
+    [supabase, sessionId, onNameScaleSaved, currentNameScale],
+  );
+
+  const persistMediaScale = useCallback(
+    async (raw: number) => {
+      if (!supabase) {
+        setError('Supabase no configurado.');
+        return;
+      }
+      const scale = normalizeExpressDisplayMediaScale(raw);
+      setSavingMedia('slider');
+      setError(null);
+      const { error: upErr } = await supabase
+        .from('express_matches')
+        .update({ display_media_scale: scale })
+        .eq('session_id', sessionId);
+
+      setSavingMedia(null);
+      if (upErr) {
+        setError(upErr.message);
+        setMediaDraft(currentMediaScale);
+        return;
+      }
+      onMediaScaleSaved(scale);
+    },
+    [supabase, sessionId, onMediaScaleSaved, currentMediaScale],
+  );
+
+  const debouncedSaveName = useDebouncedScaleSave(persistNameScale);
+  const debouncedSaveMedia = useDebouncedScaleSave(persistMediaScale);
 
   const applyNamePreset = async (presetId: ExpressNameScalePresetId) => {
     if (!supabase) {
@@ -104,6 +236,7 @@ export function ExpressControlDisplayPanel({
       setError(upErr.message);
       return;
     }
+    setNameDraft(preset.value);
     onNameScaleSaved(preset.value);
   };
 
@@ -127,11 +260,12 @@ export function ExpressControlDisplayPanel({
       setError(upErr.message);
       return;
     }
+    setMediaDraft(preset.value);
     onMediaScaleSaved(preset.value);
   };
 
-  const previewNameSize = expressPlayerNameFontSize(currentNameScale);
-  const mediaPreviewHeight = `${Math.round(48 * currentMediaScale)}px`;
+  const previewNameSize = expressPlayerNameFontSize(nameDraft);
+  const mediaPreviewHeight = `${Math.round(48 * mediaDraft)}px`;
 
   return (
     <div className="mt-3 rounded-2xl border-2 border-neutral-600 bg-neutral-800 shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
@@ -169,10 +303,23 @@ export function ExpressControlDisplayPanel({
                 JUAN GARCÍA / PEDRO LÓPEZ
               </p>
             </div>
+            <DisplayScaleSlider
+              label="Escala nombres"
+              value={nameDraft}
+              min={EXPRESS_DISPLAY_NAME_SCALE_MIN}
+              max={EXPRESS_DISPLAY_NAME_SCALE_MAX}
+              step={EXPRESS_DISPLAY_NAME_SCALE_STEP}
+              disabled={isSaving}
+              onChange={(v) => {
+                const next = normalizeExpressDisplayNameScale(v);
+                setNameDraft(next);
+                debouncedSaveName(next);
+              }}
+            />
             <ScalePresetGrid
               presets={EXPRESS_NAME_SCALE_PRESETS}
               activeId={activeNamePreset}
-              savingId={savingName}
+              savingId={savingName === 'slider' ? null : savingName}
               isSaving={isSaving}
               onSelect={(id) => void applyNamePreset(id)}
             />
@@ -203,10 +350,23 @@ export function ExpressControlDisplayPanel({
                 </div>
               </div>
             </div>
+            <DisplayScaleSlider
+              label="Escala publicidad"
+              value={mediaDraft}
+              min={EXPRESS_DISPLAY_MEDIA_SCALE_MIN}
+              max={EXPRESS_DISPLAY_MEDIA_SCALE_MAX}
+              step={EXPRESS_DISPLAY_MEDIA_SCALE_STEP}
+              disabled={isSaving}
+              onChange={(v) => {
+                const next = normalizeExpressDisplayMediaScale(v);
+                setMediaDraft(next);
+                debouncedSaveMedia(next);
+              }}
+            />
             <ScalePresetGrid
               presets={EXPRESS_MEDIA_SCALE_PRESETS}
               activeId={activeMediaPreset}
-              savingId={savingMedia}
+              savingId={savingMedia === 'slider' ? null : savingMedia}
               isSaving={isSaving}
               onSelect={(id) => void applyMediaPreset(id)}
             />
