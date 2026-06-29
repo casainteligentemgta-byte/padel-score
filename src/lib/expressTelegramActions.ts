@@ -1,9 +1,9 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 import { buildExpressSessionReset } from '@/lib/expressScoring';
 import {
   clampCourtNumbersForClub,
   expressCourtNumbersForClub,
-  normalizeExpressClubSlug,
+  resolveExpressClubSlugForDb,
 } from '@/lib/expressVenueCourts';
 import { courtNumberFromExpressSlug, expressCanchaCodeFromCourtNumber } from '@/lib/tvDeviceAuth';
 import { EXPRESS_QR_WINDOW_MS } from '@/lib/expressQrWindow';
@@ -11,11 +11,52 @@ import { EXPRESS_QR_WINDOW_MS } from '@/lib/expressQrWindow';
 const QR_WINDOW_MS = EXPRESS_QR_WINDOW_MS;
 const QR_WINDOW_LABEL = '5 min';
 
+const EXPRESS_SESSION_META_RESET_KEYS = [
+  'warmup_ends_at',
+  'match_started_at',
+  'chrono_elapsed_sec',
+  'match_ended_at',
+  'side_change_until',
+] as const;
+
+function isMissingExpressSessionMetaColumn(error: PostgrestError | null): boolean {
+  const msg = String(error?.message ?? '').toLowerCase();
+  return (
+    msg.includes('warmup_ends_at') ||
+    msg.includes('match_started_at') ||
+    msg.includes('chrono_elapsed_sec') ||
+    msg.includes('match_ended_at') ||
+    msg.includes('side_change_until')
+  );
+}
+
+function stripExpressSessionMetaFields(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const out = { ...payload };
+  for (const key of EXPRESS_SESSION_META_RESET_KEYS) {
+    delete out[key];
+  }
+  return out;
+}
+
+function buildExpressTelegramResetPayload(
+  sessionId: string,
+  baseVenue: string,
+  qrExpiresAt: string,
+): Record<string, unknown> {
+  return {
+    ...buildExpressSessionReset(sessionId),
+    base_venue: baseVenue,
+    qr_expires_at: qrExpiresAt,
+  };
+}
+
 export async function resolveExpressCourtNumbersForClub(
   supabase: SupabaseClient,
   clubSlug: string,
 ): Promise<string[]> {
-  const slug = normalizeExpressClubSlug(clubSlug);
+  const slug = resolveExpressClubSlugForDb(clubSlug);
   const found = new Set<string>();
 
   const { data: devices } = await supabase
@@ -50,6 +91,51 @@ export type ExpressTelegramActionResult =
   | { ok: true; courtNumber: string; message: string }
   | { ok: false; message: string };
 
+async function persistExpressBoardReset(
+  supabase: SupabaseClient,
+  canchaCode: string,
+  baseVenue: string,
+  qrExpiresAt: string,
+): Promise<PostgrestError | null> {
+  const sessionId = crypto.randomUUID();
+  const fullPayload = buildExpressTelegramResetPayload(sessionId, baseVenue, qrExpiresAt);
+
+  const { data: existing } = await supabase
+    .from('express_matches')
+    .select('id')
+    .eq('cancha_code', canchaCode)
+    .maybeSingle();
+
+  if (!existing) {
+    const { error } = await supabase.from('express_matches').insert([{
+      cancha_code: canchaCode,
+      ...fullPayload,
+    }]);
+    if (!error || !isMissingExpressSessionMetaColumn(error)) return error;
+    const { error: legacyError } = await supabase.from('express_matches').insert([
+      stripExpressSessionMetaFields({
+        cancha_code: canchaCode,
+        ...fullPayload,
+      }),
+    ]);
+    return legacyError;
+  }
+
+  const { error } = await supabase
+    .from('express_matches')
+    .update(fullPayload)
+    .eq('cancha_code', canchaCode);
+
+  if (!error || !isMissingExpressSessionMetaColumn(error)) return error;
+
+  const { error: legacyError } = await supabase
+    .from('express_matches')
+    .update(stripExpressSessionMetaFields(fullPayload))
+    .eq('cancha_code', canchaCode);
+
+  return legacyError;
+}
+
 export async function applyExpressQrActivation(
   supabase: SupabaseClient,
   clubSlug: string,
@@ -60,7 +146,7 @@ export async function applyExpressQrActivation(
     return { ok: false, message: 'Cancha inválida.' };
   }
 
-  const slug = normalizeExpressClubSlug(clubSlug);
+  const slug = resolveExpressClubSlugForDb(clubSlug);
 
   const { data: existing } = await supabase
     .from('express_matches')
@@ -125,43 +211,16 @@ export async function applyExpressBoardReset(
     return { ok: false, message: 'Cancha inválida.' };
   }
 
-  const slug = normalizeExpressClubSlug(clubSlug);
-  const reset = buildExpressSessionReset(crypto.randomUUID());
+  const slug = resolveExpressClubSlugForDb(clubSlug);
   const qrExpiresAt = new Date(Date.now() + QR_WINDOW_MS).toISOString();
+  const error = await persistExpressBoardReset(supabase, canchaCode, slug, qrExpiresAt);
 
-  const { data: existing } = await supabase
-    .from('express_matches')
-    .select('id')
-    .eq('cancha_code', canchaCode)
-    .maybeSingle();
-
-  if (!existing) {
-    const { error } = await supabase.from('express_matches').insert([
-      {
-        cancha_code: canchaCode,
-        base_venue: slug,
-        qr_expires_at: qrExpiresAt,
-        ...reset,
-      },
-    ]);
-    if (error) {
-      console.error('[expressTelegram] reset insert:', error);
-      return { ok: false, message: 'Error al resetear la cancha.' };
-    }
-  } else {
-    const { error } = await supabase
-      .from('express_matches')
-      .update({
-        ...reset,
-        base_venue: slug,
-        qr_expires_at: qrExpiresAt,
-      })
-      .eq('cancha_code', canchaCode);
-
-    if (error) {
-      console.error('[expressTelegram] reset update:', error);
-      return { ok: false, message: 'Error al resetear la cancha.' };
-    }
+  if (error) {
+    console.error('[expressTelegram] reset:', error);
+    const migrationHint = isMissingExpressSessionMetaColumn(error)
+      ? ' Ejecuta la migración 070_express_session_meta en Supabase.'
+      : '';
+    return { ok: false, message: `Error al resetear la cancha.${migrationHint}` };
   }
 
   return {

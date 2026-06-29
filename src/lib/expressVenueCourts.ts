@@ -37,6 +37,12 @@ export function normalizeExpressClubSlug(raw: string): string {
   return String(raw ?? '').trim();
 }
 
+/** Nombre canónico de sede para BD/Telegram (p. ej. bodeguero → El Bodeguero). */
+export function resolveExpressClubSlugForDb(raw: string): string {
+  const trimmed = normalizeExpressClubSlug(raw);
+  return resolveCanonicalExpressVenue(trimmed) ?? trimmed;
+}
+
 function normalizeVenueLookupKey(raw: string): string {
   return String(raw ?? '')
     .trim()
