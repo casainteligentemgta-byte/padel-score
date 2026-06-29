@@ -12,13 +12,13 @@ import { buildVenuesAndCourtsFromTournaments } from '@/lib/venuesFromTournaments
 import { normalizeCanchaIdKey, partitionPlaylistRows, type CourtPlaylistRowDb } from '@/lib/courtPlaylists';
 import {
   buildExpressCourts,
-  buildExpressDisplayUrl,
   DEFAULT_EXPRESS_COURT_COUNT,
   expressCourtCountForVenue,
   expressPublicidadVenueName,
   MAX_EXPRESS_COURT_COUNT,
   saveExpressCourtCount,
 } from '@/lib/expressPublicidad';
+import { buildExpressShortDisplayPath } from '@/lib/expressShortUrl';
 import { getAppBaseUrl } from '@/lib/brand';
 import {
   AlertCircle,
@@ -260,7 +260,7 @@ export default function AdminExpressPublicidadPage() {
 
   const videos = useMemo(() => mediaList.filter((m) => String(m.tipo).includes('video')), [mediaList]);
   const carrusel = useMemo(() => mediaList.filter((m) => m.tipo === 'imagen'), [mediaList]);
-  const appOrigin = useMemo(() => getAppBaseUrl(), []);
+  const displayHost = useMemo(() => getAppBaseUrl().replace(/^https?:\/\//, ''), []);
 
   const uploadFiles = async (files: File[]) => {
     if (!files.length) return;
@@ -607,8 +607,7 @@ export default function AdminExpressPublicidadPage() {
                   );
                   const { video, imagen } = partitionPlaylistRows(rows as CourtPlaylistRowDb[]);
                   const cfg = playlistConfigByCourt[court.key];
-                  const tvPath = buildExpressDisplayUrl(court.displayNum, selectedBaseVenue);
-                  const tvHref = `${appOrigin}${tvPath}`;
+                  const tvPath = buildExpressShortDisplayPath(selectedBaseVenue, court.displayNum);
 
                   return (
                     <CourtCard
@@ -637,7 +636,7 @@ export default function AdminExpressPublicidadPage() {
                       }
                       onSaveTiraPlaylist={(ids, min) => saveTiraPlaylistForCourt(court.key, ids, min)}
                       openDisplayHref={tvPath}
-                      openDisplayHrefLabel={`${appOrigin.replace(/^https?:\/\//, '')}${tvPath}`}
+                      openDisplayHrefLabel={`${displayHost}${tvPath}`}
                       previewIframeSrcOverride={tvPath}
                     />
                   );

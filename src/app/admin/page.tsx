@@ -85,6 +85,15 @@ export default function AdminHubPage() {
             iconColor: "text-padel-primary"
         },
         {
+            title: "Express · Staff Telegram",
+            desc: "Vincular manejadores de pizarra con códigos /login",
+            icon: MessageSquare,
+            href: "/admin/express/staff",
+            color: "from-cyan-500/20 to-cyan-500/5",
+            borderColor: "border-cyan-500/30",
+            iconColor: "text-cyan-300"
+        },
+        {
             title: "Gestión de Sedes",
             desc: "CRUD de clubes, branding y canchas",
             icon: Building2,

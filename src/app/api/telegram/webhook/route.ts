@@ -6,7 +6,9 @@ import {
   buildExpressStaffTelegramKeyboard,
   resolveExpressCourtNumbersForClub,
 } from '@/lib/expressTelegramActions';
+import { findActiveClubStaffByTelegramChat, linkClubStaffTelegramChat } from '@/lib/expressClubStaff';
 import {
+  buildExpressStaffWelcomeMessage,
   buildExpressTelegramGuideHelp,
   buildExpressTelegramUrlGuide,
 } from '@/lib/expressTelegramGuide';
@@ -18,6 +20,20 @@ import {
   logExpressStaffTelegramLogin,
 } from '@/lib/expressActivityReport';
 import { answerTelegramCallbackQuery, isTelegramGuideChat, notifyTelegramAdmin, sendTelegramMessage } from '@/lib/telegramBot';
+
+async function sendStaffMenu(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServiceClient>>,
+  chatId: number,
+  staff: { club_slug: string; name: string },
+): Promise<void> {
+  const courtNumbers = await resolveExpressCourtNumbersForClub(supabase, String(staff.club_slug));
+  const keyboard = buildExpressStaffTelegramKeyboard(courtNumbers);
+  await sendTelegramMessage(
+    chatId,
+    `🎛️ *Panel ${staff.name}*\nSede: \`${staff.club_slug}\`\n\nElige cancha para QR o Reset:`,
+    keyboard,
+  );
+}
 
 export async function POST(req: Request) {
   try {
@@ -32,6 +48,8 @@ export async function POST(req: Request) {
       const chatId = body.message.chat.id as number;
       const text = String(body.message.text).trim();
       const lowerText = text.toLowerCase();
+
+      const linkedStaff = await findActiveClubStaffByTelegramChat(supabase, chatId);
 
       if (
         isTelegramGuideChat(chatId) &&
@@ -52,6 +70,31 @@ export async function POST(req: Request) {
         for (const part of parts) {
           await sendTelegramMessage(chatId, part);
         }
+        return NextResponse.json({ ok: true });
+      }
+
+      if (linkedStaff && (lowerText === '/help' || lowerText === '/start')) {
+        await sendTelegramMessage(chatId, buildExpressTelegramGuideHelp());
+        return NextResponse.json({ ok: true });
+      }
+
+      if (
+        linkedStaff &&
+        (lowerText === '/urls' ||
+          lowerText.startsWith('/urls ') ||
+          lowerText === '/guia' ||
+          lowerText.startsWith('/guia ') ||
+          lowerText === '/pantallas')
+      ) {
+        const parts = buildExpressTelegramUrlGuide(String(linkedStaff.club_slug));
+        for (const part of parts) {
+          await sendTelegramMessage(chatId, part);
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      if (linkedStaff && (lowerText === '/menu' || lowerText === '/panel')) {
+        await sendStaffMenu(supabase, chatId, linkedStaff);
         return NextResponse.json({ ok: true });
       }
 
@@ -78,14 +121,11 @@ export async function POST(req: Request) {
           .maybeSingle();
 
         if (error || !staff) {
-          await sendTelegramMessage(chatId, '❌ Código inválido o inactivo.');
+          await sendTelegramMessage(chatId, '❌ Código inválido o inactivo.\n\nPide un código nuevo al administrador de Smart Padel.');
           return NextResponse.json({ ok: true });
         }
 
-        await supabase
-          .from('club_staff')
-          .update({ telegram_chat_id: chatId })
-          .eq('id', staff.id);
+        await linkClubStaffTelegramChat(supabase, String(staff.id), chatId);
 
         await logExpressStaffTelegramLogin(supabase, {
           clubSlug: String(staff.club_slug),
@@ -106,7 +146,11 @@ export async function POST(req: Request) {
 
         await sendTelegramMessage(
           chatId,
-          `✅ *Bienvenido ${staff.name}*\nSede vinculada: \`${staff.club_slug}\`\n\nPor cancha:\n• *QR* — muestra el código en la TV (1 min)\n• *Reset* — limpia marcador y vuelve a pantalla de espera`,
+          buildExpressStaffWelcomeMessage({
+            staffName: String(staff.name),
+            clubSlug: String(staff.club_slug),
+            courtNumbers,
+          }),
           keyboard,
         );
       }
@@ -123,15 +167,10 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
 
-      const { data: staff } = await supabase
-        .from('club_staff')
-        .select('club_slug, name')
-        .eq('telegram_chat_id', chatId)
-        .eq('is_active', true)
-        .maybeSingle();
+      const staff = await findActiveClubStaffByTelegramChat(supabase, chatId);
 
       if (!staff) {
-        await answerTelegramCallbackQuery(callbackQuery.id, 'No estás autorizado.');
+        await answerTelegramCallbackQuery(callbackQuery.id, 'No estás autorizado. Usa /login CODIGO');
         return NextResponse.json({ ok: true });
       }
 

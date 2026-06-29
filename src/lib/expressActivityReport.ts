@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAppBaseUrl } from '@/lib/brand';
+import { expressVenuePathSlug } from '@/lib/expressShortUrl';
 import { resolveCanonicalExpressVenue } from '@/lib/expressVenueCourts';
 
 export const EXPRESS_ACTIVITY_STAFF_LOGIN = 'staff_telegram_login';
@@ -68,9 +69,10 @@ export function buildStaffLoginTelegramMessage(payload: {
   at?: Date;
 }): string {
   const venue = resolveCanonicalExpressVenue(payload.clubSlug) ?? payload.clubSlug;
+  const pathCode = expressVenuePathSlug(venue);
   return (
     `🔐 *Staff vinculado en Telegram*\n\n` +
-    `🏢 Sede: \`${venue}\`\n` +
+    `🏢 Sede: \`${venue}\` · código \`${pathCode}\`\n` +
     `👤 Nombre: ${payload.staffName}\n` +
     `🕐 ${formatExpressNotifyTimestamp(payload.at)} (VE)`
   );
