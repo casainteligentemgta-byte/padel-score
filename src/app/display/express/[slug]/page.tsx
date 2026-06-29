@@ -447,7 +447,11 @@ export default function ExpressTvDisplay() {
       <PizarraScoreboardFit expressMode>
         <div className="flex w-full min-h-0 flex-col items-center gap-2 overflow-visible px-1 pt-0">
           {marcador ? (
-            <PizarraTableScoreboard marcador={marcador} playerNameScale={match.display_name_scale} />
+            <PizarraTableScoreboard
+              marcador={marcador}
+              playerNameScale={match.display_name_scale}
+              expressFullPlayerNames
+            />
           ) : null}
         </div>
       </PizarraScoreboardFit>

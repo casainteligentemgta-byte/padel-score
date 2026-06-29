@@ -14,7 +14,8 @@ import {
 } from '@/lib/expressScoring';
 import {
   expressPlayerPatch,
-  formatExpressPlayerField,
+  formatExpressPlayerFieldsForSave,
+  normalizeExpressPlayerInput,
   readExpressPlayerSlot,
   syncExpressTeamNameFields,
   type ExpressPlayerSlot,
@@ -35,15 +36,17 @@ function PlayerNameFields({
   slot,
   match,
   onChange,
+  onBlurField,
 }: {
   slot: ExpressPlayerSlot;
   match: ExpressMatch;
   onChange: (slot: ExpressPlayerSlot, field: 'first' | 'last', value: string) => void;
+  onBlurField: (slot: ExpressPlayerSlot, field: 'first' | 'last') => void;
 }) {
   const { first, last } = readExpressPlayerSlot(match, slot);
   const labels =
     slot === 'a_p1'
-      ? { title: 'Jugador 1', phFirst: 'Nombre', phLast: 'Apellido' }
+        ? { title: 'Jugador 1', phFirst: 'Nombre (ej. MARIA JOSE)', phLast: 'Apellido (ej. DE LA ROSA)' }
       : slot === 'a_p2'
         ? { title: 'Jugador 2', phFirst: 'Nombre', phLast: 'Apellido' }
         : slot === 'b_p1'
@@ -57,6 +60,7 @@ function PlayerNameFields({
         <input
           value={first}
           onChange={(e) => onChange(slot, 'first', e.target.value)}
+          onBlur={() => onBlurField(slot, 'first')}
           className="rounded-xl border border-neutral-700 bg-black/30 px-3 py-2 text-sm font-semibold uppercase text-white placeholder:text-neutral-600 focus:border-padel-primary focus:outline-none"
           placeholder={labels.phFirst}
           autoComplete="off"
@@ -64,6 +68,7 @@ function PlayerNameFields({
         <input
           value={last}
           onChange={(e) => onChange(slot, 'last', e.target.value)}
+          onBlur={() => onBlurField(slot, 'last')}
           className="rounded-xl border border-neutral-700 bg-black/30 px-3 py-2 text-sm font-semibold uppercase text-white placeholder:text-neutral-600 focus:border-padel-primary focus:outline-none"
           placeholder={labels.phLast}
           autoComplete="off"
@@ -172,21 +177,23 @@ export default function MobileExpressControl() {
 
   const persistTeamPlayers = useCallback(
     (team: 'a' | 'b', snapshot: ExpressMatch) => {
+      const formatted = formatExpressPlayerFieldsForSave(snapshot);
       const updates: Partial<ExpressMatch> = {
         ...(team === 'a'
           ? {
-              team_a_p1_first: snapshot.team_a_p1_first,
-              team_a_p1_last: snapshot.team_a_p1_last,
-              team_a_p2_first: snapshot.team_a_p2_first,
-              team_a_p2_last: snapshot.team_a_p2_last,
+              team_a_p1_first: formatted.team_a_p1_first,
+              team_a_p1_last: formatted.team_a_p1_last,
+              team_a_p2_first: formatted.team_a_p2_first,
+              team_a_p2_last: formatted.team_a_p2_last,
             }
           : {
-              team_b_p1_first: snapshot.team_b_p1_first,
-              team_b_p1_last: snapshot.team_b_p1_last,
-              team_b_p2_first: snapshot.team_b_p2_first,
-              team_b_p2_last: snapshot.team_b_p2_last,
+              team_b_p1_first: formatted.team_b_p1_first,
+              team_b_p1_last: formatted.team_b_p1_last,
+              team_b_p2_first: formatted.team_b_p2_first,
+              team_b_p2_last: formatted.team_b_p2_last,
             }),
-        ...syncExpressTeamNameFields(snapshot),
+        team_a_name: formatted.team_a_name,
+        team_b_name: formatted.team_b_name,
       };
       void updateServer(updates, matchRef.current!);
     },
@@ -197,8 +204,7 @@ export default function MobileExpressControl() {
     if (!matchRef.current) return;
 
     const previousState = { ...matchRef.current };
-    const value = formatExpressPlayerField(raw);
-    const patch = expressPlayerPatch(slot, field, value);
+    const patch = expressPlayerPatch(slot, field, raw, false);
     const newState = normalizeExpressMatch({
       ...(previousState as unknown as Record<string, unknown>),
       ...patch,
@@ -212,6 +218,22 @@ export default function MobileExpressControl() {
     debounceTimers.current[team] = setTimeout(() => {
       persistTeamPlayers(team, matchRef.current!);
     }, 400);
+  };
+
+  const handlePlayerBlur = (slot: ExpressPlayerSlot, field: 'first' | 'last') => {
+    if (!matchRef.current) return;
+    const previousState = { ...matchRef.current };
+    const keys = readExpressPlayerSlot(matchRef.current, slot);
+    const raw = field === 'first' ? keys.first : keys.last;
+    const patch = expressPlayerPatch(slot, field, raw, true);
+    const newState = normalizeExpressMatch({
+      ...(previousState as unknown as Record<string, unknown>),
+      ...patch,
+      ...syncExpressTeamNameFields({ ...previousState, ...patch } as ExpressMatch),
+    });
+    applyMatch(newState);
+    const team = slot.startsWith('a_') ? 'a' : 'b';
+    persistTeamPlayers(team, newState);
   };
 
   const handlePuntoDeOroToggle = async () => {
@@ -303,7 +325,9 @@ export default function MobileExpressControl() {
             )}
           </h1>
           <p className="text-xs uppercase text-neutral-400">{match.cancha_code}</p>
-          <p className="mt-1 text-[10px] text-neutral-500">Edita los 4 jugadores (nombre + apellido)</p>
+          <p className="mt-1 text-[10px] text-neutral-500">
+            Nombre y apellido admiten varias palabras (ej. MARIA JOSE / DE LA ROSA)
+          </p>
         </div>
         <button
           type="button"
@@ -328,6 +352,7 @@ export default function MobileExpressControl() {
                   slot={slot}
                   match={match}
                   onChange={handlePlayerChange}
+                  onBlurField={handlePlayerBlur}
                 />
               ))}
             </div>

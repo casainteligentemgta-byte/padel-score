@@ -5,6 +5,7 @@ import { Thermometer, Zap } from 'lucide-react';
 import { dataService } from '@/lib/dataService';
 import { visibleSetNumbersForScoreboard } from '@/lib/displaySetColumns';
 import { formatPlayerFichaName } from '@/lib/playerFichaName';
+import { formatExpressPlayerField } from '@/lib/expressPlayerNames';
 import { inferStbFromSetScoresOnly } from '@/lib/matchFinishedScoreDisplay';
 import { logDisplayVideoError } from '@/lib/logDisplayVideoError';
 import {
@@ -33,33 +34,36 @@ function matchStubFromMarcadorHistorico(marcador: any) {
   return { setScores };
 }
 
-function formatMarcadorPlayerPart(part: string): string {
-  return formatPlayerFichaName((part || '').trim());
+function formatMarcadorPlayerPart(part: string, expressFullNames = false): string {
+  const trimmed = (part || '').trim();
+  if (!trimmed) return '';
+  if (expressFullNames) return formatExpressPlayerField(trimmed);
+  return formatPlayerFichaName(trimmed);
 }
 
-function formatMarcadorTeamNombre(nombre: string): string {
+function formatMarcadorTeamNombre(nombre: string, expressFullNames = false): string {
   const raw = (nombre || '').trim();
   if (!raw) return nombre;
   if (raw.includes('/')) {
     const parts = raw
       .split(/\s*\/\s*/)
-      .map((p) => formatMarcadorPlayerPart(p))
+      .map((p) => formatMarcadorPlayerPart(p, expressFullNames))
       .filter(Boolean);
     return parts.length ? parts.join(' / ') : raw;
   }
-  return formatMarcadorPlayerPart(raw);
+  return formatMarcadorPlayerPart(raw, expressFullNames);
 }
 
-function teamDisplayFromRaw(rawName: string, fallbackId: string): string {
+function teamDisplayFromRaw(rawName: string, fallbackId: string, expressFullNames = false): string {
   const raw = (rawName || '').trim();
   const isGeneric =
     !raw || /^equipo\s*\d*$/i.test(raw) || /^team\s*\d*$/i.test(raw) || raw === '---';
   if (isGeneric) return fallbackId;
-  const normalized = formatMarcadorTeamNombre(raw);
+  const normalized = formatMarcadorTeamNombre(raw, expressFullNames);
   return normalized || fallbackId;
 }
 
-function teamLineCompact(marcador: any, side: 'local' | 'visitante'): string {
+function teamLineCompact(marcador: any, side: 'local' | 'visitante', expressFullNames = false): string {
   const raw = side === 'local' ? marcador?.equipo_1?.nombre : marcador?.equipo_2?.nombre;
   const fb = side === 'local' ? 'EQUIPO 1' : 'EQUIPO 2';
   const rawStr = (raw || '').trim();
@@ -67,26 +71,30 @@ function teamLineCompact(marcador: any, side: 'local' | 'visitante'): string {
   if (rawStr.includes('/')) {
     const parts = rawStr
       .split(/\s*\/\s*/)
-      .map((p: string) => formatMarcadorPlayerPart(p.trim()))
+      .map((p: string) => formatMarcadorPlayerPart(p.trim(), expressFullNames))
       .filter(Boolean);
-    return parts.length ? parts.join(' / ') : teamDisplayFromRaw(rawStr, fb);
+    return parts.length ? parts.join(' / ') : teamDisplayFromRaw(rawStr, fb, expressFullNames);
   }
-  return formatMarcadorTeamNombre(rawStr) || fb;
+  return formatMarcadorTeamNombre(rawStr, expressFullNames) || fb;
 }
 
-function pairPlayerNames(marcador: any, side: 'local' | 'visitante'): [string, string] | null {
+function pairPlayerNames(
+  marcador: any,
+  side: 'local' | 'visitante',
+  expressFullNames = false,
+): [string, string] | null {
   const raw = side === 'local' ? marcador?.equipo_1?.nombre : marcador?.equipo_2?.nombre;
   const rawStr = (raw || '').trim();
   if (!rawStr) return null;
   if (rawStr.includes('/')) {
     const parts = rawStr
       .split(/\s*\/\s*/)
-      .map((p: string) => formatMarcadorPlayerPart(p.trim()))
+      .map((p: string) => formatMarcadorPlayerPart(p.trim(), expressFullNames))
       .filter(Boolean);
     if (parts.length >= 2) return [parts[0], parts[1]];
     if (parts.length === 1) return [parts[0], parts[0]];
   }
-  const single = formatMarcadorTeamNombre(rawStr) || rawStr;
+  const single = formatMarcadorTeamNombre(rawStr, expressFullNames) || rawStr;
   return [single, single];
 }
 
@@ -113,11 +121,13 @@ function TeamNamesWithServe({
   side,
   color,
   playerNameScale,
+  expressFullPlayerNames = false,
 }: {
   marcador: any;
   side: 'local' | 'visitante';
   color: string;
   playerNameScale?: number;
+  expressFullPlayerNames?: boolean;
 }) {
   const eqNum = side === 'local' ? 1 : 2;
   const saqueEq = Number(marcador?.saque?.equipo);
@@ -126,14 +136,14 @@ function TeamNamesWithServe({
   const j1 = servingHere && saqueJug === 1;
   const j2 = servingHere && saqueJug === 2;
 
-  const pair = pairPlayerNames(marcador, side);
+  const pair = pairPlayerNames(marcador, side, expressFullPlayerNames);
   if (!pair) {
     return (
       <span
         className={teamNamesTailwind(playerNameScale)}
         style={teamNamesStyle(color, playerNameScale)}
       >
-        {teamLineCompact(marcador, side)}
+        {teamLineCompact(marcador, side, expressFullPlayerNames)}
       </span>
     );
   }
@@ -322,10 +332,13 @@ function expressColPtsStyle(scale: number): React.CSSProperties {
 export function PizarraTableScoreboard({
   marcador,
   playerNameScale,
+  expressFullPlayerNames = false,
 }: {
   marcador: any;
   /** Solo Express: multiplicador tamaño nombres (0.85–2.5). */
   playerNameScale?: number;
+  /** Express: muestra nombre y apellido completos (sin abreviar). */
+  expressFullPlayerNames?: boolean;
 }) {
   const setsL = Number(marcador.sets?.local ?? 0) || 0;
   const setsV = Number(marcador.sets?.visitante ?? 0) || 0;
@@ -455,14 +468,26 @@ export function PizarraTableScoreboard({
 
       <div className="flex w-full min-w-0 items-start gap-2 border-b border-white/20 pb-3 sm:gap-3 sm:pb-3.5">
         <div className="min-w-0 flex-1 text-left">
-          <TeamNamesWithServe marcador={marcador} side="local" color={c1} playerNameScale={playerNameScale} />
+          <TeamNamesWithServe
+            marcador={marcador}
+            side="local"
+            color={c1}
+            playerNameScale={playerNameScale}
+            expressFullPlayerNames={expressFullPlayerNames}
+          />
         </div>
         {scoreBlock('local', c1, ptsL)}
       </div>
 
       <div className="mt-3 flex w-full min-w-0 items-start gap-2 sm:mt-3.5 sm:gap-3">
         <div className="min-w-0 flex-1 text-left">
-          <TeamNamesWithServe marcador={marcador} side="visitante" color={c2} playerNameScale={playerNameScale} />
+          <TeamNamesWithServe
+            marcador={marcador}
+            side="visitante"
+            color={c2}
+            playerNameScale={playerNameScale}
+            expressFullPlayerNames={expressFullPlayerNames}
+          />
         </div>
         {scoreBlock('visitante', c2, ptsV)}
       </div>

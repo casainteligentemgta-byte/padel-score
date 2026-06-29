@@ -14,11 +14,16 @@ const PLAYER_FIELD: Record<
 
 const GENERIC_TEAM = /^(equipo|team|pareja|jugador|player)\s*[ab]?[\s\d]*$/i;
 
-export function formatExpressPlayerField(raw: string): string {
-  return String(raw || '')
-    .trim()
+/** Mientras se escribe: conserva espacios (incl. al final), unifica espacios múltiples. */
+export function normalizeExpressPlayerInput(raw: string): string {
+  return String(raw ?? '')
     .replace(/\s+/g, ' ')
     .toUpperCase();
+}
+
+/** Valor final guardado en BD (sin espacios al inicio/fin). */
+export function formatExpressPlayerField(raw: string): string {
+  return normalizeExpressPlayerInput(raw).trim();
 }
 
 export function buildExpressPlayerFullName(first: string, last: string): string {
@@ -163,9 +168,47 @@ export function expressPlayerPatch(
   slot: ExpressPlayerSlot,
   field: 'first' | 'last',
   value: string,
+  finalize = false,
 ): Partial<ExpressMatch> {
   const key = PLAYER_FIELD[slot][field];
-  return { [key]: formatExpressPlayerField(value) } as Partial<ExpressMatch>;
+  const normalized = finalize ? formatExpressPlayerField(value) : normalizeExpressPlayerInput(value);
+  return { [key]: normalized } as Partial<ExpressMatch>;
+}
+
+export function formatExpressPlayerFieldsForSave(match: ExpressMatch): Pick<
+  ExpressMatch,
+  | 'team_a_p1_first'
+  | 'team_a_p1_last'
+  | 'team_a_p2_first'
+  | 'team_a_p2_last'
+  | 'team_b_p1_first'
+  | 'team_b_p1_last'
+  | 'team_b_p2_first'
+  | 'team_b_p2_last'
+  | 'team_a_name'
+  | 'team_b_name'
+> {
+  const draft = { ...match };
+  for (const { slot } of EXPRESS_CONTROL_PLAYER_SLOTS) {
+    const keys = PLAYER_FIELD[slot];
+    (draft as ExpressMatch)[keys.first] = formatExpressPlayerField(
+      String(match[keys.first as keyof ExpressMatch] ?? ''),
+    );
+    (draft as ExpressMatch)[keys.last] = formatExpressPlayerField(
+      String(match[keys.last as keyof ExpressMatch] ?? ''),
+    );
+  }
+  return {
+    team_a_p1_first: draft.team_a_p1_first,
+    team_a_p1_last: draft.team_a_p1_last,
+    team_a_p2_first: draft.team_a_p2_first,
+    team_a_p2_last: draft.team_a_p2_last,
+    team_b_p1_first: draft.team_b_p1_first,
+    team_b_p1_last: draft.team_b_p1_last,
+    team_b_p2_first: draft.team_b_p2_first,
+    team_b_p2_last: draft.team_b_p2_last,
+    ...syncExpressTeamNameFields(draft),
+  };
 }
 
 export const EXPRESS_CONTROL_PLAYER_SLOTS: {
