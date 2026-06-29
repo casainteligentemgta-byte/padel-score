@@ -2,9 +2,19 @@ import type { ExpressMatch } from '@/types/expressMatch';
 
 export type ExpressPlayerSlot = 'a_p1' | 'a_p2' | 'b_p1' | 'b_p2';
 
+type ExpressPlayerNameField =
+  | 'team_a_p1_first'
+  | 'team_a_p1_last'
+  | 'team_a_p2_first'
+  | 'team_a_p2_last'
+  | 'team_b_p1_first'
+  | 'team_b_p1_last'
+  | 'team_b_p2_first'
+  | 'team_b_p2_last';
+
 const PLAYER_FIELD: Record<
   ExpressPlayerSlot,
-  { first: keyof ExpressMatch; last: keyof ExpressMatch }
+  { first: ExpressPlayerNameField; last: ExpressPlayerNameField }
 > = {
   a_p1: { first: 'team_a_p1_first', last: 'team_a_p1_last' },
   a_p2: { first: 'team_a_p2_first', last: 'team_a_p2_last' },
@@ -191,12 +201,8 @@ export function formatExpressPlayerFieldsForSave(match: ExpressMatch): Pick<
   const draft = { ...match };
   for (const { slot } of EXPRESS_CONTROL_PLAYER_SLOTS) {
     const keys = PLAYER_FIELD[slot];
-    (draft as ExpressMatch)[keys.first] = formatExpressPlayerField(
-      String(match[keys.first as keyof ExpressMatch] ?? ''),
-    );
-    (draft as ExpressMatch)[keys.last] = formatExpressPlayerField(
-      String(match[keys.last as keyof ExpressMatch] ?? ''),
-    );
+    draft[keys.first] = formatExpressPlayerField(String(match[keys.first] ?? ''));
+    draft[keys.last] = formatExpressPlayerField(String(match[keys.last] ?? ''));
   }
   return {
     team_a_p1_first: draft.team_a_p1_first,

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
-import { Plus, Minus, Power } from 'lucide-react';
+import { Plus, Minus, Power, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { ExpressMatch, normalizeExpressMatch } from '@/types/expressMatch';
 import {
@@ -15,15 +15,20 @@ import {
 import {
   expressPlayerPatch,
   formatExpressPlayerFieldsForSave,
-  normalizeExpressPlayerInput,
   readExpressPlayerSlot,
   syncExpressTeamNameFields,
   type ExpressPlayerSlot,
 } from '@/lib/expressPlayerNames';
-import { ExpressControlDisplayPanel } from '@/components/express/ExpressControlDisplayPanel';
-import { ExpressControlThirdSetPanel } from '@/components/express/ExpressControlThirdSetPanel';
+import { ExpressControlSettingsDrawer } from '@/components/express/ExpressControlSettingsDrawer';
+import { ExpressServerStrip } from '@/components/express/ExpressServerStrip';
 import { EXPRESS_TV_BRAND } from '@/lib/expressSlug';
 import { BouncingBall } from '@/components/BouncingBall';
+import type { ExpressThirdSetMode } from '@/lib/expressThirdSetMode';
+import {
+  expressSlotToServer,
+  normalizeExpressServer,
+  type ExpressServer,
+} from '@/lib/expressServer';
 
 type PageStatus = 'loading' | 'ready' | 'missing' | 'config_error';
 
@@ -35,31 +40,50 @@ function PlayerNameFields({
   match,
   onChange,
   onBlurField,
+  compact,
+  isServing,
 }: {
   slot: ExpressPlayerSlot;
   match: ExpressMatch;
   onChange: (slot: ExpressPlayerSlot, field: 'first' | 'last', value: string) => void;
   onBlurField: (slot: ExpressPlayerSlot, field: 'first' | 'last') => void;
+  compact?: boolean;
+  isServing?: boolean;
 }) {
   const { first, last } = readExpressPlayerSlot(match, slot);
   const labels =
     slot === 'a_p1'
-        ? { title: 'Jugador 1', phFirst: 'Nombre (ej. MARIA JOSE)', phLast: 'Apellido (ej. DE LA ROSA)' }
+      ? { title: 'J1', phFirst: 'Nombre', phLast: 'Apellido' }
       : slot === 'a_p2'
-        ? { title: 'Jugador 2', phFirst: 'Nombre', phLast: 'Apellido' }
+        ? { title: 'J2', phFirst: 'Nombre', phLast: 'Apellido' }
         : slot === 'b_p1'
-          ? { title: 'Jugador 3', phFirst: 'Nombre', phLast: 'Apellido' }
-          : { title: 'Jugador 4', phFirst: 'Nombre', phLast: 'Apellido' };
+          ? { title: 'J3', phFirst: 'Nombre', phLast: 'Apellido' }
+          : { title: 'J4', phFirst: 'Nombre', phLast: 'Apellido' };
+
+  const inputCls = compact
+    ? `rounded-lg border bg-black/30 px-2 py-1.5 text-[11px] font-semibold uppercase text-white placeholder:text-neutral-600 focus:outline-none ${
+        isServing ? 'border-padel-primary focus:border-padel-primary' : 'border-neutral-700 focus:border-padel-primary'
+      }`
+    : `rounded-xl border bg-black/30 px-3 py-2 text-sm font-semibold uppercase text-white placeholder:text-neutral-600 focus:outline-none ${
+        isServing ? 'border-padel-primary focus:border-padel-primary' : 'border-neutral-700 focus:border-padel-primary'
+      }`;
 
   return (
-    <div className="space-y-1.5">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500">{labels.title}</p>
-      <div className="grid grid-cols-2 gap-2">
+    <div className="space-y-1">
+      <p
+        className={`text-[9px] font-bold uppercase tracking-widest ${
+          isServing ? 'text-padel-primary' : 'text-neutral-500'
+        }`}
+      >
+        {labels.title}
+        {isServing ? ' · Saque' : ''}
+      </p>
+      <div className="grid grid-cols-2 gap-1.5">
         <input
           value={first}
           onChange={(e) => onChange(slot, 'first', e.target.value)}
           onBlur={() => onBlurField(slot, 'first')}
-          className="rounded-xl border border-neutral-700 bg-black/30 px-3 py-2 text-sm font-semibold uppercase text-white placeholder:text-neutral-600 focus:border-padel-primary focus:outline-none"
+          className={inputCls}
           placeholder={labels.phFirst}
           autoComplete="off"
         />
@@ -67,10 +91,98 @@ function PlayerNameFields({
           value={last}
           onChange={(e) => onChange(slot, 'last', e.target.value)}
           onBlur={() => onBlurField(slot, 'last')}
-          className="rounded-xl border border-neutral-700 bg-black/30 px-3 py-2 text-sm font-semibold uppercase text-white placeholder:text-neutral-600 focus:border-padel-primary focus:outline-none"
+          className={inputCls}
           placeholder={labels.phLast}
           autoComplete="off"
         />
+      </div>
+    </div>
+  );
+}
+
+function TeamScoreBlock({
+  team,
+  label,
+  slots,
+  match,
+  onScore,
+  onPlayerChange,
+  onPlayerBlur,
+  namesOpen,
+  onToggleNames,
+  server,
+}: {
+  team: 'a' | 'b';
+  label: string;
+  slots: ExpressPlayerSlot[];
+  match: ExpressMatch;
+  onScore: (team: 'a' | 'b', action: 'increment' | 'decrement') => void;
+  onPlayerChange: (slot: ExpressPlayerSlot, field: 'first' | 'last', value: string) => void;
+  onPlayerBlur: (slot: ExpressPlayerSlot, field: 'first' | 'last') => void;
+  namesOpen: boolean;
+  onToggleNames: () => void;
+  server: ExpressServer;
+}) {
+  const points = team === 'a' ? match.team_a_points : match.team_b_points;
+  const games = team === 'a' ? match.team_a_games : match.team_b_games;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-neutral-800 bg-neutral-900/90">
+      <button
+        type="button"
+        onClick={onToggleNames}
+        className="flex shrink-0 items-center justify-between px-3 py-1.5 text-left active:bg-neutral-800/60"
+      >
+        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-padel-primary/80">{label}</span>
+        <span className="flex items-center gap-1 text-[9px] font-bold uppercase text-neutral-500">
+          Nombres
+          {namesOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        </span>
+      </button>
+
+      {namesOpen ? (
+        <div className="shrink-0 space-y-2 border-b border-neutral-800 px-3 pb-2">
+          {slots.map((slot) => {
+            const slotServer = expressSlotToServer(slot);
+            const isServing = server.team === slotServer.team && server.player === slotServer.player;
+            return (
+              <PlayerNameFields
+                key={slot}
+                compact
+                isServing={isServing}
+                slot={slot}
+                match={match}
+                onChange={onPlayerChange}
+                onBlurField={onPlayerBlur}
+              />
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div className="flex min-h-0 flex-1 items-center justify-between gap-2 px-2 py-1">
+        <button
+          type="button"
+          onClick={() => onScore(team, 'decrement')}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-neutral-800 text-neutral-400 transition-transform active:scale-95"
+        >
+          <Minus size={18} />
+        </button>
+        <div className="min-w-0 flex-1 text-center">
+          <span className="block text-5xl font-black leading-none tracking-tight text-padel-primary sm:text-6xl">
+            {points}
+          </span>
+          <div className="mt-0.5 text-[10px] font-bold uppercase text-neutral-500">
+            Juegos {games}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => onScore(team, 'increment')}
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-padel-primary text-surface shadow-md shadow-padel-primary/25 transition-transform active:scale-95"
+        >
+          <Plus size={26} strokeWidth={2.5} />
+        </button>
       </div>
     </div>
   );
@@ -83,6 +195,9 @@ export default function MobileExpressControl() {
 
   const [match, setMatch] = useState<ExpressMatch | null>(null);
   const [status, setStatus] = useState<PageStatus>(() => (supabase ? 'loading' : 'config_error'));
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [namesOpenA, setNamesOpenA] = useState(false);
+  const [namesOpenB, setNamesOpenB] = useState(false);
 
   const matchRef = useRef<ExpressMatch | null>(null);
   const pendingScoreRef = useRef(false);
@@ -269,6 +384,42 @@ export default function MobileExpressControl() {
     router.push('/');
   };
 
+  const patchMatch = useCallback(
+    (patch: Record<string, unknown>) => {
+      if (!matchRef.current) return;
+      const next = normalizeExpressMatch({
+        ...(matchRef.current as unknown as Record<string, unknown>),
+        ...patch,
+      });
+      applyMatch(next);
+    },
+    [applyMatch],
+  );
+
+  const setServer = useCallback(
+    async (team: 1 | 2, player: 1 | 2) => {
+      if (!matchRef.current) return;
+      const previousState = { ...matchRef.current };
+      const updates: Partial<ExpressMatch> = { server_team: team, server_player: player };
+      const newState = { ...previousState, ...updates } as ExpressMatch;
+      applyMatch(newState);
+      await updateServer(updates, previousState);
+    },
+    [applyMatch, updateServer],
+  );
+
+  const toggleServingPlayer = useCallback(async () => {
+    if (!matchRef.current) return;
+    const s = normalizeExpressServer(matchRef.current.server_team, matchRef.current.server_player);
+    await setServer(s.team, s.player === 1 ? 2 : 1);
+  }, [setServer]);
+
+  const toggleServingTeam = useCallback(async () => {
+    if (!matchRef.current) return;
+    const s = normalizeExpressServer(matchRef.current.server_team, matchRef.current.server_player);
+    await setServer(s.team === 1 ? 2 : 1, s.player);
+  }, [setServer]);
+
   if (status === 'config_error') {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-surface px-6 text-center text-white">
@@ -304,125 +455,101 @@ export default function MobileExpressControl() {
     );
   }
 
-  const teamBlocks: { team: 'a' | 'b'; label: string; slots: ExpressPlayerSlot[] }[] = [
-    { team: 'a', label: 'Arriba · Pista', slots: TEAM_A_SLOTS },
-    { team: 'b', label: 'Abajo · Pista', slots: TEAM_B_SLOTS },
-  ];
+  const server = normalizeExpressServer(match.server_team, match.server_player);
 
   return (
-    <div className="flex min-h-screen select-none flex-col bg-surface p-4 font-sans text-white">
-      <div className="mb-4 flex items-center justify-between border-b border-neutral-800 pb-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-sm font-bold tracking-widest text-padel-primary">
+    <div className="flex h-dvh select-none flex-col overflow-hidden bg-surface px-3 py-2 font-sans text-white">
+      <header className="mb-2 flex shrink-0 items-center justify-between gap-2 border-b border-neutral-800 pb-2">
+        <div className="min-w-0">
+          <h1 className="flex flex-wrap items-center gap-1.5 text-xs font-bold tracking-widest text-padel-primary">
             {EXPRESS_TV_BRAND}
             {match.modo_puntos === 'super_tiebreak' && (
-              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">SÚPER TB</span>
+              <span className="rounded bg-amber-500/20 px-1 py-0.5 text-[9px] text-amber-400">SÚPER TB</span>
             )}
             {match.modo_puntos === 'tiebreak' && (
-              <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] text-red-500">TIE-BREAK</span>
+              <span className="rounded bg-red-500/20 px-1 py-0.5 text-[9px] text-red-500">TIE-BREAK</span>
             )}
           </h1>
-          <p className="text-xs uppercase text-neutral-400">{match.cancha_code}</p>
-          <p className="mt-1 text-[10px] text-neutral-500">
-            Nombre y apellido admiten varias palabras (ej. MARIA JOSE / DE LA ROSA)
-          </p>
+          <p className="truncate text-[10px] uppercase text-neutral-500">{match.cancha_code}</p>
         </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 text-neutral-200 active:bg-neutral-800"
+            aria-label="Ajustes"
+          >
+            <Settings size={18} className="text-padel-primary" />
+          </button>
+          <button
+            type="button"
+            onClick={endSession}
+            className="flex h-9 items-center gap-1 rounded-xl bg-red-500/10 px-2.5 text-[10px] font-bold uppercase text-red-500 active:bg-red-500/20"
+          >
+            <Power size={14} />
+            Fin
+          </button>
+        </div>
+      </header>
+
+      <main className="flex min-h-0 flex-1 flex-col gap-1.5">
+        <TeamScoreBlock
+          team="a"
+          label="Arriba · Pista"
+          slots={TEAM_A_SLOTS}
+          match={match}
+          onScore={handleScore}
+          onPlayerChange={handlePlayerChange}
+          onPlayerBlur={handlePlayerBlur}
+          namesOpen={namesOpenA}
+          onToggleNames={() => setNamesOpenA((v) => !v)}
+          server={server}
+        />
+
+        <ExpressServerStrip
+          server={server}
+          onSelect={(team, player) => void setServer(team, player)}
+          onTogglePlayer={() => void toggleServingPlayer()}
+          onToggleTeam={() => void toggleServingTeam()}
+        />
+
+        <TeamScoreBlock
+          team="b"
+          label="Abajo · Pista"
+          slots={TEAM_B_SLOTS}
+          match={match}
+          onScore={handleScore}
+          onPlayerChange={handlePlayerChange}
+          onPlayerBlur={handlePlayerBlur}
+          namesOpen={namesOpenB}
+          onToggleNames={() => setNamesOpenB((v) => !v)}
+          server={server}
+        />
+      </main>
+
+      <footer className="mt-2 shrink-0">
         <button
           type="button"
-          onClick={endSession}
-          className="flex items-center gap-2 rounded-xl bg-red-500/10 p-2 text-xs font-bold uppercase text-red-500 active:bg-red-500/20"
+          onClick={handlePuntoDeOroToggle}
+          className={`w-full rounded-xl border py-2.5 text-[11px] font-bold uppercase tracking-widest transition-colors active:opacity-90 ${
+            match.punto_de_oro
+              ? 'border-padel-primary/50 bg-padel-primary/15 text-padel-primary'
+              : 'border-neutral-800 bg-neutral-900 text-neutral-500'
+          }`}
         >
-          <Power size={14} /> Finalizar
+          {match.punto_de_oro ? '⚡ Punto de Oro activo' : 'Activar Punto de Oro'}
         </button>
-      </div>
+      </footer>
 
-      {teamBlocks.map(({ team, label, slots }) => (
-        <div
-          key={team}
-          className="mb-4 flex flex-col gap-4 rounded-3xl border border-neutral-800 bg-neutral-900 p-4"
-        >
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-padel-primary/80">{label}</p>
-            <div className="mt-3 space-y-3">
-              {slots.map((slot) => (
-                <PlayerNameFields
-                  key={slot}
-                  slot={slot}
-                  match={match}
-                  onChange={handlePlayerChange}
-                  onBlurField={handlePlayerBlur}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between border-t border-neutral-800 pt-4">
-            <button
-              type="button"
-              onClick={() => handleScore(team, 'decrement')}
-              className="flex h-14 w-14 items-center justify-center rounded-2xl bg-neutral-800 text-neutral-400 transition-transform active:scale-95"
-            >
-              <Minus size={22} />
-            </button>
-            <div className="text-center">
-              <span className="block text-6xl font-black leading-none text-padel-primary">
-                {team === 'a' ? match.team_a_points : match.team_b_points}
-              </span>
-              <span className="mt-2 block text-xs font-bold uppercase text-neutral-500">
-                Juegos: {team === 'a' ? match.team_a_games : match.team_b_games}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => handleScore(team, 'increment')}
-              className="flex h-16 w-16 items-center justify-center rounded-3xl bg-padel-primary text-surface shadow-lg shadow-padel-primary/20 transition-transform active:scale-95"
-            >
-              <Plus size={32} strokeWidth={2.5} />
-            </button>
-          </div>
-        </div>
-      ))}
-
-      <button
-        type="button"
-        onClick={handlePuntoDeOroToggle}
-        className="mt-2 w-full rounded-2xl border border-neutral-800 bg-neutral-900 py-4 text-sm font-bold uppercase tracking-widest text-neutral-400 transition-colors active:bg-neutral-800"
-      >
-        {match.punto_de_oro ? '⚡ Desactivar Punto de Oro' : 'Activar Punto de Oro'}
-      </button>
-
-      <ExpressControlThirdSetPanel
+      <ExpressControlSettingsDrawer
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
         match={match}
         sessionId={sessionId}
-        onModeSaved={(mode) => {
-          if (!matchRef.current) return;
-          const next = normalizeExpressMatch({
-            ...(matchRef.current as unknown as Record<string, unknown>),
-            third_set_mode: mode,
-          });
-          applyMatch(next);
-        }}
-      />
-
-      <ExpressControlDisplayPanel
-        match={match}
-        sessionId={sessionId}
-        onNameScaleSaved={(scale) => {
-          if (!matchRef.current) return;
-          const next = normalizeExpressMatch({
-            ...(matchRef.current as unknown as Record<string, unknown>),
-            display_name_scale: scale,
-          });
-          applyMatch(next);
-        }}
-        onMediaScaleSaved={(scale) => {
-          if (!matchRef.current) return;
-          const next = normalizeExpressMatch({
-            ...(matchRef.current as unknown as Record<string, unknown>),
-            display_media_scale: scale,
-          });
-          applyMatch(next);
-        }}
+        onThirdSetModeSaved={(mode: ExpressThirdSetMode) => patchMatch({ third_set_mode: mode })}
+        onNameScaleSaved={(scale) => patchMatch({ display_name_scale: scale })}
+        onMediaScaleSaved={(scale) => patchMatch({ display_media_scale: scale })}
+        onTickerPhrasesSaved={(phrases) => patchMatch({ display_ticker_phrases: phrases })}
       />
     </div>
   );

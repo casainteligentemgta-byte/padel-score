@@ -59,6 +59,10 @@ export function expressMatchToMarcador(match: ExpressMatch): PizarraMarcador {
     match_format: 'BEST_OF_3',
     express_third_set_mode: normalizeExpressThirdSetMode(match.third_set_mode),
     express_current_set: match.current_set,
+    saque: {
+      equipo: match.server_team,
+      jugador: match.server_player,
+    },
   };
 }
 

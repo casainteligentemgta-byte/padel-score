@@ -7,6 +7,7 @@ import {
   normalizeExpressThirdSetMode,
   type ExpressThirdSetMode,
 } from '@/lib/expressThirdSetMode';
+import { normalizeExpressServer } from '@/lib/expressServer';
 
 export type ExpressPoint = '0' | '15' | '30' | '40' | 'AD';
 
@@ -51,6 +52,10 @@ export interface ExpressMatch {
   qr_expires_at: string | null;
   /** Frases propias en tira informativa (además de mensajes admin). */
   display_ticker_phrases: string[];
+  /** Equipo al saque: 1 = A (arriba), 2 = B (abajo). */
+  server_team: 1 | 2;
+  /** Jugador al saque dentro del equipo (1 o 2). */
+  server_player: 1 | 2;
   created_at: string;
   updated_at: string;
 }
@@ -77,6 +82,10 @@ export function normalizeExpressMatch(row: Record<string, unknown>): ExpressMatc
     third_set_mode: normalizeExpressThirdSetMode(hydrated.third_set_mode),
     sets_a: setsA?.length === EXPRESS_SET_SLOTS ? setsA : [0, 0, 0],
     sets_b: setsB?.length === EXPRESS_SET_SLOTS ? setsB : [0, 0, 0],
+    ...(() => {
+      const s = normalizeExpressServer(hydrated.server_team, hydrated.server_player);
+      return { server_team: s.team, server_player: s.player };
+    })(),
   };
 }
 

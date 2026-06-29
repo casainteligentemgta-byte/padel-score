@@ -29,6 +29,8 @@ type Props = {
   sessionId: string;
   onNameScaleSaved: (scale: number) => void;
   onMediaScaleSaved: (scale: number) => void;
+  embedded?: boolean;
+  mode?: 'all' | 'names' | 'media';
 };
 
 function ScalePresetGrid<T extends string>({
@@ -139,9 +141,11 @@ export function ExpressControlDisplayPanel({
   sessionId,
   onNameScaleSaved,
   onMediaScaleSaved,
+  embedded,
+  mode = 'all',
 }: Props) {
   const supabase = getSupabaseClient();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!embedded);
   const [savingName, setSavingName] = useState<ExpressNameScalePresetId | 'slider' | null>(null);
   const [savingMedia, setSavingMedia] = useState<ExpressMediaScalePresetId | 'slider' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -267,6 +271,108 @@ export function ExpressControlDisplayPanel({
   const previewNameSize = expressPlayerNameFontSize(nameDraft);
   const mediaPreviewHeight = `${Math.round(48 * mediaDraft)}px`;
 
+  const showNames = mode === 'all' || mode === 'names';
+  const showMedia = mode === 'all' || mode === 'media';
+
+  const content = (
+    <div className={embedded ? 'space-y-4' : 'space-y-5 border-t-2 border-neutral-600 px-4 pb-4 pt-3'}>
+      {error && <p className="text-xs text-red-400">{error}</p>}
+
+      {showNames ? (
+        <section className="space-y-3">
+          {mode === 'all' ? (
+            <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-200">Nombres en pizarra</p>
+          ) : null}
+          <p className="text-[10px] leading-relaxed text-neutral-400">
+            Tamaño de los nombres de jugadores en el marcador.
+          </p>
+          <div className="rounded-xl border border-neutral-800 bg-black/40 px-3 py-3">
+            <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-neutral-500">Vista previa</p>
+            <p
+              className="font-black italic uppercase leading-snug tracking-tight text-padel-primary"
+              style={{ fontSize: previewNameSize }}
+            >
+              JUAN GARCÍA / PEDRO LÓPEZ
+            </p>
+          </div>
+          <DisplayScaleSlider
+            label="Escala nombres"
+            value={nameDraft}
+            min={EXPRESS_DISPLAY_NAME_SCALE_MIN}
+            max={EXPRESS_DISPLAY_NAME_SCALE_MAX}
+            step={EXPRESS_DISPLAY_NAME_SCALE_STEP}
+            disabled={isSaving}
+            onChange={(v) => {
+              const next = normalizeExpressDisplayNameScale(v);
+              setNameDraft(next);
+              debouncedSaveName(next);
+            }}
+          />
+          <ScalePresetGrid
+            presets={EXPRESS_NAME_SCALE_PRESETS}
+            activeId={activeNamePreset}
+            savingId={savingName === 'slider' ? null : savingName}
+            isSaving={isSaving}
+            onSelect={(id) => void applyNamePreset(id)}
+          />
+        </section>
+      ) : null}
+
+      {showMedia ? (
+        <section className={`space-y-3 ${showNames && mode === 'all' ? 'border-t border-neutral-600 pt-4' : ''}`}>
+          {mode === 'all' ? (
+            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-neutral-200">
+              <MonitorPlay className="h-3.5 w-3.5 text-padel-primary" />
+              Vídeo e imágenes
+            </p>
+          ) : null}
+          <p className="text-[10px] leading-relaxed text-neutral-400">
+            Altura de la franja de publicidad en la parte inferior de la TV.
+          </p>
+          <div className="rounded-xl border border-neutral-800 bg-black/40 px-3 py-3">
+            <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-neutral-500">Vista previa</p>
+            <div className="grid grid-cols-2 gap-1 overflow-hidden rounded-lg border border-white/10">
+              <div
+                className="flex items-center justify-center bg-neutral-950 text-[8px] font-bold uppercase tracking-wider text-neutral-500"
+                style={{ height: mediaPreviewHeight }}
+              >
+                Vídeo
+              </div>
+              <div
+                className="flex items-center justify-center bg-neutral-950 text-[8px] font-bold uppercase tracking-wider text-neutral-500"
+                style={{ height: mediaPreviewHeight }}
+              >
+                Imagen
+              </div>
+            </div>
+          </div>
+          <DisplayScaleSlider
+            label="Escala publicidad"
+            value={mediaDraft}
+            min={EXPRESS_DISPLAY_MEDIA_SCALE_MIN}
+            max={EXPRESS_DISPLAY_MEDIA_SCALE_MAX}
+            step={EXPRESS_DISPLAY_MEDIA_SCALE_STEP}
+            disabled={isSaving}
+            onChange={(v) => {
+              const next = normalizeExpressDisplayMediaScale(v);
+              setMediaDraft(next);
+              debouncedSaveMedia(next);
+            }}
+          />
+          <ScalePresetGrid
+            presets={EXPRESS_MEDIA_SCALE_PRESETS}
+            activeId={activeMediaPreset}
+            savingId={savingMedia === 'slider' ? null : savingMedia}
+            isSaving={isSaving}
+            onSelect={(id) => void applyMediaPreset(id)}
+          />
+        </section>
+      ) : null}
+    </div>
+  );
+
+  if (embedded) return content;
+
   return (
     <div className="mt-3 rounded-2xl border-2 border-neutral-600 bg-neutral-800 shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
       <button
@@ -285,94 +391,7 @@ export function ExpressControlDisplayPanel({
         )}
       </button>
 
-      {open && (
-        <div className="space-y-5 border-t-2 border-neutral-600 px-4 pb-4 pt-3">
-          {error && <p className="text-xs text-red-400">{error}</p>}
-
-          <section className="space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-200">Nombres en pizarra</p>
-            <p className="text-[10px] leading-relaxed text-neutral-400">
-              Tamaño de los nombres de jugadores en el marcador.
-            </p>
-            <div className="rounded-xl border border-neutral-800 bg-black/40 px-3 py-3">
-              <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-neutral-500">Vista previa</p>
-              <p
-                className="font-black italic uppercase leading-snug tracking-tight text-padel-primary"
-                style={{ fontSize: previewNameSize }}
-              >
-                JUAN GARCÍA / PEDRO LÓPEZ
-              </p>
-            </div>
-            <DisplayScaleSlider
-              label="Escala nombres"
-              value={nameDraft}
-              min={EXPRESS_DISPLAY_NAME_SCALE_MIN}
-              max={EXPRESS_DISPLAY_NAME_SCALE_MAX}
-              step={EXPRESS_DISPLAY_NAME_SCALE_STEP}
-              disabled={isSaving}
-              onChange={(v) => {
-                const next = normalizeExpressDisplayNameScale(v);
-                setNameDraft(next);
-                debouncedSaveName(next);
-              }}
-            />
-            <ScalePresetGrid
-              presets={EXPRESS_NAME_SCALE_PRESETS}
-              activeId={activeNamePreset}
-              savingId={savingName === 'slider' ? null : savingName}
-              isSaving={isSaving}
-              onSelect={(id) => void applyNamePreset(id)}
-            />
-          </section>
-
-          <section className="space-y-3 border-t border-neutral-600 pt-4">
-            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-neutral-200">
-              <MonitorPlay className="h-3.5 w-3.5 text-padel-primary" />
-              Vídeo e imágenes
-            </p>
-            <p className="text-[10px] leading-relaxed text-neutral-400">
-              Altura de la franja de publicidad (vídeo e imágenes) en la parte inferior de la TV.
-            </p>
-            <div className="rounded-xl border border-neutral-800 bg-black/40 px-3 py-3">
-              <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-neutral-500">Vista previa</p>
-              <div className="grid grid-cols-2 gap-1 overflow-hidden rounded-lg border border-white/10">
-                <div
-                  className="flex items-center justify-center bg-neutral-950 text-[8px] font-bold uppercase tracking-wider text-neutral-500"
-                  style={{ height: mediaPreviewHeight }}
-                >
-                  Vídeo
-                </div>
-                <div
-                  className="flex items-center justify-center bg-neutral-950 text-[8px] font-bold uppercase tracking-wider text-neutral-500"
-                  style={{ height: mediaPreviewHeight }}
-                >
-                  Imagen
-                </div>
-              </div>
-            </div>
-            <DisplayScaleSlider
-              label="Escala publicidad"
-              value={mediaDraft}
-              min={EXPRESS_DISPLAY_MEDIA_SCALE_MIN}
-              max={EXPRESS_DISPLAY_MEDIA_SCALE_MAX}
-              step={EXPRESS_DISPLAY_MEDIA_SCALE_STEP}
-              disabled={isSaving}
-              onChange={(v) => {
-                const next = normalizeExpressDisplayMediaScale(v);
-                setMediaDraft(next);
-                debouncedSaveMedia(next);
-              }}
-            />
-            <ScalePresetGrid
-              presets={EXPRESS_MEDIA_SCALE_PRESETS}
-              activeId={activeMediaPreset}
-              savingId={savingMedia === 'slider' ? null : savingMedia}
-              isSaving={isSaving}
-              onSelect={(id) => void applyMediaPreset(id)}
-            />
-          </section>
-        </div>
-      )}
+      {open ? content : null}
     </div>
   );
 }

@@ -6,6 +6,12 @@ import {
   isExpressThirdSetDeciderMode,
   normalizeExpressThirdSetMode,
 } from '@/lib/expressThirdSetMode';
+import {
+  expressServerAfterGameWon,
+  expressServerAfterTiebreakPoint,
+  EXPRESS_SERVER_DEFAULT,
+  normalizeExpressServer,
+} from '@/lib/expressServer';
 import { winsTiebreakPoints } from '@/lib/matchScoringRules';
 import {
   EXPRESS_SET_SLOTS,
@@ -103,6 +109,8 @@ export function pickScorePatch(state: ExpressMatch): Partial<ExpressMatch> {
     third_set_mode: normalizeExpressThirdSetMode(state.third_set_mode),
     punto_de_oro: state.punto_de_oro,
     is_active: state.is_active,
+    server_team: state.server_team,
+    server_player: state.server_player,
   };
 }
 
@@ -124,6 +132,8 @@ export function buildExpressSessionReset(sessionId: string): Partial<ExpressMatc
     third_set_mode: 'full',
     is_active: false,
     qr_expires_at: null,
+    server_team: EXPRESS_SERVER_DEFAULT.team,
+    server_player: EXPRESS_SERVER_DEFAULT.player,
   };
 }
 
@@ -138,6 +148,9 @@ export function calculateNextState(
 
   const state = cloneMatch(currentState);
   normalizeSets(state);
+  const server = normalizeExpressServer(state.server_team, state.server_player);
+  state.server_team = server.team;
+  state.server_player = server.player;
 
   const rival = team === 'a' ? 'b' : 'a';
   const pointsKey = teamPointsKey(team);
@@ -166,6 +179,11 @@ export function calculateNextState(
     const pts = (parseInt(String(currentPts), 10) || 0) + 1;
     const rPts = parseInt(String(rivalPts), 10) || 0;
     state[pointsKey] = pts.toString();
+
+    const totalPoints = pts + rPts;
+    const nextServer = expressServerAfterTiebreakPoint(totalPoints, server);
+    state.server_team = nextServer.team;
+    state.server_player = nextServer.player;
 
     if (winsTiebreakPoints(pts, rPts, target)) {
       if (isThirdSetDeciderPlay(state)) {
@@ -213,6 +231,11 @@ export function calculateNextState(
     state.team_a_points = '0';
     state.team_b_points = '0';
     state.modo_puntos = 'normal';
+
+    const totalGames = state.team_a_games + state.team_b_games;
+    const nextServer = expressServerAfterGameWon(totalGames);
+    state.server_team = nextServer.team;
+    state.server_player = nextServer.player;
 
     const tGames = state[gamesKey];
     const rGames = state[rivalGamesKey];
