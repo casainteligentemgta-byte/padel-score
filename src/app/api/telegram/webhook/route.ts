@@ -148,6 +148,7 @@ export async function POST(req: Request) {
           chatId,
           buildExpressStaffWelcomeMessage({
             staffName: String(staff.name),
+            roleLabel: staff.role_label ? String(staff.role_label) : null,
             clubSlug: String(staff.club_slug),
             courtNumbers,
           }),

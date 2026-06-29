@@ -8,6 +8,7 @@ export type ClubStaffRow = {
   id: string;
   club_slug: string;
   name: string;
+  role_label: string | null;
   auth_code: string;
   telegram_chat_id: number | null;
   is_active: boolean;

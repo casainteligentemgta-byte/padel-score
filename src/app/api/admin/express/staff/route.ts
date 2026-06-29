@@ -58,6 +58,7 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const name = sanitizeName(body.name);
+  const roleLabel = sanitizeName(body.role_label) || null;
   const clubSlug = resolveCanonicalExpressVenue(sanitizeName(body.club_slug)) ?? sanitizeName(body.club_slug);
 
   if (!name || !clubSlug) {
@@ -71,6 +72,7 @@ export async function POST(req: Request) {
     .insert({
       club_slug: clubSlug,
       name,
+      role_label: roleLabel,
       auth_code: authCode,
       is_active: true,
     })
@@ -106,6 +108,10 @@ export async function PATCH(req: Request) {
     const name = sanitizeName(body.name);
     if (!name) return NextResponse.json({ error: 'Nombre inválido.' }, { status: 400 });
     updates.name = name;
+  }
+
+  if (body.role_label !== undefined) {
+    updates.role_label = sanitizeName(body.role_label) || null;
   }
 
   if (body.club_slug !== undefined) {

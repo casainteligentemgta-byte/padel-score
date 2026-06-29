@@ -86,7 +86,7 @@ export default function AdminHubPage() {
         },
         {
             title: "Express · Staff Telegram",
-            desc: "Vincular manejadores de pizarra con códigos /login",
+            desc: "Lista de manejadores por club y códigos /login",
             icon: MessageSquare,
             href: "/admin/express/staff",
             color: "from-cyan-500/20 to-cyan-500/5",

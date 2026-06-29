@@ -74,17 +74,19 @@ export function buildExpressTelegramUrlGuide(filterVenue?: string): string[] {
 /** Mensaje de bienvenida staff tras /login (incluye URLs con abreviatura). */
 export function buildExpressStaffWelcomeMessage(params: {
   staffName: string;
+  roleLabel?: string | null;
   clubSlug: string;
   courtNumbers: string[];
 }): string {
   const venue = resolveCanonicalExpressVenue(params.clubSlug) ?? params.clubSlug.trim();
   const pathCode = expressVenuePathSlug(venue);
+  const roleLine = params.roleLabel ? ` · _${params.roleLabel}_` : '';
   const urlLines = params.courtNumbers
     .map((courtNumber) => `C${courtNumber}: \`${expressTvUrl(venue, Number(courtNumber))}\``)
     .join('\n');
 
   return (
-    `✅ *Bienvenido ${params.staffName}*\n` +
+    `✅ *Bienvenido ${params.staffName}*${roleLine}\n` +
     `🏢 ${venue} · código \`${pathCode}\`\n\n` +
     `📺 *Cargar en la TV:*\n${urlLines}\n\n` +
     `Por cancha:\n` +
