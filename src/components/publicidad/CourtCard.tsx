@@ -63,7 +63,7 @@ type CourtCardProps = {
   openDisplayHrefLabel?: string;
   /** Vista previa embebida distinta a /dev/pizarra-concept. */
   previewIframeSrcOverride?: string | null;
-  /** Etiqueta junto al wifi (p. ej. fast-1). */
+  /** Etiqueta junto al wifi (p. ej. scan-go-1). */
   courtKeyBadge?: string;
 };
 

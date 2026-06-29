@@ -6,7 +6,18 @@ import {
   buildExpressStaffTelegramKeyboard,
   resolveExpressCourtNumbersForClub,
 } from '@/lib/expressTelegramActions';
-import { answerTelegramCallbackQuery, sendTelegramMessage } from '@/lib/telegramBot';
+import {
+  buildExpressTelegramGuideHelp,
+  buildExpressTelegramUrlGuide,
+} from '@/lib/expressTelegramGuide';
+import {
+  buildExpressDailyReportMessage,
+  buildStaffLoginTelegramMessage,
+  expressReportDayBoundsUtc,
+  fetchPizarraActivationsForDay,
+  logExpressStaffTelegramLogin,
+} from '@/lib/expressActivityReport';
+import { answerTelegramCallbackQuery, isTelegramGuideChat, notifyTelegramAdmin, sendTelegramMessage } from '@/lib/telegramBot';
 
 export async function POST(req: Request) {
   try {
@@ -20,6 +31,36 @@ export async function POST(req: Request) {
     if (body.message?.text) {
       const chatId = body.message.chat.id as number;
       const text = String(body.message.text).trim();
+      const lowerText = text.toLowerCase();
+
+      if (
+        isTelegramGuideChat(chatId) &&
+        (lowerText === '/urls' ||
+          lowerText.startsWith('/urls ') ||
+          lowerText === '/guia' ||
+          lowerText.startsWith('/guia ') ||
+          lowerText === '/help' ||
+          lowerText === '/start')
+      ) {
+        if (lowerText === '/help' || lowerText === '/start') {
+          await sendTelegramMessage(chatId, buildExpressTelegramGuideHelp());
+          return NextResponse.json({ ok: true });
+        }
+
+        const filter = text.replace(/^\/(urls|guia)\s*/i, '').trim();
+        const parts = buildExpressTelegramUrlGuide(filter || undefined);
+        for (const part of parts) {
+          await sendTelegramMessage(chatId, part);
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      if (isTelegramGuideChat(chatId) && (lowerText === '/informe' || lowerText === '/reporte')) {
+        const bounds = expressReportDayBoundsUtc(new Date());
+        const rows = await fetchPizarraActivationsForDay(supabase, bounds);
+        await sendTelegramMessage(chatId, buildExpressDailyReportMessage(rows, bounds.dayLabel));
+        return NextResponse.json({ ok: true });
+      }
 
       if (text.startsWith('/login')) {
         const authCode = text.split(/\s+/)[1]?.trim().toUpperCase();
@@ -45,6 +86,20 @@ export async function POST(req: Request) {
           .from('club_staff')
           .update({ telegram_chat_id: chatId })
           .eq('id', staff.id);
+
+        await logExpressStaffTelegramLogin(supabase, {
+          clubSlug: String(staff.club_slug),
+          staffName: String(staff.name),
+          staffId: String(staff.id),
+          telegramChatId: chatId,
+        });
+
+        await notifyTelegramAdmin(
+          buildStaffLoginTelegramMessage({
+            staffName: String(staff.name),
+            clubSlug: String(staff.club_slug),
+          }),
+        );
 
         const courtNumbers = await resolveExpressCourtNumbersForClub(supabase, String(staff.club_slug));
         const keyboard = buildExpressStaffTelegramKeyboard(courtNumbers);

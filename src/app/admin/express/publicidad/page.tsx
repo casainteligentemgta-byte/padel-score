@@ -459,7 +459,7 @@ export default function AdminExpressPublicidadPage() {
               </h1>
               <p className="text-[11px] uppercase leading-tight tracking-wider text-white/60">
                 Playlists por sede para pantallas{' '}
-                <span className="font-mono text-padel-primary/90">/display/express/fast-N</span>
+                <span className="font-mono text-padel-primary/90">/display/express/scan-go-N</span>
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -487,7 +487,7 @@ export default function AdminExpressPublicidadPage() {
                 escanear el QR (4 jugadores: nombre + apellido).
               </li>
               <li>
-                Sube vídeos/imágenes aquí abajo; en cada tarjeta <span className="font-mono">fast-N</span> elige{' '}
+                Sube vídeos/imágenes aquí abajo; en cada tarjeta <span className="font-mono">scan-go-N</span> elige{' '}
                 <strong className="text-white/80">Video</strong>, <strong className="text-white/80">Imagen</strong>{' '}
                 o <strong className="text-white/80">Texto</strong> (tira inferior).
               </li>

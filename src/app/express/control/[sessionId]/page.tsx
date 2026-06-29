@@ -286,7 +286,7 @@ export default function MobileExpressControl() {
       <div className="mb-4 flex items-center justify-between border-b border-neutral-800 pb-4">
         <div>
           <h1 className="flex items-center gap-2 text-sm font-bold tracking-widest text-padel-primary">
-            EXPRESS MATCH
+            SCAN&GO
             {match.modo_puntos === 'tiebreak' && (
               <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] text-red-500">TIE-BREAK</span>
             )}

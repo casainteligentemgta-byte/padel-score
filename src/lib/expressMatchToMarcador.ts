@@ -54,9 +54,9 @@ export function expressMatchToMarcador(match: ExpressMatch): PizarraMarcador {
   };
 }
 
-export function courtNumFromExpressSlug(slug: string): string {
-  return slug.replace(/^fast-/, '');
-}
+import { courtNumFromExpressSlug } from '@/lib/expressSlug';
+
+export { courtNumFromExpressSlug };
 
 export function canchaIdFromExpressSlug(slug: string): string {
   return `cancha_${courtNumFromExpressSlug(slug)}`;

@@ -46,6 +46,13 @@ export function isTelegramConfigured(): boolean {
   return Boolean(TELEGRAM_TOKEN && process.env.TELEGRAM_CHAT_ID?.trim());
 }
 
+/** Chat ID del admin (TELEGRAM_CHAT_ID): guía de URLs y avisos PIN. */
+export function isTelegramGuideChat(chatId: number | string): boolean {
+  const allowed = process.env.TELEGRAM_CHAT_ID?.trim();
+  if (!allowed) return false;
+  return String(chatId) === allowed;
+}
+
 export async function notifyTelegramTvPinRequest(payload: {
   clubSlug: string;
   courtNumber: string;
@@ -61,4 +68,11 @@ export async function notifyTelegramTvPinRequest(payload: {
     `🔐 PIN de Activación: \`${payload.pin}\``;
 
   await sendTelegramMessage(chatId, mensaje);
+}
+
+/** Avisos solo al admin (TELEGRAM_CHAT_ID). */
+export async function notifyTelegramAdmin(text: string): Promise<void> {
+  const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
+  if (!TELEGRAM_TOKEN || !chatId) return;
+  await sendTelegramMessage(chatId, text);
 }

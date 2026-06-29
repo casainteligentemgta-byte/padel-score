@@ -1,19 +1,22 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
+import { normalizeExpressSlug } from '@/lib/expressSlug';
 import { isValidExpressSlug, normalizeExpressMatch } from '@/types/expressMatch';
 
 type Ctx = { params: Promise<{ slug: string }> };
 
 /**
- * GET: obtiene o auto-provisiona la fila express_matches de una cancha (fast-N).
+ * GET: obtiene o auto-provisiona la fila express_matches de una cancha (scan-go-N).
  * Usa service role para evitar fallos de RLS en TV/kiosco.
  */
 export async function GET(_req: Request, { params }: Ctx) {
-  const { slug } = await params;
+  const { slug: slugParam } = await params;
 
-  if (!isValidExpressSlug(slug)) {
-    return NextResponse.json({ error: 'Slug inválido (use fast-1, fast-2, …)' }, { status: 400 });
+  if (!isValidExpressSlug(slugParam)) {
+    return NextResponse.json({ error: 'Slug inválido (use scan-go-1, scan-go-2, …)' }, { status: 400 });
   }
+
+  const slug = normalizeExpressSlug(slugParam);
 
   const supabase = getSupabaseServiceClient();
   if (!supabase) {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { notFound, useSearchParams } from 'next/navigation';
+import { notFound, useRouter, useSearchParams } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { QRCodeSVG } from 'qrcode.react';
 import { Megaphone, Zap } from 'lucide-react';
@@ -38,12 +38,17 @@ import type { CourtPlaylistsState } from '@/lib/useCourtPlaylists';
 import { BouncingBall } from '@/components/BouncingBall';
 import { ExpressTvDeviceGate } from '@/components/express/ExpressTvDeviceGate';
 import { mergeExpressTickerMessages } from '@/lib/expressTickerMessages';
+import {
+  expressSlugDisplayLabel,
+  isLegacyExpressSlug,
+  normalizeExpressSlug,
+} from '@/lib/expressSlug';
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 
 type LoadState = 'loading' | 'ready' | 'error';
 
 function expressScoringMeta(match: ExpressMatch): { levelLine: string; genderLine: string } {
-  const levelLine = 'EXPRESS MATCH';
+  const levelLine = 'SCAN&GO';
   let genderLine = match.punto_de_oro ? 'Punto de oro' : 'Ventaja clásica';
   if (match.modo_puntos === 'tiebreak') {
     genderLine = 'Tie-break';
@@ -79,7 +84,9 @@ function ExpressTvPublicidadDock({
 }
 
 export default function ExpressTvDisplay() {
-  const slug = useRouteSegment('slug');
+  const slugRaw = useRouteSegment('slug');
+  const slug = normalizeExpressSlug(slugRaw);
+  const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = useMemo(() => getSupabaseClient(), []);
 
@@ -93,6 +100,13 @@ export default function ExpressTvDisplay() {
 
   const courtNum = courtNumFromExpressSlug(slug);
   const canchaId = canchaIdFromExpressSlug(slug);
+  const boardLabel = expressSlugDisplayLabel(slug);
+
+  useEffect(() => {
+    if (!isValidExpressSlug(slugRaw) || !isLegacyExpressSlug(slugRaw)) return;
+    const qs = searchParams.toString();
+    router.replace(`/display/express/${slug}${qs ? `?${qs}` : ''}`);
+  }, [slugRaw, slug, router, searchParams]);
 
   const [match, setMatch] = useState<ExpressMatch | null>(null);
   const [loadState, setLoadState] = useState<LoadState>('loading');
@@ -263,7 +277,7 @@ export default function ExpressTvDisplay() {
       });
   }, [supabase, match?.id, match?.base_venue, urlBaseVenue, slug]);
 
-  if (!isValidExpressSlug(slug)) {
+  if (!isValidExpressSlug(slugRaw)) {
     notFound();
   }
 
@@ -277,7 +291,7 @@ export default function ExpressTvDisplay() {
       <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-hidden bg-[#050505] font-outfit text-white">
         <PistaTopBar
           courtHeadline={courtHeadline}
-          levelLine="EXPRESS MATCH"
+          levelLine="SCAN&GO"
           genderLine="Cargando cancha…"
           mode="wait"
         />
@@ -336,7 +350,7 @@ export default function ExpressTvDisplay() {
             <>
               <div className="shrink-0 text-center">
                 <h1 className="mb-1 text-2xl font-black italic uppercase tracking-tighter sm:text-3xl">
-                  {slug.toUpperCase()}
+                  {boardLabel}
                 </h1>
                 <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-gray-500 sm:text-xs sm:tracking-[0.35em]">
                   Escanea para iniciar el marcador
@@ -367,7 +381,7 @@ export default function ExpressTvDisplay() {
           ) : (
             <div className="max-w-md shrink-0 px-4 text-center">
               <h1 className="text-2xl font-black italic uppercase tracking-tighter sm:text-3xl">
-                {slug.toUpperCase()}
+                {boardLabel}
               </h1>
               <p className="mt-4 text-sm font-bold uppercase tracking-widest text-neutral-400">
                 Pantalla lista

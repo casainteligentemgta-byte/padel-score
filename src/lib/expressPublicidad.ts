@@ -1,7 +1,10 @@
 /**
- * Publicidad en pantallas Express (/display/express/fast-N).
+ * Publicidad en pantallas Express (/display/express/scan-go-N).
  * Playlists en `cancha_publicidad` con venue_name distinto al torneo para no mezclar contenidos.
  */
+
+import { expressCourtCountForClub } from '@/lib/expressVenueCourts';
+import { expressDisplayPath, expressSlugFromDisplayNum } from '@/lib/expressSlug';
 
 export const EXPRESS_PUBLICIDAD_VENUE_SUFFIX = ' · Express';
 
@@ -21,12 +24,8 @@ export function expressBaseVenueFromPublicidadVenue(venue: string): string {
   return v;
 }
 
-export function expressSlugFromDisplayNum(displayNum: number): string {
-  return `fast-${Math.max(1, Math.floor(displayNum))}`;
-}
-
-export function expressDisplayPath(displayNum: number): string {
-  return `/display/express/${expressSlugFromDisplayNum(displayNum)}`;
+export function expressDisplayPathForNum(displayNum: number): string {
+  return expressDisplayPath(displayNum);
 }
 
 /**
@@ -58,14 +57,14 @@ export function buildExpressCourts(count: number): ExpressCourtDef[] {
     const slug = expressSlugFromDisplayNum(displayNum);
     return {
       key: String(displayNum),
-      label: `Express ${slug.toUpperCase()}`,
+      label: `Scan&Go ${displayNum}`,
       displayNum,
       slug,
     };
   });
 }
 
-export const DEFAULT_EXPRESS_COURT_COUNT = 4;
+export const DEFAULT_EXPRESS_COURT_COUNT = 3;
 export const MAX_EXPRESS_COURT_COUNT = 16;
 
 const COURT_COUNT_STORAGE_KEY = 'express_publicidad_court_counts';
@@ -102,7 +101,7 @@ export function expressCourtCountForVenue(baseVenue: string): number {
   const key = String(baseVenue || '').trim().toLowerCase();
   const stored = loadExpressCourtCounts()[key];
   if (stored && stored >= 1) return stored;
-  return DEFAULT_EXPRESS_COURT_COUNT;
+  return expressCourtCountForClub(baseVenue);
 }
 
 /** Orden de búsqueda de playlist en TV Express (Express · sede, luego sede torneo). */

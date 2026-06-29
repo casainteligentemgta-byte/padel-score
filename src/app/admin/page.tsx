@@ -77,7 +77,7 @@ export default function AdminHubPage() {
         },
         {
             title: "Express · Publicidad",
-            desc: "Playlists para pantallas fast-N (partidos informales)",
+            desc: "Playlists para pantallas Scan&Go (partidos informales)",
             icon: Zap,
             href: "/admin/express/publicidad",
             color: "from-lime-500/20 to-lime-500/5",

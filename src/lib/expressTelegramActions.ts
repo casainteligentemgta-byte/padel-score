@@ -1,9 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildExpressSessionReset } from '@/lib/expressScoring';
 import {
+  clampCourtNumbersForClub,
   expressCourtNumbersForClub,
   normalizeExpressClubSlug,
-  sortCourtNumbers,
 } from '@/lib/expressVenueCourts';
 import { courtNumberFromExpressSlug, expressCanchaCodeFromCourtNumber } from '@/lib/tvDeviceAuth';
 
@@ -37,7 +37,10 @@ export async function resolveExpressCourtNumbersForClub(
     if (n) found.add(n);
   }
 
-  if (found.size > 0) return sortCourtNumbers(found);
+  if (found.size > 0) {
+    const clamped = clampCourtNumbersForClub(slug, found);
+    if (clamped.length > 0) return clamped;
+  }
   return expressCourtNumbersForClub(slug);
 }
 

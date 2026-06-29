@@ -73,7 +73,4 @@ export function normalizeExpressMatch(row: Record<string, unknown>): ExpressMatc
 }
 
 export { getAppBaseUrl as getExpressAppBaseUrl } from '@/lib/brand';
-
-export function isValidExpressSlug(slug: string): boolean {
-  return /^fast-\d+$/.test(slug);
-}
+export { isValidExpressSlug } from '@/lib/expressSlug';
