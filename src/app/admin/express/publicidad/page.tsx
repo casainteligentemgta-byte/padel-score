@@ -487,13 +487,13 @@ export default function AdminExpressPublicidadPage() {
                 escanear el QR (4 jugadores: nombre + apellido).
               </li>
               <li>
-                Sube vídeos/imágenes aquí abajo; en cada tarjeta <span className="font-mono">scan-go-N</span> elige{' '}
+                Sube vídeos e imágenes aquí; en cada tarjeta <span className="font-mono">BD/C1</span> asigna{' '}
                 <strong className="text-white/80">Video</strong>, <strong className="text-white/80">Imagen</strong>{' '}
-                o <strong className="text-white/80">Texto</strong> (tira inferior).
+                o <strong className="text-white/80">Texto</strong> (tira inferior). Solo administradores.
               </li>
               <li>
-                También puedes elegir vídeos desde el móvil: control Express →{' '}
-                <strong className="text-white/80">Publicidad en TV</strong>.
+                La sede de cada TV se define al abrir la URL corta (<span className="font-mono">BD/C1</span>) o al
+                activar QR desde Telegram del club.
               </li>
             </ul>
           </section>
