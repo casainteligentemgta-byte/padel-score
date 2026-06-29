@@ -21,6 +21,7 @@ import {
   expressPublicidadVenueName,
 } from '@/lib/expressPublicidad';
 import { expressQrDockPaddingBottom } from '@/lib/expressDisplayMediaScale';
+import { expressMatchSlugCodes } from '@/lib/expressMatchDb';
 import { expressQrWindowSecondsLeft, formatExpressQrCountdown, isExpressQrWindowOpen } from '@/lib/expressQrWindow';
 import {
   canchaIdFromExpressSlug,
@@ -201,20 +202,40 @@ export default function ExpressTvDisplay() {
       setLoadState('loading');
       setErrorMessage(null);
 
-      const { data: existing, error: fetchError } = await supabase
-        .from('express_matches')
-        .select('*')
-        .eq('cancha_code', slug)
-        .maybeSingle();
+      let existing: Record<string, unknown> | null = null;
+      for (const code of expressMatchSlugCodes(slug)) {
+        const { data, error: fetchError } = await supabase
+          .from('express_matches')
+          .select('*')
+          .eq('cancha_code', code)
+          .maybeSingle();
+
+        if (cancelled) return;
+
+        if (fetchError && fetchError.code !== 'PGRST116') {
+          console.error('[ExpressTv] fetch error:', fetchError);
+          setErrorMessage(fetchError.message);
+          setLoadState('error');
+          return;
+        }
+
+        if (data) {
+          existing = data as Record<string, unknown>;
+          break;
+        }
+      }
+
+      if (existing && String(existing.cancha_code ?? '') !== slug) {
+        const { data: migrated } = await supabase
+          .from('express_matches')
+          .update({ cancha_code: slug })
+          .eq('id', String(existing.id))
+          .select('*')
+          .maybeSingle();
+        if (migrated) existing = migrated as Record<string, unknown>;
+      }
 
       if (cancelled) return;
-
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        console.error('[ExpressTv] fetch error:', fetchError);
-        setErrorMessage(fetchError.message);
-        setLoadState('error');
-        return;
-      }
 
       if (existing) {
         setMatch(normalizeExpressMatch(existing));

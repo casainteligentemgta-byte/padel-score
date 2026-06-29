@@ -176,9 +176,14 @@ export async function POST(req: Request) {
       }
 
       const clubSlug = String(staff.club_slug);
+      const allowedCourts = await resolveExpressCourtNumbersForClub(supabase, clubSlug);
 
       if (data.startsWith('activate_')) {
         const courtNumber = data.replace('activate_', '');
+        if (!allowedCourts.includes(courtNumber)) {
+          await answerTelegramCallbackQuery(callbackQuery.id, 'Cancha no válida para este club.');
+          return NextResponse.json({ ok: true });
+        }
         const result = await applyExpressQrActivation(supabase, clubSlug, courtNumber);
         await answerTelegramCallbackQuery(callbackQuery.id, result.message);
         return NextResponse.json({ ok: true });
@@ -186,6 +191,10 @@ export async function POST(req: Request) {
 
       if (data.startsWith('reset_')) {
         const courtNumber = data.replace('reset_', '');
+        if (!allowedCourts.includes(courtNumber)) {
+          await answerTelegramCallbackQuery(callbackQuery.id, 'Cancha no válida para este club.');
+          return NextResponse.json({ ok: true });
+        }
         const result = await applyExpressBoardReset(supabase, clubSlug, courtNumber);
         await answerTelegramCallbackQuery(callbackQuery.id, result.message);
         return NextResponse.json({ ok: true });

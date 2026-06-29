@@ -36,6 +36,7 @@ import {
   expressMatchEndedSummary,
   expressWarmupEndsAtMs,
 } from '@/lib/expressSessionMeta';
+import { updateExpressMatchBySession } from '@/lib/expressMatchDb';
 import { PizarraCenterChrono } from '@/components/pizarra/PizarraDisplayParts';
 import { EXPRESS_TV_BRAND } from '@/lib/expressSlug';
 import { BouncingBall } from '@/components/BouncingBall';
@@ -235,6 +236,7 @@ export default function MobileExpressControl() {
   const [namesOpenB, setNamesOpenB] = useState(false);
   const [matchBusy, setMatchBusy] = useState(false);
   const [uiTick, setUiTick] = useState(() => Date.now());
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   const matchRef = useRef<ExpressMatch | null>(null);
   const pendingScoreRef = useRef(false);
@@ -257,16 +259,23 @@ export default function MobileExpressControl() {
       updateGen?: number,
     ): Promise<boolean> => {
       if (!supabase) return false;
-      const { error } = await supabase
-        .from('express_matches')
-        .update(updates)
-        .eq('session_id', sessionId);
-      if (error) {
-        console.error('[ExpressControl] update error:', error);
-        if (updateGen == null || updateGenRef.current === updateGen) {
+      const result = await updateExpressMatchBySession(supabase, sessionId, updates);
+
+      if (!result.ok) {
+        console.error('[ExpressControl] update error:', result.message);
+        if (result.reason === 'stale_session') {
+          setStatus('missing');
+          setUpdateError(result.message);
+        } else if (updateGen == null || updateGenRef.current === updateGen) {
           applyMatch(fallback);
+          setUpdateError('No se pudo guardar. Revisa conexión o escanea el QR de nuevo.');
         }
         return false;
+      }
+
+      if (updateGen == null || updateGenRef.current === updateGen) {
+        applyMatch(result.match);
+        setUpdateError(null);
       }
       return true;
     },
@@ -357,25 +366,19 @@ export default function MobileExpressControl() {
       const endedSummary = expressMatchEndedSummary(normalized);
 
       if (!endedSummary && !normalized.is_active) {
-        const { data: activated, error } = await supabase
-          .from('express_matches')
-          .update({ is_active: true, qr_expires_at: null, match_ended_at: null })
-          .eq('session_id', sessionId)
-          .select('*')
-          .maybeSingle();
+        const activated = await updateExpressMatchBySession(supabase, sessionId, {
+          is_active: true,
+          qr_expires_at: null,
+          match_ended_at: null,
+        });
 
-        if (error) {
-          console.error('[ExpressControl] activate error:', error);
+        if (!activated.ok) {
+          console.error('[ExpressControl] activate error:', activated.message);
           setStatus('missing');
           return;
         }
 
-        if (!activated) {
-          setStatus('missing');
-          return;
-        }
-
-        applyMatch(activated);
+        applyMatch(activated.match);
         setStatus('ready');
 
         void fetch('/api/express/session-started', {
@@ -401,6 +404,10 @@ export default function MobileExpressControl() {
     pendingScoreRef.current = true;
     const previousState = { ...matchRef.current };
     const patch = calculateNextState(previousState, team, action);
+    if (Object.keys(patch).length === 0) {
+      pendingScoreRef.current = false;
+      return;
+    }
     const newState = { ...previousState, ...patch } as ExpressMatch;
 
     applyMatch(newState);
@@ -638,6 +645,11 @@ export default function MobileExpressControl() {
     <div className="relative flex h-dvh select-none flex-col overflow-hidden bg-surface px-3 py-2 font-sans text-white">
       <PizarraWarmupOverlay endsAt={warmupEndsAt} layout="banner" />
       <ExpressSideChangeBanner visible={sideChangeVisible} onDismiss={() => void dismissSideChange()} />
+      {updateError ? (
+        <div className="mb-1 shrink-0 rounded-lg border border-red-500/40 bg-red-500/10 px-2 py-1 text-center text-[10px] font-bold uppercase tracking-wide text-red-400">
+          {updateError}
+        </div>
+      ) : null}
       <header className="mb-2 flex shrink-0 items-center justify-between gap-2 border-b border-neutral-800 pb-2">
         <div className="min-w-0">
           <h1 className="flex flex-wrap items-center gap-1.5 text-xs font-bold tracking-widest text-padel-primary">
@@ -676,19 +688,21 @@ export default function MobileExpressControl() {
         </div>
       </header>
 
-      <main className={`flex min-h-0 flex-1 flex-col gap-1.5 ${scoringLocked ? 'pointer-events-none opacity-60' : ''}`}>
-        <TeamScoreBlock
-          team="a"
-          label="Arriba · Pista"
-          slots={TEAM_A_SLOTS}
-          match={match}
-          onScore={handleScore}
-          onPlayerChange={handlePlayerChange}
-          onPlayerBlur={handlePlayerBlur}
-          namesOpen={namesOpenA}
-          onToggleNames={() => setNamesOpenA((v) => !v)}
-          server={server}
-        />
+      <main className="flex min-h-0 flex-1 flex-col gap-1.5">
+        <div className={scoringLocked ? 'pointer-events-none opacity-60' : ''}>
+          <TeamScoreBlock
+            team="a"
+            label="Arriba · Pista"
+            slots={TEAM_A_SLOTS}
+            match={match}
+            onScore={handleScore}
+            onPlayerChange={handlePlayerChange}
+            onPlayerBlur={handlePlayerBlur}
+            namesOpen={namesOpenA}
+            onToggleNames={() => setNamesOpenA((v) => !v)}
+            server={server}
+          />
+        </div>
 
         <ExpressServerStrip
           server={server}
@@ -697,18 +711,20 @@ export default function MobileExpressControl() {
           onToggleTeam={() => void toggleServingTeam()}
         />
 
-        <TeamScoreBlock
-          team="b"
-          label="Abajo · Pista"
-          slots={TEAM_B_SLOTS}
-          match={match}
-          onScore={handleScore}
-          onPlayerChange={handlePlayerChange}
-          onPlayerBlur={handlePlayerBlur}
-          namesOpen={namesOpenB}
-          onToggleNames={() => setNamesOpenB((v) => !v)}
-          server={server}
-        />
+        <div className={scoringLocked ? 'pointer-events-none opacity-60' : ''}>
+          <TeamScoreBlock
+            team="b"
+            label="Abajo · Pista"
+            slots={TEAM_B_SLOTS}
+            match={match}
+            onScore={handleScore}
+            onPlayerChange={handlePlayerChange}
+            onPlayerBlur={handlePlayerBlur}
+            namesOpen={namesOpenB}
+            onToggleNames={() => setNamesOpenB((v) => !v)}
+            server={server}
+          />
+        </div>
       </main>
 
       <footer className={`mt-2 shrink-0 ${scoringLocked ? 'pointer-events-none opacity-60' : ''}`}>
