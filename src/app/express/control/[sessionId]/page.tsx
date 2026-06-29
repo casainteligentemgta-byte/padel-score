@@ -8,6 +8,7 @@ import { Plus, Minus, Power, Settings, Pencil } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { ExpressMatch, normalizeExpressMatch } from '@/types/expressMatch';
 import {
+  buildExpressNewMatch,
   buildExpressSessionReset,
   calculateNextState,
   pickExpressScorePatch,
@@ -23,6 +24,19 @@ import {
 import { SmartPadelBallIcon } from '@/components/SmartPadelBallIcon';
 import { ExpressControlSettingsDrawer } from '@/components/express/ExpressControlSettingsDrawer';
 import { ExpressServerStrip } from '@/components/express/ExpressServerStrip';
+import { ExpressMatchEndPanel } from '@/components/express/ExpressMatchEndPanel';
+import { ExpressSideChangeBanner } from '@/components/express/ExpressSideChangeBanner';
+import { PizarraWarmupOverlay } from '@/components/PizarraWarmupOverlay';
+import {
+  expressChronoTotalSec,
+  expressFormatDuration,
+  expressIsSideChangeVisible,
+  expressIsWarmupActive,
+  expressMatchChronoCron,
+  expressMatchEndedSummary,
+  expressWarmupEndsAtMs,
+} from '@/lib/expressSessionMeta';
+import { PizarraCenterChrono } from '@/components/pizarra/PizarraDisplayParts';
 import { EXPRESS_TV_BRAND } from '@/lib/expressSlug';
 import { BouncingBall } from '@/components/BouncingBall';
 import type { ExpressThirdSetMode } from '@/lib/expressThirdSetMode';
@@ -219,6 +233,8 @@ export default function MobileExpressControl() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [namesOpenA, setNamesOpenA] = useState(false);
   const [namesOpenB, setNamesOpenB] = useState(false);
+  const [matchBusy, setMatchBusy] = useState(false);
+  const [uiTick, setUiTick] = useState(() => Date.now());
 
   const matchRef = useRef<ExpressMatch | null>(null);
   const pendingScoreRef = useRef(false);
@@ -258,6 +274,37 @@ export default function MobileExpressControl() {
   );
 
   useEffect(() => {
+    const id = setInterval(() => setUiTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!supabase || !matchRef.current) return;
+    const m = matchRef.current;
+    if (!m.is_active || !m.warmup_ends_at) return;
+    const endMs = new Date(m.warmup_ends_at).getTime();
+    if (!Number.isFinite(endMs) || endMs <= Date.now()) {
+      if (!m.match_started_at) {
+        void updateServer(
+          { warmup_ends_at: null, match_started_at: new Date().toISOString() },
+          m,
+        );
+      }
+      return;
+    }
+    const delay = endMs - Date.now() + 50;
+    const t = setTimeout(() => {
+      const cur = matchRef.current;
+      if (!cur?.warmup_ends_at) return;
+      void updateServer(
+        { warmup_ends_at: null, match_started_at: new Date().toISOString() },
+        cur,
+      );
+    }, delay);
+    return () => clearTimeout(t);
+  }, [supabase, match?.warmup_ends_at, match?.is_active, updateServer]);
+
+  useEffect(() => {
     if (!supabase || status !== 'ready') return;
 
     const channel = supabase
@@ -289,32 +336,58 @@ export default function MobileExpressControl() {
 
     const activateControl = async () => {
       setStatus('loading');
-      const { data, error } = await supabase
+      const { data: existing, error: fetchError } = await supabase
         .from('express_matches')
-        .update({ is_active: true, qr_expires_at: null })
-        .eq('session_id', sessionId)
         .select('*')
+        .eq('session_id', sessionId)
         .maybeSingle();
 
-      if (error) {
-        console.error('[ExpressControl] activate error:', error);
+      if (fetchError) {
+        console.error('[ExpressControl] fetch error:', fetchError);
         setStatus('missing');
         return;
       }
 
-      if (!data) {
+      if (!existing) {
         setStatus('missing');
         return;
       }
 
-      applyMatch(data);
+      const normalized = normalizeExpressMatch(existing);
+      const endedSummary = expressMatchEndedSummary(normalized);
+
+      if (!endedSummary && !normalized.is_active) {
+        const { data: activated, error } = await supabase
+          .from('express_matches')
+          .update({ is_active: true, qr_expires_at: null, match_ended_at: null })
+          .eq('session_id', sessionId)
+          .select('*')
+          .maybeSingle();
+
+        if (error) {
+          console.error('[ExpressControl] activate error:', error);
+          setStatus('missing');
+          return;
+        }
+
+        if (!activated) {
+          setStatus('missing');
+          return;
+        }
+
+        applyMatch(activated);
+        setStatus('ready');
+
+        void fetch('/api/express/session-started', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId }),
+        }).catch(() => {});
+        return;
+      }
+
+      applyMatch(existing);
       setStatus('ready');
-
-      void fetch('/api/express/session-started', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId }),
-      }).catch(() => {});
     };
 
     activateControl();
@@ -322,6 +395,8 @@ export default function MobileExpressControl() {
 
   const handleScore = async (team: 'a' | 'b', action: 'increment' | 'decrement') => {
     if (!matchRef.current || pendingScoreRef.current) return;
+    if (expressMatchEndedSummary(matchRef.current)) return;
+    if (expressIsWarmupActive(matchRef.current, uiTick)) return;
 
     pendingScoreRef.current = true;
     const previousState = { ...matchRef.current };
@@ -331,17 +406,57 @@ export default function MobileExpressControl() {
     applyMatch(newState);
 
     const matchJustEnded = previousState.is_active && newState.is_active === false;
-    const payload = matchJustEnded
-      ? buildExpressSessionReset(crypto.randomUUID())
-      : pickExpressScorePatch(newState);
+    let payload: Partial<ExpressMatch> = pickExpressScorePatch(newState);
+
+    if (
+      action === 'increment' &&
+      !previousState.match_started_at &&
+      !expressIsWarmupActive(previousState, uiTick)
+    ) {
+      payload.match_started_at = new Date().toISOString();
+    }
+
+    if (matchJustEnded) {
+      const chronoState = {
+        ...newState,
+        is_active: true,
+        match_started_at:
+          previousState.match_started_at ?? payload.match_started_at ?? newState.match_started_at,
+      };
+      const elapsed = expressChronoTotalSec(chronoState);
+      payload = {
+        ...payload,
+        match_ended_at: new Date().toISOString(),
+        chrono_elapsed_sec: elapsed,
+        match_started_at: null,
+        side_change_until: null,
+        warmup_ends_at: null,
+      };
+    }
 
     const updateGen = ++updateGenRef.current;
     const ok = await updateServer(payload, previousState, updateGen);
     pendingScoreRef.current = false;
+  };
 
-    if (ok && matchJustEnded) {
-      router.push('/');
-    }
+  const startNewMatch = async (withWarmup: boolean) => {
+    if (!matchRef.current || matchBusy) return;
+    setMatchBusy(true);
+    const previousState = { ...matchRef.current };
+    const reset = buildExpressNewMatch(previousState, { withWarmup });
+    const newState = { ...previousState, ...reset } as ExpressMatch;
+    applyMatch(newState);
+    const ok = await updateServer(reset, previousState);
+    setMatchBusy(false);
+    if (!ok) return;
+  };
+
+  const dismissSideChange = async () => {
+    if (!matchRef.current) return;
+    const previousState = { ...matchRef.current };
+    const updates: Partial<ExpressMatch> = { side_change_until: null };
+    applyMatch({ ...previousState, ...updates } as ExpressMatch);
+    await updateServer(updates, previousState);
   };
 
   const persistTeamPlayers = useCallback(
@@ -512,9 +627,17 @@ export default function MobileExpressControl() {
   }
 
   const server = normalizeExpressServer(match.server_team, match.server_player);
+  const showEndSummary = expressMatchEndedSummary(match);
+  const warmupActive = expressIsWarmupActive(match, uiTick);
+  const warmupEndsAt = expressWarmupEndsAtMs(match);
+  const sideChangeVisible = expressIsSideChangeVisible(match, uiTick);
+  const chronoCron = expressMatchChronoCron(match);
+  const scoringLocked = showEndSummary || warmupActive;
 
   return (
-    <div className="flex h-dvh select-none flex-col overflow-hidden bg-surface px-3 py-2 font-sans text-white">
+    <div className="relative flex h-dvh select-none flex-col overflow-hidden bg-surface px-3 py-2 font-sans text-white">
+      <PizarraWarmupOverlay endsAt={warmupEndsAt} layout="banner" />
+      <ExpressSideChangeBanner visible={sideChangeVisible} onDismiss={() => void dismissSideChange()} />
       <header className="mb-2 flex shrink-0 items-center justify-between gap-2 border-b border-neutral-800 pb-2">
         <div className="min-w-0">
           <h1 className="flex flex-wrap items-center gap-1.5 text-xs font-bold tracking-widest text-padel-primary">
@@ -527,6 +650,11 @@ export default function MobileExpressControl() {
             )}
           </h1>
           <p className="truncate text-[10px] uppercase text-neutral-500">{match.cancha_code}</p>
+          {!showEndSummary && match.is_active ? (
+            <div className="mt-0.5 scale-[0.85] origin-left">
+              <PizarraCenterChrono cron={chronoCron} compact />
+            </div>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <button
@@ -548,7 +676,7 @@ export default function MobileExpressControl() {
         </div>
       </header>
 
-      <main className="flex min-h-0 flex-1 flex-col gap-1.5">
+      <main className={`flex min-h-0 flex-1 flex-col gap-1.5 ${scoringLocked ? 'pointer-events-none opacity-60' : ''}`}>
         <TeamScoreBlock
           team="a"
           label="Arriba · Pista"
@@ -583,7 +711,7 @@ export default function MobileExpressControl() {
         />
       </main>
 
-      <footer className="mt-2 shrink-0">
+      <footer className={`mt-2 shrink-0 ${scoringLocked ? 'pointer-events-none opacity-60' : ''}`}>
         <button
           type="button"
           onClick={handlePuntoDeOroToggle}
@@ -607,6 +735,24 @@ export default function MobileExpressControl() {
         onMediaScaleSaved={(scale) => patchMatch({ display_media_scale: scale })}
         onTickerPhrasesSaved={(phrases) => patchMatch({ display_ticker_phrases: phrases })}
       />
+
+      {showEndSummary ? (
+        <ExpressMatchEndPanel
+          match={match}
+          busy={matchBusy}
+          onNewMatchWithWarmup={() => void startNewMatch(true)}
+          onNewMatchDirect={() => void startNewMatch(false)}
+          onEndSession={() => void endSession()}
+        />
+      ) : null}
+
+      {warmupActive ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-20 z-30 px-3 text-center">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-padel-primary">
+            Calentamiento · {expressFormatDuration(Math.max(0, Math.ceil(((warmupEndsAt ?? uiTick) - uiTick) / 1000)))}
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

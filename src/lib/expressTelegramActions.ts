@@ -6,8 +6,10 @@ import {
   normalizeExpressClubSlug,
 } from '@/lib/expressVenueCourts';
 import { courtNumberFromExpressSlug, expressCanchaCodeFromCourtNumber } from '@/lib/tvDeviceAuth';
+import { EXPRESS_QR_WINDOW_MS } from '@/lib/expressQrWindow';
 
-const QR_WINDOW_MS = 60_000;
+const QR_WINDOW_MS = EXPRESS_QR_WINDOW_MS;
+const QR_WINDOW_LABEL = '5 min';
 
 export async function resolveExpressCourtNumbersForClub(
   supabase: SupabaseClient,
@@ -109,7 +111,7 @@ export async function applyExpressQrActivation(
   return {
     ok: true,
     courtNumber,
-    message: `✅ Cancha ${courtNumber} · QR activo 1 min`,
+    message: `✅ Cancha ${courtNumber} · QR activo ${QR_WINDOW_LABEL}`,
   };
 }
 
@@ -165,7 +167,7 @@ export async function applyExpressBoardReset(
   return {
     ok: true,
     courtNumber,
-    message: `🔄 Cancha ${courtNumber} reseteada · QR activo 1 min`,
+    message: `🔄 Cancha ${courtNumber} reseteada · QR activo ${QR_WINDOW_LABEL}`,
   };
 }
 

@@ -90,7 +90,7 @@ export function buildExpressStaffWelcomeMessage(params: {
     `🏢 ${venue} · código \`${pathCode}\`\n\n` +
     `📺 *Cargar en la TV:*\n${urlLines}\n\n` +
     `Por cancha:\n` +
-    `• *QR* — muestra el código en la TV (1 min)\n` +
+    `• *QR* — muestra el código en la TV (5 min)\n` +
     `• *Reset* — limpia marcador y vuelve a espera\n\n` +
     `_Comandos: /urls · /menu · /help_`
   );

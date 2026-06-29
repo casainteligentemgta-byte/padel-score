@@ -14,6 +14,7 @@ import {
 } from '@/lib/expressServer';
 import { winsTiebreakPoints } from '@/lib/matchScoringRules';
 import { normalizeExpressPoint } from '@/lib/expressPoints';
+import { EXPRESS_SIDE_CHANGE_MS, EXPRESS_WARMUP_MS } from '@/lib/expressSessionMeta';
 import {
   EXPRESS_SET_SLOTS,
   type ExpressMatch,
@@ -103,6 +104,11 @@ export function pickExpressScorePatch(state: ExpressMatch): Partial<ExpressMatch
     is_active: state.is_active,
     server_team: state.server_team,
     server_player: state.server_player,
+    warmup_ends_at: state.warmup_ends_at ?? null,
+    match_started_at: state.match_started_at ?? null,
+    chrono_elapsed_sec: state.chrono_elapsed_sec ?? 0,
+    match_ended_at: state.match_ended_at ?? null,
+    side_change_until: state.side_change_until ?? null,
   };
 }
 
@@ -146,6 +152,40 @@ export function buildExpressSessionReset(sessionId: string): Partial<ExpressMatc
     qr_expires_at: null,
     server_team: EXPRESS_SERVER_DEFAULT.team,
     server_player: EXPRESS_SERVER_DEFAULT.player,
+    warmup_ends_at: null,
+    match_started_at: null,
+    chrono_elapsed_sec: 0,
+    match_ended_at: null,
+    side_change_until: null,
+  };
+}
+
+/** Nuevo partido en la misma sesión (mantiene nombres y ajustes de TV). */
+export function buildExpressNewMatch(
+  current: ExpressMatch,
+  opts?: { withWarmup?: boolean },
+): Partial<ExpressMatch> {
+  const now = Date.now();
+  const withWarmup = opts?.withWarmup === true;
+  return {
+    session_id: current.session_id,
+    team_a_points: '0',
+    team_b_points: '0',
+    team_a_games: 0,
+    team_b_games: 0,
+    sets_a: [0, 0, 0],
+    sets_b: [0, 0, 0],
+    current_set: 1,
+    modo_puntos: 'normal',
+    third_set_mode: normalizeExpressThirdSetMode(current.third_set_mode),
+    is_active: true,
+    match_ended_at: null,
+    chrono_elapsed_sec: 0,
+    side_change_until: null,
+    server_team: EXPRESS_SERVER_DEFAULT.team,
+    server_player: EXPRESS_SERVER_DEFAULT.player,
+    warmup_ends_at: withWarmup ? new Date(now + EXPRESS_WARMUP_MS).toISOString() : null,
+    match_started_at: withWarmup ? null : new Date(now).toISOString(),
   };
 }
 
@@ -156,6 +196,13 @@ export function calculateNextState(
 ): Partial<ExpressMatch> {
   if (!currentState.is_active && action === 'increment') {
     return {};
+  }
+
+  if (currentState.warmup_ends_at) {
+    const warmupEnd = new Date(currentState.warmup_ends_at).getTime();
+    if (Number.isFinite(warmupEnd) && warmupEnd > Date.now()) {
+      return {};
+    }
   }
 
   const state = cloneMatch(currentState);
@@ -249,6 +296,10 @@ export function calculateNextState(
     const nextServer = expressServerAfterGameWon(totalGames);
     state.server_team = nextServer.team;
     state.server_player = nextServer.player;
+
+    if (totalGames % 2 === 1) {
+      state.side_change_until = new Date(Date.now() + EXPRESS_SIDE_CHANGE_MS).toISOString();
+    }
 
     const tGames = state[gamesKey];
     const rGames = state[rivalGamesKey];

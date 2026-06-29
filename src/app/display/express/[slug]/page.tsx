@@ -21,7 +21,7 @@ import {
   expressPublicidadVenueName,
 } from '@/lib/expressPublicidad';
 import { expressQrDockPaddingBottom } from '@/lib/expressDisplayMediaScale';
-import { expressQrWindowSecondsLeft, isExpressQrWindowOpen } from '@/lib/expressQrWindow';
+import { expressQrWindowSecondsLeft, formatExpressQrCountdown, isExpressQrWindowOpen } from '@/lib/expressQrWindow';
 import {
   canchaIdFromExpressSlug,
   courtNumFromExpressSlug,
@@ -38,6 +38,15 @@ import { BouncingBall } from '@/components/BouncingBall';
 import { ExpressTvDeviceGate } from '@/components/express/ExpressTvDeviceGate';
 import { ExpressTvPublicidadDock } from '@/components/express/ExpressTvPublicidadDock';
 import { ExpressPlaylistDebug } from '@/components/express/ExpressPlaylistDebug';
+import { ExpressMatchEndOverlay } from '@/components/express/ExpressMatchEndOverlay';
+import { ExpressSideChangeBanner } from '@/components/express/ExpressSideChangeBanner';
+import { PizarraWarmupOverlay } from '@/components/PizarraWarmupOverlay';
+import {
+  expressIsSideChangeVisible,
+  expressMatchChronoCron,
+  expressMatchEndedSummary,
+  expressWarmupEndsAtMs,
+} from '@/lib/expressSessionMeta';
 import { mergeExpressTickerMessages } from '@/lib/expressTickerMessages';
 import {
   EXPRESS_TV_BRAND,
@@ -51,13 +60,16 @@ type LoadState = 'loading' | 'ready' | 'error';
 
 function expressScoringMeta(match: ExpressMatch): { levelLine: string; genderLine: string } {
   const levelLine = EXPRESS_TV_BRAND;
-  let genderLine = match.punto_de_oro ? 'Punto de oro' : 'Ventaja clásica';
   if (match.modo_puntos === 'super_tiebreak') {
-    genderLine = 'Súper tie-break';
-  } else if (match.modo_puntos === 'tiebreak') {
-    genderLine = 'Tie-break';
+    return { levelLine, genderLine: 'Súper tie-break' };
   }
-  return { levelLine, genderLine };
+  if (match.modo_puntos === 'tiebreak') {
+    return { levelLine, genderLine: 'Tie-break' };
+  }
+  if (match.punto_de_oro) {
+    return { levelLine, genderLine: 'Punto de oro' };
+  }
+  return { levelLine, genderLine: '' };
 }
 
 export default function ExpressTvDisplay() {
@@ -91,7 +103,13 @@ export default function ExpressTvDisplay() {
   const [match, setMatch] = useState<ExpressMatch | null>(null);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [uiTick, setUiTick] = useState(() => Date.now());
   const syncedBaseVenueRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const id = setInterval(() => setUiTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const effectiveBaseVenue =
     urlBaseVenue || String(match?.base_venue ?? '').trim();
@@ -124,10 +142,13 @@ export default function ExpressTvDisplay() {
     [playlists.tickerMessages, match?.display_ticker_phrases],
   );
 
-  const marcador = useMemo(
-    () => (match?.is_active ? expressMatchToMarcador(match) : null),
-    [match],
-  );
+  const marcador = useMemo(() => {
+    if (!match) return null;
+    if (match.is_active || expressMatchEndedSummary(match)) {
+      return expressMatchToMarcador(match);
+    }
+    return null;
+  }, [match]);
 
   const [qrTick, setQrTick] = useState(() => Date.now());
 
@@ -334,6 +355,48 @@ export default function ExpressTvDisplay() {
   const { levelLine, genderLine } = expressScoringMeta(match);
   const qrWindowOpen = isExpressQrWindowOpen(match, qrTick);
   const qrSecondsLeft = expressQrWindowSecondsLeft(match, qrTick);
+  const endedSummary = expressMatchEndedSummary(match);
+  const warmupEndsAt = match ? expressWarmupEndsAtMs(match) : null;
+  const sideChangeVisible = match ? expressIsSideChangeVisible(match, uiTick) : false;
+  const matchChronoCron = match ? expressMatchChronoCron(match) : null;
+
+  if (endedSummary && marcador) {
+    return wrapGate(
+      <div className="relative flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-hidden bg-[#050505] font-outfit text-white select-none">
+        <PistaTopBar
+          courtHeadline={courtHeadline}
+          levelLine={levelLine}
+          levelLineClassName={expressBrandClassName}
+          genderLine="Partido finalizado"
+          mode="live"
+          goldenPoint={match.punto_de_oro}
+          liveCenter="chrono"
+          matchChronoCron={matchChronoCron}
+        />
+        <PizarraScoreboardFit expressMode>
+          <div className="flex w-full min-h-0 flex-col items-center gap-2 overflow-visible px-1 pt-0">
+            <PizarraTableScoreboard
+              marcador={marcador}
+              playerNameScale={match.display_name_scale}
+              expressFullPlayerNames
+            />
+          </div>
+        </PizarraScoreboardFit>
+        <ExpressMatchEndOverlay match={match} />
+        <ExpressTvPublicidadDock
+          layout="inline"
+          canchaId={canchaId}
+          baseVenue={effectiveBaseVenue}
+          playlistVenue={playlistVenue}
+          playlists={playlists}
+          minimalMode={minimalMode}
+          mediaScale={match.display_media_scale}
+          tickerMessages={tickerMessages}
+        />
+        <PizarraDisplayGlobalStyles />
+      </div>,
+    );
+  }
 
   if (!match.is_active) {
     const controlUrl = `${getExpressAppBaseUrl()}/express/control/${match.session_id}`;
@@ -365,7 +428,7 @@ export default function ExpressTvDisplay() {
                 </p>
                 {qrSecondsLeft != null && (
                   <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-padel-primary">
-                    QR activo · {qrSecondsLeft}s
+                    QR activo · {formatExpressQrCountdown(qrSecondsLeft)}
                   </p>
                 )}
               </div>
@@ -395,7 +458,7 @@ export default function ExpressTvDisplay() {
                 Pantalla lista
               </p>
               <p className="mt-2 text-xs leading-relaxed text-neutral-500">
-                El staff puede habilitar el QR desde Telegram durante 1 minuto para iniciar un partido.
+                El encargado del club puede habilitar el QR desde Telegram (ventana de 5 minutos).
               </p>
             </div>
           )}
@@ -417,7 +480,9 @@ export default function ExpressTvDisplay() {
   }
 
   return wrapGate(
-    <div className="flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-hidden bg-[#050505] font-outfit text-white select-none">
+    <div className="relative flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-hidden bg-[#050505] font-outfit text-white select-none">
+      <PizarraWarmupOverlay endsAt={warmupEndsAt} layout="fullscreen" />
+      <ExpressSideChangeBanner visible={sideChangeVisible} layout="tv" />
       <PistaTopBar
         courtHeadline={courtHeadline}
         levelLine={levelLine}
@@ -425,7 +490,8 @@ export default function ExpressTvDisplay() {
         genderLine={genderLine}
         mode="live"
         goldenPoint={match.punto_de_oro}
-        liveCenter="badge"
+        liveCenter="chrono"
+        matchChronoCron={matchChronoCron}
       />
 
       {match.modo_puntos === 'tiebreak' && (

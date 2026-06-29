@@ -57,6 +57,16 @@ export interface ExpressMatch {
   server_team: 1 | 2;
   /** Jugador al saque dentro del equipo (1 o 2). */
   server_player: 1 | 2;
+  /** Fin del calentamiento (ISO). Null si no hay calentamiento activo. */
+  warmup_ends_at: string | null;
+  /** Inicio del cronómetro de partido (ISO). */
+  match_started_at: string | null;
+  /** Segundos congelados al terminar el partido. */
+  chrono_elapsed_sec: number;
+  /** Marca fin natural; mantiene resumen hasta nuevo partido o reset. */
+  match_ended_at: string | null;
+  /** Banner de cambio de lado visible hasta esta hora (ISO). */
+  side_change_until: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -89,6 +99,11 @@ export function normalizeExpressMatch(row: Record<string, unknown>): ExpressMatc
       const s = normalizeExpressServer(hydrated.server_team, hydrated.server_player);
       return { server_team: s.team, server_player: s.player };
     })(),
+    warmup_ends_at: hydrated.warmup_ends_at ? String(hydrated.warmup_ends_at) : null,
+    match_started_at: hydrated.match_started_at ? String(hydrated.match_started_at) : null,
+    chrono_elapsed_sec: Number(hydrated.chrono_elapsed_sec) || 0,
+    match_ended_at: hydrated.match_ended_at ? String(hydrated.match_ended_at) : null,
+    side_change_until: hydrated.side_change_until ? String(hydrated.side_change_until) : null,
   };
 }
 
