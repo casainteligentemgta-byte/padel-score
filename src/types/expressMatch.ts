@@ -8,6 +8,7 @@ import {
   type ExpressThirdSetMode,
 } from '@/lib/expressThirdSetMode';
 import { normalizeExpressServer } from '@/lib/expressServer';
+import { normalizeExpressPoint } from '@/lib/expressPoints';
 
 export type ExpressPoint = '0' | '15' | '30' | '40' | 'AD';
 
@@ -82,6 +83,8 @@ export function normalizeExpressMatch(row: Record<string, unknown>): ExpressMatc
     third_set_mode: normalizeExpressThirdSetMode(hydrated.third_set_mode),
     sets_a: setsA?.length === EXPRESS_SET_SLOTS ? setsA : [0, 0, 0],
     sets_b: setsB?.length === EXPRESS_SET_SLOTS ? setsB : [0, 0, 0],
+    team_a_points: normalizeExpressPoint(hydrated.team_a_points),
+    team_b_points: normalizeExpressPoint(hydrated.team_b_points),
     ...(() => {
       const s = normalizeExpressServer(hydrated.server_team, hydrated.server_player);
       return { server_team: s.team, server_player: s.player };

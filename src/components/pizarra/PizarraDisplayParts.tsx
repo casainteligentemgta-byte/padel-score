@@ -342,7 +342,9 @@ export function PizarraTableScoreboard({
 }) {
   const setsL = Number(marcador.sets?.local ?? 0) || 0;
   const setsV = Number(marcador.sets?.visitante ?? 0) || 0;
-  const currentSet = setsL + setsV + 1;
+  const expressCurrentSet = Number(marcador.express_current_set ?? 0);
+  const currentSet =
+    expressCurrentSet >= 1 && expressCurrentSet <= 3 ? expressCurrentSet : setsL + setsV + 1;
   const fmt = String(marcador.match_format || '');
   const twoPlusStb =
     fmt === 'TWO_SHORT_SETS' || fmt === 'TWO_NORMAL_SETS' || fmt === '2SETS_STB';
@@ -385,7 +387,6 @@ export function PizarraTableScoreboard({
   const scaledBoard = playerNameScale != null && playerNameScale > 0;
   const boardScale = scaledBoard ? normalizeExpressDisplayNameScale(playerNameScale) : 1;
   const expressThirdSetMode = marcador.express_third_set_mode as string | undefined;
-  const expressCurrentSet = Number(marcador.express_current_set ?? 0);
   const showThirdSetModeLabel =
     expressThirdSetMode &&
     (expressCurrentSet === 3 || (setsL === 1 && setsV === 1));

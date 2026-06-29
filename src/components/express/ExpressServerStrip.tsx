@@ -34,8 +34,8 @@ export function ExpressServerStrip({ server, onSelect, onTogglePlayer, onToggleT
               onClick={() => onSelect(team, player)}
               className={`flex h-9 min-w-[2.5rem] flex-col items-center justify-center rounded-lg border-2 px-2 transition-colors ${
                 active
-                  ? 'border-padel-primary bg-padel-primary/10 text-padel-primary'
-                  : 'border-neutral-700 bg-neutral-950 text-neutral-400 active:bg-neutral-800'
+                  ? 'border-padel-primary bg-padel-primary/20 text-padel-primary'
+                  : 'border-neutral-600 bg-neutral-950 text-neutral-200 active:bg-neutral-800'
               }`}
               title={active ? 'Sacando' : `Asignar saque a ${label}`}
             >
@@ -52,14 +52,14 @@ export function ExpressServerStrip({ server, onSelect, onTogglePlayer, onToggleT
         <button
           type="button"
           onClick={onTogglePlayer}
-          className="rounded-lg border border-neutral-700 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-padel-primary/90 active:bg-neutral-800"
+          className="rounded-lg border border-neutral-600 bg-neutral-950 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-padel-primary active:bg-neutral-800"
         >
           Otro jugador
         </button>
         <button
           type="button"
           onClick={onToggleTeam}
-          className="rounded-lg border border-neutral-700 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-neutral-400 active:bg-neutral-800"
+          className="rounded-lg border border-neutral-600 bg-neutral-950 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-neutral-300 active:bg-neutral-800"
         >
           Cambiar pareja
         </button>

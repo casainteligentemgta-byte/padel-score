@@ -13,6 +13,7 @@ import {
   normalizeExpressServer,
 } from '@/lib/expressServer';
 import { winsTiebreakPoints } from '@/lib/matchScoringRules';
+import { normalizeExpressPoint } from '@/lib/expressPoints';
 import {
   EXPRESS_SET_SLOTS,
   type ExpressMatch,
@@ -20,6 +21,11 @@ import {
 } from '@/types/expressMatch';
 
 const REGULAR_POINTS: ExpressPoint[] = ['0', '15', '30', '40', 'AD'];
+
+function normalizeExpressPoints(state: ExpressMatch): void {
+  state.team_a_points = normalizeExpressPoint(state.team_a_points);
+  state.team_b_points = normalizeExpressPoint(state.team_b_points);
+}
 
 function cloneMatch(state: ExpressMatch): ExpressMatch {
   return JSON.parse(JSON.stringify(state)) as ExpressMatch;
@@ -83,10 +89,27 @@ function applyThirdSetEntry(state: ExpressMatch): void {
   }
 }
 
+/** Solo marcador: evita pisar nombres u otros campos en cada punto. */
+export function pickExpressScorePatch(state: ExpressMatch): Partial<ExpressMatch> {
+  return {
+    team_a_points: state.team_a_points,
+    team_b_points: state.team_b_points,
+    team_a_games: state.team_a_games,
+    team_b_games: state.team_b_games,
+    sets_a: state.sets_a,
+    sets_b: state.sets_b,
+    current_set: state.current_set,
+    modo_puntos: state.modo_puntos,
+    is_active: state.is_active,
+    server_team: state.server_team,
+    server_player: state.server_player,
+  };
+}
+
 /** Campos mutables para UPDATE en Supabase (sin id, created_at, cancha_code). */
 export function pickScorePatch(state: ExpressMatch): Partial<ExpressMatch> {
   return {
-    session_id: state.session_id,
+    ...pickExpressScorePatch(state),
     ...syncExpressTeamNameFields(state),
     team_a_p1_first: state.team_a_p1_first,
     team_a_p1_last: state.team_a_p1_last,
@@ -98,19 +121,8 @@ export function pickScorePatch(state: ExpressMatch): Partial<ExpressMatch> {
     team_b_p2_last: state.team_b_p2_last,
     team_a_avatar: state.team_a_avatar,
     team_b_avatar: state.team_b_avatar,
-    team_a_points: state.team_a_points,
-    team_b_points: state.team_b_points,
-    team_a_games: state.team_a_games,
-    team_b_games: state.team_b_games,
-    sets_a: state.sets_a,
-    sets_b: state.sets_b,
-    current_set: state.current_set,
-    modo_puntos: state.modo_puntos,
     third_set_mode: normalizeExpressThirdSetMode(state.third_set_mode),
     punto_de_oro: state.punto_de_oro,
-    is_active: state.is_active,
-    server_team: state.server_team,
-    server_player: state.server_player,
   };
 }
 
@@ -148,6 +160,7 @@ export function calculateNextState(
 
   const state = cloneMatch(currentState);
   normalizeSets(state);
+  normalizeExpressPoints(state);
   const server = normalizeExpressServer(state.server_team, state.server_player);
   state.server_team = server.team;
   state.server_player = server.player;

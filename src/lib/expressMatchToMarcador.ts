@@ -1,4 +1,5 @@
 import { expressMarcadorTeamNombre } from '@/lib/expressPlayerNames';
+import { normalizeExpressPoint } from '@/lib/expressPoints';
 import { normalizeExpressThirdSetMode } from '@/lib/expressThirdSetMode';
 import type { ExpressMatch } from '@/types/expressMatch';
 
@@ -45,8 +46,8 @@ export function expressMatchToMarcador(match: ExpressMatch): PizarraMarcador {
     equipo_1: { nombre: expressMarcadorTeamNombre(match, 'a'), color: '#CCFF00' },
     equipo_2: { nombre: expressMarcadorTeamNombre(match, 'b'), color: '#FF5500' },
     puntos: {
-      local: String(match.team_a_points ?? '0'),
-      visitante: String(match.team_b_points ?? '0'),
+      local: normalizeExpressPoint(match.team_a_points),
+      visitante: normalizeExpressPoint(match.team_b_points),
     },
     games: {
       local: match.team_a_games ?? 0,

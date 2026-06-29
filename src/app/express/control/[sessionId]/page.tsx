@@ -4,21 +4,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
-import { Plus, Minus, Power, Settings, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Minus, Power, Settings, Pencil } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { ExpressMatch, normalizeExpressMatch } from '@/types/expressMatch';
 import {
   buildExpressSessionReset,
   calculateNextState,
-  pickScorePatch,
+  pickExpressScorePatch,
 } from '@/lib/expressScoring';
 import {
   expressPlayerPatch,
+  expressPlayerDisplayName,
   formatExpressPlayerFieldsForSave,
   readExpressPlayerSlot,
   syncExpressTeamNameFields,
   type ExpressPlayerSlot,
 } from '@/lib/expressPlayerNames';
+import { SmartPadelBallIcon } from '@/components/SmartPadelBallIcon';
 import { ExpressControlSettingsDrawer } from '@/components/express/ExpressControlSettingsDrawer';
 import { ExpressServerStrip } from '@/components/express/ExpressServerStrip';
 import { EXPRESS_TV_BRAND } from '@/lib/expressSlug';
@@ -127,21 +129,21 @@ function TeamScoreBlock({
   const games = team === 'a' ? match.team_a_games : match.team_b_games;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-neutral-800 bg-neutral-900/90">
-      <button
-        type="button"
-        onClick={onToggleNames}
-        className="flex shrink-0 items-center justify-between px-3 py-1.5 text-left active:bg-neutral-800/60"
-      >
-        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-padel-primary/80">{label}</span>
-        <span className="flex items-center gap-1 text-[9px] font-bold uppercase text-neutral-500">
-          Nombres
-          {namesOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        </span>
-      </button>
+    <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-neutral-700 bg-neutral-900">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-800 px-3 py-1.5">
+        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-padel-primary">{label}</span>
+        <button
+          type="button"
+          onClick={onToggleNames}
+          className="inline-flex items-center gap-1 rounded-lg border border-neutral-600 bg-neutral-950 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-padel-primary active:bg-neutral-800"
+        >
+          <Pencil className="h-3 w-3" />
+          {namesOpen ? 'Listo' : 'Editar'}
+        </button>
+      </div>
 
       {namesOpen ? (
-        <div className="shrink-0 space-y-2 border-b border-neutral-800 px-3 pb-2">
+        <div className="shrink-0 space-y-2 border-b border-neutral-800 bg-black/25 px-3 py-2">
           {slots.map((slot) => {
             const slotServer = expressSlotToServer(slot);
             const isServing = server.team === slotServer.team && server.player === slotServer.player;
@@ -158,13 +160,32 @@ function TeamScoreBlock({
             );
           })}
         </div>
-      ) : null}
+      ) : (
+        <div className="shrink-0 space-y-0.5 border-b border-neutral-800 px-3 py-1.5">
+          {slots.map((slot) => {
+            const slotServer = expressSlotToServer(slot);
+            const isServing = server.team === slotServer.team && server.player === slotServer.player;
+            const name = expressPlayerDisplayName(match, slot);
+            return (
+              <div
+                key={slot}
+                className={`flex items-center gap-1.5 truncate text-[11px] font-bold uppercase leading-tight ${
+                  isServing ? 'text-padel-primary' : 'text-neutral-300'
+                }`}
+              >
+                {isServing ? <SmartPadelBallIcon size={12} title="Saque" /> : null}
+                <span className="truncate">{name}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 items-center justify-between gap-2 px-2 py-1">
         <button
           type="button"
           onClick={() => onScore(team, 'decrement')}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-neutral-800 text-neutral-400 transition-transform active:scale-95"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-600 bg-neutral-950 text-neutral-200 transition-transform active:scale-95 active:bg-neutral-800"
         >
           <Minus size={18} />
         </button>
@@ -172,14 +193,14 @@ function TeamScoreBlock({
           <span className="block text-5xl font-black leading-none tracking-tight text-padel-primary sm:text-6xl">
             {points}
           </span>
-          <div className="mt-0.5 text-[10px] font-bold uppercase text-neutral-500">
+          <div className="mt-0.5 text-[10px] font-bold uppercase text-neutral-400">
             Juegos {games}
           </div>
         </div>
         <button
           type="button"
           onClick={() => onScore(team, 'increment')}
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-padel-primary text-surface shadow-md shadow-padel-primary/25 transition-transform active:scale-95"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-padel-primary bg-padel-primary text-black shadow-md shadow-padel-primary/30 transition-transform active:scale-95"
         >
           <Plus size={26} strokeWidth={2.5} />
         </button>
@@ -201,6 +222,7 @@ export default function MobileExpressControl() {
 
   const matchRef = useRef<ExpressMatch | null>(null);
   const pendingScoreRef = useRef(false);
+  const updateGenRef = useRef(0);
   const debounceTimers = useRef<{ a: ReturnType<typeof setTimeout> | null; b: ReturnType<typeof setTimeout> | null }>({
     a: null,
     b: null,
@@ -213,7 +235,11 @@ export default function MobileExpressControl() {
   }, []);
 
   const updateServer = useCallback(
-    async (updates: Partial<ExpressMatch>, fallback: ExpressMatch): Promise<boolean> => {
+    async (
+      updates: Partial<ExpressMatch>,
+      fallback: ExpressMatch,
+      updateGen?: number,
+    ): Promise<boolean> => {
       if (!supabase) return false;
       const { error } = await supabase
         .from('express_matches')
@@ -221,13 +247,42 @@ export default function MobileExpressControl() {
         .eq('session_id', sessionId);
       if (error) {
         console.error('[ExpressControl] update error:', error);
-        applyMatch(fallback);
+        if (updateGen == null || updateGenRef.current === updateGen) {
+          applyMatch(fallback);
+        }
         return false;
       }
       return true;
     },
     [sessionId, supabase, applyMatch],
   );
+
+  useEffect(() => {
+    if (!supabase || status !== 'ready') return;
+
+    const channel = supabase
+      .channel(`express-control-${sessionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'express_matches',
+          filter: `session_id=eq.${sessionId}`,
+        },
+        (payload) => {
+          if (pendingScoreRef.current) return;
+          const row = payload.new as Record<string, unknown> | null;
+          if (!row) return;
+          applyMatch(row as unknown as ExpressMatch);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, sessionId, status, applyMatch]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -278,9 +333,10 @@ export default function MobileExpressControl() {
     const matchJustEnded = previousState.is_active && newState.is_active === false;
     const payload = matchJustEnded
       ? buildExpressSessionReset(crypto.randomUUID())
-      : pickScorePatch(newState);
+      : pickExpressScorePatch(newState);
 
-    const ok = await updateServer(payload, previousState);
+    const updateGen = ++updateGenRef.current;
+    const ok = await updateServer(payload, previousState, updateGen);
     pendingScoreRef.current = false;
 
     if (ok && matchJustEnded) {

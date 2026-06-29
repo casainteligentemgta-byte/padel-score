@@ -234,7 +234,19 @@ export function readExpressPlayerSlot(
 ): { first: string; last: string } {
   const keys = PLAYER_FIELD[slot];
   return {
-    first: String(match[keys.first as keyof ExpressMatch] ?? ''),
-    last: String(match[keys.last as keyof ExpressMatch] ?? ''),
+    first: String(match[keys.first] ?? ''),
+    last: String(match[keys.last] ?? ''),
   };
+}
+
+const SLOT_FALLBACK: Record<ExpressPlayerSlot, string> = {
+  a_p1: 'Jugador 1',
+  a_p2: 'Jugador 2',
+  b_p1: 'Jugador 3',
+  b_p2: 'Jugador 4',
+};
+
+export function expressPlayerDisplayName(match: ExpressMatch, slot: ExpressPlayerSlot): string {
+  const { first, last } = readExpressPlayerSlot(match, slot);
+  return buildExpressPlayerFullName(first, last) || SLOT_FALLBACK[slot];
 }
