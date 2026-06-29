@@ -35,7 +35,7 @@ export default function AdminExpressStaffPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const [formName, setFormName] = useState('');
-  const [formClub, setFormClub] = useState(EXPRESS_VENUE_OPTIONS[0] ?? '');
+  const [formClub, setFormClub] = useState<string>(EXPRESS_VENUE_OPTIONS[0] ?? '');
 
   const venueOptions = useMemo(() => [...EXPRESS_VENUE_OPTIONS], []);
 
