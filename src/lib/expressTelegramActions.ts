@@ -6,6 +6,7 @@ import {
   resolveExpressClubSlugForDb,
 } from '@/lib/expressVenueCourts';
 import { courtNumberFromExpressSlug, expressCanchaCodeFromCourtNumber } from '@/lib/tvDeviceAuth';
+import { courtNumFromExpressSlug, expressSlugFromCourtNumber } from '@/lib/expressSlug';
 import { EXPRESS_QR_WINDOW_MS } from '@/lib/expressQrWindow';
 
 const QR_WINDOW_MS = EXPRESS_QR_WINDOW_MS;
@@ -28,6 +29,56 @@ function isMissingExpressSessionMetaColumn(error: PostgrestError | null): boolea
     msg.includes('match_ended_at') ||
     msg.includes('side_change_until')
   );
+}
+
+function isExpressRlsGuardError(error: PostgrestError | null): boolean {
+  const msg = String(error?.message ?? '').toLowerCase();
+  return (
+    msg.includes('express_matches:') ||
+    msg.includes('actualización no permitida') ||
+    msg.includes('qr_expires_at solo puede borrarse')
+  );
+}
+
+function expressCanchaCodesForLookup(courtNumber: string): string[] {
+  const primary = expressCanchaCodeFromCourtNumber(courtNumber);
+  if (!primary) return [];
+  const n = courtNumFromExpressSlug(primary);
+  if (!n) return [primary];
+  const codes = [expressSlugFromCourtNumber(n), `fast-${n}`];
+  return [...new Set(codes)];
+}
+
+async function findExpressMatchRow(
+  supabase: SupabaseClient,
+  courtNumber: string,
+): Promise<{ id: string; cancha_code: string; is_active?: boolean; session_id?: string } | null> {
+  for (const canchaCode of expressCanchaCodesForLookup(courtNumber)) {
+    const { data } = await supabase
+      .from('express_matches')
+      .select('id, cancha_code, is_active, session_id')
+      .eq('cancha_code', canchaCode)
+      .maybeSingle();
+    if (data?.id) {
+      return {
+        id: String(data.id),
+        cancha_code: String(data.cancha_code),
+        is_active: Boolean(data.is_active),
+        session_id: data.session_id ? String(data.session_id) : undefined,
+      };
+    }
+  }
+  return null;
+}
+
+function expressTelegramResetErrorMessage(error: PostgrestError | null): string {
+  if (isMissingExpressSessionMetaColumn(error)) {
+    return 'Error al resetear la cancha. Ejecuta 070_express_session_meta en Supabase.';
+  }
+  if (isExpressRlsGuardError(error)) {
+    return 'Error al resetear la cancha. Ejecuta 071_express_rls_hardening en Supabase.';
+  }
+  return 'Error al resetear la cancha.';
 }
 
 function stripExpressSessionMetaFields(
@@ -93,28 +144,37 @@ export type ExpressTelegramActionResult =
 
 async function persistExpressBoardReset(
   supabase: SupabaseClient,
-  canchaCode: string,
+  courtNumber: string,
   baseVenue: string,
   qrExpiresAt: string,
 ): Promise<PostgrestError | null> {
   const sessionId = crypto.randomUUID();
-  const fullPayload = buildExpressTelegramResetPayload(sessionId, baseVenue, qrExpiresAt);
+  const insertCanchaCode = expressCanchaCodeFromCourtNumber(courtNumber);
+  if (!insertCanchaCode) {
+    return { message: 'Cancha inválida', details: '', hint: '', code: '22P02' } as PostgrestError;
+  }
 
-  const { data: existing } = await supabase
-    .from('express_matches')
-    .select('id')
-    .eq('cancha_code', canchaCode)
-    .maybeSingle();
+  const existing = await findExpressMatchRow(supabase, courtNumber);
+  const targetCanchaCode = existing?.cancha_code ?? insertCanchaCode;
+  const shouldMigrateLegacySlug =
+    existing != null &&
+    /^fast-/i.test(existing.cancha_code) &&
+    insertCanchaCode !== existing.cancha_code;
+
+  const fullPayload = {
+    ...buildExpressTelegramResetPayload(sessionId, baseVenue, qrExpiresAt),
+    ...(shouldMigrateLegacySlug ? { cancha_code: insertCanchaCode } : {}),
+  };
 
   if (!existing) {
     const { error } = await supabase.from('express_matches').insert([{
-      cancha_code: canchaCode,
+      cancha_code: insertCanchaCode,
       ...fullPayload,
     }]);
     if (!error || !isMissingExpressSessionMetaColumn(error)) return error;
     const { error: legacyError } = await supabase.from('express_matches').insert([
       stripExpressSessionMetaFields({
-        cancha_code: canchaCode,
+        cancha_code: insertCanchaCode,
         ...fullPayload,
       }),
     ]);
@@ -124,14 +184,14 @@ async function persistExpressBoardReset(
   const { error } = await supabase
     .from('express_matches')
     .update(fullPayload)
-    .eq('cancha_code', canchaCode);
+    .eq('cancha_code', targetCanchaCode);
 
   if (!error || !isMissingExpressSessionMetaColumn(error)) return error;
 
   const { error: legacyError } = await supabase
     .from('express_matches')
     .update(stripExpressSessionMetaFields(fullPayload))
-    .eq('cancha_code', canchaCode);
+    .eq('cancha_code', targetCanchaCode);
 
   return legacyError;
 }
@@ -148,11 +208,7 @@ export async function applyExpressQrActivation(
 
   const slug = resolveExpressClubSlugForDb(clubSlug);
 
-  const { data: existing } = await supabase
-    .from('express_matches')
-    .select('id, is_active, session_id')
-    .eq('cancha_code', canchaCode)
-    .maybeSingle();
+  const existing = await findExpressMatchRow(supabase, courtNumber);
 
   if (existing?.is_active) {
     return {
@@ -164,6 +220,7 @@ export async function applyExpressQrActivation(
 
   const expiresAt = new Date(Date.now() + QR_WINDOW_MS).toISOString();
   const sessionId = existing?.session_id || crypto.randomUUID();
+  const targetCanchaCode = existing?.cancha_code ?? canchaCode;
 
   if (!existing) {
     const { error } = await supabase.from('express_matches').insert([
@@ -186,7 +243,7 @@ export async function applyExpressQrActivation(
         qr_expires_at: expiresAt,
         base_venue: slug,
       })
-      .eq('cancha_code', canchaCode);
+      .eq('cancha_code', targetCanchaCode);
 
     if (error) {
       console.error('[expressTelegram] activate update:', error);
@@ -213,14 +270,11 @@ export async function applyExpressBoardReset(
 
   const slug = resolveExpressClubSlugForDb(clubSlug);
   const qrExpiresAt = new Date(Date.now() + QR_WINDOW_MS).toISOString();
-  const error = await persistExpressBoardReset(supabase, canchaCode, slug, qrExpiresAt);
+  const error = await persistExpressBoardReset(supabase, courtNumber, slug, qrExpiresAt);
 
   if (error) {
     console.error('[expressTelegram] reset:', error);
-    const migrationHint = isMissingExpressSessionMetaColumn(error)
-      ? ' Ejecuta la migración 070_express_session_meta en Supabase.'
-      : '';
-    return { ok: false, message: `Error al resetear la cancha.${migrationHint}` };
+    return { ok: false, message: expressTelegramResetErrorMessage(error) };
   }
 
   return {
