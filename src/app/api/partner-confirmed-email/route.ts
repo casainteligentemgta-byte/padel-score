@@ -3,10 +3,15 @@ import { PartnerConfirmedEmail } from '@/emails/PartnerConfirmedEmail';
 import { NextResponse } from 'next/server';
 import { getAppBaseUrl } from '@/lib/brand';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function POST(req: Request) {
     try {
+        const apiKey = process.env.RESEND_API_KEY?.trim();
+        if (!apiKey) {
+            console.error('[partner-confirmed-email] RESEND_API_KEY is missing');
+            return NextResponse.json({ error: 'Service configuration error' }, { status: 500 });
+        }
+
+        const resend = new Resend(apiKey);
         const { to, guestName, tournamentName } = await req.json();
         const hubUrl = `${getAppBaseUrl()}/dashboard`;
 
