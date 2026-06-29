@@ -36,6 +36,21 @@ import { EXPRESS_VENUE_OPTIONS } from '@/lib/expressVenueCourts';
 
 type QuickAddState = Record<string, { name: string; role: string }>;
 
+const inputDark =
+  'rounded-lg border border-white/20 bg-zinc-900 px-3 py-2 text-sm text-white outline-none placeholder:text-white/40 focus:border-padel-primary/60';
+const selectDark =
+  'rounded-lg border border-white/20 bg-zinc-900 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white [color-scheme:dark]';
+const btnGhost =
+  'inline-flex items-center gap-1 rounded-lg border border-white/20 bg-zinc-900 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-zinc-800';
+const btnAccent =
+  'inline-flex items-center gap-1.5 rounded-lg border border-padel-primary/50 bg-padel-primary/15 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-padel-primary hover:bg-padel-primary/25';
+const btnAccentLg =
+  'inline-flex items-center gap-2 rounded-xl border border-padel-primary/50 bg-padel-primary/15 px-4 py-2 text-xs font-bold uppercase tracking-widest text-padel-primary hover:bg-padel-primary/25 disabled:opacity-50';
+const btnPrimary =
+  'inline-flex items-center justify-center gap-1 rounded-lg bg-padel-primary px-4 py-2 text-xs font-black uppercase tracking-widest text-black hover:brightness-110 disabled:opacity-50';
+const btnDanger =
+  'inline-flex items-center gap-1 rounded-lg border border-red-500/40 bg-red-950/40 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-red-200 hover:bg-red-950/70';
+
 function StaffRowCard({
   row,
   saving,
@@ -85,7 +100,7 @@ function StaffRowCard({
             </span>
           )}
         </div>
-        <p className="mt-1 font-mono text-xs text-padel-primary">/login {row.auth_code}</p>
+        <p className="mt-1 font-mono text-xs text-[#d4ff4d]">/login {row.auth_code}</p>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -93,7 +108,7 @@ function StaffRowCard({
           value={row.role_label ?? ''}
           onChange={(e) => onPatch(row.id, { role_label: e.target.value })}
           disabled={saving}
-          className="rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider"
+          className={selectDark}
         >
           <option value="">Sin rol</option>
           {CLUB_STAFF_ROLE_PRESETS.map((role) => (
@@ -102,11 +117,7 @@ function StaffRowCard({
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          onClick={() => onCopy(row)}
-          className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider hover:border-padel-primary/40"
-        >
+        <button type="button" onClick={() => onCopy(row)} className={btnGhost}>
           {copiedId === row.id ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
           /login
         </button>
@@ -115,7 +126,7 @@ function StaffRowCard({
             type="button"
             disabled={saving}
             onClick={() => onPatch(row.id, { unlink_telegram: true })}
-            className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider"
+            className={btnGhost}
           >
             Desvincular
           </button>
@@ -124,7 +135,7 @@ function StaffRowCard({
           type="button"
           disabled={saving}
           onClick={() => onPatch(row.id, { regenerate_code: true })}
-          className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider"
+          className={btnGhost}
         >
           Nuevo código
         </button>
@@ -132,7 +143,7 @@ function StaffRowCard({
           type="button"
           disabled={saving}
           onClick={() => onPatch(row.id, { is_active: !row.is_active })}
-          className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider"
+          className={btnGhost}
         >
           {row.is_active ? 'Off' : 'On'}
         </button>
@@ -140,7 +151,7 @@ function StaffRowCard({
           type="button"
           disabled={saving}
           onClick={() => onDelete(row.id, row.name)}
-          className="rounded-lg border border-red-500/30 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-red-300"
+          className={btnDanger}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -185,13 +196,13 @@ function ClubRosterCard({
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left hover:bg-white/[0.03]"
+        className="flex w-full items-center justify-between gap-3 bg-zinc-950/40 px-4 py-4 text-left text-white hover:bg-zinc-900/60"
       >
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Building2 className="h-4 w-4 shrink-0 text-padel-primary" />
             <span className="font-bold text-white">{venue.venue}</span>
-            <span className="rounded bg-padel-primary/20 px-2 py-0.5 font-mono text-xs text-padel-primary">
+            <span className="rounded border border-padel-primary/40 bg-padel-primary/15 px-2 py-0.5 font-mono text-xs text-[#d4ff4d]">
               {venue.pathCode}
             </span>
             <span className="text-xs text-white/40">{venue.courtCount} canchas</span>
@@ -207,21 +218,12 @@ function ClubRosterCard({
       {expanded ? (
         <div className="space-y-3 border-t border-white/10 px-4 py-4">
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={onShare}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-200"
-            >
+            <button type="button" onClick={onShare} className={btnAccent}>
               {shareCopied ? <Check className="h-3.5 w-3.5" /> : <MessageCircle className="h-3.5 w-3.5" />}
               Copiar guía del club
             </button>
             {venue.staff.length === 0 ? (
-              <button
-                type="button"
-                disabled={saving}
-                onClick={onInit}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-padel-primary/30 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-padel-primary"
-              >
+              <button type="button" disabled={saving} onClick={onInit} className={btnAccent}>
                 <Wand2 className="h-3.5 w-3.5" />
                 Crear encargado por defecto
               </button>
@@ -233,12 +235,12 @@ function ClubRosterCard({
               value={quickAdd.name}
               onChange={(e) => onQuickAddChange({ ...quickAdd, name: e.target.value })}
               placeholder="Nombre del manejador"
-              className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none focus:border-padel-primary/50"
+              className={inputDark}
             />
             <select
               value={quickAdd.role}
               onChange={(e) => onQuickAddChange({ ...quickAdd, role: e.target.value })}
-              className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none"
+              className={`${selectDark} text-sm normal-case`}
             >
               <option value="">Rol (opcional)</option>
               {CLUB_STAFF_ROLE_PRESETS.map((role) => (
@@ -247,12 +249,7 @@ function ClubRosterCard({
                 </option>
               ))}
             </select>
-            <button
-              type="button"
-              disabled={saving || !quickAdd.name.trim()}
-              onClick={onAdd}
-              className="inline-flex items-center justify-center gap-1 rounded-lg bg-padel-primary px-4 py-2 text-xs font-black uppercase tracking-widest text-black disabled:opacity-50"
-            >
+            <button type="button" disabled={saving || !quickAdd.name.trim()} onClick={onAdd} className={btnPrimary}>
               <Plus className="h-4 w-4" />
               Añadir
             </button>
@@ -489,16 +486,11 @@ export default function AdminExpressStaffPage() {
             <h1 className="text-2xl font-black uppercase tracking-tight">Lista de manejadores por club</h1>
             <p className="mt-2 max-w-2xl text-sm text-white/50">
               Un registro por persona y sede. Cada manejador vincula Telegram con{' '}
-              <code className="text-padel-primary">/login CODIGO</code> y controla QR/Reset de su club.
+              <code className="text-[#d4ff4d]">/login CODIGO</code> y controla QR/Reset de su club.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => initClub()}
-              disabled={saving || loading}
-              className="inline-flex items-center gap-2 rounded-xl border border-padel-primary/30 px-4 py-2 text-xs font-bold uppercase tracking-widest text-padel-primary"
-            >
+            <button type="button" onClick={() => initClub()} disabled={saving || loading} className={btnAccentLg}>
               <Wand2 className="h-4 w-4" />
               Inicializar clubes vacíos
             </button>
@@ -506,7 +498,7 @@ export default function AdminExpressStaffPage() {
               type="button"
               onClick={() => loadStaff()}
               disabled={loading || saving}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-white/70"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-zinc-900 px-4 py-2 text-xs font-bold uppercase tracking-widest text-white hover:bg-zinc-800 disabled:opacity-50"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               Actualizar
@@ -548,7 +540,7 @@ export default function AdminExpressStaffPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar club, nombre, rol o código…"
-            className="w-full rounded-xl border border-white/10 bg-black/40 py-3 pl-10 pr-4 text-sm outline-none focus:border-padel-primary/50"
+            className={`w-full ${inputDark} py-3 pl-10`}
           />
         </div>
 
