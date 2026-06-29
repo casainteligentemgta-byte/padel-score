@@ -15,3 +15,15 @@ export function expressCanchaCodeFromCourtNumber(courtNumber: string): string {
 export function courtNumberFromExpressSlug(slug: string): string {
   return courtNumFromExpressSlug(slug);
 }
+
+export function generateTvPinCode(): string {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+export function normalizeClubSlug(raw: unknown): string {
+  return String(raw ?? '').trim();
+}
+
+export function normalizeDeviceToken(raw: unknown): string {
+  return String(raw ?? '').trim();
+}
