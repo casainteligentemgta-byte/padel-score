@@ -37,6 +37,7 @@ import {
 import type { CourtPlaylistsState } from '@/lib/useCourtPlaylists';
 import { BouncingBall } from '@/components/BouncingBall';
 import { ExpressTvDeviceGate } from '@/components/express/ExpressTvDeviceGate';
+import { ExpressPlaylistDebug } from '@/components/express/ExpressPlaylistDebug';
 import { mergeExpressTickerMessages } from '@/lib/expressTickerMessages';
 import {
   expressSlugDisplayLabel,
@@ -97,6 +98,8 @@ export default function ExpressTvDisplay() {
     (venueParam ? expressBaseVenueFromPublicidadVenue(venueParam) : '');
   const minimalMode =
     searchParams.get('minimal') === '1' || searchParams.get('minimal') === 'true';
+  const debugMode =
+    searchParams.get('debug') === '1' || searchParams.get('debug') === 'true';
 
   const courtNum = courtNumFromExpressSlug(slug);
   const canchaId = canchaIdFromExpressSlug(slug);
@@ -160,6 +163,15 @@ export default function ExpressTvDisplay() {
   const wrapGate = (node: ReactNode) => (
     <ExpressTvDeviceGate clubSlug={effectiveBaseVenue} expressSlug={slug}>
       {node}
+      {debugMode ? (
+        <ExpressPlaylistDebug
+          effectiveBaseVenue={effectiveBaseVenue}
+          playlistVenue={playlistVenue}
+          playlistVenueCandidates={playlistVenueCandidates}
+          canchaId={canchaId}
+          playlists={playlists}
+        />
+      ) : null}
     </ExpressTvDeviceGate>
   );
 
