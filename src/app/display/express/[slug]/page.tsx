@@ -14,7 +14,7 @@ import {
 } from '@/types/expressMatch';
 import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
 import { useCourtDisplayHeartbeat } from '@/lib/courtDisplayHeartbeat';
-import { buildCourtHeadline } from '@/lib/pizarraHeaderLabels';
+import { buildExpressTvTopLeft } from '@/lib/expressDisplayHeader';
 import {
   expressBaseVenueFromPublicidadVenue,
   expressPlaylistVenueCandidates,
@@ -50,7 +50,6 @@ import {
 } from '@/lib/expressSessionMeta';
 import { mergeExpressTickerMessages } from '@/lib/expressTickerMessages';
 import {
-  EXPRESS_TV_BRAND,
   expressSlugDisplayLabel,
   isLegacyExpressSlug,
   normalizeExpressSlug,
@@ -58,20 +57,6 @@ import {
 import { useThreeFingerDragExit } from '@/lib/useThreeFingerDragExit';
 
 type LoadState = 'loading' | 'ready' | 'error';
-
-function expressScoringMeta(match: ExpressMatch): { levelLine: string; genderLine: string } {
-  const levelLine = EXPRESS_TV_BRAND;
-  if (match.modo_puntos === 'super_tiebreak') {
-    return { levelLine, genderLine: 'Súper tie-break' };
-  }
-  if (match.modo_puntos === 'tiebreak') {
-    return { levelLine, genderLine: 'Tie-break' };
-  }
-  if (match.punto_de_oro) {
-    return { levelLine, genderLine: 'Punto de oro' };
-  }
-  return { levelLine, genderLine: '' };
-}
 
 export default function ExpressTvDisplay() {
   const slugRaw = useRouteSegment('slug');
@@ -93,7 +78,6 @@ export default function ExpressTvDisplay() {
   const courtNum = courtNumFromExpressSlug(slug);
   const canchaId = canchaIdFromExpressSlug(slug);
   const boardLabel = expressSlugDisplayLabel(slug);
-  const expressBrandClassName = 'font-outfit text-lg font-bold tracking-widest text-white';
 
   useEffect(() => {
     if (!isValidExpressSlug(slugRaw) || !isLegacyExpressSlug(slugRaw)) return;
@@ -129,10 +113,10 @@ export default function ExpressTvDisplay() {
       ? expressPublicidadVenueName(effectiveBaseVenue)
       : playlistVenue;
 
-  const courtHeadline = useMemo(() => {
-    const base = buildCourtHeadline(effectiveBaseVenue || null, courtNum);
-    return base.includes('Express') ? base : `${base} · Express`;
-  }, [effectiveBaseVenue, courtNum]);
+  const expressTopLeft = useMemo(
+    () => buildExpressTvTopLeft(effectiveBaseVenue, courtNum),
+    [effectiveBaseVenue, courtNum],
+  );
 
   const playlists = useCourtPlaylists(canchaId, playlistVenue, playlistVenueFallbacks);
   useCourtDisplayHeartbeat(canchaId, heartbeatVenue);
@@ -336,10 +320,10 @@ export default function ExpressTvDisplay() {
     return wrapGate(
       <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-hidden bg-[#050505] font-outfit text-white">
         <PistaTopBar
-          courtHeadline={courtHeadline}
-          levelLine={EXPRESS_TV_BRAND}
-          levelLineClassName={expressBrandClassName}
-          genderLine="Cargando cancha…"
+          courtHeadline=""
+          levelLine=""
+          genderLine=""
+          expressTopLeft={expressTopLeft}
           mode="wait"
         />
         <div
@@ -373,7 +357,6 @@ export default function ExpressTvDisplay() {
     );
   }
 
-  const { levelLine, genderLine } = expressScoringMeta(match);
   const qrWindowOpen = isExpressQrWindowOpen(match, qrTick);
   const qrSecondsLeft = expressQrWindowSecondsLeft(match, qrTick);
   const endedSummary = expressMatchEndedSummary(match);
@@ -385,10 +368,10 @@ export default function ExpressTvDisplay() {
     return wrapGate(
       <div className="relative flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-hidden bg-[#050505] font-outfit text-white select-none">
         <PistaTopBar
-          courtHeadline={courtHeadline}
-          levelLine={levelLine}
-          levelLineClassName={expressBrandClassName}
-          genderLine="Partido finalizado"
+          courtHeadline=""
+          levelLine=""
+          genderLine=""
+          expressTopLeft={expressTopLeft}
           mode="live"
           goldenPoint={match.punto_de_oro}
           liveCenter="chrono"
@@ -427,10 +410,10 @@ export default function ExpressTvDisplay() {
         <div className="pointer-events-none absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_center,_#ccff00_0%,_transparent_70%)]" />
 
         <PistaTopBar
-          courtHeadline={courtHeadline}
-          levelLine={levelLine}
-          levelLineClassName={expressBrandClassName}
-          genderLine={qrWindowOpen ? 'Escanea el QR para jugar' : 'Pantalla en espera'}
+          courtHeadline=""
+          levelLine=""
+          genderLine=""
+          expressTopLeft={expressTopLeft}
           mode="wait"
         />
 
@@ -505,10 +488,10 @@ export default function ExpressTvDisplay() {
       <PizarraWarmupOverlay endsAt={warmupEndsAt} layout="fullscreen" />
       <ExpressSideChangeBanner visible={sideChangeVisible} layout="tv" />
       <PistaTopBar
-        courtHeadline={courtHeadline}
-        levelLine={levelLine}
-        levelLineClassName={expressBrandClassName}
-        genderLine={genderLine}
+        courtHeadline=""
+        levelLine=""
+        genderLine=""
+        expressTopLeft={expressTopLeft}
         mode="live"
         goldenPoint={match.punto_de_oro}
         liveCenter="chrono"

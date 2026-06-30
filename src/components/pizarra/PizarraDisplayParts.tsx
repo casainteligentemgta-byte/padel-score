@@ -786,6 +786,7 @@ export function PistaTopBar({
   onOpenPremiumScoreboard,
   matchChronoCron,
   liveCenter = 'chrono',
+  expressTopLeft,
 }: {
   courtHeadline: string;
   levelLine: string;
@@ -798,6 +799,8 @@ export function PistaTopBar({
   matchChronoCron?: { elapsedSec?: number; running?: boolean; startedAt?: number | null } | null;
   /** En Express: badge EN VIVO en lugar del cronómetro. */
   liveCenter?: 'chrono' | 'badge';
+  /** Cabecera fija Express: SMARTPADEL58 · club · cancha. */
+  expressTopLeft?: { brand: string; club: string; court: string };
 }) {
   const [now, setNow] = useState(() => new Date());
   const [tempC, setTempC] = useState<number | null>(null);
@@ -837,11 +840,27 @@ export function PistaTopBar({
   return (
     <div className="relative z-20 grid w-full flex-shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-3 border-b border-white/10 bg-black/60 px-4 py-2.5 backdrop-blur-xl sm:gap-4 sm:px-8 sm:py-3">
       <div className="min-w-0 flex flex-col gap-0.5 pr-1 text-left">
-        <span className="truncate text-[11px] font-black uppercase tracking-[0.12em] text-white sm:text-xs">
-          {courtHeadline}
-        </span>
-        {levelLine ? <span className={levelLineClass}>{levelLine}</span> : null}
-        {genderLine ? <span className={metaMuted}>{genderLine}</span> : null}
+        {expressTopLeft ? (
+          <>
+            <span className="truncate font-outfit text-base font-bold uppercase tracking-widest text-white sm:text-lg">
+              {expressTopLeft.brand}
+            </span>
+            {expressTopLeft.club ? (
+              <span className="truncate text-[11px] font-black uppercase tracking-[0.12em] text-white sm:text-xs">
+                {expressTopLeft.club}
+              </span>
+            ) : null}
+            <span className={metaMuted}>{expressTopLeft.court}</span>
+          </>
+        ) : (
+          <>
+            <span className="truncate text-[11px] font-black uppercase tracking-[0.12em] text-white sm:text-xs">
+              {courtHeadline}
+            </span>
+            {levelLine ? <span className={levelLineClass}>{levelLine}</span> : null}
+            {genderLine ? <span className={metaMuted}>{genderLine}</span> : null}
+          </>
+        )}
       </div>
 
       <div className="flex shrink-0 flex-col items-center justify-start gap-1 pt-0.5">
