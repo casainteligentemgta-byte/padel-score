@@ -196,6 +196,13 @@ export async function POST(req: Request) {
           return NextResponse.json({ ok: true });
         }
         const result = await applyExpressBoardReset(supabase, clubSlug, courtNumber);
+        if (!result.ok) {
+          console.error('[telegram/webhook] reset failed', {
+            clubSlug,
+            courtNumber,
+            message: result.message,
+          });
+        }
         await answerTelegramCallbackQuery(callbackQuery.id, result.message);
         return NextResponse.json({ ok: true });
       }
