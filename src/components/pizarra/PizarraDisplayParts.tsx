@@ -378,7 +378,7 @@ export function PizarraTableScoreboard({
   const setColumnLabel = (col: number) => {
     if (col === 3 && scoreboardCol3Tb) return 'TB';
     if (col === 3 && scoreboardCol3Stb) return 'STB';
-    return `SET ${col}`;
+    return `SET\u00A0${col}`;
   };
 
   const c1 = marcador?.equipo_1?.color || '#CCFF00';
@@ -392,7 +392,7 @@ export function PizarraTableScoreboard({
     expressThirdSetMode &&
     (expressCurrentSet === 3 || (setsL === 1 && setsV === 1));
   const colSet =
-    'w-[2.1rem] min-w-[2.1rem] max-w-[2.1rem] shrink-0 sm:w-[2.35rem] sm:min-w-[2.35rem] sm:max-w-[2.35rem]';
+    'w-[2.6rem] min-w-[2.6rem] max-w-[2.6rem] shrink-0 sm:w-[2.85rem] sm:min-w-[2.85rem] sm:max-w-[2.85rem]';
   const colPts = 'w-[3rem] min-w-[3rem] max-w-[3.25rem] shrink-0 sm:w-[3.1rem]';
 
   const scoreBlock = (side: 'local' | 'visitante', color: string, pts: string) => (
@@ -433,8 +433,8 @@ export function PizarraTableScoreboard({
               key={`h-${s}`}
               className={
                 scaledBoard
-                  ? 'shrink-0 text-center font-black uppercase leading-tight tracking-wider text-gray-500 sm:tracking-[0.2em]'
-                  : `${colSet} text-center text-[8px] font-black uppercase leading-tight tracking-wider text-gray-500 sm:text-[9px] sm:tracking-[0.2em]`
+                  ? 'shrink-0 whitespace-nowrap text-center font-black uppercase leading-none tracking-wide text-gray-500'
+                  : `${colSet} whitespace-nowrap text-center text-[8px] font-black uppercase leading-none tracking-wide text-gray-500 sm:text-[9px]`
               }
               style={
                 scaledBoard
@@ -451,8 +451,8 @@ export function PizarraTableScoreboard({
           <div
             className={
               scaledBoard
-                ? 'shrink-0 text-center font-black uppercase leading-tight tracking-[0.12em] text-padel-primary sm:tracking-[0.18em]'
-                : `${colPts} text-center text-[7px] font-black uppercase leading-tight tracking-[0.12em] text-padel-primary sm:text-[8px] sm:tracking-[0.18em]`
+                ? 'shrink-0 whitespace-nowrap text-center font-black uppercase leading-none tracking-wide text-padel-primary'
+                : `${colPts} whitespace-nowrap text-center text-[7px] font-black uppercase leading-none tracking-wide text-padel-primary sm:text-[8px]`
             }
             style={
               scaledBoard
@@ -861,9 +861,22 @@ export function PistaTopBar({
 
   return (
     <div className="relative z-20 grid w-full flex-shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-3 border-b border-white/10 bg-black/60 px-4 py-2.5 backdrop-blur-xl sm:gap-4 sm:px-8 sm:py-3">
-      <div className="min-w-0 flex flex-col items-start gap-0.5 text-left leading-tight">
+      <div
+        className={`min-w-0 flex flex-col gap-0.5 leading-tight ${
+          expressTopLeft ? 'items-start text-left' : 'items-start text-left'
+        }`}
+      >
         {expressTopLeft ? (
-          <ExpressTvTopLeftBlock club={expressTopLeft.club} court={expressTopLeft.court} />
+          <>
+            <span className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-300 sm:text-[10px]">
+              {dateStr}
+            </span>
+            <span className="font-mono text-sm font-black tabular-nums text-padel-primary sm:text-base">{timeStr}</span>
+            <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-gray-400 sm:text-[10px]">
+              <Thermometer className="h-3 w-3 shrink-0 text-padel-primary/80" aria-hidden />
+              {tempStr}
+            </span>
+          </>
         ) : (
           <>
             <span className="truncate text-[11px] font-black uppercase tracking-[0.12em] text-white sm:text-xs">
@@ -914,15 +927,21 @@ export function PistaTopBar({
         ) : null}
       </div>
 
-      <div className="min-w-0 flex flex-col items-end gap-0.5 text-right">
-        <span className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-300 sm:text-[10px]">
-          {dateStr}
-        </span>
-        <span className="font-mono text-sm font-black tabular-nums text-padel-primary sm:text-base">{timeStr}</span>
-        <span className="flex items-center justify-end gap-1 text-[9px] font-bold uppercase tracking-widest text-gray-400 sm:text-[10px]">
-          <Thermometer className="h-3 w-3 shrink-0 text-padel-primary/80" aria-hidden />
-          {tempStr}
-        </span>
+      <div className="min-w-0 flex flex-col items-end gap-0.5 text-right leading-tight">
+        {expressTopLeft ? (
+          <ExpressTvTopLeftBlock club={expressTopLeft.club} court={expressTopLeft.court} align="end" />
+        ) : (
+          <>
+            <span className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-300 sm:text-[10px]">
+              {dateStr}
+            </span>
+            <span className="font-mono text-sm font-black tabular-nums text-padel-primary sm:text-base">{timeStr}</span>
+            <span className="flex items-center justify-end gap-1 text-[9px] font-bold uppercase tracking-widest text-gray-400 sm:text-[10px]">
+              <Thermometer className="h-3 w-3 shrink-0 text-padel-primary/80" aria-hidden />
+              {tempStr}
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

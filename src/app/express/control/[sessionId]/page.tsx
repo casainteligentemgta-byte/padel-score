@@ -669,53 +669,56 @@ export default function MobileExpressControl() {
           {updateError}
         </div>
       ) : null}
-      <header className="mb-2 grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-neutral-800 pb-2">
-        <div className="min-w-0 justify-self-start">
-          <div className="flex min-w-0 flex-col items-start gap-0.5">
-            <ExpressTvBrandMark />
+      <header className="mb-2 shrink-0 border-b border-neutral-800 pb-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex flex-col items-start gap-0.5">
+            <ExpressTvBrandMark align="start" />
             <p className="w-full max-w-full truncate text-[10px] font-bold uppercase tracking-[0.15em] text-neutral-400">
               {expressPistaLabel(match.cancha_code)}
             </p>
+            <div className="flex flex-wrap items-center gap-1">
+              {match.modo_puntos === 'super_tiebreak' && (
+                <span className="rounded bg-amber-500/20 px-1 py-0.5 text-[9px] text-amber-400">SÚPER TB</span>
+              )}
+              {match.modo_puntos === 'tiebreak' && (
+                <span className="rounded bg-red-500/20 px-1 py-0.5 text-[9px] text-red-500">TIE-BREAK</span>
+              )}
+            </div>
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1">
-            {match.modo_puntos === 'super_tiebreak' && (
-              <span className="rounded bg-amber-500/20 px-1 py-0.5 text-[9px] text-amber-400">SÚPER TB</span>
-            )}
-            {match.modo_puntos === 'tiebreak' && (
-              <span className="rounded bg-red-500/20 px-1 py-0.5 text-[9px] text-red-500">TIE-BREAK</span>
-            )}
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 text-neutral-200 active:bg-neutral-800"
+              aria-label="Ajustes"
+            >
+              <Settings size={18} className="text-padel-primary" />
+            </button>
+            <button
+              type="button"
+              onClick={endSession}
+              className="flex h-9 items-center gap-1 rounded-xl bg-red-500/10 px-2.5 text-[10px] font-bold uppercase text-red-500 active:bg-red-500/20"
+            >
+              <Power size={14} />
+              Fin
+            </button>
           </div>
         </div>
-        <div className="flex justify-center px-1">
-          <ExpressMatchCenterPanel
-            warmupActive={warmupActive}
-            warmupRemainingSec={warmupRemainingSec}
-            awaitingStart={awaitingStart}
-            showChrono={!warmupActive && !awaitingStart && (match.is_active || showEndSummary)}
-            chronoCron={chronoCron}
-            busy={matchBusy}
-            onStartMatch={() => void startMatchClock()}
-            onStartWarmup={() => void startWarmupClock()}
-          />
-        </div>
-        <div className="flex shrink-0 items-center justify-end gap-1.5">
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 text-neutral-200 active:bg-neutral-800"
-            aria-label="Ajustes"
-          >
-            <Settings size={18} className="text-padel-primary" />
-          </button>
-          <button
-            type="button"
-            onClick={endSession}
-            className="flex h-9 items-center gap-1 rounded-xl bg-red-500/10 px-2.5 text-[10px] font-bold uppercase text-red-500 active:bg-red-500/20"
-          >
-            <Power size={14} />
-            Fin
-          </button>
-        </div>
+
+        {warmupActive || awaitingStart || (match.is_active || showEndSummary) ? (
+          <div className="mt-3 flex justify-center border-t border-neutral-800/80 px-1 pt-3">
+            <ExpressMatchCenterPanel
+              warmupActive={warmupActive}
+              warmupRemainingSec={warmupRemainingSec}
+              awaitingStart={awaitingStart}
+              showChrono={!warmupActive && !awaitingStart && (match.is_active || showEndSummary)}
+              chronoCron={chronoCron}
+              busy={matchBusy}
+              onStartMatch={() => void startMatchClock()}
+              onStartWarmup={() => void startWarmupClock()}
+            />
+          </div>
+        ) : null}
       </header>
 
       <main className="flex min-h-0 flex-1 flex-col gap-1.5">

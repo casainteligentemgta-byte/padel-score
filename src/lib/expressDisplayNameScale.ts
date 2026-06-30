@@ -55,7 +55,7 @@ export const EXPRESS_SET_HEADER_BASE_REM = 0.8125;
 /** Base cabecera POINTS (~12px a escala 1). */
 export const EXPRESS_POINTS_HEADER_BASE_REM = 0.75;
 /** Ancho columna set / points (rem a escala 1). */
-export const EXPRESS_SET_COL_WIDTH_REM = 2.85;
+export const EXPRESS_SET_COL_WIDTH_REM = 3.15;
 export const EXPRESS_PTS_COL_WIDTH_REM = 3.75;
 
 export function expressPizarraFontSize(baseRem: number, scale: number): string {

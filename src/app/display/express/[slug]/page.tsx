@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { notFound, useRouter, useSearchParams } from 'next/navigation';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { QRCodeSVG } from 'qrcode.react';
-import { Megaphone, Zap } from 'lucide-react';
+import { Zap } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import {
   ExpressMatch,
@@ -468,12 +468,9 @@ export default function ExpressTvDisplay() {
                 />
               </div>
 
-              <div className="hidden shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 sm:flex">
-                <Megaphone className="h-4 w-4 shrink-0 text-padel-primary" />
-                <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-                  Sin registro · Plug &amp; Play
-                </p>
-              </div>
+              <p className="shrink-0 text-center text-[10px] font-black uppercase tracking-[0.38em] text-padel-primary sm:text-xs sm:tracking-[0.45em]">
+                SCAN&amp;GO
+              </p>
             </>
           ) : (
             <div className="max-w-md shrink-0 px-4 text-center">

@@ -46,12 +46,12 @@ export function ExpressMatchCenterPanel({
 
   if (awaitingStart) {
     return (
-      <div className="flex flex-col items-center gap-1.5">
+      <div className="flex w-full max-w-xs flex-col items-center gap-2">
         <button
           type="button"
           disabled={busy}
           onClick={onStartMatch}
-          className="flex min-w-[9.5rem] items-center justify-center gap-1.5 rounded-xl bg-padel-primary px-3 py-2 text-[10px] font-black uppercase tracking-wider text-black shadow-[0_0_20px_rgba(204,255,0,0.2)] disabled:opacity-50"
+          className="flex w-full max-w-[11rem] items-center justify-center gap-1.5 rounded-xl bg-padel-primary px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-black shadow-[0_0_20px_rgba(204,255,0,0.2)] disabled:opacity-50"
         >
           <Play className="h-3.5 w-3.5 shrink-0" />
           Iniciar partido
@@ -60,7 +60,7 @@ export function ExpressMatchCenterPanel({
           type="button"
           disabled={busy}
           onClick={onStartWarmup}
-          className="flex min-w-[9.5rem] items-center justify-center gap-1.5 rounded-xl border border-padel-primary/40 bg-padel-primary/10 px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-padel-primary disabled:opacity-50"
+          className="flex w-full max-w-[11rem] items-center justify-center gap-1.5 rounded-xl border border-padel-primary/40 bg-padel-primary/10 px-4 py-2 text-[9px] font-bold uppercase tracking-wider text-padel-primary disabled:opacity-50"
         >
           <Flame className="h-3.5 w-3.5 shrink-0" />
           5 min calentamiento
