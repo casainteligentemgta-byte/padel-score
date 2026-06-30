@@ -23,7 +23,7 @@ export function ExpressTvBrandMark({ align = 'start' }: { align?: 'start' | 'end
   );
 }
 
-/** Cabecera TV: SMARTPADEL58, club y cancha (derecha en pizarrón Express). */
+/** Cabecera TV: SMARTPADEL58, club y cancha justo debajo (derecha en pizarrón Express). */
 export function ExpressTvTopLeftBlock({
   club,
   court,
@@ -37,7 +37,7 @@ export function ExpressTvTopLeftBlock({
   return (
     <div className={`min-w-0 max-w-full ${wrap}`}>
       <div
-        className={`grid grid-cols-[auto_auto] gap-x-1 gap-y-0.5 sm:gap-x-1.5 ${
+        className={`grid grid-cols-[auto_auto] gap-x-1 sm:gap-x-1.5 ${
           align === 'end' ? 'text-right' : 'text-left'
         }`}
       >
@@ -47,15 +47,19 @@ export function ExpressTvTopLeftBlock({
           bounceHeight={1.35}
           className="col-start-1 row-start-1 shrink-0 -mb-0.5 self-end"
         />
-        <span className={`col-start-2 row-start-1 max-w-full truncate ${brandTextClass}`}>SMARTPADEL58</span>
-        {club ? (
-          <span className="col-start-2 row-start-2 max-w-full truncate text-[11px] font-black uppercase tracking-[0.12em] text-white sm:text-xs">
-            {club}
-          </span>
-        ) : null}
-        <span className="col-start-2 row-start-3 max-w-full truncate text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500 sm:text-[10px]">
-          {court}
+        <span className={`col-start-2 row-start-1 max-w-full truncate leading-none ${brandTextClass}`}>
+          SMARTPADEL58
         </span>
+        <div className="col-start-2 row-start-2 -mt-2.5 flex max-w-full flex-col gap-0 leading-none sm:-mt-3">
+          {club ? (
+            <span className="truncate text-[11px] font-black uppercase tracking-[0.12em] text-white sm:text-xs">
+              {club}
+            </span>
+          ) : null}
+          <span className="truncate text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500 sm:text-[10px]">
+            {court}
+          </span>
+        </div>
       </div>
     </div>
   );

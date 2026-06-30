@@ -6,8 +6,6 @@ import { expressServerLabel, type ExpressServer } from '@/lib/expressServer';
 type Props = {
   server: ExpressServer;
   onSelect: (team: 1 | 2, player: 1 | 2) => void;
-  onTogglePlayer: () => void;
-  onToggleTeam: () => void;
 };
 
 const SERVER_BUTTONS: { team: 1 | 2; player: 1 | 2 }[] = [
@@ -17,10 +15,10 @@ const SERVER_BUTTONS: { team: 1 | 2; player: 1 | 2 }[] = [
   { team: 2, player: 2 },
 ];
 
-export function ExpressServerStrip({ server, onSelect, onTogglePlayer, onToggleTeam }: Props) {
+export function ExpressServerStrip({ server, onSelect }: Props) {
   return (
-    <div className="shrink-0 space-y-1.5 rounded-xl border border-neutral-800 bg-neutral-900/80 px-2 py-1.5">
-      <p className="text-center text-[8px] font-black uppercase tracking-[0.18em] text-neutral-500">
+    <div className="shrink-0 rounded-xl border border-neutral-800 bg-neutral-900/80 px-2 py-1.5">
+      <p className="mb-1 text-center text-[8px] font-black uppercase tracking-[0.18em] text-neutral-500">
         Sacador: toca J1–J4
       </p>
       <div className="flex items-center justify-center gap-1">
@@ -47,22 +45,6 @@ export function ExpressServerStrip({ server, onSelect, onTogglePlayer, onToggleT
             </button>
           );
         })}
-      </div>
-      <div className="flex flex-wrap items-center justify-center gap-1">
-        <button
-          type="button"
-          onClick={onTogglePlayer}
-          className="rounded-lg border border-neutral-600 bg-neutral-950 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-padel-primary active:bg-neutral-800"
-        >
-          Otro jugador
-        </button>
-        <button
-          type="button"
-          onClick={onToggleTeam}
-          className="rounded-lg border border-neutral-600 bg-neutral-950 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-neutral-300 active:bg-neutral-800"
-        >
-          Cambiar pareja
-        </button>
       </div>
     </div>
   );

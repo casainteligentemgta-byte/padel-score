@@ -37,7 +37,7 @@ import {
   expressWarmupEndsAtMs,
 } from '@/lib/expressSessionMeta';
 import { updateExpressMatchBySession } from '@/lib/expressMatchDb';
-import { ExpressTvBrandMark } from '@/components/express/ExpressTvBrandMark';
+import { ExpressTvTopLeftBlock } from '@/components/express/ExpressTvBrandMark';
 import { ExpressMatchCenterPanel } from '@/components/express/ExpressMatchCenterPanel';
 import { expressPistaLabel } from '@/lib/expressDisplayHeader';
 import { BouncingBall } from '@/components/BouncingBall';
@@ -145,7 +145,7 @@ function TeamScoreBlock({
   const games = team === 'a' ? match.team_a_games : match.team_b_games;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-neutral-700 bg-neutral-900">
+    <div className="flex flex-col rounded-2xl border border-neutral-700 bg-neutral-900">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-800 px-3 py-1.5">
         <span className="text-[9px] font-black uppercase tracking-[0.2em] text-padel-primary">{label}</span>
         <button
@@ -197,7 +197,7 @@ function TeamScoreBlock({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 items-center justify-between gap-2 px-2 py-1">
+      <div className="flex shrink-0 items-center justify-between gap-2 px-2 py-1.5">
         <button
           type="button"
           onClick={() => onScore(team, 'decrement')}
@@ -209,7 +209,7 @@ function TeamScoreBlock({
           <span className="block text-5xl font-black leading-none tracking-tight text-padel-primary sm:text-6xl">
             {points}
           </span>
-          <div className="mt-0.5 text-[10px] font-bold uppercase text-neutral-400">
+          <div className="mt-0 text-[9px] font-bold uppercase leading-tight text-neutral-400">
             Juegos {games}
           </div>
         </div>
@@ -601,18 +601,6 @@ export default function MobileExpressControl() {
     [applyMatch, updateServer],
   );
 
-  const toggleServingPlayer = useCallback(async () => {
-    if (!matchRef.current) return;
-    const s = normalizeExpressServer(matchRef.current.server_team, matchRef.current.server_player);
-    await setServer(s.team, s.player === 1 ? 2 : 1);
-  }, [setServer]);
-
-  const toggleServingTeam = useCallback(async () => {
-    if (!matchRef.current) return;
-    const s = normalizeExpressServer(matchRef.current.server_team, matchRef.current.server_player);
-    await setServer(s.team === 1 ? 2 : 1, s.player);
-  }, [setServer]);
-
   if (status === 'config_error') {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-surface px-6 text-center text-white">
@@ -671,12 +659,9 @@ export default function MobileExpressControl() {
       ) : null}
       <header className="mb-2 shrink-0 border-b border-neutral-800 pb-2">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex flex-col items-start gap-0.5">
-            <ExpressTvBrandMark align="start" />
-            <p className="w-full max-w-full truncate text-[10px] font-bold uppercase tracking-[0.15em] text-neutral-400">
-              {expressPistaLabel(match.cancha_code)}
-            </p>
-            <div className="flex flex-wrap items-center gap-1">
+          <div className="min-w-0 flex-1">
+            <ExpressTvTopLeftBlock club="" court={expressPistaLabel(match.cancha_code)} align="start" />
+            <div className="mt-1 flex flex-wrap items-center gap-1">
               {match.modo_puntos === 'super_tiebreak' && (
                 <span className="rounded bg-amber-500/20 px-1 py-0.5 text-[9px] text-amber-400">SÚPER TB</span>
               )}
@@ -721,7 +706,7 @@ export default function MobileExpressControl() {
         ) : null}
       </header>
 
-      <main className="flex min-h-0 flex-1 flex-col gap-1.5">
+      <main className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pb-2">
         <div className={scoringLocked ? 'pointer-events-none opacity-60' : ''}>
           <TeamScoreBlock
             team="a"
@@ -740,8 +725,6 @@ export default function MobileExpressControl() {
         <ExpressServerStrip
           server={server}
           onSelect={(team, player) => void setServer(team, player)}
-          onTogglePlayer={() => void toggleServingPlayer()}
-          onToggleTeam={() => void toggleServingTeam()}
         />
 
         <div className={scoringLocked ? 'pointer-events-none opacity-60' : ''}>
@@ -760,11 +743,11 @@ export default function MobileExpressControl() {
         </div>
       </main>
 
-      <footer className={`mt-2 shrink-0 ${scoringLocked ? 'pointer-events-none opacity-60' : ''}`}>
+      <footer className={`mt-1.5 shrink-0 pb-1 ${scoringLocked ? 'pointer-events-none opacity-60' : ''}`}>
         <button
           type="button"
           onClick={handlePuntoDeOroToggle}
-          className={`w-full rounded-xl border py-2.5 text-[11px] font-bold uppercase tracking-widest transition-colors active:opacity-90 ${
+          className={`w-full rounded-xl border py-2 text-[10px] font-bold uppercase tracking-widest transition-colors active:opacity-90 ${
             match.punto_de_oro
               ? 'border-padel-primary/50 bg-padel-primary/15 text-padel-primary'
               : 'border-neutral-800 bg-neutral-900 text-neutral-500'
