@@ -129,7 +129,13 @@ export async function applyExpressBoardReset(
 
   if (!result.ok) {
     console.error('[expressTelegram] reset:', result.message);
-    return { ok: false, message: `Error al resetear la cancha: ${result.message}` };
+    const migrationHint = result.message.toLowerCase().includes('does not exist')
+      ? ' Ejecuta la migración 071_express_schema_repair.sql en Supabase.'
+      : '';
+    return {
+      ok: false,
+      message: `Error al resetear la cancha: ${result.message}${migrationHint}`,
+    };
   }
 
   return {
