@@ -34,7 +34,10 @@ export function ExpressSideChangeBanner({
               isTv ? 'px-8 py-4' : 'px-5 py-3'
             }`}
           >
-            <RefreshCw className={`${isTv ? 'h-6 w-6' : 'h-5 w-5'} animate-spin` style={{ animationDuration: '3s' }} />
+            <RefreshCw
+              className={`${isTv ? 'h-6 w-6' : 'h-5 w-5'} animate-spin`}
+              style={{ animationDuration: '3s' }}
+            />
             <div className="flex flex-col">
               <span className={`font-black italic uppercase leading-none ${isTv ? 'text-lg' : 'text-sm'}`}>
                 Cambio de lado
