@@ -1,13 +1,13 @@
-/** Base tipográfica nombres Express (~13px a escala 1). */
-export const EXPRESS_PLAYER_NAME_BASE_REM = 0.8125;
+/** Base tipográfica nombres Express (~18px a escala 1). */
+export const EXPRESS_PLAYER_NAME_BASE_REM = 1.125;
 
-export const EXPRESS_DISPLAY_NAME_SCALE_DEFAULT = 1.25;
+export const EXPRESS_DISPLAY_NAME_SCALE_DEFAULT = 1.5;
 
 export const EXPRESS_DISPLAY_NAME_SCALE_MIN = 0.85;
-export const EXPRESS_DISPLAY_NAME_SCALE_MAX = 2.5;
+export const EXPRESS_DISPLAY_NAME_SCALE_MAX = 3;
 export const EXPRESS_DISPLAY_NAME_SCALE_STEP = 0.05;
 
-export type ExpressNameScalePresetId = 'S' | 'M' | 'L' | 'XL';
+export type ExpressNameScalePresetId = 'S' | 'M' | 'L' | 'XL' | 'XXL';
 
 export const EXPRESS_NAME_SCALE_PRESETS: {
   id: ExpressNameScalePresetId;
@@ -17,8 +17,9 @@ export const EXPRESS_NAME_SCALE_PRESETS: {
 }[] = [
   { id: 'S', label: 'Pequeño', shortLabel: 'S', value: 0.85 },
   { id: 'M', label: 'Normal', shortLabel: 'M', value: 1 },
-  { id: 'L', label: 'Grande', shortLabel: 'L', value: 1.25 },
-  { id: 'XL', label: 'Muy grande', shortLabel: 'XL', value: 1.5 },
+  { id: 'L', label: 'Grande', shortLabel: 'L', value: 1.35 },
+  { id: 'XL', label: 'Muy grande', shortLabel: 'XL', value: 1.75 },
+  { id: 'XXL', label: 'TV XL', shortLabel: 'XXL', value: 2.25 },
 ];
 
 function snapExpressScaleStep(
@@ -47,15 +48,15 @@ export function expressPlayerNameFontSize(scale: number): string {
   return `calc(${EXPRESS_PLAYER_NAME_BASE_REM}rem * ${s})`;
 }
 
-/** Base celdas de juegos/puntos (~11px a escala 1). */
-export const EXPRESS_SCORE_CELL_BASE_REM = 0.6875;
-/** Base cabeceras SET (~9px a escala 1). */
-export const EXPRESS_SET_HEADER_BASE_REM = 0.5625;
-/** Base cabecera POINTS (~8px a escala 1). */
-export const EXPRESS_POINTS_HEADER_BASE_REM = 0.5;
+/** Base celdas de juegos/puntos (~16px a escala 1). */
+export const EXPRESS_SCORE_CELL_BASE_REM = 1;
+/** Base cabeceras SET (~13px a escala 1). */
+export const EXPRESS_SET_HEADER_BASE_REM = 0.8125;
+/** Base cabecera POINTS (~12px a escala 1). */
+export const EXPRESS_POINTS_HEADER_BASE_REM = 0.75;
 /** Ancho columna set / points (rem a escala 1). */
-export const EXPRESS_SET_COL_WIDTH_REM = 2.35;
-export const EXPRESS_PTS_COL_WIDTH_REM = 3.1;
+export const EXPRESS_SET_COL_WIDTH_REM = 2.85;
+export const EXPRESS_PTS_COL_WIDTH_REM = 3.75;
 
 export function expressPizarraFontSize(baseRem: number, scale: number): string {
   const s = normalizeExpressDisplayNameScale(scale);

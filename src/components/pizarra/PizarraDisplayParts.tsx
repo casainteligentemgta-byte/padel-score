@@ -23,7 +23,7 @@ import { normalizeExpressDisplayMediaScale } from '@/lib/expressDisplayMediaScal
 import { expressThirdSetModeTvLabel } from '@/lib/expressThirdSetMode';
 import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
 import { SmartPadelBallIcon } from '@/components/SmartPadelBallIcon';
-import { ExpressTvBrandMark } from '@/components/express/ExpressTvBrandMark';
+import { ExpressTvTopLeftBlock } from '@/components/express/ExpressTvBrandMark';
 import { useTripleTap } from '@/lib/useTripleTap';
 
 function matchStubFromMarcadorHistorico(marcador: any) {
@@ -336,7 +336,7 @@ export function PizarraTableScoreboard({
   expressFullPlayerNames = false,
 }: {
   marcador: any;
-  /** Solo Express: multiplicador tamaño nombres (0.85–2.5). */
+  /** Solo Express: multiplicador tamaño nombres, cabeceras y cifras (0.85–3). */
   playerNameScale?: number;
   /** Express: muestra nombre y apellido completos (sin abreviar). */
   expressFullPlayerNames?: boolean;
@@ -576,7 +576,13 @@ export function TickerMarquee({
 }: {
   messages: { id: string; mensaje: string; highlight?: boolean }[];
 }) {
-  if (!messages.length) return null;
+  const stableRef = useRef(messages);
+  if (messages.length > 0) {
+    stableRef.current = messages;
+  }
+  const shown = messages.length > 0 ? messages : stableRef.current;
+  if (!shown.length) return null;
+
   const renderMsg = (msg: { id: string; mensaje: string; highlight?: boolean }, suffix = '') => (
     <span
       key={`${msg.id}${suffix}`}
@@ -593,11 +599,11 @@ export function TickerMarquee({
         <div className="marquee-track animate-marquee">
           <div className="marquee-half">
             <span className="marquee-enter-gap" aria-hidden />
-            {messages.map((msg) => renderMsg(msg))}
+            {shown.map((msg) => renderMsg(msg))}
           </div>
           <div className="marquee-half">
             <span className="marquee-enter-gap" aria-hidden />
-            {messages.map((msg) => renderMsg(msg, '-d'))}
+            {shown.map((msg) => renderMsg(msg, '-d'))}
           </div>
         </div>
       </div>
@@ -616,6 +622,7 @@ export function PizarraScoreboardFit({
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
+  const rafRef = useRef<number | null>(null);
 
   const updateScale = useCallback(() => {
     const wrap = containerRef.current;
@@ -630,22 +637,33 @@ export function PizarraScoreboardFit({
     const s = expressMode
       ? Math.min(1, (cw - 4) / mw)
       : Math.min(1, (cw - 4) / mw, (ch - 4) / mh);
-    setScale((prev) => (Math.abs(prev - s) < 0.002 ? prev : s));
+    setScale((prev) => (Math.abs(prev - s) < 0.012 ? prev : s));
   }, [expressMode]);
 
-  useLayoutEffect(() => {
-    updateScale();
+  const scheduleUpdateScale = useCallback(() => {
+    if (rafRef.current != null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      updateScale();
+    });
   }, [updateScale]);
+
+  useLayoutEffect(() => {
+    scheduleUpdateScale();
+  }, [scheduleUpdateScale]);
 
   useEffect(() => {
     const wrap = containerRef.current;
     if (!wrap || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => updateScale());
+    const ro = new ResizeObserver(() => scheduleUpdateScale());
     ro.observe(wrap);
     const inner = contentRef.current;
     if (inner) ro.observe(inner);
-    return () => ro.disconnect();
-  }, [updateScale]);
+    return () => {
+      ro.disconnect();
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [scheduleUpdateScale]);
 
   return (
     <div
@@ -843,17 +861,9 @@ export function PistaTopBar({
 
   return (
     <div className="relative z-20 grid w-full flex-shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-3 border-b border-white/10 bg-black/60 px-4 py-2.5 backdrop-blur-xl sm:gap-4 sm:px-8 sm:py-3">
-      <div className="min-w-0 flex flex-col gap-0.5 pr-1 text-left">
+      <div className="min-w-0 flex flex-col items-start gap-0.5 text-left leading-tight">
         {expressTopLeft ? (
-          <>
-            <ExpressTvBrandMark />
-            {expressTopLeft.club ? (
-              <span className="truncate text-[11px] font-black uppercase tracking-[0.12em] text-white sm:text-xs">
-                {expressTopLeft.club}
-              </span>
-            ) : null}
-            <span className={metaMuted}>{expressTopLeft.court}</span>
-          </>
+          <ExpressTvTopLeftBlock club={expressTopLeft.club} court={expressTopLeft.court} />
         ) : (
           <>
             <span className="truncate text-[11px] font-black uppercase tracking-[0.12em] text-white sm:text-xs">

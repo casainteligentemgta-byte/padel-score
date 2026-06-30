@@ -39,15 +39,17 @@ function ScalePresetGrid<T extends string>({
   savingId,
   isSaving,
   onSelect,
+  columns = 4,
 }: {
   presets: { id: T; label: string; shortLabel: string }[];
   activeId: T;
   savingId: T | null;
   isSaving: boolean;
   onSelect: (id: T) => void;
+  columns?: 4 | 5;
 }) {
   return (
-    <div className="grid grid-cols-4 gap-2">
+    <div className={columns === 5 ? 'grid grid-cols-5 gap-2' : 'grid grid-cols-4 gap-2'}>
       {presets.map((preset) => {
         const on = activeId === preset.id;
         const busy = savingId === preset.id;
@@ -284,7 +286,7 @@ export function ExpressControlDisplayPanel({
             <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-200">Nombres en pizarra</p>
           ) : null}
           <p className="text-[10px] leading-relaxed text-neutral-400">
-            Tamaño de los nombres de jugadores en el marcador.
+            Tamaño de nombres, cabeceras (SET 1, POINTS) y números del marcador en la TV.
           </p>
           <div className="rounded-xl border border-neutral-800 bg-black/40 px-3 py-3">
             <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-neutral-500">Vista previa</p>
@@ -314,6 +316,7 @@ export function ExpressControlDisplayPanel({
             savingId={savingName === 'slider' ? null : savingName}
             isSaving={isSaving}
             onSelect={(id) => void applyNamePreset(id)}
+            columns={5}
           />
         </section>
       ) : null}

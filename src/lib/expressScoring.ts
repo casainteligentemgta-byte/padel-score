@@ -160,6 +160,22 @@ export function buildExpressSessionReset(sessionId: string): Partial<ExpressMatc
   };
 }
 
+/** Inicia el cronómetro del partido (sin calentamiento). */
+export function buildExpressStartMatch(): Partial<ExpressMatch> {
+  return {
+    warmup_ends_at: null,
+    match_started_at: new Date().toISOString(),
+  };
+}
+
+/** Calentamiento de 5 min antes de iniciar el cronómetro. */
+export function buildExpressStartWarmup(): Partial<ExpressMatch> {
+  return {
+    warmup_ends_at: new Date(Date.now() + EXPRESS_WARMUP_MS).toISOString(),
+    match_started_at: null,
+  };
+}
+
 /** Nuevo partido en la misma sesión (mantiene nombres y ajustes de TV). */
 export function buildExpressNewMatch(
   current: ExpressMatch,

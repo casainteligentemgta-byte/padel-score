@@ -48,10 +48,10 @@ export function expressMatchSlugCodes(slug: string): string[] {
 /** Marca visible en pantallas TV Express (/display/express/[slug]). */
 export const EXPRESS_TV_BRAND = 'SmartPadel58';
 
-/** Etiqueta de cancha en TV / control (p. ej. CANCHA 3). */
+/** Etiqueta de cancha en TV / control (p. ej. Cancha 3). */
 export function expressSlugDisplayLabel(slug: string): string {
   const n = courtNumFromExpressSlug(slug);
-  return n ? `CANCHA ${n}` : EXPRESS_TV_BRAND;
+  return n ? `Cancha ${n}` : EXPRESS_TV_BRAND;
 }
 
 export function expressDisplayPath(displayNum: number): string {

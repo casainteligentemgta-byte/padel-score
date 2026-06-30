@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import {
   fetchCanchaPlaylistConfig,
@@ -69,19 +69,24 @@ export function useCourtPlaylists(
   }, [venueName, venueFallbacks]);
 
   const resolvedVenueName = venueCandidates[0] ?? venueName ?? null;
+  const venueCandidatesKey = useMemo(() => venueCandidates.join('\x1e'), [venueCandidates]);
+  const venueCandidatesRef = useRef(venueCandidates);
+  venueCandidatesRef.current = venueCandidates;
+  const loadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
+    const venues = venueCandidatesRef.current;
     if (!supabase || !canchaId) {
       setRows([]);
       setTickerMessages([]);
       return;
     }
-    const { data, error } = await fetchCanchaPlaylistRowsForVenues(supabase, canchaId, venueCandidates);
+    const { data, error } = await fetchCanchaPlaylistRowsForVenues(supabase, canchaId, venues);
     if (error) {
-      console.error('[useCourtPlaylists] fetch error:', error.message, { canchaId, venueCandidates });
-      setRows([]);
+      console.error('[useCourtPlaylists] fetch error:', error.message, { canchaId, venues });
     } else {
-      setRows(normalizeCourtPlaylistRows((data as unknown[]) || []));
+      const next = normalizeCourtPlaylistRows((data as unknown[]) || []);
+      setRows((prev) => (next.length > 0 ? next : prev));
     }
 
     const cfgVenue = resolvedVenueName?.trim();
@@ -106,8 +111,16 @@ export function useCourtPlaylists(
     }
 
     const msgs = await fetchCanchaTiraMessages(supabase, canchaId, resolvedVenueName);
-    setTickerMessages(msgs);
-  }, [supabase, canchaId, venueCandidates, resolvedVenueName]);
+    setTickerMessages((prev) => (msgs.length > 0 ? msgs : prev));
+  }, [supabase, canchaId, venueCandidatesKey, resolvedVenueName]);
+
+  const scheduleLoad = useCallback(() => {
+    if (loadDebounceRef.current) clearTimeout(loadDebounceRef.current);
+    loadDebounceRef.current = setTimeout(() => {
+      loadDebounceRef.current = null;
+      void load();
+    }, 400);
+  }, [load]);
 
   useEffect(() => {
     void load();
@@ -118,17 +131,18 @@ export function useCourtPlaylists(
 
     const ch = supabase
       .channel(`court_pl_${canchaId}_${resolvedVenueName || 'all'}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cancha_publicidad' }, load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'media_content' }, load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cancha_playlist_config' }, load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cancha_tira' }, load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tira_informativa' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cancha_publicidad' }, scheduleLoad)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'media_content' }, scheduleLoad)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cancha_playlist_config' }, scheduleLoad)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cancha_tira' }, scheduleLoad)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tira_informativa' }, scheduleLoad)
       .subscribe();
 
     return () => {
+      if (loadDebounceRef.current) clearTimeout(loadDebounceRef.current);
       ch.unsubscribe();
     };
-  }, [supabase, canchaId, resolvedVenueName, load]);
+  }, [supabase, canchaId, resolvedVenueName, scheduleLoad]);
 
   const { video, imagen } = useMemo(() => partitionPlaylistRows(rows), [rows]);
 

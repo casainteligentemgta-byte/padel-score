@@ -21,7 +21,7 @@ import {
   expressPlaylistVenueCandidates,
   expressPublicidadVenueName,
 } from '@/lib/expressPublicidad';
-import { expressQrDockPaddingBottom } from '@/lib/expressDisplayMediaScale';
+import { expressQrDockPaddingBottom, EXPRESS_QR_CODE_SIZE_PX } from '@/lib/expressDisplayMediaScale';
 import { expressQrWindowSecondsLeft, formatExpressQrCountdown, isExpressQrWindowOpen } from '@/lib/expressQrWindow';
 import {
   canchaIdFromExpressSlug,
@@ -110,7 +110,10 @@ export default function ExpressTvDisplay() {
     [effectiveBaseVenue, venueParam],
   );
   const playlistVenue = playlistVenueCandidates[0] ?? null;
-  const playlistVenueFallbacks = playlistVenueCandidates.slice(1);
+  const playlistVenueFallbacks = useMemo(
+    () => playlistVenueCandidates.slice(1),
+    [playlistVenueCandidates],
+  );
   const heartbeatVenue =
     effectiveBaseVenue.trim()
       ? expressPublicidadVenueName(effectiveBaseVenue)
@@ -125,10 +128,18 @@ export default function ExpressTvDisplay() {
   useCourtDisplayHeartbeat(canchaId, heartbeatVenue);
   useThreeFingerDragExit('/');
 
-  const tickerMessages = useMemo(
-    () => mergeExpressTickerMessages(playlists.tickerMessages, match?.display_ticker_phrases ?? []),
-    [playlists.tickerMessages, match?.display_ticker_phrases],
-  );
+  const tickerStableRef = useRef<{ id: string; mensaje: string; highlight?: boolean }[]>([]);
+  const tickerMessages = useMemo(() => {
+    const merged = mergeExpressTickerMessages(
+      playlists.tickerMessages,
+      match?.display_ticker_phrases ?? [],
+    );
+    if (merged.length > 0) {
+      tickerStableRef.current = merged;
+      return merged;
+    }
+    return tickerStableRef.current;
+  }, [playlists.tickerMessages, match?.display_ticker_phrases]);
 
   const marcador = useMemo(() => {
     if (!match) return null;
@@ -270,18 +281,25 @@ export default function ExpressTvDisplay() {
 
     initMatch();
 
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, supabase]);
+
+  useEffect(() => {
+    if (!supabase || !match?.id) return;
+
     const channel = supabase
-      .channel(`express-${slug}`)
+      .channel(`express-match-${match.id}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'express_matches',
-          filter: `cancha_code=eq.${slug}`,
+          filter: `id=eq.${match.id}`,
         },
         (payload) => {
-          if (cancelled) return;
           const row = payload.new as Record<string, unknown> | null;
           if (!row) return;
           setMatch(normalizeExpressMatch(row));
@@ -290,10 +308,9 @@ export default function ExpressTvDisplay() {
       .subscribe();
 
     return () => {
-      cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [slug, supabase]);
+  }, [slug, supabase, match?.id]);
 
   useEffect(() => {
     if (!supabase || !match?.id || !urlBaseVenue.trim()) return;
@@ -425,32 +442,33 @@ export default function ExpressTvDisplay() {
         />
 
         <div
-          className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden px-4 py-2 sm:gap-3"
+          className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5 overflow-hidden px-4 pb-3 pt-1 sm:gap-2"
           style={qrContentPaddingStyle}
         >
           {qrWindowOpen ? (
             <>
               <div className="shrink-0 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-gray-500 sm:text-xs sm:tracking-[0.35em]">
+                <p className="text-[9px] font-bold uppercase tracking-[0.26em] text-gray-500 sm:text-[10px] sm:tracking-[0.32em]">
                   Escanea para iniciar el marcador
                 </p>
                 {qrSecondsLeft != null && (
-                  <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-padel-primary">
+                  <p className="mt-1.5 text-[9px] font-bold uppercase tracking-widest text-padel-primary">
                     QR activo · {formatExpressQrCountdown(qrSecondsLeft)}
                   </p>
                 )}
               </div>
 
-              <div className="shrink-0 rounded-2xl bg-white p-2.5 shadow-[0_0_40px_rgba(204,255,0,0.12)] sm:rounded-3xl sm:p-3">
+              <div className="mb-1 shrink-0 rounded-xl bg-white p-2 shadow-[0_0_28px_rgba(204,255,0,0.1)] sm:rounded-2xl sm:p-2.5">
                 <QRCodeSVG
                   value={controlUrl}
-                  size={148}
+                  size={EXPRESS_QR_CODE_SIZE_PX}
                   level="H"
-                  className="block h-auto w-[148px] max-w-[min(36vw,148px)]"
+                  className="block h-auto max-w-[min(24vw,104px)]"
+                  style={{ width: EXPRESS_QR_CODE_SIZE_PX, height: 'auto' }}
                 />
               </div>
 
-              <div className="hidden shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 sm:flex">
+              <div className="hidden shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 sm:flex">
                 <Megaphone className="h-4 w-4 shrink-0 text-padel-primary" />
                 <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">
                   Sin registro · Plug &amp; Play

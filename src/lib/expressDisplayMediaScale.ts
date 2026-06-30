@@ -53,10 +53,19 @@ export function nearestExpressMediaScalePresetId(scale: number): ExpressMediaSca
   return best.id;
 }
 
-/** Reserva inferior (vídeo + imágenes + tira) en pantalla QR Express. */
+/** Tamaño del QR en standby Express (px). */
+export const EXPRESS_QR_CODE_SIZE_PX = 104;
+
+/** Reserva para la tira informativa bajo vídeo/imágenes. */
+export const EXPRESS_QR_TICKER_RESERVE_REM = 5;
+
+/** Margen extra entre el QR y la franja de vídeo/imágenes. */
+export const EXPRESS_QR_MEDIA_GAP_REM = 2.25;
+
+/** Reserva inferior (vídeo + imágenes + tira + margen) en pantalla QR Express. */
 export function expressQrDockPaddingBottom(mediaScale: number): string {
   const s = normalizeExpressDisplayMediaScale(mediaScale);
   const strip = `min(calc(26vh * ${s}), calc(12rem * ${s}))`;
-  return `calc(${strip} + 5rem)`;
+  return `calc(${strip} + ${EXPRESS_QR_TICKER_RESERVE_REM}rem + ${EXPRESS_QR_MEDIA_GAP_REM}rem)`;
 }
 

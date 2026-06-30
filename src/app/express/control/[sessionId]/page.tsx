@@ -10,6 +10,8 @@ import { ExpressMatch, normalizeExpressMatch } from '@/types/expressMatch';
 import {
   buildExpressNewMatch,
   buildExpressSessionReset,
+  buildExpressStartMatch,
+  buildExpressStartWarmup,
   calculateNextState,
   pickExpressScorePatch,
 } from '@/lib/expressScoring';
@@ -26,10 +28,8 @@ import { ExpressControlSettingsDrawer } from '@/components/express/ExpressContro
 import { ExpressServerStrip } from '@/components/express/ExpressServerStrip';
 import { ExpressMatchEndPanel } from '@/components/express/ExpressMatchEndPanel';
 import { ExpressSideChangeBanner } from '@/components/express/ExpressSideChangeBanner';
-import { PizarraWarmupOverlay } from '@/components/PizarraWarmupOverlay';
 import {
   expressChronoTotalSec,
-  expressFormatDuration,
   expressIsSideChangeVisible,
   expressIsWarmupActive,
   expressMatchChronoCron,
@@ -37,8 +37,9 @@ import {
   expressWarmupEndsAtMs,
 } from '@/lib/expressSessionMeta';
 import { updateExpressMatchBySession } from '@/lib/expressMatchDb';
-import { PizarraCenterChrono } from '@/components/pizarra/PizarraDisplayParts';
-import { EXPRESS_TV_BRAND } from '@/lib/expressSlug';
+import { ExpressTvBrandMark } from '@/components/express/ExpressTvBrandMark';
+import { ExpressMatchCenterPanel } from '@/components/express/ExpressMatchCenterPanel';
+import { expressPistaLabel } from '@/lib/expressDisplayHeader';
 import { BouncingBall } from '@/components/BouncingBall';
 import type { ExpressThirdSetMode } from '@/lib/expressThirdSetMode';
 import {
@@ -415,14 +416,6 @@ export default function MobileExpressControl() {
     const matchJustEnded = previousState.is_active && newState.is_active === false;
     let payload: Partial<ExpressMatch> = pickExpressScorePatch(newState);
 
-    if (
-      action === 'increment' &&
-      !previousState.match_started_at &&
-      !expressIsWarmupActive(previousState, uiTick)
-    ) {
-      payload.match_started_at = new Date().toISOString();
-    }
-
     if (matchJustEnded) {
       const chronoState = {
         ...newState,
@@ -454,6 +447,28 @@ export default function MobileExpressControl() {
     const newState = { ...previousState, ...reset } as ExpressMatch;
     applyMatch(newState);
     const ok = await updateServer(reset, previousState);
+    setMatchBusy(false);
+    if (!ok) return;
+  };
+
+  const startMatchClock = async () => {
+    if (!matchRef.current || matchBusy || matchRef.current.match_started_at) return;
+    setMatchBusy(true);
+    const previousState = { ...matchRef.current };
+    const updates = buildExpressStartMatch();
+    applyMatch({ ...previousState, ...updates } as ExpressMatch);
+    const ok = await updateServer(updates, previousState);
+    setMatchBusy(false);
+    if (!ok) return;
+  };
+
+  const startWarmupClock = async () => {
+    if (!matchRef.current || matchBusy) return;
+    setMatchBusy(true);
+    const previousState = { ...matchRef.current };
+    const updates = buildExpressStartWarmup();
+    applyMatch({ ...previousState, ...updates } as ExpressMatch);
+    const ok = await updateServer(updates, previousState);
     setMatchBusy(false);
     if (!ok) return;
   };
@@ -639,36 +654,51 @@ export default function MobileExpressControl() {
   const warmupEndsAt = expressWarmupEndsAtMs(match);
   const sideChangeVisible = expressIsSideChangeVisible(match, uiTick);
   const chronoCron = expressMatchChronoCron(match);
-  const scoringLocked = showEndSummary || warmupActive;
+  const awaitingStart =
+    match.is_active && !showEndSummary && !match.match_started_at && !warmupActive;
+  const scoringLocked = showEndSummary || warmupActive || awaitingStart;
+  const warmupRemainingSec = warmupEndsAt
+    ? Math.max(0, Math.ceil((warmupEndsAt - uiTick) / 1000))
+    : 0;
 
   return (
     <div className="relative flex h-dvh select-none flex-col overflow-hidden bg-surface px-3 py-2 font-sans text-white">
-      <PizarraWarmupOverlay endsAt={warmupEndsAt} layout="banner" />
       <ExpressSideChangeBanner visible={sideChangeVisible} onDismiss={() => void dismissSideChange()} />
       {updateError ? (
         <div className="mb-1 shrink-0 rounded-lg border border-red-500/40 bg-red-500/10 px-2 py-1 text-center text-[10px] font-bold uppercase tracking-wide text-red-400">
           {updateError}
         </div>
       ) : null}
-      <header className="mb-2 flex shrink-0 items-center justify-between gap-2 border-b border-neutral-800 pb-2">
-        <div className="min-w-0">
-          <h1 className="flex flex-wrap items-center gap-1.5 text-xs font-bold tracking-widest text-padel-primary">
-            {EXPRESS_TV_BRAND}
+      <header className="mb-2 grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-neutral-800 pb-2">
+        <div className="min-w-0 justify-self-start">
+          <div className="flex min-w-0 flex-col items-start gap-0.5">
+            <ExpressTvBrandMark />
+            <p className="w-full max-w-full truncate text-[10px] font-bold uppercase tracking-[0.15em] text-neutral-400">
+              {expressPistaLabel(match.cancha_code)}
+            </p>
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1">
             {match.modo_puntos === 'super_tiebreak' && (
               <span className="rounded bg-amber-500/20 px-1 py-0.5 text-[9px] text-amber-400">SÚPER TB</span>
             )}
             {match.modo_puntos === 'tiebreak' && (
               <span className="rounded bg-red-500/20 px-1 py-0.5 text-[9px] text-red-500">TIE-BREAK</span>
             )}
-          </h1>
-          <p className="truncate text-[10px] uppercase text-neutral-500">{match.cancha_code}</p>
-          {!showEndSummary && match.is_active ? (
-            <div className="mt-0.5 scale-[0.85] origin-left">
-              <PizarraCenterChrono cron={chronoCron} compact />
-            </div>
-          ) : null}
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex justify-center px-1">
+          <ExpressMatchCenterPanel
+            warmupActive={warmupActive}
+            warmupRemainingSec={warmupRemainingSec}
+            awaitingStart={awaitingStart}
+            showChrono={!warmupActive && !awaitingStart && (match.is_active || showEndSummary)}
+            chronoCron={chronoCron}
+            busy={matchBusy}
+            onStartMatch={() => void startMatchClock()}
+            onStartWarmup={() => void startWarmupClock()}
+          />
+        </div>
+        <div className="flex shrink-0 items-center justify-end gap-1.5">
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
@@ -760,14 +790,6 @@ export default function MobileExpressControl() {
           onNewMatchDirect={() => void startNewMatch(false)}
           onEndSession={() => void endSession()}
         />
-      ) : null}
-
-      {warmupActive ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-20 z-30 px-3 text-center">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-padel-primary">
-            Calentamiento · {expressFormatDuration(Math.max(0, Math.ceil(((warmupEndsAt ?? uiTick) - uiTick) / 1000)))}
-          </p>
-        </div>
       ) : null}
     </div>
   );
