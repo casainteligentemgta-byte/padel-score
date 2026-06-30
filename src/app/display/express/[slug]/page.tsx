@@ -22,7 +22,6 @@ import {
   expressPublicidadVenueName,
 } from '@/lib/expressPublicidad';
 import { expressQrDockPaddingBottom } from '@/lib/expressDisplayMediaScale';
-import { expressMatchSlugCodes } from '@/lib/expressMatchDb';
 import { expressQrWindowSecondsLeft, formatExpressQrCountdown, isExpressQrWindowOpen } from '@/lib/expressQrWindow';
 import {
   canchaIdFromExpressSlug,
@@ -51,6 +50,7 @@ import {
 } from '@/lib/expressSessionMeta';
 import { mergeExpressTickerMessages } from '@/lib/expressTickerMessages';
 import {
+  expressMatchSlugCodes,
   expressSlugDisplayLabel,
   isLegacyExpressSlug,
   normalizeExpressSlug,

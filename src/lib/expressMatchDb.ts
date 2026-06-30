@@ -286,15 +286,3 @@ export async function updateExpressMatchByCourt(
 export function expressNewSessionId(): string {
   return randomUUID();
 }
-
-/** Normaliza slug de ruta / filtro realtime. */
-export function expressMatchSlugCodes(slug: string): string[] {
-  const canonical = normalizeExpressSlug(slug);
-  const n = courtNumFromExpressSlug(canonical);
-  if (!n) return [canonical];
-  const codes = [`scan-go-${n}`];
-  if (isLegacyExpressSlug(slug) || isLegacyExpressSlug(canonical)) {
-    codes.push(`fast-${n}`);
-  }
-  return codes;
-}

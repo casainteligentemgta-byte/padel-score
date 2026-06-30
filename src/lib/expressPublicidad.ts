@@ -16,12 +16,15 @@ export function expressPublicidadVenueName(baseVenue: string): string {
   const base = String(baseVenue || '').trim();
   if (!base) return 'Express';
   if (base.endsWith(EXPRESS_PUBLICIDAD_VENUE_SUFFIX)) return base;
-  // Normaliza variantes erróneas guardadas con guión o bullet distinto
+  // Normaliza variantes erróneas (guión, bullet, o solo espacio antes de Express)
   const normalized = base
     .replace(/\s*[-–]\s*Express\s*$/i, EXPRESS_PUBLICIDAD_VENUE_SUFFIX)
-    .replace(/\s*•\s*Express\s*$/i, EXPRESS_PUBLICIDAD_VENUE_SUFFIX);
+    .replace(/\s*•\s*Express\s*$/i, EXPRESS_PUBLICIDAD_VENUE_SUFFIX)
+    .replace(/\s*·\s*Express\s*$/i, EXPRESS_PUBLICIDAD_VENUE_SUFFIX)
+    .replace(/\s+Express\s*$/i, EXPRESS_PUBLICIDAD_VENUE_SUFFIX);
   if (normalized.endsWith(EXPRESS_PUBLICIDAD_VENUE_SUFFIX)) return normalized;
-  return `${normalized}${EXPRESS_PUBLICIDAD_VENUE_SUFFIX}`;
+  const canonical = resolveCanonicalExpressVenue(normalized) ?? normalized;
+  return `${canonical}${EXPRESS_PUBLICIDAD_VENUE_SUFFIX}`;
 }
 
 /** Sede real a partir del venue de playlist Express. */
@@ -30,7 +33,18 @@ export function expressBaseVenueFromPublicidadVenue(venue: string): string {
   if (v.endsWith(EXPRESS_PUBLICIDAD_VENUE_SUFFIX)) {
     return v.slice(0, -EXPRESS_PUBLICIDAD_VENUE_SUFFIX.length).trim();
   }
+  const m = v.match(/^(.+?)\s*[-–•·]?\s*Express\s*$/i);
+  if (m) return m[1].trim();
   return v;
+}
+
+/** Clave canónica de playlist Express para comparar variantes (mayúsculas, · vs espacio). */
+export function expressPublicidadVenueMatchKey(venue: string): string {
+  return expressPublicidadVenueName(expressBaseVenueFromPublicidadVenue(venue))
+    .trim()
+    .toLowerCase()
+    .replace(/[·•\-–]/g, ' ')
+    .replace(/\s+/g, ' ');
 }
 
 export function expressDisplayPathForNum(displayNum: number): string {
@@ -130,15 +144,20 @@ export function expressPlaylistVenueCandidates(
   };
 
   const explicit = String(explicitVenueParam || '').trim();
+  const baseRaw = String(baseVenue || '').trim();
+  const explicitBase = explicit ? expressBaseVenueFromPublicidadVenue(explicit) : '';
+  const mergedBase = baseRaw || explicitBase;
+  const base = resolveCanonicalExpressVenue(mergedBase) ?? mergedBase;
+
+  // Siempre primero: venue canónico con · (como en admin / BD)
+  if (base) add(expressPublicidadVenueName(base));
+
   if (explicit.includes('Express')) add(explicit);
 
-  const baseRaw = String(baseVenue || '').trim();
-  const base = resolveCanonicalExpressVenue(baseRaw) ?? baseRaw;
   if (base) {
-    add(expressPublicidadVenueName(base));
     add(base);
-    // Variante legacy con guión (por si en BD quedó "El Bodeguero - Express")
     add(`${base} - Express`);
+    add(`${base} Express`);
   }
 
   return out;

@@ -133,10 +133,18 @@ export function normalizeCourtPlaylistRows(rows: unknown[]): CourtPlaylistRowDb[
   });
 }
 
+function playlistVenueLooseKey(vn: string): string {
+  return String(vn ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[·•\-–]/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
 function filterPlaylistRowsByVenueLoose(rows: CourtPlaylistRowDb[], vn: string | null): CourtPlaylistRowDb[] {
   if (!vn) return rows;
-  const want = vn.trim().toLowerCase();
-  return rows.filter((r) => String(r.venue_name ?? '').trim().toLowerCase() === want);
+  const want = playlistVenueLooseKey(vn);
+  return rows.filter((r) => playlistVenueLooseKey(String(r.venue_name ?? '')) === want);
 }
 
 export type CanchaPlaylistConfig = {
@@ -183,6 +191,23 @@ export async function fetchCanchaPlaylistRows(
   if (!r.error && ((r.data as unknown[]) || []).length > 0) {
     const norm = await enrichRowsWithMediaById(supabase, normalizeCourtPlaylistRows((r.data as unknown[]) || []));
     if (hasPlayableRows(norm)) return { ...r, data: norm };
+  }
+
+  // Variante de venue sin · exacto (p. ej. "EL BODEGUERO Express" vs "El Bodeguero · Express")
+  if (vn) {
+    const rLoose = await supabase
+      .from('cancha_publicidad')
+      .select('id, cancha_id, venue_name, media_id, orden, duracion_segundos, playlist_slot, posicion_pantalla, media_content(*)')
+      .in('cancha_id', canchaIds)
+      .order('orden', { ascending: true });
+    if (!rLoose.error && ((rLoose.data as unknown[]) || []).length > 0) {
+      let norm = await enrichRowsWithMediaById(
+        supabase,
+        normalizeCourtPlaylistRows((rLoose.data as unknown[]) || []),
+      );
+      norm = filterPlaylistRowsByVenueLoose(norm, vn);
+      if (hasPlayableRows(norm)) return { ...rLoose, data: norm };
+    }
   }
 
   // Algunas BD exponen la relación como `publicidad` en lugar de `media_content`.

@@ -78,6 +78,7 @@ export function useCourtPlaylists(
     }
     const { data, error } = await fetchCanchaPlaylistRowsForVenues(supabase, canchaId, venueCandidates);
     if (error) {
+      console.error('[useCourtPlaylists] fetch error:', error.message, { canchaId, venueCandidates });
       setRows([]);
     } else {
       setRows(normalizeCourtPlaylistRows((data as unknown[]) || []));

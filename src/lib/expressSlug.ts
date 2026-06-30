@@ -33,6 +33,18 @@ export function isLegacyExpressSlug(slug: string): boolean {
   return /^fast-\d+$/i.test(String(slug ?? '').trim());
 }
 
+/** Códigos cancha_code en BD para slug de ruta (scan-go-N + legacy fast-N). */
+export function expressMatchSlugCodes(slug: string): string[] {
+  const canonical = normalizeExpressSlug(slug);
+  const n = courtNumFromExpressSlug(canonical);
+  if (!n) return [canonical];
+  const codes = [`scan-go-${n}`];
+  if (isLegacyExpressSlug(slug) || isLegacyExpressSlug(canonical)) {
+    codes.push(`fast-${n}`);
+  }
+  return codes;
+}
+
 /** Marca visible en pantallas TV Express (/display/express/[slug]). */
 export const EXPRESS_TV_BRAND = 'SmartPadel58';
 
