@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildExpressSessionReset } from '@/lib/expressScoring';
 import {
   findExpressMatchByCourt,
+  expressNewSessionId,
   updateExpressMatchByCourt,
 } from '@/lib/expressMatchDb';
 import {
@@ -57,7 +58,7 @@ export async function resolveExpressCourtNumbersForClub(
     const clamped = clampCourtNumbersForClub(slug, found);
     if (clamped.length > 0) return clamped;
   }
-  return expressCourtNumbersForClub(slug);
+  return expressCourtNumbersForClub(venue);
 }
 
 export type ExpressTelegramActionResult =
@@ -86,7 +87,7 @@ export async function applyExpressQrActivation(
   }
 
   const expiresAt = new Date(Date.now() + QR_WINDOW_MS).toISOString();
-  const sessionId = existing?.session_id ? String(existing.session_id) : crypto.randomUUID();
+  const sessionId = existing?.session_id ? String(existing.session_id) : expressNewSessionId();
 
   const result = await updateExpressMatchByCourt(supabase, courtNumber, {
     session_id: sessionId,
@@ -118,7 +119,7 @@ export async function applyExpressBoardReset(
   }
 
   const venue = resolveClubVenue(clubSlug);
-  const reset = buildExpressSessionReset(crypto.randomUUID());
+  const reset = buildExpressSessionReset(expressNewSessionId());
   const qrExpiresAt = new Date(Date.now() + QR_WINDOW_MS).toISOString();
 
   const result = await updateExpressMatchByCourt(supabase, courtNumber, {
@@ -129,7 +130,11 @@ export async function applyExpressBoardReset(
 
   if (!result.ok) {
     console.error('[expressTelegram] reset:', result.message);
-    return { ok: false, message: `Error al resetear la cancha: ${result.message}` };
+    const detail = result.message.slice(0, 120);
+    return {
+      ok: false,
+      message: `Error reset cancha ${courtNumber}: ${detail}`,
+    };
   }
 
   return {
