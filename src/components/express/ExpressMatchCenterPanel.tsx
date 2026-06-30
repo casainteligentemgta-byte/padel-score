@@ -3,6 +3,7 @@
 import { Flame, Play } from 'lucide-react';
 import { PizarraCenterChrono } from '@/components/pizarra/PizarraDisplayParts';
 import { expressFormatDuration } from '@/lib/expressSessionMeta';
+import { useTripleTap } from '@/lib/useTripleTap';
 
 type ChronoCron = {
   elapsedSec?: number;
@@ -31,9 +32,15 @@ export function ExpressMatchCenterPanel({
   onStartMatch,
   onStartWarmup,
 }: ExpressMatchCenterPanelProps) {
+  const tripleTapStartFromWarmup = useTripleTap(onStartMatch, warmupActive && !busy);
+
   if (warmupActive) {
     return (
-      <div className="flex flex-col items-center justify-center gap-0.5 py-0">
+      <div
+        className="flex cursor-pointer touch-manipulation flex-col items-center justify-center gap-0.5 py-0"
+        onClick={tripleTapStartFromWarmup}
+        role="presentation"
+      >
         <span className="text-[7px] font-black uppercase tracking-[0.28em] text-padel-primary sm:text-[8px] sm:tracking-[0.32em]">
           Calentamiento
         </span>

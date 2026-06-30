@@ -449,16 +449,11 @@ export default function ExpressTvDisplay() {
         >
           {qrWindowOpen ? (
             <>
-              <div className="shrink-0 text-center">
-                <p className="text-[9px] font-bold uppercase tracking-[0.26em] text-gray-500 sm:text-[10px] sm:tracking-[0.32em]">
-                  Escanea para iniciar el marcador
+              {qrSecondsLeft != null && (
+                <p className="shrink-0 text-center text-[9px] font-bold uppercase tracking-widest text-padel-primary">
+                  QR activo · {formatExpressQrCountdown(qrSecondsLeft)}
                 </p>
-                {qrSecondsLeft != null && (
-                  <p className="mt-1.5 text-[9px] font-bold uppercase tracking-widest text-padel-primary">
-                    QR activo · {formatExpressQrCountdown(qrSecondsLeft)}
-                  </p>
-                )}
-              </div>
+              )}
 
               <div className="mb-1 shrink-0 rounded-xl bg-white p-2 shadow-[0_0_28px_rgba(204,255,0,0.1)] sm:rounded-2xl sm:p-2.5">
                 <QRCodeSVG
