@@ -514,7 +514,7 @@ export default function ExpressTvDisplay() {
 
       {warmupActive ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex min-h-0 flex-[1] items-center justify-center border-b border-white/5 bg-[radial-gradient(circle_at_center,_rgba(204,255,0,0.06)_0%,_transparent_65%)]">
+          <div className="flex min-h-0 flex-[1] items-center justify-center bg-[#050505]">
             <PizarraWarmupOverlay endsAt={warmupEndsAt} layout="express-top" />
           </div>
           <ExpressTvPublicidadDock

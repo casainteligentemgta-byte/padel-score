@@ -587,8 +587,11 @@ function CarouselImagePanel({
 
 export function TickerMarquee({
   messages,
+  solidBg = false,
 }: {
   messages: { id: string; mensaje: string; highlight?: boolean }[];
+  /** Express TV: mismo negro sólido que cabecera y marcador. */
+  solidBg?: boolean;
 }) {
   const stableRef = useRef(messages);
   if (messages.length > 0) {
@@ -608,7 +611,11 @@ export function TickerMarquee({
     </span>
   );
   return (
-    <div className="pizarra-ticker-bleed pizarra-ticker-bleed--flush relative z-0 box-border flex min-h-[4rem] min-w-0 flex-row items-center border-b border-white/10 bg-black/60 py-4 backdrop-blur-md sm:min-h-[4.5rem]">
+    <div
+      className={`pizarra-ticker-bleed pizarra-ticker-bleed--flush relative z-0 box-border flex min-h-[4rem] min-w-0 flex-row items-center border-b border-white/10 py-4 sm:min-h-[4.5rem] ${
+        solidBg ? 'bg-[#050505]' : 'bg-black/60 backdrop-blur-md'
+      }`}
+    >
       <div className="marquee-ticker-viewport">
         <div className="marquee-track animate-marquee">
           <div className="marquee-half">
@@ -683,7 +690,9 @@ export function PizarraScoreboardFit({
     <div
       ref={containerRef}
       className={`flex min-h-0 w-full flex-1 flex-col items-stretch justify-start px-3 pt-1 pb-2 sm:px-6 sm:pt-2 ${
-        expressMode ? 'overflow-x-hidden overflow-y-auto' : 'overflow-hidden'
+        expressMode
+          ? 'overflow-x-hidden overflow-y-auto bg-[#050505]'
+          : 'overflow-hidden'
       }`}
     >
       <div
@@ -872,9 +881,13 @@ export function PistaTopBar({
   const tempStr = tempC != null && Number.isFinite(tempC) ? `${tempC}°C` : '—';
   const metaMuted = 'text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500';
   const levelLineClass = levelLineClassName ?? metaMuted;
+  const expressSolidBar = Boolean(expressTopLeft);
+  const barShellClass = expressSolidBar
+    ? 'relative z-20 grid w-full flex-shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-3 border-b border-white/10 bg-[#050505] px-4 py-2.5 sm:gap-4 sm:px-8 sm:py-3'
+    : 'relative z-20 grid w-full flex-shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-3 border-b border-white/10 bg-black/60 px-4 py-2.5 backdrop-blur-xl sm:gap-4 sm:px-8 sm:py-3';
 
   return (
-    <div className="relative z-20 grid w-full flex-shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-3 border-b border-white/10 bg-black/60 px-4 py-2.5 backdrop-blur-xl sm:gap-4 sm:px-8 sm:py-3">
+    <div className={barShellClass}>
       <div
         className={`min-w-0 flex flex-col gap-0.5 leading-tight ${
           expressTopLeft ? 'items-start text-left' : 'items-start text-left'
@@ -986,6 +999,7 @@ export function PizarraPublicidadFooter({
   mediaScale,
   expressImageCarousel,
   tickerMessagesOverride,
+  expressSolidTicker = false,
 }: {
   canchaId: string;
   playlists: {
@@ -1005,6 +1019,8 @@ export function PizarraPublicidadFooter({
   mediaScale?: number;
   expressImageCarousel?: boolean;
   tickerMessagesOverride?: { id: string; mensaje: string }[];
+  /** Express TV: tira informativa con fondo #050505 (sin blur). */
+  expressSolidTicker?: boolean;
 }) {
   if (minimalMode) return null;
   const tickerMessages = tickerMessagesOverride ?? playlists.tickerMessages;
@@ -1024,7 +1040,7 @@ export function PizarraPublicidadFooter({
         imageCarouselIndex={playlists.imageIndex}
         imageCarouselTotal={imageTotal}
       />
-      <TickerMarquee messages={tickerMessages} />
+      <TickerMarquee messages={tickerMessages} solidBg={expressSolidTicker} />
     </>
   );
 }
