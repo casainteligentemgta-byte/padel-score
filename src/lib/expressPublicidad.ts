@@ -3,7 +3,7 @@
  * Playlists en `cancha_publicidad` con venue_name distinto al torneo para no mezclar contenidos.
  */
 
-import { expressCourtCountForClub } from '@/lib/expressVenueCourts';
+import { expressCourtCountForClub, resolveCanonicalExpressVenue } from '@/lib/expressVenueCourts';
 import { EXPRESS_TV_BRAND, expressDisplayPath, expressSlugFromDisplayNum } from '@/lib/expressSlug';
 
 /** Punto medio Unicode U+00B7 — debe coincidir con venue_name en cancha_publicidad (admin Express). */
@@ -132,10 +132,13 @@ export function expressPlaylistVenueCandidates(
   const explicit = String(explicitVenueParam || '').trim();
   if (explicit.includes('Express')) add(explicit);
 
-  const base = String(baseVenue || '').trim();
+  const baseRaw = String(baseVenue || '').trim();
+  const base = resolveCanonicalExpressVenue(baseRaw) ?? baseRaw;
   if (base) {
     add(expressPublicidadVenueName(base));
     add(base);
+    // Variante legacy con guión (por si en BD quedó "El Bodeguero - Express")
+    add(`${base} - Express`);
   }
 
   return out;

@@ -15,6 +15,7 @@ import {
 import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
 import { useCourtDisplayHeartbeat } from '@/lib/courtDisplayHeartbeat';
 import { buildExpressTvTopLeft } from '@/lib/expressDisplayHeader';
+import { resolveCanonicalExpressVenue } from '@/lib/expressVenueCourts';
 import {
   expressBaseVenueFromPublicidadVenue,
   expressPlaylistVenueCandidates,
@@ -96,8 +97,10 @@ export default function ExpressTvDisplay() {
     return () => clearInterval(id);
   }, []);
 
-  const effectiveBaseVenue =
-    urlBaseVenue || String(match?.base_venue ?? '').trim();
+  const effectiveBaseVenue = useMemo(() => {
+    const raw = urlBaseVenue || String(match?.base_venue ?? '').trim();
+    return resolveCanonicalExpressVenue(raw) ?? raw;
+  }, [urlBaseVenue, match?.base_venue]);
   const playlistVenueCandidates = useMemo(
     () =>
       expressPlaylistVenueCandidates(
@@ -324,6 +327,7 @@ export default function ExpressTvDisplay() {
           levelLine=""
           genderLine=""
           expressTopLeft={expressTopLeft}
+          suppressWaitBadge
           mode="wait"
         />
         <div
@@ -340,6 +344,7 @@ export default function ExpressTvDisplay() {
           minimalMode={minimalMode}
           mediaScale={displayMediaScale}
           tickerMessages={tickerMessages}
+          showDiagnostics={debugMode}
         />
         <PizarraDisplayGlobalStyles />
       </div>,
@@ -396,6 +401,7 @@ export default function ExpressTvDisplay() {
           minimalMode={minimalMode}
           mediaScale={match.display_media_scale}
           tickerMessages={tickerMessages}
+          showDiagnostics={debugMode}
         />
         <PizarraDisplayGlobalStyles />
       </div>,
@@ -414,6 +420,7 @@ export default function ExpressTvDisplay() {
           levelLine=""
           genderLine=""
           expressTopLeft={expressTopLeft}
+          suppressWaitBadge
           mode="wait"
         />
 
@@ -424,9 +431,6 @@ export default function ExpressTvDisplay() {
           {qrWindowOpen ? (
             <>
               <div className="shrink-0 text-center">
-                <h1 className="mb-1 text-2xl font-black italic uppercase tracking-tighter sm:text-3xl">
-                  {boardLabel}
-                </h1>
                 <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-gray-500 sm:text-xs sm:tracking-[0.35em]">
                   Escanea para iniciar el marcador
                 </p>
@@ -455,14 +459,11 @@ export default function ExpressTvDisplay() {
             </>
           ) : (
             <div className="max-w-md shrink-0 px-4 text-center">
-              <h1 className="text-2xl font-black italic uppercase tracking-tighter sm:text-3xl">
-                {boardLabel}
-              </h1>
-              <p className="mt-4 text-sm font-bold uppercase tracking-widest text-neutral-400">
-                Pantalla lista
+              <p className="text-sm font-bold uppercase tracking-widest text-neutral-400">
+                Esperando QR
               </p>
               <p className="mt-2 text-xs leading-relaxed text-neutral-500">
-                El encargado del club puede habilitar el QR desde Telegram (ventana de 5 minutos).
+                El encargado del club puede habilitar el código desde Telegram (ventana de 5 minutos).
               </p>
             </div>
           )}
@@ -476,6 +477,7 @@ export default function ExpressTvDisplay() {
           minimalMode={minimalMode}
           mediaScale={displayMediaScale}
           tickerMessages={tickerMessages}
+          showDiagnostics={debugMode}
         />
 
         <PizarraDisplayGlobalStyles />

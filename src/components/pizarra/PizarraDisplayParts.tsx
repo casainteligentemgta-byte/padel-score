@@ -23,6 +23,7 @@ import { normalizeExpressDisplayMediaScale } from '@/lib/expressDisplayMediaScal
 import { expressThirdSetModeTvLabel } from '@/lib/expressThirdSetMode';
 import { CourtAdVideoOrIframe } from '@/components/CourtAdVideoOrIframe';
 import { SmartPadelBallIcon } from '@/components/SmartPadelBallIcon';
+import { ExpressTvBrandMark } from '@/components/express/ExpressTvBrandMark';
 import { useTripleTap } from '@/lib/useTripleTap';
 
 function matchStubFromMarcadorHistorico(marcador: any) {
@@ -787,6 +788,7 @@ export function PistaTopBar({
   matchChronoCron,
   liveCenter = 'chrono',
   expressTopLeft,
+  suppressWaitBadge,
 }: {
   courtHeadline: string;
   levelLine: string;
@@ -799,8 +801,10 @@ export function PistaTopBar({
   matchChronoCron?: { elapsedSec?: number; running?: boolean; startedAt?: number | null } | null;
   /** En Express: badge EN VIVO en lugar del cronómetro. */
   liveCenter?: 'chrono' | 'badge';
-  /** Cabecera fija Express: SMARTPADEL58 · club · cancha. */
-  expressTopLeft?: { brand: string; club: string; court: string };
+  /** Cabecera fija Express: smartPADEL58 + club + cancha. */
+  expressTopLeft?: { club: string; court: string };
+  /** Express standby: sin badge «EN ESPERA» en el centro. */
+  suppressWaitBadge?: boolean;
 }) {
   const [now, setNow] = useState(() => new Date());
   const [tempC, setTempC] = useState<number | null>(null);
@@ -842,9 +846,7 @@ export function PistaTopBar({
       <div className="min-w-0 flex flex-col gap-0.5 pr-1 text-left">
         {expressTopLeft ? (
           <>
-            <span className="truncate font-outfit text-base font-bold uppercase tracking-widest text-white sm:text-lg">
-              {expressTopLeft.brand}
-            </span>
+            <ExpressTvBrandMark />
             {expressTopLeft.club ? (
               <span className="truncate text-[11px] font-black uppercase tracking-[0.12em] text-white sm:text-xs">
                 {expressTopLeft.club}
@@ -884,6 +886,8 @@ export function PistaTopBar({
               <PizarraCenterChrono cron={matchChronoCron} compact />
             )}
           </div>
+        ) : suppressWaitBadge ? (
+          <div className="h-6 w-8" aria-hidden />
         ) : (
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-500/90" />

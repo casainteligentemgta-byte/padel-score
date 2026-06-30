@@ -269,6 +269,17 @@ export async function fetchCanchaPlaylistRowsForVenues(
     const rows = (r.data as CourtPlaylistRowDb[] | null) ?? [];
     if (rows.some((x) => Boolean(x.media_content?.url))) return r;
   }
+
+  // Playlist legacy sin venue_name (admin torneo antiguo): misma cancha, sede vacía en BD.
+  const rGlobal = await fetchCanchaPlaylistRows(supabase, canchaId, null);
+  if (!rGlobal.error) {
+    const all = (rGlobal.data as CourtPlaylistRowDb[] | null) ?? [];
+    const legacy = all.filter((x) => !String(x.venue_name ?? '').trim());
+    if (legacy.some((x) => Boolean(x.media_content?.url))) {
+      return { ...rGlobal, data: legacy };
+    }
+  }
+
   const first = venueNames.map((v) => String(v ?? '').trim()).find(Boolean);
   return fetchCanchaPlaylistRows(supabase, canchaId, first || null);
 }
