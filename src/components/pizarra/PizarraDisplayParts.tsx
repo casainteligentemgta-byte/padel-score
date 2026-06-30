@@ -817,8 +817,8 @@ export function PistaTopBar({
   goldenPoint?: boolean;
   onOpenPremiumScoreboard?: () => void;
   matchChronoCron?: { elapsedSec?: number; running?: boolean; startedAt?: number | null } | null;
-  /** En Express: badge EN VIVO en lugar del cronómetro. */
-  liveCenter?: 'chrono' | 'badge';
+  /** En Express: badge EN VIVO en lugar del cronómetro; none = centro vacío (p. ej. calentamiento TV). */
+  liveCenter?: 'chrono' | 'badge' | 'none';
   /** Cabecera fija Express: smartPADEL58 + club + cancha. */
   expressTopLeft?: { club: string; court: string };
   /** Express standby: sin badge «EN ESPERA» en el centro. */
@@ -898,7 +898,9 @@ export function PistaTopBar({
                 : 'flex flex-col items-center'
             }
           >
-            {liveCenter === 'badge' ? (
+            {liveCenter === 'none' ? (
+              <div className="h-6 w-8" aria-hidden />
+            ) : liveCenter === 'badge' ? (
               <div className="flex items-center gap-2 sm:gap-3">
                 <div className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-padel-primary" />
                 <span className="text-[9px] font-black uppercase tracking-[0.35em] text-padel-primary sm:text-[10px] sm:tracking-[0.4em]">

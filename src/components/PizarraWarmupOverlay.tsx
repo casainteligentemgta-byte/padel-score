@@ -34,8 +34,8 @@ export function parseCalentamientoEndsAt(raw: unknown): number | null {
 
 type PizarraWarmupOverlayProps = {
     endsAt: number | null | undefined;
-    /** fullscreen: capa sobre el marcador; banner: franja compacta */
-    layout?: 'fullscreen' | 'banner';
+    /** fullscreen: capa sobre el marcador; banner: móvil; express-top: TV mitad superior sin tapar publicidad */
+    layout?: 'fullscreen' | 'banner' | 'express-top';
     className?: string;
 };
 
@@ -79,6 +79,22 @@ export function PizarraWarmupOverlay({
             >
                 <span className="text-xs font-black uppercase tracking-[0.25em] text-padel-primary">Calentamiento</span>
                 <span className="font-mono text-3xl font-black tabular-nums text-white">{text}</span>
+            </div>
+        );
+    }
+
+    if (layout === 'express-top') {
+        return (
+            <div className={`flex flex-col items-center justify-center px-6 text-center ${className}`}>
+                <p className="mb-3 text-sm font-black uppercase tracking-[0.35em] text-padel-primary sm:mb-4 sm:text-base sm:tracking-[0.4em]">
+                    Calentamiento
+                </p>
+                <p
+                    className="font-black tabular-nums leading-none text-white"
+                    style={{ fontSize: 'clamp(3rem, 12vw, 8rem)' }}
+                >
+                    {text}
+                </p>
             </div>
         );
     }

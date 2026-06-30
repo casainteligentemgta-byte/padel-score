@@ -15,6 +15,8 @@ type Props = {
   tickerMessages: { id: string; mensaje: string }[];
   /** overlay = absolute bottom (standby/QR); inline = flujo flex (partido en vivo). */
   layout?: 'overlay' | 'inline';
+  /** Express TV calentamiento: ocupa mitad inferior y estira vídeo/imágenes. */
+  fillHeight?: boolean;
   /** Solo en ?debug=1: aviso técnico mínimo al pie del dock. */
   showDiagnostics?: boolean;
 };
@@ -54,6 +56,7 @@ export function ExpressTvPublicidadDock({
   tickerMessages,
   layout = 'overlay',
   showDiagnostics = false,
+  fillHeight = false,
 }: Props) {
   const expressVenueName = expressPublicidadVenueName(baseVenue);
 
@@ -78,7 +81,9 @@ export function ExpressTvPublicidadDock({
 
   const shellClass =
     layout === 'inline'
-      ? 'relative z-10 w-full min-w-0 max-w-none flex-shrink-0 overflow-hidden border-t border-white/10 bg-[#050505]'
+      ? fillHeight
+        ? 'relative z-10 flex min-h-0 w-full min-w-0 max-w-none flex-1 flex-col overflow-hidden border-t border-white/10 bg-[#050505]'
+        : 'relative z-10 w-full min-w-0 max-w-none flex-shrink-0 overflow-hidden border-t border-white/10 bg-[#050505]'
       : 'absolute bottom-0 left-0 right-0 z-20 flex w-full min-w-0 max-w-none flex-col items-stretch border-t border-white/10 bg-[#050505]';
 
   return (

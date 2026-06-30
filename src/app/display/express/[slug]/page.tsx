@@ -44,6 +44,7 @@ import { ExpressSideChangeBanner } from '@/components/express/ExpressSideChangeB
 import { PizarraWarmupOverlay } from '@/components/PizarraWarmupOverlay';
 import {
   expressIsSideChangeVisible,
+  expressIsWarmupActive,
   expressMatchChronoCron,
   expressMatchEndedSummary,
   expressWarmupEndsAtMs,
@@ -383,6 +384,7 @@ export default function ExpressTvDisplay() {
   const qrSecondsLeft = expressQrWindowSecondsLeft(match, qrTick);
   const endedSummary = expressMatchEndedSummary(match);
   const warmupEndsAt = match ? expressWarmupEndsAtMs(match) : null;
+  const warmupActive = match ? expressIsWarmupActive(match, uiTick) : false;
   const sideChangeVisible = match ? expressIsSideChangeVisible(match, uiTick) : false;
   const matchChronoCron = match ? expressMatchChronoCron(match) : null;
 
@@ -502,57 +504,79 @@ export default function ExpressTvDisplay() {
 
   return wrapGate(
     <div className="relative flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-hidden bg-[#050505] font-outfit text-white select-none">
-      <PizarraWarmupOverlay endsAt={warmupEndsAt} layout="fullscreen" />
-      <ExpressSideChangeBanner visible={sideChangeVisible} layout="tv" />
+      <ExpressSideChangeBanner visible={sideChangeVisible && !warmupActive} layout="tv" />
       <PistaTopBar
         courtHeadline=""
         levelLine=""
         genderLine=""
         expressTopLeft={expressTopLeft}
         mode="live"
-        goldenPoint={match.punto_de_oro}
-        liveCenter="chrono"
+        goldenPoint={match.punto_de_oro && !warmupActive}
+        liveCenter={warmupActive ? 'none' : 'chrono'}
         matchChronoCron={matchChronoCron}
       />
 
-      {match.modo_puntos === 'tiebreak' && (
-        <div className="flex shrink-0 items-center justify-center gap-2 border-b border-red-500/20 bg-red-500/10 py-1">
-          <Zap className="h-3.5 w-3.5 text-red-400" />
-          <span className="text-[9px] font-black uppercase tracking-[0.3em] text-red-400">Tie-break</span>
+      {warmupActive ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-[1] items-center justify-center border-b border-white/5 bg-[radial-gradient(circle_at_center,_rgba(204,255,0,0.06)_0%,_transparent_65%)]">
+            <PizarraWarmupOverlay endsAt={warmupEndsAt} layout="express-top" />
+          </div>
+          <ExpressTvPublicidadDock
+            layout="inline"
+            fillHeight
+            canchaId={canchaId}
+            baseVenue={effectiveBaseVenue}
+            playlistVenue={playlistVenue}
+            playlists={playlists}
+            minimalMode={minimalMode}
+            mediaScale={match.display_media_scale}
+            tickerMessages={tickerMessages}
+            showDiagnostics={debugMode}
+          />
         </div>
+      ) : (
+        <>
+          {match.modo_puntos === 'tiebreak' && (
+            <div className="flex shrink-0 items-center justify-center gap-2 border-b border-red-500/20 bg-red-500/10 py-1">
+              <Zap className="h-3.5 w-3.5 text-red-400" />
+              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-red-400">Tie-break</span>
+            </div>
+          )}
+
+          {match.modo_puntos === 'super_tiebreak' && (
+            <div className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-500/20 bg-amber-500/10 py-1">
+              <Zap className="h-3.5 w-3.5 text-amber-400" />
+              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-amber-400">
+                Súper tie-break
+              </span>
+            </div>
+          )}
+
+          <PizarraScoreboardFit expressMode>
+            <div className="flex w-full min-h-0 flex-col items-center gap-2 overflow-visible px-1 pt-0">
+              {marcador ? (
+                <PizarraTableScoreboard
+                  marcador={marcador}
+                  playerNameScale={match.display_name_scale}
+                  expressFullPlayerNames
+                />
+              ) : null}
+            </div>
+          </PizarraScoreboardFit>
+
+          <ExpressTvPublicidadDock
+            layout="inline"
+            canchaId={canchaId}
+            baseVenue={effectiveBaseVenue}
+            playlistVenue={playlistVenue}
+            playlists={playlists}
+            minimalMode={minimalMode}
+            mediaScale={match.display_media_scale}
+            tickerMessages={tickerMessages}
+            showDiagnostics={debugMode}
+          />
+        </>
       )}
-
-      {match.modo_puntos === 'super_tiebreak' && (
-        <div className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-500/20 bg-amber-500/10 py-1">
-          <Zap className="h-3.5 w-3.5 text-amber-400" />
-          <span className="text-[9px] font-black uppercase tracking-[0.3em] text-amber-400">
-            Súper tie-break
-          </span>
-        </div>
-      )}
-
-      <PizarraScoreboardFit expressMode>
-        <div className="flex w-full min-h-0 flex-col items-center gap-2 overflow-visible px-1 pt-0">
-          {marcador ? (
-            <PizarraTableScoreboard
-              marcador={marcador}
-              playerNameScale={match.display_name_scale}
-              expressFullPlayerNames
-            />
-          ) : null}
-        </div>
-      </PizarraScoreboardFit>
-
-      <ExpressTvPublicidadDock
-        layout="inline"
-        canchaId={canchaId}
-        baseVenue={effectiveBaseVenue}
-        playlistVenue={playlistVenue}
-        playlists={playlists}
-        minimalMode={minimalMode}
-        mediaScale={match.display_media_scale}
-        tickerMessages={tickerMessages}
-      />
 
       <PizarraDisplayGlobalStyles />
     </div>,
