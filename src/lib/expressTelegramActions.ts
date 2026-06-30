@@ -1,9 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { buildExpressSessionReset } from '@/lib/expressScoring';
 import {
   findExpressMatchByCourt,
   updateExpressMatchByCourt,
 } from '@/lib/expressMatchDb';
+import {
+  expressBoardResetUserMessage,
+  resetExpressBoardForTelegram,
+} from '@/lib/expressTelegramReset';
 import {
   clampCourtNumbersForClub,
   expressCourtNumbersForClub,
@@ -118,24 +121,20 @@ export async function applyExpressBoardReset(
   }
 
   const venue = resolveClubVenue(clubSlug);
-  const reset = buildExpressSessionReset(crypto.randomUUID());
-  const qrExpiresAt = new Date(Date.now() + QR_WINDOW_MS).toISOString();
-
-  const result = await updateExpressMatchByCourt(supabase, courtNumber, {
-    ...reset,
-    base_venue: venue,
-    qr_expires_at: qrExpiresAt,
-  });
+  const result = await resetExpressBoardForTelegram(supabase, courtNumber, venue);
 
   if (!result.ok) {
     console.error('[expressTelegram] reset:', result.message);
-    return { ok: false, message: `Error al resetear la cancha: ${result.message}` };
+    return {
+      ok: false,
+      message: expressBoardResetUserMessage(result, courtNumber, QR_WINDOW_LABEL),
+    };
   }
 
   return {
     ok: true,
     courtNumber,
-    message: `🔄 Cancha ${courtNumber} reseteada · QR activo ${QR_WINDOW_LABEL}`,
+    message: expressBoardResetUserMessage(result, courtNumber, QR_WINDOW_LABEL),
   };
 }
 

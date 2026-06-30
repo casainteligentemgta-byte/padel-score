@@ -19,6 +19,11 @@ export function expressCanonicalCanchaCode(courtNumber: string): string {
   return expressSlugFromCourtNumber(courtNumber);
 }
 
+export function expressLegacyCanchaCode(courtNumber: string): string {
+  const n = courtNumFromExpressSlug(expressSlugFromCourtNumber(courtNumber));
+  return n ? `fast-${n}` : '';
+}
+
 /** Busca fila express por número de cancha (soporta legacy fast-N). */
 export async function findExpressMatchByCourt(
   supabase: SupabaseClient,
@@ -54,17 +59,71 @@ const OPTIONAL_EXPRESS_COLUMNS = [
   'side_change_until',
 ] as const;
 
-function stripOptionalExpressColumns<T extends Record<string, unknown>>(payload: T): T {
+const EXTENDED_EXPRESS_COLUMNS = [
+  ...OPTIONAL_EXPRESS_COLUMNS,
+  'team_a_p1_first',
+  'team_a_p1_last',
+  'team_a_p2_first',
+  'team_a_p2_last',
+  'team_b_p1_first',
+  'team_b_p1_last',
+  'team_b_p2_first',
+  'team_b_p2_last',
+  'base_venue',
+  'qr_expires_at',
+  'display_name_scale',
+  'display_media_scale',
+  'display_ticker_phrases',
+] as const;
+
+function stripColumns<T extends Record<string, unknown>>(
+  payload: T,
+  keys: readonly string[],
+): T {
   const next = { ...payload };
-  for (const key of OPTIONAL_EXPRESS_COLUMNS) {
+  for (const key of keys) {
     delete next[key];
   }
   return next;
 }
 
+function stripOptionalExpressColumns<T extends Record<string, unknown>>(payload: T): T {
+  return stripColumns(payload, OPTIONAL_EXPRESS_COLUMNS);
+}
+
+function stripExtendedExpressColumns<T extends Record<string, unknown>>(payload: T): T {
+  return stripColumns(payload, EXTENDED_EXPRESS_COLUMNS);
+}
+
 function isMissingColumnError(message: string): boolean {
   const m = message.toLowerCase();
   return m.includes('column') && (m.includes('does not exist') || m.includes('could not find'));
+}
+
+function isCanchaCodeConstraintError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('cancha_code') &&
+    (m.includes('check constraint') ||
+      m.includes('violates check') ||
+      m.includes('express_matches_cancha_code'))
+  );
+}
+
+function insertCanchaCodesForCourt(courtNumber: string): string[] {
+  const canonical = expressCanonicalCanchaCode(courtNumber);
+  const legacy = expressLegacyCanchaCode(courtNumber);
+  if (!canonical) return [];
+  return legacy && legacy !== canonical ? [canonical, legacy] : [canonical];
+}
+
+function payloadForCourtAttempt(
+  updates: Record<string, unknown>,
+  attempt: number,
+): Record<string, unknown> {
+  if (attempt === 0) return { ...updates };
+  if (attempt === 1) return stripOptionalExpressColumns(updates);
+  return stripExtendedExpressColumns(updates);
 }
 
 /**
@@ -78,7 +137,9 @@ export async function updateExpressMatchBySession(
 ): Promise<ExpressSessionUpdateResult> {
   let payload: Record<string, unknown> = { ...updates };
 
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    payload = payloadForCourtAttempt(updates as Record<string, unknown>, attempt);
+
     const { data, error } = await supabase
       .from('express_matches')
       .update(payload)
@@ -87,8 +148,7 @@ export async function updateExpressMatchBySession(
       .maybeSingle();
 
     if (error) {
-      if (attempt === 0 && isMissingColumnError(error.message)) {
-        payload = stripOptionalExpressColumns(payload);
+      if (attempt < 2 && isMissingColumnError(error.message)) {
         continue;
       }
       return { ok: false, reason: 'error', message: error.message };
@@ -113,7 +173,8 @@ export type ExpressCourtUpdateResult =
   | { ok: false; message: string };
 
 /**
- * UPDATE por cancha (Telegram). Migra fast-N → scan-go-N si aplica.
+ * UPDATE por cancha (Telegram). Conserva cancha_code existente (fast-N o scan-go-N).
+ * Reintenta con menos columnas y con slug legacy si el esquema aún no migró a scan-go.
  */
 export async function updateExpressMatchByCourt(
   supabase: SupabaseClient,
@@ -126,24 +187,31 @@ export async function updateExpressMatchByCourt(
     return { ok: false, message: 'Cancha inválida.' };
   }
 
-  let payload: Record<string, unknown> = { ...updates };
-  if (existing && String(existing.cancha_code ?? '') !== targetCode) {
-    payload.cancha_code = targetCode;
-  }
-
   const rowId = existing?.id ? String(existing.id) : null;
+  const insertCodes = insertCanchaCodesForCourt(courtNumber);
+  const maxAttempts = rowId ? 3 : Math.max(3, insertCodes.length * 3);
+  let lastMessage = 'No se pudo actualizar la cancha.';
 
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const payload = payloadForCourtAttempt(updates as Record<string, unknown>, attempt % 3);
+    const insertCode = insertCodes[Math.floor(attempt / 3)] ?? insertCodes[insertCodes.length - 1];
+
     const query = rowId
       ? supabase.from('express_matches').update(payload).eq('id', rowId)
-      : supabase.from('express_matches').insert([{ ...payload, cancha_code: targetCode }]);
+      : supabase
+          .from('express_matches')
+          .insert([{ ...payload, cancha_code: insertCode }]);
 
     const { data, error } = await (rowId ? query.select('*').maybeSingle() : query.select('*').single());
 
     if (error) {
-      if (attempt === 0 && isMissingColumnError(error.message)) {
-        payload = stripOptionalExpressColumns(payload);
-        if (!rowId) payload.cancha_code = targetCode;
+      lastMessage = error.message;
+      const canRetryColumns = attempt % 3 < 2 && isMissingColumnError(error.message);
+      const canRetryLegacyInsert =
+        !rowId &&
+        isCanchaCodeConstraintError(error.message) &&
+        attempt < maxAttempts - 1;
+      if (canRetryColumns || canRetryLegacyInsert) {
         continue;
       }
       return { ok: false, message: error.message };
@@ -156,7 +224,7 @@ export async function updateExpressMatchByCourt(
     return { ok: true, match: normalizeExpressMatch(data as Record<string, unknown>) };
   }
 
-  return { ok: false, message: 'No se pudo actualizar la cancha.' };
+  return { ok: false, message: lastMessage };
 }
 
 /** Normaliza slug de ruta / filtro realtime. */
