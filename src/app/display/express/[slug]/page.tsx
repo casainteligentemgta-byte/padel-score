@@ -407,6 +407,7 @@ export default function ExpressTvDisplay() {
               marcador={marcador}
               playerNameScale={match.display_name_scale}
               expressFullPlayerNames
+              expressFlatPanel
             />
           </div>
         </PizarraScoreboardFit>
@@ -554,6 +555,7 @@ export default function ExpressTvDisplay() {
                   marcador={marcador}
                   playerNameScale={match.display_name_scale}
                   expressFullPlayerNames
+                  expressFlatPanel
                 />
               ) : null}
             </div>

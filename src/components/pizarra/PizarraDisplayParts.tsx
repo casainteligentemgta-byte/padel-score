@@ -294,20 +294,24 @@ function ScoreCell({
   children,
   color,
   displayScale,
+  flat = false,
 }: {
   children: React.ReactNode;
   color: string;
   /** Solo Express: misma escala que nombres de jugadores. */
   displayScale?: number;
+  /** Express TV: sin caja de fondo en cifras. */
+  flat?: boolean;
 }) {
   const scaled = displayScale != null && displayScale > 0;
+  const boxClass = flat
+    ? 'inline-flex w-full min-w-0 max-w-full items-center justify-center px-1 py-0.5 font-mono font-black tabular-nums sm:px-1.5'
+    : scaled
+      ? 'inline-flex w-full min-w-0 max-w-full items-center justify-center rounded border border-white/20 bg-black/50 px-1 py-0.5 font-mono font-black tabular-nums sm:px-1.5'
+      : 'inline-flex w-full min-w-0 max-w-full items-center justify-center rounded border border-white/20 bg-black/50 px-1 py-0.5 font-mono text-[11px] font-black tabular-nums sm:px-1.5 sm:text-xs md:text-sm';
   return (
     <span
-      className={
-        scaled
-          ? 'inline-flex w-full min-w-0 max-w-full items-center justify-center rounded border border-white/20 bg-black/50 px-1 py-0.5 font-mono font-black tabular-nums sm:px-1.5'
-          : 'inline-flex w-full min-w-0 max-w-full items-center justify-center rounded border border-white/20 bg-black/50 px-1 py-0.5 font-mono text-[11px] font-black tabular-nums sm:px-1.5 sm:text-xs md:text-sm'
-      }
+      className={boxClass}
       style={{
         color,
         ...(scaled
@@ -334,12 +338,15 @@ export function PizarraTableScoreboard({
   marcador,
   playerNameScale,
   expressFullPlayerNames = false,
+  expressFlatPanel = false,
 }: {
   marcador: any;
   /** Solo Express: multiplicador tamaño nombres, cabeceras y cifras (0.85–3). */
   playerNameScale?: number;
   /** Express: muestra nombre y apellido completos (sin abreviar). */
   expressFullPlayerNames?: boolean;
+  /** Express TV: sin panel semitransparente; fondo negro de la pantalla. */
+  expressFlatPanel?: boolean;
 }) {
   const setsL = Number(marcador.sets?.local ?? 0) || 0;
   const setsV = Number(marcador.sets?.visitante ?? 0) || 0;
@@ -405,7 +412,7 @@ export function PizarraTableScoreboard({
             className={scaledBoard ? 'flex shrink-0 justify-center' : `flex justify-center ${colSet}`}
             style={scaledBoard ? expressColSetStyle(boardScale) : undefined}
           >
-            <ScoreCell color={color} displayScale={playerNameScale}>
+            <ScoreCell color={color} displayScale={playerNameScale} flat={expressFlatPanel}>
               {v}
             </ScoreCell>
           </div>
@@ -415,16 +422,23 @@ export function PizarraTableScoreboard({
         className={scaledBoard ? 'flex shrink-0 justify-center' : `flex justify-center ${colPts}`}
         style={scaledBoard ? expressColPtsStyle(boardScale) : undefined}
       >
-        <ScoreCell color={color} displayScale={playerNameScale}>
+        <ScoreCell color={color} displayScale={playerNameScale} flat={expressFlatPanel}>
           {pts}
         </ScoreCell>
       </div>
     </div>
   );
 
+  const panelClass = expressFlatPanel
+    ? 'w-full px-3 py-3 sm:px-5 sm:py-4'
+    : 'w-full rounded-2xl border border-white/10 bg-black/45 px-3 py-3 shadow-[0_0_40px_rgba(0,0,0,0.5)] backdrop-blur-sm sm:px-5 sm:py-4';
+  const teamRowDividerClass = expressFlatPanel
+    ? 'flex w-full min-w-0 items-start gap-2 pb-3 sm:gap-3 sm:pb-3.5'
+    : 'flex w-full min-w-0 items-start gap-2 border-b border-white/20 pb-3 sm:gap-3 sm:pb-3.5';
+
   return (
     <div className="w-full max-w-5xl">
-      <div className="w-full rounded-2xl border border-white/10 bg-black/45 px-3 py-3 shadow-[0_0_40px_rgba(0,0,0,0.5)] backdrop-blur-sm sm:px-5 sm:py-4">
+      <div className={panelClass}>
       <div className="flex w-full min-w-0 items-end gap-2 pb-2 sm:gap-3">
         <div className="min-w-0 flex-1" />
         <div className="flex shrink-0 items-end gap-0.5 sm:gap-1">
@@ -468,7 +482,7 @@ export function PizarraTableScoreboard({
         </div>
       </div>
 
-      <div className="flex w-full min-w-0 items-start gap-2 border-b border-white/20 pb-3 sm:gap-3 sm:pb-3.5">
+      <div className={teamRowDividerClass}>
         <div className="min-w-0 flex-1 text-left">
           <TeamNamesWithServe
             marcador={marcador}
