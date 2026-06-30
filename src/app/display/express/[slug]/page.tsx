@@ -339,7 +339,7 @@ export default function ExpressTvDisplay() {
 
   if (loadState === 'loading') {
     return wrapGate(
-      <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-hidden bg-[#050505] font-outfit text-white">
+      <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-hidden bg-black font-outfit text-white">
         <PistaTopBar
           courtHeadline=""
           levelLine=""
@@ -364,14 +364,14 @@ export default function ExpressTvDisplay() {
           tickerMessages={tickerMessages}
           showDiagnostics={debugMode}
         />
-        <PizarraDisplayGlobalStyles />
+        <PizarraDisplayGlobalStyles bodyBackground="#000000" />
       </div>,
     );
   }
 
   if (loadState === 'error' || !match) {
     return wrapGate(
-      <div className="flex h-screen flex-col items-center justify-center bg-[#050505] px-6 text-center text-white">
+      <div className="flex h-screen flex-col items-center justify-center bg-black px-6 text-center text-white">
         <p className="mb-2 text-sm font-bold uppercase tracking-widest text-padel-primary">Express Match</p>
         <p className="max-w-md text-sm text-neutral-400">
           {errorMessage || 'No se pudo cargar el marcador de esta cancha.'}
@@ -390,7 +390,7 @@ export default function ExpressTvDisplay() {
 
   if (endedSummary && marcador) {
     return wrapGate(
-      <div className="relative flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-hidden bg-[#050505] font-outfit text-white select-none">
+      <div className="relative flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-hidden bg-black font-outfit text-white select-none">
         <PistaTopBar
           courtHeadline=""
           levelLine=""
@@ -423,7 +423,7 @@ export default function ExpressTvDisplay() {
           tickerMessages={tickerMessages}
           showDiagnostics={debugMode}
         />
-        <PizarraDisplayGlobalStyles />
+        <PizarraDisplayGlobalStyles bodyBackground="#000000" />
       </div>,
     );
   }
@@ -432,7 +432,7 @@ export default function ExpressTvDisplay() {
     const controlUrl = `${getExpressAppBaseUrl()}/express/control/${match.session_id}`;
 
     return wrapGate(
-      <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-hidden bg-[#050505] font-outfit text-white">
+      <div className="relative flex h-screen w-full max-w-none min-w-0 flex-col overflow-hidden bg-black font-outfit text-white">
         <div className="pointer-events-none absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_center,_#ccff00_0%,_transparent_70%)]" />
 
         <PistaTopBar
@@ -493,13 +493,13 @@ export default function ExpressTvDisplay() {
           showDiagnostics={debugMode}
         />
 
-        <PizarraDisplayGlobalStyles />
+        <PizarraDisplayGlobalStyles bodyBackground="#000000" />
       </div>,
     );
   }
 
   return wrapGate(
-    <div className="relative flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-hidden bg-[#050505] font-outfit text-white select-none">
+    <div className="relative flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col items-stretch overflow-hidden bg-black font-outfit text-white select-none">
       <ExpressSideChangeBanner visible={sideChangeVisible && !warmupActive} layout="tv" />
       <PistaTopBar
         courtHeadline=""
@@ -514,7 +514,7 @@ export default function ExpressTvDisplay() {
 
       {warmupActive ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex min-h-0 flex-[1] items-center justify-center bg-[#050505]">
+          <div className="flex min-h-0 flex-[1] items-center justify-center bg-black">
             <PizarraWarmupOverlay endsAt={warmupEndsAt} layout="express-top" />
           </div>
           <ExpressTvPublicidadDock
@@ -575,7 +575,7 @@ export default function ExpressTvDisplay() {
         </>
       )}
 
-      <PizarraDisplayGlobalStyles />
+      <PizarraDisplayGlobalStyles bodyBackground="#000000" />
     </div>,
   );
 }

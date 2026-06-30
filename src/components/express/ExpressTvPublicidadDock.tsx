@@ -82,9 +82,9 @@ export function ExpressTvPublicidadDock({
   const shellClass =
     layout === 'inline'
       ? fillHeight
-        ? 'relative z-10 flex min-h-0 w-full min-w-0 max-w-none flex-1 flex-col overflow-hidden bg-[#050505]'
-        : 'relative z-10 w-full min-w-0 max-w-none flex-shrink-0 overflow-hidden bg-[#050505]'
-      : 'absolute bottom-0 left-0 right-0 z-20 flex w-full min-w-0 max-w-none flex-col items-stretch bg-[#050505]';
+        ? 'relative z-10 flex min-h-0 w-full min-w-0 max-w-none flex-1 flex-col overflow-hidden bg-black'
+        : 'relative z-10 w-full min-w-0 max-w-none flex-shrink-0 overflow-hidden bg-black'
+      : 'absolute bottom-0 left-0 right-0 z-20 flex w-full min-w-0 max-w-none flex-col items-stretch bg-black';
 
   return (
     <div className={shellClass}>

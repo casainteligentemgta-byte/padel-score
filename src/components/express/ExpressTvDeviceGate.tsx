@@ -109,7 +109,7 @@ export function ExpressTvDeviceGate({ clubSlug, expressSlug, children }: Props) 
 
   if (status === 'checking' || status === 'idle') {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#050505] text-white">
+      <div className="flex h-screen items-center justify-center bg-black text-white">
         <p className="text-sm font-bold uppercase tracking-widest text-padel-primary">
           Verificando pantalla…
         </p>
@@ -119,7 +119,7 @@ export function ExpressTvDeviceGate({ clubSlug, expressSlug, children }: Props) 
 
   if (status === 'pending_pin' || status === 'error') {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-6 bg-[#050505] px-6 text-white">
+      <div className="flex h-screen flex-col items-center justify-center gap-6 bg-black px-6 text-white">
         <div className="text-center">
           <p className="text-xs font-black uppercase tracking-[0.35em] text-padel-primary">
             Activación de pantalla

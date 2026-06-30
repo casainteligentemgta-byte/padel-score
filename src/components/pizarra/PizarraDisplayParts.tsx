@@ -553,7 +553,7 @@ function CarouselImagePanel({
   const fitClass = expressMode ? 'object-cover object-center' : 'object-contain object-center';
 
   return (
-    <div className="relative h-full w-full min-h-0 min-w-0 overflow-hidden bg-[#0a0a0a]">
+    <div className={`relative h-full w-full min-h-0 min-w-0 overflow-hidden ${expressMode ? 'bg-black' : 'bg-[#0a0a0a]'}`}>
       {expressMode ? (
         <div
           className="pointer-events-none absolute inset-0 scale-110 opacity-30 blur-2xl"
@@ -613,7 +613,7 @@ export function TickerMarquee({
   return (
     <div
       className={`pizarra-ticker-bleed pizarra-ticker-bleed--flush relative z-0 box-border flex min-h-[4rem] min-w-0 flex-row items-center border-b border-white/10 py-4 sm:min-h-[4.5rem] ${
-        solidBg ? 'bg-[#050505]' : 'bg-black/60 backdrop-blur-md'
+        solidBg ? 'bg-black' : 'bg-black/60 backdrop-blur-md'
       }`}
     >
       <div className="marquee-ticker-viewport">
@@ -691,7 +691,7 @@ export function PizarraScoreboardFit({
       ref={containerRef}
       className={`flex min-h-0 w-full flex-1 flex-col items-stretch justify-start px-3 pt-1 pb-2 sm:px-6 sm:pt-2 ${
         expressMode
-          ? 'overflow-x-hidden overflow-y-auto bg-[#050505]'
+          ? 'overflow-x-hidden overflow-y-auto bg-black'
           : 'overflow-hidden'
       }`}
     >
@@ -883,7 +883,7 @@ export function PistaTopBar({
   const levelLineClass = levelLineClassName ?? metaMuted;
   const expressSolidBar = Boolean(expressTopLeft);
   const barShellClass = expressSolidBar
-    ? 'relative z-20 grid w-full flex-shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-3 border-b border-white/10 bg-[#050505] px-4 py-2.5 sm:gap-4 sm:px-8 sm:py-3'
+    ? 'relative z-20 grid w-full flex-shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-3 border-b border-white/10 bg-black px-4 py-2.5 sm:gap-4 sm:px-8 sm:py-3'
     : 'relative z-20 grid w-full flex-shrink-0 grid-cols-[1fr_auto_1fr] items-start gap-3 border-b border-white/10 bg-black/60 px-4 py-2.5 backdrop-blur-xl sm:gap-4 sm:px-8 sm:py-3';
 
   return (
@@ -976,7 +976,7 @@ export function PistaTopBar({
   );
 }
 
-export function PizarraDisplayGlobalStyles() {
+export function PizarraDisplayGlobalStyles({ bodyBackground = '#050505' }: { bodyBackground?: string } = {}) {
   return (
     <style jsx global>{`
       @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
@@ -984,7 +984,7 @@ export function PizarraDisplayGlobalStyles() {
         font-family: 'Outfit', sans-serif;
       }
       body {
-        background: #050505;
+        background: ${bodyBackground};
         margin: 0;
         overflow: hidden;
       }
@@ -1019,7 +1019,7 @@ export function PizarraPublicidadFooter({
   mediaScale?: number;
   expressImageCarousel?: boolean;
   tickerMessagesOverride?: { id: string; mensaje: string }[];
-  /** Express TV: tira informativa con fondo #050505 (sin blur). */
+  /** Express TV: tira informativa con fondo negro puro (sin blur). */
   expressSolidTicker?: boolean;
 }) {
   if (minimalMode) return null;
