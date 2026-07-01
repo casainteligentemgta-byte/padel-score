@@ -1,5 +1,9 @@
 import { generateRotativeRotation, validateMatchScores } from '../src/lib/americano/logic.ts';
 import { generateBalancedRotation } from '../src/lib/americano/socialGolfer.ts';
+import {
+  isAmericanoMatchComplete,
+  nextAmericanoScore,
+} from '../src/lib/americano/americanoScoring.ts';
 import { ScheduleEngine } from '../src/services/ScheduleEngine.ts';
 import { flattenPlayersFromTeams } from '../src/lib/americano/tournamentBridge.ts';
 import { TournamentType } from '../src/types/tournament.ts';
@@ -70,6 +74,16 @@ function testScheduleEngine() {
   assert(Boolean(schedule.matches[0].playerA1Id), 'partido con 4 jugadores');
 }
 
+function testTactileScoring() {
+  const base = { scoreA: 20, scoreB: 18, pointsGoal: 24 as const };
+  const inc = nextAmericanoScore(base, 'a', 'increment');
+  assert(inc?.scoreA === 21, 'increment team A');
+  assert(isAmericanoMatchComplete({ scoreA: 24, scoreB: 20, pointsGoal: 24 }), '24-20 completo');
+  assert(!isAmericanoMatchComplete({ scoreA: 23, scoreB: 20, pointsGoal: 24 }), '23-20 incompleto');
+  assert(nextAmericanoScore({ scoreA: 0, scoreB: 0, pointsGoal: 24 }, 'a', 'decrement') === null, 'no negativos');
+}
+
 testRotation();
 testScheduleEngine();
+testTactileScoring();
 console.log('test-americano-rotation: OK');

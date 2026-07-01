@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { ExpressTvPublicidadDock } from '@/components/express/ExpressTvPublicidadDock';
+import { AmericanoCourtLivePanel } from '@/components/americano/AmericanoCourtLivePanel';
 import { AmericanoLeaderboard } from '@/components/americano/AmericanoLeaderboard';
 import { useAmericanoRealtime } from '@/lib/americano/useAmericanoRealtime';
 import { useCourtPlaylists } from '@/lib/useCourtPlaylists';
@@ -11,6 +12,8 @@ type Props = {
   baseVenue: string;
   /** Cancha para playlists de publicidad (reutiliza cancha_publicidad existente). */
   canchaId?: string;
+  /** Si se indica, muestra marcador en vivo de esa cancha arriba del ranking. */
+  highlightCourt?: number;
   showDiagnostics?: boolean;
 };
 
@@ -18,6 +21,7 @@ export function AmericanoTvLayout({
   sessionId,
   baseVenue,
   canchaId = 'cancha_1',
+  highlightCourt,
   showDiagnostics = false,
 }: Props) {
   const { loading, error, bundle } = useAmericanoRealtime(sessionId);
@@ -28,6 +32,7 @@ export function AmericanoTvLayout({
   const sessionName = bundle?.session.name;
   const pointsGoal = bundle?.session.pointsGoal;
   const players = bundle?.players ?? [];
+  const matches = bundle?.matches ?? [];
 
   const statusLine = useMemo(() => {
     if (loading) return 'Cargando clasificación…';
@@ -38,6 +43,15 @@ export function AmericanoTvLayout({
   return (
     <div className="relative flex h-screen min-h-0 w-full max-w-none min-w-0 flex-col overflow-hidden bg-black font-outfit text-white select-none">
       <div className="flex min-h-0 flex-1 flex-col">
+        {highlightCourt != null && highlightCourt >= 1 && bundle ? (
+          <AmericanoCourtLivePanel
+            matches={matches}
+            players={players}
+            courtNumber={highlightCourt}
+            pointsGoal={pointsGoal}
+          />
+        ) : null}
+
         <div className="flex min-h-0 flex-[1] flex-col overflow-hidden border-b border-white/10">
           {statusLine && !bundle ? (
             <div className="flex h-full items-center justify-center px-4 text-center text-sm text-neutral-400">

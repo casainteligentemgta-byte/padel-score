@@ -18,6 +18,8 @@ Producción (`main` / smartpadel58.com) **no** incluye este módulo hasta merge 
 | UI laboratorio | `/americano` | ✅ |
 | Control admin | `/americano/session/[sessionId]` | ✅ |
 | Pantalla TV | `/americano/tv/[sessionId]` | ✅ |
+| Marcador táctil por cancha | `/americano/marker/[sessionId]/[courtNumber]` | ✅ |
+| TV con marcador en vivo | `/americano/tv/[sessionId]?court=N` | ✅ |
 | Ranking acumulado | leaderboard + puntos por partido | ✅ |
 | Integración torneos legacy | `AMERICANO_INDIVIDUAL` en ScheduleEngine + puente `tournament_id` | ✅ (rama staging) |
 
@@ -32,7 +34,8 @@ Producción (`main` / smartpadel58.com) **no** incluye este módulo hasta merge 
 URLs:
 
 - Control: `/americano/session/{uuid}`
-- TV: `/americano/tv/{uuid}` (publicidad vía `ExpressTvPublicidadDock` + sede del evento)
+- Marcador táctil: `/americano/marker/{uuid}/{cancha}` (ej. cancha 1, 2…)
+- TV: `/americano/tv/{uuid}` · TV cancha: `?court=1&complex=...`
 
 ## Flujo de trabajo
 
@@ -52,8 +55,8 @@ git push origin main      # producción cuando esté listo
 - [x] Auth en server actions + RLS lectura pública
 - [x] Corrección de resultados + recálculo de puntos
 - [x] Podio / informe Telegram al cerrar sesión
+- [x] Marcador táctil por cancha
 - [ ] Exportar PDF / compartir WhatsApp del cuadrante
-- [ ] Marcador táctil por cancha (opcional; hoy se cargan resultados en el panel)
 
 ## Algoritmo de rotación (v1)
 

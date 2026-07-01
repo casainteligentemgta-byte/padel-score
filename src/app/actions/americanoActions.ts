@@ -11,6 +11,10 @@ import { requireAmericanoManager } from '@/lib/americano/americanoAuth';
 import { syncAmericanoSessionToTournament } from '@/lib/americano/americanoSync';
 import { notifyAmericanoSessionFinished } from '@/lib/americano/americanoTelegram';
 import {
+  isAmericanoMatchComplete,
+  nextAmericanoScore,
+} from '@/lib/americano/americanoScoring';
+import {
   flattenPlayersFromTeams,
   normalizeAmericanoPointsGoal,
 } from '@/lib/americano/tournamentBridge';
@@ -425,10 +429,115 @@ async function applyMatchScores(
   return { ok: true, data: { sessionId } };
 }
 
-function revalidateAfterMatch(sessionId: string, tournamentId?: string | null) {
+function revalidateAfterMatch(sessionId: string, tournamentId?: string | null, courtNumber?: number) {
   revalidatePath(`/americano/session/${sessionId}`);
   revalidatePath(`/americano/tv/${sessionId}`);
+  if (courtNumber != null) {
+    revalidatePath(`/americano/marker/${sessionId}/${courtNumber}`);
+  }
   if (tournamentId) revalidatePath(`/tournaments/${tournamentId}`);
+}
+
+/**
+ * Marcador táctil por cancha (sin auth — mismo criterio que Express control).
+ * Actualiza marcador en vivo; al llegar a pointsGoal finaliza y suma puntos.
+ */
+export async function tapAmericanoScore(input: {
+  matchId: string;
+  team: 'a' | 'b';
+  action: 'increment' | 'decrement';
+}): Promise<ActionResult<{ finished: boolean; scoreA: number; scoreB: number }>> {
+  const matchId = String(input.matchId || '').trim();
+  if (!matchId) {
+    return { ok: false, error: 'Partido no indicado.' };
+  }
+
+  const supabase = getSupabaseServiceClient();
+  if (!supabase) {
+    return { ok: false, error: 'Servidor sin SUPABASE_SERVICE_ROLE_KEY.' };
+  }
+
+  const { data: row, error: fetchErr } = await supabase
+    .from('americano_matches')
+    .select('*')
+    .eq('id', matchId)
+    .maybeSingle();
+
+  if (fetchErr || !row) {
+    return { ok: false, error: fetchErr?.message ?? 'Partido no encontrado.' };
+  }
+
+  const { data: sessionRow } = await supabase
+    .from('americano_sessions')
+    .select('status')
+    .eq('id', row.session_id)
+    .maybeSingle();
+
+  if (sessionRow?.status === 'finished') {
+    return { ok: false, error: 'La sesión está cerrada.' };
+  }
+
+  if (row.status !== 'pending') {
+    return { ok: false, error: 'Este partido ya finalizó.' };
+  }
+
+  const pointsGoal = row.points_goal as AmericanoPointsGoal;
+  const next = nextAmericanoScore(
+    {
+      scoreA: row.score_a as number,
+      scoreB: row.score_b as number,
+      pointsGoal,
+    },
+    input.team,
+    input.action,
+  );
+
+  if (!next) {
+    return { ok: false, error: 'Marcador fuera de rango.' };
+  }
+
+  const sessionId = row.session_id as string;
+  const courtNumber = row.court_number as number;
+
+  if (isAmericanoMatchComplete(next)) {
+    const result = await applyMatchScores(matchId, next.scoreA, next.scoreB, false);
+    if (!result.ok) return result;
+
+    const { data: sessionRow } = await supabase
+      .from('americano_sessions')
+      .select('tournament_id')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    revalidateAfterMatch(sessionId, sessionRow?.tournament_id as string | undefined, courtNumber);
+
+    return {
+      ok: true,
+      data: { finished: true, scoreA: next.scoreA, scoreB: next.scoreB },
+    };
+  }
+
+  const { error: updErr } = await supabase
+    .from('americano_matches')
+    .update({
+      score_a: next.scoreA,
+      score_b: next.scoreB,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', matchId)
+    .eq('status', 'pending');
+
+  if (updErr) {
+    return { ok: false, error: updErr.message };
+  }
+
+  revalidatePath(`/americano/marker/${sessionId}/${courtNumber}`);
+  revalidatePath(`/americano/tv/${sessionId}`);
+
+  return {
+    ok: true,
+    data: { finished: false, scoreA: next.scoreA, scoreB: next.scoreB },
+  };
 }
 
 export async function submitMatchResult(

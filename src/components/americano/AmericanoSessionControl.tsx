@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Check, ExternalLink, Loader2, Tv } from 'lucide-react';
+import { Check, ExternalLink, Loader2, Smartphone, Tv } from 'lucide-react';
 import { correctMatchResult, submitMatchResult } from '@/app/actions/americanoActions';
 import { getAmericanoAccessToken } from '@/lib/americano/americanoClientAuth';
 import { playerNameById } from '@/lib/americano/logic';
@@ -32,6 +32,11 @@ export function AmericanoSessionControl({ sessionId }: Props) {
     }
     return [...map.entries()].sort((a, b) => a[0] - b[0]);
   }, [matches]);
+
+  const courtLinks = useMemo(() => {
+    const count = session?.courtCount ?? 1;
+    return Array.from({ length: count }, (_, i) => i + 1);
+  }, [session?.courtCount]);
 
   const handleSubmit = (matchId: string, isCorrection = false) => {
     const draft = scoreDraft[matchId] ?? { a: '', b: '' };
@@ -94,6 +99,29 @@ export function AmericanoSessionControl({ sessionId }: Props) {
         </Link>
       </section>
 
+      <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-wide text-amber-300">
+          <Smartphone className="h-4 w-4" />
+          Marcadores táctiles por cancha
+        </h2>
+        <p className="mb-3 text-xs text-neutral-500">
+          Abre en tablet o móvil junto a cada pista. Los puntos se sincronizan con la TV y el ranking.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {courtLinks.map((court) => (
+            <Link
+              key={court}
+              href={`/americano/marker/${sessionId}/${court}`}
+              target="_blank"
+              className="inline-flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-amber-300 hover:border-amber-400/50"
+            >
+              <Smartphone className="h-3.5 w-3.5" />
+              Cancha {court}
+            </Link>
+          ))}
+        </div>
+      </section>
+
       {formError ? (
         <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
           {formError}
@@ -145,6 +173,13 @@ export function AmericanoSessionControl({ sessionId }: Props) {
                   <div key={match.id} className="px-4 py-3">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500">
                       Cancha {match.courtNumber}
+                      <Link
+                        href={`/americano/marker/${sessionId}/${match.courtNumber}`}
+                        target="_blank"
+                        className="ml-2 text-amber-400/80 hover:text-amber-300"
+                      >
+                        · Marcador
+                      </Link>
                     </p>
                     <p className="mt-1 text-sm font-medium">
                       {teamALabel}
