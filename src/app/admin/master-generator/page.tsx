@@ -32,6 +32,7 @@ import {
     Download
 } from 'lucide-react';
 import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournament';
+import { resolveCategoryTournamentType } from '@/lib/americano/tournamentBridge';
 import { MasterScheduleEngine, MasterScheduleConfig, CategoryConfig } from '@/services/MasterScheduleEngine';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
@@ -459,7 +460,7 @@ export default function MasterGeneratorPage() {
                         rrMatchFormat: pendingRRFormat,
                         advanceCount: pendingAdvanceCount,
                         quickQualification: pendingTournamentType === 'ROUND_ROBIN' && pendingAdvanceCount === 2 ? pendingQuickQualification : undefined,
-                        type: pendingTournamentType === 'CUADRO_CONSOLACION' ? TournamentType.CUADRO_CONSOLACION : TournamentType.ROUND_ROBIN,
+                        type: resolveCategoryTournamentType(pendingTournamentType),
                         consolacionMatchFormat: pendingTournamentType === 'CUADRO_CONSOLACION' ? pendingConsolacionMatchFormat : undefined,
                         inscriptionPrice: Number(pendingPrice) || 0,
                         tieBreakRule: pendingTieBreakRule,
@@ -481,7 +482,7 @@ export default function MasterGeneratorPage() {
                     gender,
                     category,
                     numTeams: pendingNumTeams,
-                    type: pendingTournamentType === 'CUADRO_CONSOLACION' ? TournamentType.CUADRO_CONSOLACION : TournamentType.ROUND_ROBIN,
+                    type: resolveCategoryTournamentType(pendingTournamentType),
                     goldenPoint: pendingTournamentType === 'CUADRO_CONSOLACION' ? true : pendingGolden,
                     setFormat: pendingSetFormat,
                     matchFormat: pendingMatchFormat,
@@ -686,7 +687,8 @@ export default function MasterGeneratorPage() {
                         const team1Index = m.team1Index ?? (t1Id ? teamIdToIndex.get(String(t1Id)) : undefined);
                         const team2Index = m.team2Index ?? (t2Id ? teamIdToIndex.get(String(t2Id)) : undefined);
 
-                        const isGroupStage = m.roundName === 'Fase de Grupos';
+                        const isAmericanoMatch = m.format === 'AMERICANO_ROTATIVE' || m.stage === 'AMERICANO';
+                        const isGroupStage = !isAmericanoMatch && m.roundName === 'Fase de Grupos';
                         const displayOrder = i + 1;
                         // Segmento del id 1-based (como tournamentService): si fuera `i` (0-based),
                         // inferMatchOrderFromId trataría ...-1- como orden 1 y colisionaría con ...-0-.
@@ -695,7 +697,7 @@ export default function MasterGeneratorPage() {
                             id: m.id || `m-${cat.id}-${displayOrder}-${Date.now().toString(36)}`,
                             scheduledTime: typeof m.scheduledTime === 'string' ? m.scheduledTime : (m.scheduledTime instanceof Date ? m.scheduledTime.toISOString() : new Date().toISOString()),
                             status: m.status ?? MatchStatus.PENDING,
-                            stage: isGroupStage ? 'GROUP_STAGE' : (m.roundName?.includes('Consolación') ? 'CONSOLATION' : 'MAIN_DRAW'),
+                            stage: isAmericanoMatch ? 'AMERICANO' : isGroupStage ? 'GROUP_STAGE' : (m.roundName?.includes('Consolación') ? 'CONSOLATION' : 'MAIN_DRAW'),
                             matchFormat: effectiveMatchFormat,
                             tieBreakType: effectiveTieBreakType,
                             matchNumber: displayOrder,
@@ -1286,7 +1288,7 @@ export default function MasterGeneratorPage() {
                                                         <Trophy className="w-3 h-3 text-yellow-400" /> Objetivo de Puntos
                                                     </label>
                                                     <div className="grid grid-cols-6 gap-2">
-                                                        {[4, 8, 12, 16, 20, 24].map(pts => (
+                                                        {[16, 24, 32, 40].map(pts => (
                                                             <button
                                                                 key={pts}
                                                                 type="button"

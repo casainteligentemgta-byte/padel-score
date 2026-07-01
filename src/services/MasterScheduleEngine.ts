@@ -3,6 +3,7 @@ import {
     MatchStatus,
     TournamentCategory
 } from '../types/tournament';
+import { ScheduleEngine } from './ScheduleEngine';
 
 export interface CategoryConfig {
     id: string;
@@ -73,6 +74,34 @@ export class MasterScheduleEngine {
         categories.forEach(cat => {
             if (!cat.teams || cat.teams.length < 2) {
                 console.warn(`[Engine] Categoría ${cat.category} tiene menos de 2 equipos, ignorada.`);
+                return;
+            }
+
+            if (cat.type === TournamentType.AMERICANO_INDIVIDUAL) {
+                const schedule = ScheduleEngine.generateAmericanoIndividualSchedule({
+                    tournamentId: 'master',
+                    numTeams: cat.teams.length,
+                    numCourts,
+                    clubHoursStart: dailyStartTime,
+                    clubHoursEnd: dailyEndTime,
+                    startDate: new Date(startDate + 'T00:00:00'),
+                    matchDurationMinutes,
+                    bufferMinutes,
+                    type: TournamentType.AMERICANO_INDIVIDUAL,
+                    teams: cat.teams,
+                    pointsGoal: cat.pointsGoal ?? 24,
+                });
+
+                schedule.matches.forEach((match: any) => {
+                    allMatches.push({
+                        categoryId: cat.id,
+                        category: cat.category,
+                        categoryName: `${cat.gender} - ${cat.category}`,
+                        team1Name: `${match.playerA1Name} / ${match.playerA2Name}`,
+                        team2Name: `${match.playerB1Name} / ${match.playerB2Name}`,
+                        ...match,
+                    });
+                });
                 return;
             }
 

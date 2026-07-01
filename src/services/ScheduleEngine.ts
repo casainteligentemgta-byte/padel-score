@@ -1,4 +1,14 @@
 import {
+    generateRotativeRotation,
+} from '../lib/americano/logic';
+import {
+    AMERICANO_ROTATIVE_FORMAT,
+    flattenPlayersFromTeams,
+    normalizeAmericanoPointsGoal,
+    rotativePlayersFromFlat,
+} from '../lib/americano/tournamentBridge';
+import type { AmericanoPointsGoal } from '../types/americano';
+import {
     TournamentType,
     MatchStatus,
     ScheduleConfig
@@ -12,6 +22,10 @@ export class ScheduleEngine {
     static readonly SLOT_MINUTES = 90;
 
     static generateSchedule(config: ScheduleConfig) {
+        if (config.type === TournamentType.AMERICANO_INDIVIDUAL) {
+            return this.generateAmericanoIndividualSchedule(config);
+        }
+
         if (config.numTeams < 2) {
             console.warn('[ScheduleEngine] Not enough teams to generate a schedule');
             return {
@@ -36,7 +50,6 @@ export class ScheduleEngine {
 
         let pairings: [number, number][] = [];
         if (
-            type === TournamentType.AMERICANO_INDIVIDUAL ||
             type === TournamentType.AMERICANO_DUPLA ||
             type === TournamentType.ROUND_ROBIN
         ) {
@@ -131,6 +144,91 @@ export class ScheduleEngine {
             notScheduled: totalPairings - matches.length,
             estimatedHours: (matches.length / numCourts) * (slotMinutes / 60)
         };
+    }
+
+    /**
+     * Genera fixture de americano individual (parejas rotativas, 4 jugadores por partido).
+     */
+    static generateAmericanoIndividualSchedule(config: ScheduleConfig) {
+        const players = config.players?.length
+            ? config.players
+            : flattenPlayersFromTeams(config.teams ?? []);
+
+        if (players.length < 4) {
+            console.warn('[ScheduleEngine] Americano individual requiere al menos 4 jugadores');
+            return {
+                matches: [],
+                totalMatches: 0,
+                pairingsGenerated: 0,
+                notScheduled: 0,
+                estimatedHours: 0,
+                warnings: ['Se necesitan al menos 4 jugadores para un americano individual.'],
+            };
+        }
+
+        const pointsGoal = normalizeAmericanoPointsGoal(config.pointsGoal ?? 24) as AmericanoPointsGoal;
+        const numCourts = Math.max(1, config.numCourts || 1);
+        const rotation = generateRotativeRotation(rotativePlayersFromFlat(players), numCourts, pointsGoal);
+
+        const playerById = new Map(players.map((p) => [p.id, p]));
+        const slotMinutes = this.americanoSlotMinutes(pointsGoal, config.bufferMinutes ?? 2);
+
+        const [startH, startM] = (config.clubHoursStart || '08:00').split(':').map(Number);
+        let roundStart = new Date(config.startDate);
+        roundStart.setHours(startH, startM, 0, 0);
+
+        const matches: any[] = [];
+
+        for (const round of rotation.rounds) {
+            for (const slot of round.matches) {
+                const a1 = playerById.get(slot.playerA1Id);
+                const a2 = playerById.get(slot.playerA2Id);
+                const b1 = playerById.get(slot.playerB1Id);
+                const b2 = playerById.get(slot.playerB2Id);
+
+                matches.push({
+                    format: AMERICANO_ROTATIVE_FORMAT,
+                    stage: 'AMERICANO',
+                    roundNumber: round.roundNumber,
+                    roundName: `Ronda ${round.roundNumber}`,
+                    courtIndex: slot.courtNumber - 1,
+                    court: slot.courtNumber,
+                    playerA1Id: slot.playerA1Id,
+                    playerA2Id: slot.playerA2Id,
+                    playerB1Id: slot.playerB1Id,
+                    playerB2Id: slot.playerB2Id,
+                    playerA1Name: a1?.name ?? slot.playerA1Id,
+                    playerA2Name: a2?.name ?? slot.playerA2Id,
+                    playerB1Name: b1?.name ?? slot.playerB1Id,
+                    playerB2Name: b2?.name ?? slot.playerB2Id,
+                    pointsGoal: slot.pointsGoal,
+                    restingPlayerIds: round.restingPlayerIds,
+                    scheduledTime: new Date(roundStart),
+                    status: MatchStatus.PENDING,
+                    games: { t1: 0, t2: 0 },
+                });
+            }
+            roundStart = new Date(roundStart.getTime() + slotMinutes * 60000);
+        }
+
+        return {
+            matches,
+            totalMatches: matches.length,
+            pairingsGenerated: matches.length,
+            notScheduled: 0,
+            estimatedHours: (rotation.rounds.length * slotMinutes) / 60,
+            warnings: rotation.warnings,
+        };
+    }
+
+    private static americanoSlotMinutes(pointsGoal: AmericanoPointsGoal, bufferMinutes: number): number {
+        const durationByGoal: Record<AmericanoPointsGoal, number> = {
+            16: 10,
+            24: 15,
+            32: 22,
+            40: 30,
+        };
+        return durationByGoal[pointsGoal] + bufferMinutes;
     }
 
     private static generateRoundRobinPairings(numTeams: number): [number, number][] {

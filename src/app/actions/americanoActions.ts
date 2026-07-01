@@ -7,17 +7,23 @@ import {
   validateMatchScores,
   type AmericanoMatch,
 } from '@/lib/americano/logic';
+import {
+  flattenPlayersFromTeams,
+  normalizeAmericanoPointsGoal,
+} from '@/lib/americano/tournamentBridge';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
+import { TournamentType } from '@/types/tournament';
 import type { AmericanoPointsGoal } from '@/types/americano';
 
 export type ActionResult<T = void> = { ok: true; data: T } | { ok: false; error: string };
 
-export async function createAmericanoSession(input: {
+async function insertAmericanoSessionCore(input: {
   name: string;
   baseVenue: string;
   courtCount: number;
   pointsGoal: AmericanoPointsGoal;
   playerNames: string[];
+  tournamentId?: string | null;
 }): Promise<ActionResult<{ sessionId: string }>> {
   const supabase = getSupabaseServiceClient();
   if (!supabase) {
@@ -42,6 +48,7 @@ export async function createAmericanoSession(input: {
       court_count: courtCount,
       points_goal: pointsGoal,
       status: 'live',
+      tournament_id: input.tournamentId ?? null,
     })
     .select('id')
     .single();
@@ -99,11 +106,139 @@ export async function createAmericanoSession(input: {
     return { ok: false, error: matchesErr.message };
   }
 
-  revalidatePath('/americano');
+  return { ok: true, data: { sessionId } };
+}
+
+export async function createAmericanoSession(input: {
+  name: string;
+  baseVenue: string;
+  courtCount: number;
+  pointsGoal: AmericanoPointsGoal;
+  playerNames: string[];
+}): Promise<ActionResult<{ sessionId: string }>> {
+  const result = await insertAmericanoSessionCore(input);
+  if (result.ok) {
+    revalidatePath('/americano');
+    revalidatePath(`/americano/session/${result.data.sessionId}`);
+    revalidatePath(`/americano/tv/${result.data.sessionId}`);
+  }
+  return result;
+}
+
+export async function createAmericanoSessionFromTournament(input: {
+  tournamentId: string;
+}): Promise<ActionResult<{ sessionId: string }>> {
+  const supabase = getSupabaseServiceClient();
+  if (!supabase) {
+    return { ok: false, error: 'Servidor sin SUPABASE_SERVICE_ROLE_KEY.' };
+  }
+
+  const tournamentId = String(input.tournamentId || '').trim();
+  if (!tournamentId) {
+    return { ok: false, error: 'Torneo no indicado.' };
+  }
+
+  const { data: existing } = await supabase
+    .from('americano_sessions')
+    .select('id, status')
+    .eq('tournament_id', tournamentId)
+    .neq('status', 'finished')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.id) {
+    return { ok: true, data: { sessionId: existing.id as string } };
+  }
+
+  const { data: tournamentRow, error: tournamentErr } = await supabase
+    .from('tournaments')
+    .select('id, data')
+    .eq('id', tournamentId)
+    .maybeSingle();
+
+  if (tournamentErr || !tournamentRow) {
+    return { ok: false, error: tournamentErr?.message ?? 'Torneo no encontrado.' };
+  }
+
+  const tournament = (tournamentRow.data ?? {}) as Record<string, any>;
+  if (tournament.type !== TournamentType.AMERICANO_INDIVIDUAL) {
+    return { ok: false, error: 'Este torneo no es americano individual.' };
+  }
+
+  const players = flattenPlayersFromTeams(tournament.teams ?? []);
+  if (players.length < 4) {
+    return { ok: false, error: 'El torneo necesita al menos 4 jugadores inscritos.' };
+  }
+
+  const result = await insertAmericanoSessionCore({
+    name: String(tournament.name || 'Americano'),
+    baseVenue: String(tournament.complexName || ''),
+    courtCount: Math.max(1, Number(tournament.totalCourts) || (tournament.courtNames?.length ?? 2)),
+    pointsGoal: normalizeAmericanoPointsGoal(tournament.pointsGoal ?? 24),
+    playerNames: players.map((p) => p.name),
+    tournamentId,
+  });
+
+  if (!result.ok) return result;
+
+  const sessionId = result.data.sessionId;
+  const nextData = {
+    ...tournament,
+    americanoSessionId: sessionId,
+  };
+
+  await supabase
+    .from('tournaments')
+    .update({ data: nextData, updated_at: new Date().toISOString() })
+    .eq('id', tournamentId);
+
+  revalidatePath(`/tournaments/${tournamentId}`);
   revalidatePath(`/americano/session/${sessionId}`);
   revalidatePath(`/americano/tv/${sessionId}`);
 
-  return { ok: true, data: { sessionId } };
+  return result;
+}
+
+export async function finishAmericanoSession(input: {
+  sessionId: string;
+}): Promise<ActionResult<void>> {
+  const supabase = getSupabaseServiceClient();
+  if (!supabase) {
+    return { ok: false, error: 'Servidor sin SUPABASE_SERVICE_ROLE_KEY.' };
+  }
+
+  const sessionId = String(input.sessionId || '').trim();
+  if (!sessionId) {
+    return { ok: false, error: 'Sesión no indicada.' };
+  }
+
+  const { data: session, error: sessionErr } = await supabase
+    .from('americano_sessions')
+    .select('id, tournament_id, status')
+    .eq('id', sessionId)
+    .maybeSingle();
+
+  if (sessionErr || !session) {
+    return { ok: false, error: sessionErr?.message ?? 'Sesión no encontrada.' };
+  }
+
+  const { error: updateErr } = await supabase
+    .from('americano_sessions')
+    .update({ status: 'finished', updated_at: new Date().toISOString() })
+    .eq('id', sessionId);
+
+  if (updateErr) {
+    return { ok: false, error: updateErr.message };
+  }
+
+  if (session.tournament_id) {
+    revalidatePath(`/tournaments/${session.tournament_id}`);
+  }
+  revalidatePath(`/americano/session/${sessionId}`);
+  revalidatePath(`/americano/tv/${sessionId}`);
+
+  return { ok: true, data: undefined as void };
 }
 
 export async function submitMatchResult(input: {
@@ -144,6 +279,32 @@ export async function submitMatchResult(input: {
     return { ok: false, error: validationError };
   }
 
+  const sessionId = row.session_id as string;
+
+  const { error: rpcErr } = await supabase.rpc('submit_americano_match_result', {
+    p_match_id: matchId,
+    p_score_a: scoreA,
+    p_score_b: scoreB,
+  });
+
+  if (!rpcErr) {
+    revalidatePath(`/americano/session/${sessionId}`);
+    revalidatePath(`/americano/tv/${sessionId}`);
+
+    const { data: sessionRow } = await supabase
+      .from('americano_sessions')
+      .select('tournament_id')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    if (sessionRow?.tournament_id) {
+      revalidatePath(`/tournaments/${sessionRow.tournament_id}`);
+    }
+
+    return { ok: true, data: undefined as void };
+  }
+
+  // Fallback si la migración RPC aún no está aplicada
   const match: AmericanoMatch = {
     id: row.id,
     sessionId: row.session_id,
@@ -171,16 +332,11 @@ export async function submitMatchResult(input: {
     .eq('status', 'pending');
 
   if (matchUpdateErr) {
-    return { ok: false, error: matchUpdateErr.message };
+    return { ok: false, error: rpcErr.message || matchUpdateErr.message };
   }
 
   const deltas = pointsDeltaForMatch({ ...match, scoreA, scoreB });
-  const playerIds = [
-    match.playerA1Id,
-    match.playerA2Id,
-    match.playerB1Id,
-    match.playerB2Id,
-  ];
+  const playerIds = [match.playerA1Id, match.playerA2Id, match.playerB1Id, match.playerB2Id];
 
   const { data: players, error: playersErr } = await supabase
     .from('americano_players')
@@ -203,8 +359,18 @@ export async function submitMatchResult(input: {
     }
   }
 
-  revalidatePath(`/americano/session/${match.sessionId}`);
-  revalidatePath(`/americano/tv/${match.sessionId}`);
+  revalidatePath(`/americano/session/${sessionId}`);
+  revalidatePath(`/americano/tv/${sessionId}`);
+
+  const { data: sessionRow } = await supabase
+    .from('americano_sessions')
+    .select('tournament_id')
+    .eq('id', sessionId)
+    .maybeSingle();
+
+  if (sessionRow?.tournament_id) {
+    revalidatePath(`/tournaments/${sessionRow.tournament_id}`);
+  }
 
   return { ok: true, data: undefined as void };
 }

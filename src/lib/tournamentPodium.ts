@@ -1,4 +1,9 @@
 import { MatchStatus, TournamentType } from '@/types/tournament';
+import {
+    applyAmericanoRotativeMatchToStandings,
+    isAmericanoRotativeMatchForStandings,
+    sortStandingsByAmericanoPoints,
+} from '@/lib/americano/standings';
 
 /** Etiqueta de ronda del cuadro (alineado con el hub de categoría). */
 export function getBracketStageLabel(match: any): string {
@@ -66,7 +71,9 @@ export function calculateStandingsFromMatches(matches: any[], tournament: any): 
             }
         };
 
-        if (isIndividual) {
+        if (isIndividual && isAmericanoRotativeMatchForStandings(m)) {
+            applyAmericanoRotativeMatchToStandings(m, updateStats);
+        } else if (isIndividual) {
             const team1 = tournament.teams?.[m.team1Index - 1];
             const team2 = tournament.teams?.[m.team2Index - 1];
 
@@ -131,6 +138,10 @@ export function calculateStandingsFromMatches(matches: any[], tournament: any): 
             );
         }
     });
+
+    if (tournament?.type === TournamentType.AMERICANO_INDIVIDUAL) {
+        return sortStandingsByAmericanoPoints(standings);
+    }
 
     return Object.values(standings).sort((a: any, b: any) => {
         if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;

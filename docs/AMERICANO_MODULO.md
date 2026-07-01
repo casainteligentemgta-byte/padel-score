@@ -19,13 +19,13 @@ Producción (`main` / smartpadel58.com) **no** incluye este módulo hasta merge 
 | Control admin | `/americano/session/[sessionId]` | ✅ |
 | Pantalla TV | `/americano/tv/[sessionId]` | ✅ |
 | Ranking acumulado | leaderboard + puntos por partido | ✅ |
-| Integración torneos legacy | `AMERICANO_INDIVIDUAL` en master-generator | Sin tocar |
+| Integración torneos legacy | `AMERICANO_INDIVIDUAL` en ScheduleEngine + puente `tournament_id` | ✅ (rama staging) |
 
 **Aislamiento:** no modifica `expressScoring.ts`, `express_matches` ni el flujo Express de canchas.
 
 ## Probar en staging
 
-1. Aplicar migración `072_americano_sessions.sql` en Supabase (staging/prod según entorno).
+1. Aplicar migraciones `072_americano_sessions.sql` y `073_americano_tournament_bridge.sql` en Supabase (staging/prod según entorno).
 2. Laboratorio: `https://padel-score-mgti.vercel.app/americano`
 3. Crear sesión → control → abrir TV desde el panel.
 

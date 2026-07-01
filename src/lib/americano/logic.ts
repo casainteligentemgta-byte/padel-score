@@ -10,6 +10,7 @@ export interface AmericanoSession {
   courtCount: number;
   pointsGoal: AmericanoPointsGoal;
   status: AmericanoSessionStatus;
+  tournamentId?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

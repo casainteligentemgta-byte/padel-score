@@ -28,6 +28,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
+import { flattenPlayersFromTeams } from '@/lib/americano/tournamentBridge';
 import { TournamentStepper } from '@/components/TournamentStepper';
 import { useEffect } from 'react';
 
@@ -181,7 +182,12 @@ export default function NewTournamentPage() {
             return alert('Debes iniciar sesión');
         }
 
-        if (tournamentData.teams.length < 2) {
+        if (tournamentData.type === TournamentType.AMERICANO_INDIVIDUAL) {
+            const playerCount = flattenPlayersFromTeams(tournamentData.teams).length;
+            if (playerCount < 4) {
+                return alert('Se necesitan al menos 4 jugadores para un americano individual.');
+            }
+        } else if (tournamentData.teams.length < 2) {
             return alert('Se necesitan al menos 2 parejas para generar partidos');
         }
 
@@ -478,7 +484,10 @@ export default function NewTournamentPage() {
                     startDate: startDateLocal,
                     matchDurationMinutes: matchDuration,
                     bufferMinutes: 2,
-                    type: tournamentData.type
+                    type: tournamentData.type,
+                    teams: tournamentData.teams,
+                    players: flattenPlayersFromTeams(tournamentData.teams),
+                    pointsGoal: tournamentData.pointsGoal,
                 });
 
                 enrichedMatches = (schedule.matches || []).map((m: any, idx: number) => {

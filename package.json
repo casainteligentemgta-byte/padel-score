@@ -15,6 +15,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:tournament": "tsx scripts/test-tournament-engine.ts",
+    "test:americano": "tsx scripts/test-americano-rotation.ts",
     "test:express": "tsx scripts/test-express-scoring.ts",
     "verify:ceo": "node scripts/verify-ceo.mjs",
     "open-inscriptions": "node scripts/open-tournament-inscriptions.mjs",

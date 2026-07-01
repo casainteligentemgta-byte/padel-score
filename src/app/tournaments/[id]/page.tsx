@@ -33,7 +33,12 @@ import {
     FileText
 } from 'lucide-react';
 import Link from 'next/link';
-import { MatchStatus, TournamentType, ScheduleConfig } from '@/types/tournament';
+import { AmericanoTournamentPanel } from '@/components/americano/AmericanoTournamentPanel';
+import {
+    applyAmericanoRotativeMatchToStandings,
+    isAmericanoRotativeMatchForStandings,
+    sortStandingsByAmericanoPoints,
+} from '@/lib/americano/standings';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { resolveCategoryPodium, getPodiumDisplayLines } from '@/lib/tournamentPodium';
@@ -1276,7 +1281,9 @@ export default function TournamentDashboard() {
                 }
             };
 
-            if (isIndividual) {
+            if (isIndividual && isAmericanoRotativeMatchForStandings(m)) {
+                applyAmericanoRotativeMatchToStandings(m, updateStats);
+            } else if (isIndividual) {
                 const team1 = tournament.teams[m.team1Index - 1];
                 const team2 = tournament.teams[m.team2Index - 1];
 
@@ -1293,6 +1300,10 @@ export default function TournamentDashboard() {
                 updateStats(`team-${m.team2Index}`, m.team2.name || `Pareja ${m.team2Index}`, null, m.games?.t2 || 0, m.games?.t1 || 0, m.sets?.t2 || 0, m.sets?.t1 || 0);
             }
         });
+
+        if (tournament?.type === TournamentType.AMERICANO_INDIVIDUAL) {
+            return sortStandingsByAmericanoPoints(standings);
+        }
 
         const sorted = Object.values(standings).sort((a: any, b: any) => {
             if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;
@@ -2149,6 +2160,19 @@ export default function TournamentDashboard() {
                 <main
                     className={`mx-auto flex min-h-0 w-full min-w-0 ${mainMaxWNonLive} flex-col px-4 py-6 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] transition-all duration-500`}
                 >
+                    {tournament?.type === TournamentType.AMERICANO_INDIVIDUAL && (
+                        <div className="mb-6">
+                            <AmericanoTournamentPanel
+                                tournamentId={id}
+                                tournamentName={tournament.name || 'Americano'}
+                                baseVenue={tournament.complexName}
+                                courtCount={tournament.totalCourts || tournament.courtNames?.length || 2}
+                                pointsGoal={tournament.pointsGoal ?? 24}
+                                americanoSessionId={(tournament as any).americanoSessionId ?? null}
+                                isOwner={!!canManageTournament}
+                            />
+                        </div>
+                    )}
                     <AnimatePresence mode="wait">
                         {activeTab === 'Grupos' ? (
                             <motion.div

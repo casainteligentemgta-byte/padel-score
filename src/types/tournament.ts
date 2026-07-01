@@ -125,8 +125,21 @@ export interface Match {
     points?: { t1: string, t2: string }; // '0', '15', '30', '40', 'AD'
     server?: { team: 1 | 2, player: 1 | 2 }; // 1 o 2 (pareja) y 1 o 2 (jugador dentro de esa pareja)
     groupName?: string;
-    stage?: 'GROUP_STAGE' | 'MAIN_DRAW' | 'CONSOLATION';
+    stage?: 'GROUP_STAGE' | 'MAIN_DRAW' | 'CONSOLATION' | 'AMERICANO';
     roundName?: string;
+    /** Americano rotativo: 4 jugadores por partido */
+    format?: 'AMERICANO_ROTATIVE' | string;
+    roundNumber?: number;
+    playerA1Id?: string;
+    playerA2Id?: string;
+    playerB1Id?: string;
+    playerB2Id?: string;
+    playerA1Name?: string;
+    playerA2Name?: string;
+    playerB1Name?: string;
+    playerB2Name?: string;
+    pointsGoal?: number;
+    restingPlayerIds?: string[];
     bracketPosition?: {
         round: number;
         position: number;
@@ -143,6 +156,11 @@ export interface ScheduleConfig {
     matchDurationMinutes: number;
     bufferMinutes: number;
     startDate: Date;
+    /** Jugadores individuales (americano). */
+    players?: { id: string; name: string; photo?: string | null }[];
+    /** Equipos legacy (se aplanan a jugadores en americano individual). */
+    teams?: any[];
+    pointsGoal?: number;
 }
 
 export interface Participant {

@@ -13,6 +13,7 @@ type SessionRow = {
   court_count: number;
   points_goal: number;
   status: string;
+  tournament_id?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -48,6 +49,7 @@ export function mapSession(row: SessionRow): AmericanoSession {
     courtCount: row.court_count,
     pointsGoal: row.points_goal as AmericanoPointsGoal,
     status: row.status as AmericanoSession['status'],
+    tournamentId: row.tournament_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

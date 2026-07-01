@@ -1,0 +1,53 @@
+import { generateRotativeRotation, validateMatchScores } from '../src/lib/americano/logic.ts';
+import { ScheduleEngine } from '../src/services/ScheduleEngine.ts';
+import { flattenPlayersFromTeams } from '../src/lib/americano/tournamentBridge.ts';
+import { TournamentType } from '../src/types/tournament.ts';
+
+function assert(cond: boolean, msg: string) {
+  if (!cond) throw new Error(msg);
+}
+
+function testRotation() {
+  const players = Array.from({ length: 8 }, (_, i) => ({
+    id: `p${i + 1}`,
+    name: `Jugador ${i + 1}`,
+  }));
+  const result = generateRotativeRotation(players, 2, 24);
+  assert(result.rounds.length === 7, '8 jugadores deben generar 7 rondas');
+  assert(result.rounds[0].matches.length === 2, '2 canchas en ronda 1');
+  assert(validateMatchScores(24, 18, 24) === null, '24-18 válido');
+  assert(validateMatchScores(24, 24, 24) !== null, 'empate inválido');
+  assert(validateMatchScores(24, 23, 24) === null, '24-23 válido');
+  assert(validateMatchScores(23, 20, 24) !== null, 'ganador debe llegar a 24');
+}
+
+function testScheduleEngine() {
+  const teams = Array.from({ length: 4 }, (_, i) => ({
+    id: `team-${i}`,
+    p1: { id: `p${i * 2 + 1}`, name: `J${i * 2 + 1}` },
+    p2: { id: `p${i * 2 + 2}`, name: `J${i * 2 + 2}` },
+  }));
+
+  const schedule = ScheduleEngine.generateAmericanoIndividualSchedule({
+    tournamentId: 'test',
+    numTeams: teams.length,
+    numCourts: 2,
+    clubHoursStart: '08:00',
+    clubHoursEnd: '22:00',
+    startDate: new Date('2026-07-01'),
+    matchDurationMinutes: 15,
+    bufferMinutes: 2,
+    type: TournamentType.AMERICANO_INDIVIDUAL,
+    teams,
+    players: flattenPlayersFromTeams(teams),
+    pointsGoal: 24,
+  });
+
+  assert(schedule.matches.length > 0, 'debe generar partidos');
+  assert(schedule.matches[0].format === 'AMERICANO_ROTATIVE', 'formato rotativo');
+  assert(Boolean(schedule.matches[0].playerA1Id), 'partido con 4 jugadores');
+}
+
+testRotation();
+testScheduleEngine();
+console.log('test-americano-rotation: OK');
