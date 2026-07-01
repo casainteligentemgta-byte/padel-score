@@ -16,6 +16,12 @@ function newPlayer(index: number): AmericanoPlayer {
   return { id: `p-${index}-${Date.now()}`, name: `Jugador ${index}` };
 }
 
+const fieldInputClass =
+  'w-full rounded-xl border border-white/20 bg-slate-900 px-3 py-2.5 text-sm text-white placeholder:text-neutral-500 caret-padel-primary outline-none focus:border-padel-primary/60 focus:ring-1 focus:ring-padel-primary/30';
+
+const playerInputClass =
+  'min-w-0 flex-1 rounded-lg border border-white/20 bg-slate-900 px-2.5 py-2 text-sm text-white placeholder:text-neutral-500 caret-padel-primary outline-none focus:border-padel-primary/60 focus:ring-1 focus:ring-padel-primary/30';
+
 export default function AmericanoLabPage() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -105,7 +111,8 @@ export default function AmericanoLabPage() {
             <input
               value={eventName}
               onChange={(e) => setEventName(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none focus:border-padel-primary/50"
+              placeholder="Ej. Americano viernes noche"
+              className={fieldInputClass}
             />
           </label>
           <label className="block space-y-1.5">
@@ -115,7 +122,8 @@ export default function AmericanoLabPage() {
             <input
               value={baseVenue}
               onChange={(e) => setBaseVenue(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none focus:border-padel-primary/50"
+              placeholder="Ej. El Bodeguero"
+              className={fieldInputClass}
             />
           </label>
           <label className="block space-y-1.5 sm:col-span-2 sm:max-w-xs">
@@ -128,7 +136,7 @@ export default function AmericanoLabPage() {
               max={12}
               value={numCourts}
               onChange={(e) => setNumCourts(Math.max(1, Number(e.target.value) || 1))}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none focus:border-padel-primary/50"
+              className={fieldInputClass}
             />
           </label>
         </section>
@@ -178,7 +186,7 @@ export default function AmericanoLabPage() {
                 <input
                   value={p.name}
                   onChange={(e) => updateName(p.id, e.target.value)}
-                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-2.5 py-2 text-sm outline-none focus:border-padel-primary/40"
+                  className={playerInputClass}
                 />
                 <button
                   type="button"
