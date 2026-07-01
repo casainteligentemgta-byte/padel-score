@@ -6,7 +6,9 @@ import { Check, ExternalLink, Loader2, Smartphone, Tv } from 'lucide-react';
 import { correctMatchResult, submitMatchResult } from '@/app/actions/americanoActions';
 import { getAmericanoAccessToken } from '@/lib/americano/americanoClientAuth';
 import { playerNameById } from '@/lib/americano/logic';
+import { buildAmericanoPdfInputFromBundle } from '@/lib/americano/americanoSchedulePdf';
 import { useAmericanoRealtime } from '@/lib/americano/useAmericanoRealtime';
+import { AmericanoExportPdfButtons } from '@/components/americano/AmericanoExportPdfButtons';
 
 type Props = {
   sessionId: string;
@@ -37,6 +39,11 @@ export function AmericanoSessionControl({ sessionId }: Props) {
     const count = session?.courtCount ?? 1;
     return Array.from({ length: count }, (_, i) => i + 1);
   }, [session?.courtCount]);
+
+  const pdfInput = useMemo(
+    () => (bundle ? buildAmericanoPdfInputFromBundle(bundle) : null),
+    [bundle],
+  );
 
   const handleSubmit = (matchId: string, isCorrection = false) => {
     const draft = scoreDraft[matchId] ?? { a: '', b: '' };
@@ -88,15 +95,18 @@ export function AmericanoSessionControl({ sessionId }: Props) {
             {session.courtCount} cancha(s) · a {session.pointsGoal} pts · {players.length} jugadores
           </p>
         </div>
-        <Link
-          href={tvUrl}
-          target="_blank"
-          className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white hover:border-amber-400/40 hover:text-amber-300"
-        >
-          <Tv className="h-4 w-4" />
-          Abrir TV
-          <ExternalLink className="h-3 w-3 opacity-60" />
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <AmericanoExportPdfButtons input={pdfInput} compact />
+          <Link
+            href={tvUrl}
+            target="_blank"
+            className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white hover:border-amber-400/40 hover:text-amber-300"
+          >
+            <Tv className="h-4 w-4" />
+            Abrir TV
+            <ExternalLink className="h-3 w-3 opacity-60" />
+          </Link>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">

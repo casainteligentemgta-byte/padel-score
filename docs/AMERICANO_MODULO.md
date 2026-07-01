@@ -20,6 +20,7 @@ Producción (`main` / smartpadel58.com) **no** incluye este módulo hasta merge 
 | Pantalla TV | `/americano/tv/[sessionId]` | ✅ |
 | Marcador táctil por cancha | `/americano/marker/[sessionId]/[courtNumber]` | ✅ |
 | TV con marcador en vivo | `/americano/tv/[sessionId]?court=N` | ✅ |
+| Export PDF cuadrante | `americanoSchedulePdf.ts` + botones en lab y control | ✅ |
 | Ranking acumulado | leaderboard + puntos por partido | ✅ |
 | Integración torneos legacy | `AMERICANO_INDIVIDUAL` en ScheduleEngine + puente `tournament_id` | ✅ (rama staging) |
 
@@ -56,9 +57,16 @@ git push origin main      # producción cuando esté listo
 - [x] Corrección de resultados + recálculo de puntos
 - [x] Podio / informe Telegram al cerrar sesión
 - [x] Marcador táctil por cancha
-- [ ] Exportar PDF / compartir WhatsApp del cuadrante
+- [x] Exportar PDF del cuadrante (descarga + compartir nativo en móvil)
+- [ ] Compartir WhatsApp dedicado del cuadrante (opcional; el share nativo del PDF cubre móvil)
 
-## Algoritmo de rotación (v1)
+## Export PDF
 
-`generateRotativeRotation`: rotación circular + bloques de 4 por cancha.  
+- Generador: `src/lib/americano/americanoSchedulePdf.ts` (jsPDF + autoTable).
+- Botones **PDF** / **Compartir** en `/americano` (preview) y en `/americano/session/{id}` (con resultados y clasificación en vivo).
+- En móvil, **Compartir** usa Web Share API con el archivo PDF (WhatsApp, correo, etc.); si no está disponible, descarga directa.
+
+## Algoritmo de rotación (v2)
+
+`generateRotativeRotation` → **social golfer greedy** (`socialGolfer.ts`): parejas más equilibradas que la rotación circular v1.  
 Cada jugador suma los puntos de su lado en cada partido terminado.

@@ -11,6 +11,8 @@ import {
   generateAmericanoIndividualSchedule,
   playerNameById,
 } from '@/lib/americano/rotationEngine';
+import { buildAmericanoPdfInputFromSchedule } from '@/lib/americano/americanoSchedulePdf';
+import { AmericanoExportPdfButtons } from '@/components/americano/AmericanoExportPdfButtons';
 import type { AmericanoPlayer, AmericanoPointsGoal } from '@/types/americano';
 
 function newPlayer(index: number): AmericanoPlayer {
@@ -45,6 +47,20 @@ export default function AmericanoLabPage() {
         pointsGoal,
       }),
     [eventName, players, numCourts, pointsGoal],
+  );
+
+  const pdfInput = useMemo(
+    () =>
+      schedule.rounds.length > 0
+        ? buildAmericanoPdfInputFromSchedule(schedule, {
+            eventName,
+            baseVenue,
+            courtCount: numCourts,
+            pointsGoal,
+            players,
+          })
+        : null,
+    [schedule, eventName, baseVenue, numCourts, pointsGoal, players],
   );
 
   const addPlayer = () => {
@@ -210,15 +226,18 @@ export default function AmericanoLabPage() {
               <Trophy className="h-4 w-4" />
               Resumen
             </h2>
-            <button
-              type="button"
-              disabled={pending || schedule.rounds.length === 0}
-              onClick={startSession}
-              className="inline-flex items-center gap-2 rounded-xl bg-padel-primary px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-black disabled:opacity-50"
-            >
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              Crear sesión y controlar
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <AmericanoExportPdfButtons input={pdfInput} disabled={schedule.rounds.length === 0} />
+              <button
+                type="button"
+                disabled={pending || schedule.rounds.length === 0}
+                onClick={startSession}
+                className="inline-flex items-center gap-2 rounded-xl bg-padel-primary px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-black disabled:opacity-50"
+              >
+                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                Crear sesión y controlar
+              </button>
+            </div>
           </div>
           {createError ? (
             <p className="mb-3 text-xs text-red-400">{createError}</p>
@@ -241,7 +260,10 @@ export default function AmericanoLabPage() {
         </section>
 
         <section className="space-y-4">
-          <h2 className="text-sm font-black uppercase tracking-wide">Cuadrante de rondas</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-black uppercase tracking-wide">Cuadrante de rondas</h2>
+            <AmericanoExportPdfButtons input={pdfInput} disabled={schedule.rounds.length === 0} compact />
+          </div>
           {schedule.rounds.length === 0 ? (
             <p className="text-sm text-neutral-500">Ajusta jugadores y canchas para generar rondas.</p>
           ) : (
