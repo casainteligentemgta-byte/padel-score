@@ -28,9 +28,44 @@ Producción (`main` / smartpadel58.com) **no** incluye este módulo hasta merge 
 
 ## Probar en staging
 
-1. Aplicar migraciones `072`, `073` y `074` en Supabase (staging/prod según entorno).
+1. **Aplicar migraciones en Supabase** (una sola vez, ver sección siguiente).
 2. Laboratorio: `https://padel-score-mgti.vercel.app/americano`
 3. Crear sesión → control → abrir TV desde el panel.
+
+## Migración Supabase (obligatoria)
+
+El módulo **no funciona** sin estas tablas y funciones. Ejecutar **en el mismo proyecto** que usa staging (`NEXT_PUBLIC_SUPABASE_URL` en Vercel).
+
+### Opción A — Un solo script (recomendado)
+
+1. [Supabase Dashboard](https://supabase.com/dashboard) → tu proyecto → **SQL Editor** → **New query**
+2. Copiar y pegar el contenido de `scripts/apply-americano-migrations.sql`
+3. **Run** (debe terminar sin errores)
+4. Al final del script verás listadas 3 tablas (`americano_sessions`, `americano_players`, `americano_matches`) y 3 funciones RPC
+
+### Opción B — Archivos por separado
+
+En el mismo SQL Editor, ejecutar **en orden**:
+
+1. `supabase/migrations/072_americano_sessions.sql`
+2. `supabase/migrations/073_americano_tournament_bridge.sql`
+3. `supabase/migrations/074_americano_rls_and_correction.sql`
+
+### Comprobar que quedó bien
+
+```sql
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public' AND table_name LIKE 'americano_%';
+
+SELECT routine_name FROM information_schema.routines
+WHERE routine_schema = 'public' AND routine_name LIKE '%americano%';
+```
+
+Debes ver **3 tablas** y **3 funciones** (`submit_americano_match_result`, `recalculate_americano_session_points`, `correct_americano_match_result`).
+
+### Si ya ejecutaste solo la 072
+
+Ejecuta solo `073` y `074` (o el script completo: usa `IF NOT EXISTS` y es idempotente en tablas).
 
 URLs:
 
