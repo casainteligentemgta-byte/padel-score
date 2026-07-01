@@ -58,13 +58,14 @@ git push origin main      # producción cuando esté listo
 - [x] Podio / informe Telegram al cerrar sesión
 - [x] Marcador táctil por cancha
 - [x] Exportar PDF del cuadrante (descarga + compartir nativo en móvil)
-- [ ] Compartir WhatsApp dedicado del cuadrante (opcional; el share nativo del PDF cubre móvil)
+- [x] Compartir WhatsApp dedicado (PDF en móvil; texto + enlace en escritorio)
 
 ## Export PDF
 
 - Generador: `src/lib/americano/americanoSchedulePdf.ts` (jsPDF + autoTable).
-- Botones **PDF** / **Compartir** en `/americano` (preview) y en `/americano/session/{id}` (con resultados y clasificación en vivo).
-- En móvil, **Compartir** usa Web Share API con el archivo PDF (WhatsApp, correo, etc.); si no está disponible, descarga directa.
+- Botones **PDF** / **Compartir** / **WhatsApp** en `/americano` (preview) y en `/americano/session/{id}` (con resultados y clasificación en vivo).
+- En móvil, **Compartir** y **WhatsApp** usan Web Share API con el archivo PDF.
+- En escritorio, **WhatsApp** descarga el PDF y abre `wa.me` con resumen del cuadrante y enlace al control.
 
 ## Algoritmo de rotación (v2)
 

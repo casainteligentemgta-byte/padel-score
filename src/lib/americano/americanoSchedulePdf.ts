@@ -269,6 +269,100 @@ export function americanoPdfFileName(eventName: string): string {
   return `Americano_${safeFilenamePart(eventName)}.pdf`;
 }
 
+const WHATSAPP_TEXT_MAX = 3500;
+
+export function buildAmericanoWhatsAppMessage(
+  input: AmericanoPdfInput,
+  shareUrl?: string,
+): string {
+  const lines: string[] = [];
+  lines.push(`🎾 *${input.eventName}*`);
+  const meta = [
+    input.baseVenue?.trim(),
+    `${input.courtCount} cancha(s)`,
+    `a ${input.pointsGoal} pts`,
+    `${input.players.length} jugadores`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  if (meta) lines.push(`📍 ${meta}`);
+  lines.push('');
+
+  for (const round of input.rounds) {
+    lines.push(`*Ronda ${round.roundNumber}*`);
+    for (const m of round.matches) {
+      const score = m.score ? ` _(${m.score})_` : '';
+      lines.push(`Cancha ${m.court}: ${m.teamA} vs ${m.teamB}${score}`);
+    }
+    if (round.restingLabel) {
+      lines.push(`Descanso: ${round.restingLabel}`);
+    }
+    lines.push('');
+  }
+
+  const hasStandings = input.players.some((p) => (p.totalPoints ?? 0) > 0);
+  if (hasStandings) {
+    lines.push('*Clasificación*');
+    for (const [idx, p] of input.players.slice(0, 12).entries()) {
+      lines.push(`${idx + 1}. ${p.name} — ${p.totalPoints ?? 0} pts`);
+    }
+    lines.push('');
+  }
+
+  const url = shareUrl?.trim();
+  if (url) {
+    lines.push(`🔗 ${url}`);
+  } else {
+    lines.push('📎 Cuadrante completo en PDF (descargado en tu dispositivo).');
+  }
+
+  let text = lines.join('\n').trim();
+  if (text.length > WHATSAPP_TEXT_MAX) {
+    text = `${text.slice(0, WHATSAPP_TEXT_MAX - 40).trim()}\n\n… (cuadrante completo en el PDF)`;
+  }
+  return text;
+}
+
+function openWhatsAppWithText(text: string): void {
+  if (typeof window === 'undefined') return;
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+}
+
+export async function shareAmericanoScheduleViaWhatsApp(
+  input: AmericanoPdfInput,
+  options?: { shareUrl?: string },
+): Promise<void> {
+  const doc = buildAmericanoSchedulePdf(input);
+  const fileName = americanoPdfFileName(input.eventName);
+  const blob = doc.output('blob') as Blob;
+  const file = new File([blob], fileName, { type: 'application/pdf' });
+  const shareUrl =
+    options?.shareUrl?.trim() ||
+    (typeof window !== 'undefined' ? window.location.href : undefined);
+  const text = buildAmericanoWhatsAppMessage(input, shareUrl);
+
+  if (
+    typeof navigator !== 'undefined' &&
+    typeof navigator.share === 'function' &&
+    typeof navigator.canShare === 'function' &&
+    navigator.canShare({ files: [file] })
+  ) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: input.eventName,
+        text,
+      });
+      return;
+    } catch (e) {
+      if ((e as DOMException)?.name === 'AbortError') return;
+    }
+  }
+
+  downloadAmericanoSchedulePdf(input);
+  openWhatsAppWithText(text);
+}
+
 export function downloadAmericanoSchedulePdf(input: AmericanoPdfInput): void {
   const doc = buildAmericanoSchedulePdf(input);
   const fileName = americanoPdfFileName(input.eventName);
