@@ -6,6 +6,7 @@ import {
   fetchPizarraActivationsForDay,
   isCronAuthorized,
 } from '@/lib/expressActivityReport';
+import { isPrimaryProductionDeployment } from '@/lib/deploymentTier';
 import { notifyTelegramAdmin } from '@/lib/telegramBot';
 
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,10 @@ export const maxDuration = 60;
 export async function GET(req: Request) {
   if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (!isPrimaryProductionDeployment()) {
+    return NextResponse.json({ ok: true, skipped: true, reason: 'staging deployment' });
   }
 
   try {
