@@ -25,7 +25,7 @@ Producción (`main` / smartpadel58.com) **no** incluye este módulo hasta merge 
 
 ## Probar en staging
 
-1. Aplicar migraciones `072_americano_sessions.sql` y `073_americano_tournament_bridge.sql` en Supabase (staging/prod según entorno).
+1. Aplicar migraciones `072`, `073` y `074` en Supabase (staging/prod según entorno).
 2. Laboratorio: `https://padel-score-mgti.vercel.app/americano`
 3. Crear sesión → control → abrir TV desde el panel.
 
@@ -48,10 +48,12 @@ git push origin main      # producción cuando esté listo
 
 ## Roadmap restante
 
+- [x] Parejas más equilibradas (social golfer greedy v2)
+- [x] Auth en server actions + RLS lectura pública
+- [x] Corrección de resultados + recálculo de puntos
+- [x] Podio / informe Telegram al cerrar sesión
 - [ ] Exportar PDF / compartir WhatsApp del cuadrante
 - [ ] Marcador táctil por cancha (opcional; hoy se cargan resultados en el panel)
-- [ ] Podio / informe Telegram al cerrar sesión
-- [ ] Parejas más equilibradas (social golfer)
 
 ## Algoritmo de rotación (v1)
 

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, Play, Plus, Trash2, Users, LayoutGrid, Trophy } from 'lucide-react';
 import { createAmericanoSession } from '@/app/actions/americanoActions';
+import { getAmericanoAccessToken } from '@/lib/americano/americanoClientAuth';
 import { AMERICANO_POINTS_PRESETS } from '@/lib/americano/pointsPresets';
 import {
   generateAmericanoIndividualSchedule,
@@ -61,7 +62,9 @@ export default function AmericanoLabPage() {
   const startSession = () => {
     setCreateError(null);
     startTransition(async () => {
+      const accessToken = await getAmericanoAccessToken();
       const result = await createAmericanoSession({
+        accessToken,
         name: eventName,
         baseVenue,
         courtCount: numCourts,

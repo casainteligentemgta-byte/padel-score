@@ -1,10 +1,29 @@
 import { generateRotativeRotation, validateMatchScores } from '../src/lib/americano/logic.ts';
+import { generateBalancedRotation } from '../src/lib/americano/socialGolfer.ts';
 import { ScheduleEngine } from '../src/services/ScheduleEngine.ts';
 import { flattenPlayersFromTeams } from '../src/lib/americano/tournamentBridge.ts';
 import { TournamentType } from '../src/types/tournament.ts';
 
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(msg);
+}
+
+function partnerRepeatMax(players: { id: string; name: string }[], courtCount: number) {
+  const r = generateBalancedRotation(players, courtCount, 24);
+  const partnerCount = new Map<string, number>();
+  function inc(a: string, b: string) {
+    const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+    partnerCount.set(key, (partnerCount.get(key) ?? 0) + 1);
+  }
+  for (const round of r.rounds) {
+    for (const m of round.matches) {
+      inc(m.playerA1Id, m.playerA2Id);
+      inc(m.playerB1Id, m.playerB2Id);
+    }
+  }
+  let max = 0;
+  for (const v of partnerCount.values()) max = Math.max(max, v);
+  return max;
 }
 
 function testRotation() {
@@ -19,6 +38,9 @@ function testRotation() {
   assert(validateMatchScores(24, 24, 24) !== null, 'empate inválido');
   assert(validateMatchScores(24, 23, 24) === null, '24-23 válido');
   assert(validateMatchScores(23, 20, 24) !== null, 'ganador debe llegar a 24');
+
+  const maxPartners = partnerRepeatMax(players, 2);
+  assert(maxPartners <= 2, `social golfer: repeticiones de pareja <= 2 (got ${maxPartners})`);
 }
 
 function testScheduleEngine() {

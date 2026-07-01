@@ -1,4 +1,5 @@
 import type { AmericanoPointsGoal } from '@/types/americano';
+import { generateBalancedRotation } from '@/lib/americano/socialGolfer';
 
 export type AmericanoSessionStatus = 'draft' | 'live' | 'finished';
 export type AmericanoMatchStatus = 'pending' | 'finished';
@@ -100,9 +101,19 @@ function pairGroupOfFour(
 }
 
 /**
- * Genera rondas de americano individual con rotación circular y bloques de 4 por cancha.
+ * Genera rondas de americano individual (social golfer greedy v2).
+ * Minimiza parejas y rivales repetidos; fallback circular si n > 16.
  */
 export function generateRotativeRotation(
+  players: RotativePlayer[],
+  courtCount: number,
+  pointsGoal: AmericanoPointsGoal = 24,
+): RotativeRotationResult {
+  return generateBalancedRotation(players, courtCount, pointsGoal);
+}
+
+/** @deprecated Usar generateRotativeRotation (ahora delega en social golfer). */
+export function generateRotativeRotationCircle(
   players: RotativePlayer[],
   courtCount: number,
   pointsGoal: AmericanoPointsGoal = 24,

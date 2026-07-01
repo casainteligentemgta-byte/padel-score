@@ -3,7 +3,8 @@
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Check, ExternalLink, Loader2, Tv } from 'lucide-react';
-import { submitMatchResult } from '@/app/actions/americanoActions';
+import { correctMatchResult, submitMatchResult } from '@/app/actions/americanoActions';
+import { getAmericanoAccessToken } from '@/lib/americano/americanoClientAuth';
 import { playerNameById } from '@/lib/americano/logic';
 import { useAmericanoRealtime } from '@/lib/americano/useAmericanoRealtime';
 
@@ -14,7 +15,7 @@ type Props = {
 export function AmericanoSessionControl({ sessionId }: Props) {
   const { loading, error, bundle, refresh } = useAmericanoRealtime(sessionId);
   const [pending, startTransition] = useTransition();
-  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [scoreDraft, setScoreDraft] = useState<Record<string, { a: string; b: string }>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -32,16 +33,19 @@ export function AmericanoSessionControl({ sessionId }: Props) {
     return [...map.entries()].sort((a, b) => a[0] - b[0]);
   }, [matches]);
 
-  const handleSubmit = (matchId: string) => {
+  const handleSubmit = (matchId: string, isCorrection = false) => {
     const draft = scoreDraft[matchId] ?? { a: '', b: '' };
     const scoreA = Number(draft.a);
     const scoreB = Number(draft.b);
     setFormError(null);
-    setActiveMatchId(matchId);
+    setEditingMatchId(matchId);
 
     startTransition(async () => {
-      const result = await submitMatchResult({ matchId, scoreA, scoreB });
-      setActiveMatchId(null);
+      const accessToken = await getAmericanoAccessToken();
+      const result = isCorrection
+        ? await correctMatchResult({ matchId, scoreA, scoreB, accessToken })
+        : await submitMatchResult({ matchId, scoreA, scoreB, accessToken });
+      setEditingMatchId(null);
       if (!result.ok) {
         setFormError(result.error);
         return;
@@ -135,7 +139,7 @@ export function AmericanoSessionControl({ sessionId }: Props) {
                 };
                 const teamALabel = `${playerNameById(players, match.playerA1Id)} / ${playerNameById(players, match.playerA2Id)}`;
                 const teamBLabel = `${playerNameById(players, match.playerB1Id)} / ${playerNameById(players, match.playerB2Id)}`;
-                const saving = pending && activeMatchId === match.id;
+                const saving = pending && editingMatchId === match.id;
 
                 return (
                   <div key={match.id} className="px-4 py-3">
@@ -149,10 +153,54 @@ export function AmericanoSessionControl({ sessionId }: Props) {
                     </p>
 
                     {isFinished ? (
-                      <p className="mt-2 inline-flex items-center gap-1.5 text-sm font-bold text-emerald-400">
-                        <Check className="h-4 w-4" />
-                        {match.scoreA} – {match.scoreB}
-                      </p>
+                      <div className="mt-2 space-y-2">
+                        <p className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-400">
+                          <Check className="h-4 w-4" />
+                          {match.scoreA} – {match.scoreB}
+                        </p>
+                        <div className="flex flex-wrap items-end gap-2">
+                          <label className="space-y-1">
+                            <span className="text-[9px] uppercase tracking-wider text-neutral-500">Corregir A</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={match.pointsGoal}
+                              value={draft.a}
+                              onChange={(e) =>
+                                setScoreDraft((prev) => ({
+                                  ...prev,
+                                  [match.id]: { ...draft, a: e.target.value },
+                                }))
+                              }
+                              className="w-20 rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-sm outline-none focus:border-amber-400/50"
+                            />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-[9px] uppercase tracking-wider text-neutral-500">Corregir B</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={match.pointsGoal}
+                              value={draft.b}
+                              onChange={(e) =>
+                                setScoreDraft((prev) => ({
+                                  ...prev,
+                                  [match.id]: { ...draft, b: e.target.value },
+                                }))
+                              }
+                              className="w-20 rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-sm outline-none focus:border-amber-400/50"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => handleSubmit(match.id, true)}
+                            className="rounded-lg border border-amber-500/30 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-amber-300 hover:bg-amber-500/10 disabled:opacity-50"
+                          >
+                            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Corregir'}
+                          </button>
+                        </div>
+                      </div>
                     ) : (
                       <div className="mt-3 flex flex-wrap items-end gap-2">
                         <label className="space-y-1">
@@ -190,7 +238,7 @@ export function AmericanoSessionControl({ sessionId }: Props) {
                         <button
                           type="button"
                           disabled={saving}
-                          onClick={() => handleSubmit(match.id)}
+                          onClick={() => handleSubmit(match.id, false)}
                           className="rounded-lg bg-amber-500/20 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-amber-300 hover:bg-amber-500/30 disabled:opacity-50"
                         >
                           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Guardar'}

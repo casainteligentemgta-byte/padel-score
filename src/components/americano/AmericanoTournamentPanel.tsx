@@ -7,6 +7,7 @@ import {
   createAmericanoSessionFromTournament,
   finishAmericanoSession,
 } from '@/app/actions/americanoActions';
+import { getAmericanoAccessToken } from '@/lib/americano/americanoClientAuth';
 
 type Props = {
   tournamentId: string;
@@ -36,7 +37,8 @@ export function AmericanoTournamentPanel({
   const handleStart = () => {
     setError(null);
     startTransition(async () => {
-      const result = await createAmericanoSessionFromTournament({ tournamentId });
+      const accessToken = await getAmericanoAccessToken();
+      const result = await createAmericanoSessionFromTournament({ tournamentId, accessToken });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -49,7 +51,8 @@ export function AmericanoTournamentPanel({
     if (!sessionId) return;
     setError(null);
     startTransition(async () => {
-      const result = await finishAmericanoSession({ sessionId });
+      const accessToken = await getAmericanoAccessToken();
+      const result = await finishAmericanoSession({ sessionId, accessToken });
       if (!result.ok) {
         setError(result.error);
       }

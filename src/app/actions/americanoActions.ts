@@ -7,6 +7,9 @@ import {
   validateMatchScores,
   type AmericanoMatch,
 } from '@/lib/americano/logic';
+import { requireAmericanoManager } from '@/lib/americano/americanoAuth';
+import { syncAmericanoSessionToTournament } from '@/lib/americano/americanoSync';
+import { notifyAmericanoSessionFinished } from '@/lib/americano/americanoTelegram';
 import {
   flattenPlayersFromTeams,
   normalizeAmericanoPointsGoal,
@@ -16,6 +19,8 @@ import { TournamentType } from '@/types/tournament';
 import type { AmericanoPointsGoal } from '@/types/americano';
 
 export type ActionResult<T = void> = { ok: true; data: T } | { ok: false; error: string };
+
+type AuthInput = { accessToken?: string | null };
 
 async function insertAmericanoSessionCore(input: {
   name: string;
@@ -109,13 +114,18 @@ async function insertAmericanoSessionCore(input: {
   return { ok: true, data: { sessionId } };
 }
 
-export async function createAmericanoSession(input: {
-  name: string;
-  baseVenue: string;
-  courtCount: number;
-  pointsGoal: AmericanoPointsGoal;
-  playerNames: string[];
-}): Promise<ActionResult<{ sessionId: string }>> {
+export async function createAmericanoSession(
+  input: AuthInput & {
+    name: string;
+    baseVenue: string;
+    courtCount: number;
+    pointsGoal: AmericanoPointsGoal;
+    playerNames: string[];
+  },
+): Promise<ActionResult<{ sessionId: string }>> {
+  const auth = await requireAmericanoManager(input.accessToken, { allowLab: true });
+  if (!auth.ok) return auth;
+
   const result = await insertAmericanoSessionCore(input);
   if (result.ok) {
     revalidatePath('/americano');
@@ -125,15 +135,18 @@ export async function createAmericanoSession(input: {
   return result;
 }
 
-export async function createAmericanoSessionFromTournament(input: {
-  tournamentId: string;
-}): Promise<ActionResult<{ sessionId: string }>> {
+export async function createAmericanoSessionFromTournament(
+  input: AuthInput & { tournamentId: string },
+): Promise<ActionResult<{ sessionId: string }>> {
+  const tournamentId = String(input.tournamentId || '').trim();
+  const auth = await requireAmericanoManager(input.accessToken, { tournamentId });
+  if (!auth.ok) return auth;
+
   const supabase = getSupabaseServiceClient();
   if (!supabase) {
     return { ok: false, error: 'Servidor sin SUPABASE_SERVICE_ROLE_KEY.' };
   }
 
-  const tournamentId = String(input.tournamentId || '').trim();
   if (!tournamentId) {
     return { ok: false, error: 'Torneo no indicado.' };
   }
@@ -183,10 +196,7 @@ export async function createAmericanoSessionFromTournament(input: {
   if (!result.ok) return result;
 
   const sessionId = result.data.sessionId;
-  const nextData = {
-    ...tournament,
-    americanoSessionId: sessionId,
-  };
+  const nextData = { ...tournament, americanoSessionId: sessionId };
 
   await supabase
     .from('tournaments')
@@ -200,28 +210,33 @@ export async function createAmericanoSessionFromTournament(input: {
   return result;
 }
 
-export async function finishAmericanoSession(input: {
-  sessionId: string;
-}): Promise<ActionResult<void>> {
+export async function finishAmericanoSession(
+  input: AuthInput & { sessionId: string },
+): Promise<ActionResult<void>> {
+  const sessionId = String(input.sessionId || '').trim();
+  const auth = await requireAmericanoManager(input.accessToken, { sessionId });
+  if (!auth.ok) return auth;
+
   const supabase = getSupabaseServiceClient();
   if (!supabase) {
     return { ok: false, error: 'Servidor sin SUPABASE_SERVICE_ROLE_KEY.' };
   }
 
-  const sessionId = String(input.sessionId || '').trim();
   if (!sessionId) {
     return { ok: false, error: 'Sesión no indicada.' };
   }
 
   const { data: session, error: sessionErr } = await supabase
     .from('americano_sessions')
-    .select('id, tournament_id, status')
+    .select('id, tournament_id, status, name, base_venue, points_goal')
     .eq('id', sessionId)
     .maybeSingle();
 
   if (sessionErr || !session) {
     return { ok: false, error: sessionErr?.message ?? 'Sesión no encontrada.' };
   }
+
+  await supabase.rpc('recalculate_americano_session_points', { p_session_id: sessionId });
 
   const { error: updateErr } = await supabase
     .from('americano_sessions')
@@ -232,31 +247,68 @@ export async function finishAmericanoSession(input: {
     return { ok: false, error: updateErr.message };
   }
 
+  let tournamentName: string | undefined;
   if (session.tournament_id) {
+    const standings = await syncAmericanoSessionToTournament(
+      supabase,
+      sessionId,
+      session.tournament_id as string,
+    );
+
+    const { data: tRow } = await supabase
+      .from('tournaments')
+      .select('data')
+      .eq('id', session.tournament_id)
+      .maybeSingle();
+    tournamentName = (tRow?.data as any)?.name;
+
+    await notifyAmericanoSessionFinished({
+      sessionName: session.name as string,
+      baseVenue: session.base_venue as string,
+      pointsGoal: session.points_goal as number,
+      tournamentName,
+      standings: standings.map((s) => ({
+        name: s.name,
+        totalPoints: s.totalPoints,
+        rank: s.rank,
+      })),
+    });
+
     revalidatePath(`/tournaments/${session.tournament_id}`);
+  } else {
+    const { data: players } = await supabase
+      .from('americano_players')
+      .select('name, total_points')
+      .eq('session_id', sessionId)
+      .order('total_points', { ascending: false });
+
+    await notifyAmericanoSessionFinished({
+      sessionName: session.name as string,
+      baseVenue: session.base_venue as string,
+      pointsGoal: session.points_goal as number,
+      standings: (players ?? []).map((p, idx) => ({
+        name: p.name as string,
+        totalPoints: p.total_points as number,
+        rank: idx + 1,
+      })),
+    });
   }
+
   revalidatePath(`/americano/session/${sessionId}`);
   revalidatePath(`/americano/tv/${sessionId}`);
 
   return { ok: true, data: undefined as void };
 }
 
-export async function submitMatchResult(input: {
-  matchId: string;
-  scoreA: number;
-  scoreB: number;
-}): Promise<ActionResult<void>> {
+async function applyMatchScores(
+  matchId: string,
+  scoreA: number,
+  scoreB: number,
+  allowCorrection: boolean,
+): Promise<ActionResult<{ sessionId: string }>> {
   const supabase = getSupabaseServiceClient();
   if (!supabase) {
     return { ok: false, error: 'Servidor sin SUPABASE_SERVICE_ROLE_KEY.' };
-  }
-
-  const matchId = String(input.matchId || '').trim();
-  const scoreA = Number(input.scoreA);
-  const scoreB = Number(input.scoreB);
-
-  if (!matchId) {
-    return { ok: false, error: 'Partido no indicado.' };
   }
 
   const { data: row, error: fetchErr } = await supabase
@@ -269,7 +321,7 @@ export async function submitMatchResult(input: {
     return { ok: false, error: fetchErr?.message ?? 'Partido no encontrado.' };
   }
 
-  if (row.status === 'finished') {
+  if (row.status === 'finished' && !allowCorrection) {
     return { ok: false, error: 'Este partido ya tiene resultado.' };
   }
 
@@ -281,6 +333,31 @@ export async function submitMatchResult(input: {
 
   const sessionId = row.session_id as string;
 
+  if (allowCorrection) {
+    const { error: rpcErr } = await supabase.rpc('correct_americano_match_result', {
+      p_match_id: matchId,
+      p_score_a: scoreA,
+      p_score_b: scoreB,
+    });
+
+    if (!rpcErr) {
+      return { ok: true, data: { sessionId } };
+    }
+
+    await supabase
+      .from('americano_matches')
+      .update({
+        score_a: scoreA,
+        score_b: scoreB,
+        status: 'finished',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', matchId);
+
+    await supabase.rpc('recalculate_americano_session_points', { p_session_id: sessionId });
+    return { ok: true, data: { sessionId } };
+  }
+
   const { error: rpcErr } = await supabase.rpc('submit_americano_match_result', {
     p_match_id: matchId,
     p_score_a: scoreA,
@@ -288,23 +365,9 @@ export async function submitMatchResult(input: {
   });
 
   if (!rpcErr) {
-    revalidatePath(`/americano/session/${sessionId}`);
-    revalidatePath(`/americano/tv/${sessionId}`);
-
-    const { data: sessionRow } = await supabase
-      .from('americano_sessions')
-      .select('tournament_id')
-      .eq('id', sessionId)
-      .maybeSingle();
-
-    if (sessionRow?.tournament_id) {
-      revalidatePath(`/tournaments/${sessionRow.tournament_id}`);
-    }
-
-    return { ok: true, data: undefined as void };
+    return { ok: true, data: { sessionId } };
   }
 
-  // Fallback si la migración RPC aún no está aplicada
   const match: AmericanoMatch = {
     id: row.id,
     sessionId: row.session_id,
@@ -359,18 +422,85 @@ export async function submitMatchResult(input: {
     }
   }
 
+  return { ok: true, data: { sessionId } };
+}
+
+function revalidateAfterMatch(sessionId: string, tournamentId?: string | null) {
   revalidatePath(`/americano/session/${sessionId}`);
   revalidatePath(`/americano/tv/${sessionId}`);
+  if (tournamentId) revalidatePath(`/tournaments/${tournamentId}`);
+}
+
+export async function submitMatchResult(
+  input: AuthInput & { matchId: string; scoreA: number; scoreB: number },
+): Promise<ActionResult<void>> {
+  const matchId = String(input.matchId || '').trim();
+  if (!matchId) {
+    return { ok: false, error: 'Partido no indicado.' };
+  }
+
+  const supabase = getSupabaseServiceClient();
+  if (!supabase) {
+    return { ok: false, error: 'Servidor sin SUPABASE_SERVICE_ROLE_KEY.' };
+  }
+
+  const { data: row } = await supabase
+    .from('americano_matches')
+    .select('session_id')
+    .eq('id', matchId)
+    .maybeSingle();
+
+  const auth = await requireAmericanoManager(input.accessToken, {
+    sessionId: row?.session_id as string,
+  });
+  if (!auth.ok) return auth;
+
+  const result = await applyMatchScores(matchId, Number(input.scoreA), Number(input.scoreB), false);
+  if (!result.ok) return result;
 
   const { data: sessionRow } = await supabase
     .from('americano_sessions')
     .select('tournament_id')
-    .eq('id', sessionId)
+    .eq('id', result.data.sessionId)
     .maybeSingle();
 
-  if (sessionRow?.tournament_id) {
-    revalidatePath(`/tournaments/${sessionRow.tournament_id}`);
+  revalidateAfterMatch(result.data.sessionId, sessionRow?.tournament_id as string | undefined);
+  return { ok: true, data: undefined as void };
+}
+
+export async function correctMatchResult(
+  input: AuthInput & { matchId: string; scoreA: number; scoreB: number },
+): Promise<ActionResult<void>> {
+  const matchId = String(input.matchId || '').trim();
+  if (!matchId) {
+    return { ok: false, error: 'Partido no indicado.' };
   }
 
+  const supabase = getSupabaseServiceClient();
+  if (!supabase) {
+    return { ok: false, error: 'Servidor sin SUPABASE_SERVICE_ROLE_KEY.' };
+  }
+
+  const { data: row } = await supabase
+    .from('americano_matches')
+    .select('session_id')
+    .eq('id', matchId)
+    .maybeSingle();
+
+  const auth = await requireAmericanoManager(input.accessToken, {
+    sessionId: row?.session_id as string,
+  });
+  if (!auth.ok) return auth;
+
+  const result = await applyMatchScores(matchId, Number(input.scoreA), Number(input.scoreB), true);
+  if (!result.ok) return result;
+
+  const { data: sessionRow } = await supabase
+    .from('americano_sessions')
+    .select('tournament_id')
+    .eq('id', result.data.sessionId)
+    .maybeSingle();
+
+  revalidateAfterMatch(result.data.sessionId, sessionRow?.tournament_id as string | undefined);
   return { ok: true, data: undefined as void };
 }
