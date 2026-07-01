@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Mail,
@@ -25,6 +25,7 @@ import { useAppSettings } from '@/lib/AppSettingsContext';
 import { isAdminAccess } from '@/lib/adminAccess';
 import LegalModal from '@/components/legal/LegalModal';
 import { getAuthHeaders } from '@/lib/apiAuth';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
 export default function HomePage() {
     const { user, isAdmin, loading: authLoading, profileLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
@@ -45,16 +46,14 @@ export default function HomePage() {
     const [smartConsentAccepted, setSmartConsentAccepted] = useState(false);
     const [smartConsentModalOpen, setSmartConsentModalOpen] = useState(false);
     const [smartConsentSaving, setSmartConsentSaving] = useState(false);
+    const supabaseConfigured = useMemo(() => !!getSupabaseClient(), []);
 
     useEffect(() => {
         if (!authLoading && user) {
-            if (isAdmin) {
-                router.replace('/admin');
-            } else if (!profileLoading) {
-                router.replace('/dashboard');
-            }
+            const admin = isAdmin || isAdminAccess(profile?.role, user.email ?? undefined);
+            router.replace(admin ? '/admin' : '/dashboard');
         }
-    }, [authLoading, user, profileLoading, isAdmin, router]);
+    }, [authLoading, user, profile?.role, isAdmin, router]);
 
     const handleGoogleSignIn = async () => {
         setLoading(true);
@@ -141,8 +140,8 @@ export default function HomePage() {
                     console.error('Error persisting legal consent:', e);
                 }
             }
-            const shouldGoAdmin = isAdmin || isAdminAccess(undefined, formData.email);
-            router.push(shouldGoAdmin ? '/admin' : '/dashboard');
+            const shouldGoAdmin = isAdminAccess(profile?.role, formData.email);
+            router.replace(shouldGoAdmin ? '/admin' : '/dashboard');
 
         } catch (err: any) {
             setError(getAuthErrorMessage(err));
@@ -200,6 +199,13 @@ export default function HomePage() {
                 {/* Auth Card Container - Now Transparent to remove 'rectangulo blanco' perception */}
                 <div className="w-full">
                     <div className="p-0">
+                        {!supabaseConfigured ? (
+                            <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+                                Supabase no está configurado en este despliegue. Revisa en Vercel las variables{' '}
+                                <code className="text-red-100">NEXT_PUBLIC_SUPABASE_URL</code> y{' '}
+                                <code className="text-red-100">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>.
+                            </div>
+                        ) : null}
                         {/* Selector Tab - Glowing Text Style */}
                         <div className="flex justify-center gap-12 mb-12 border-b border-white/5 pb-4">
                             <button
@@ -251,7 +257,7 @@ export default function HomePage() {
                                                 required={!isLogin}
                                                 type="text"
                                                 placeholder="NOMBRE COMPLETO"
-                                                className="w-full h-16 bg-transparent border border-white/10 rounded-full pl-16 pr-6 text-sm outline-none focus:border-padel-primary/40 focus:bg-white/[0.02] transition-all font-bold text-white placeholder:text-zinc-700 tracking-wider"
+                                                className="w-full h-16 rounded-full border border-white/20 bg-slate-900 pl-16 pr-6 text-sm font-bold text-white caret-padel-primary outline-none placeholder:text-neutral-500 focus:border-padel-primary/60 focus:ring-1 focus:ring-padel-primary/30 transition-all tracking-wider"
                                                 value={formData.name}
                                                 onChange={e => setFormData({ ...formData, name: e.target.value })}
                                             />
@@ -268,7 +274,7 @@ export default function HomePage() {
                                     required
                                     type="email"
                                     placeholder="CORREO ELECTRÓNICO"
-                                    className="w-full h-16 bg-transparent border border-white/10 rounded-full pl-16 pr-6 text-sm outline-none focus:border-padel-primary/40 focus:bg-white/[0.02] transition-all font-bold text-white placeholder:text-zinc-700 tracking-wider"
+                                    className="w-full h-16 rounded-full border border-white/20 bg-slate-900 pl-16 pr-6 text-sm font-bold text-white caret-padel-primary outline-none placeholder:text-neutral-500 focus:border-padel-primary/60 focus:ring-1 focus:ring-padel-primary/30 transition-all tracking-wider"
                                     value={formData.email}
                                     onChange={e => setFormData({ ...formData, email: e.target.value })}
                                 />
@@ -282,7 +288,7 @@ export default function HomePage() {
                                     required
                                     type={showPassword ? 'text' : 'password'}
                                     placeholder="CONTRASEÑA"
-                                    className="w-full h-16 bg-transparent border border-white/10 rounded-full pl-16 pr-14 text-sm outline-none focus:border-padel-primary/40 focus:bg-white/[0.02] transition-all font-bold text-white placeholder:text-zinc-700 tracking-wider"
+                                    className="w-full h-16 rounded-full border border-white/20 bg-slate-900 pl-16 pr-14 text-sm font-bold text-white caret-padel-primary outline-none placeholder:text-neutral-500 focus:border-padel-primary/60 focus:ring-1 focus:ring-padel-primary/30 transition-all tracking-wider"
                                     value={formData.password}
                                     onChange={e => setFormData({ ...formData, password: e.target.value })}
                                 />

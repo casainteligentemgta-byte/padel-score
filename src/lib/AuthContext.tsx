@@ -242,7 +242,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
         const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
         if (error) throw error;
-        if (data.user) await fetchProfile(data.user.id, { email: data.user.email ?? undefined, name: (data.user.user_metadata?.full_name as string) || (data.user.user_metadata?.name as string) });
+        if (data.user) {
+            const appUser = mapSupabaseUser(data.user);
+            setUser(appUser);
+            setLoading(false);
+            await fetchProfile(data.user.id, {
+                email: data.user.email ?? undefined,
+                name: (data.user.user_metadata?.full_name as string) || (data.user.user_metadata?.name as string),
+            });
+        }
     };
 
     const signUpWithEmail = async (email: string, pass: string, name: string) => {

@@ -26,26 +26,35 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { isAdminAccess } from '@/lib/adminAccess';
 
 import BouncingBall from '@/components/BouncingBall';
 
 export default function AdminHubPage() {
-    const { isAdmin, loading, profile, logout } = useAuth();
+    const { isAdmin, loading, profile, profileLoading, user, logout } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
-        if (!loading && !isAdmin) {
-            router.replace('/');
+        if (loading) return;
+        if (!user) {
+            router.replace('/login');
+            return;
         }
-    }, [isAdmin, loading, router]);
+        if (profileLoading) return;
+        const admin = isAdmin || isAdminAccess(profile?.role, user.email ?? undefined);
+        if (!admin) {
+            router.replace('/dashboard');
+        }
+    }, [isAdmin, loading, profileLoading, profile?.role, user, router]);
 
-    if (loading) return (
+    if (loading || profileLoading) return (
         <div className="h-screen bg-[#050505] flex items-center justify-center">
             <div className="w-8 h-8 border-4 border-padel-primary/20 border-t-padel-primary rounded-full animate-spin" />
         </div>
     );
 
-    if (!isAdmin) return null;
+    const hasAdminAccess = isAdmin || isAdminAccess(profile?.role, user?.email ?? undefined);
+    if (!hasAdminAccess) return null;
 
     const adminSections = [
         {

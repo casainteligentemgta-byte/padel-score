@@ -31,9 +31,30 @@ export default function DashboardPage() {
     const [recentMatches, setRecentMatches] = useState<RecentMatch[]>([]);
 
     useEffect(() => {
-        if (!authLoading && !user?.uid) {
-            router.replace('/login');
-        }
+        if (authLoading) return;
+
+        let cancelled = false;
+        const verify = async () => {
+            if (user?.uid) return;
+            const supabase = getSupabaseClient();
+            if (!supabase) {
+                if (!cancelled) router.replace('/login');
+                return;
+            }
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!cancelled && !session?.user) {
+                router.replace('/login');
+            }
+        };
+
+        const timer = window.setTimeout(() => {
+            void verify();
+        }, 400);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
     }, [authLoading, router, user?.uid]);
 
     useEffect(() => {

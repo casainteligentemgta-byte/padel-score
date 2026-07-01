@@ -80,5 +80,11 @@ export function getAuthErrorMessage(err: any): string {
   if (process.env.NODE_ENV === 'development') {
     return `Error de autenticación: ${msg}`;
   }
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.includes('mgti') || host.includes('staging') || host === 'localhost') {
+      return msg || 'No se pudo completar la operación. Inténtalo de nuevo.';
+    }
+  }
   return 'No se pudo completar la operación. Inténtalo de nuevo.';
 }

@@ -116,8 +116,8 @@ export default function LoginPage() {
     const {
         user,
         loading: authLoading,
-        profileLoading,
         isAdmin,
+        profile,
         signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,
@@ -126,6 +126,7 @@ export default function LoginPage() {
     } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
+    const supabaseConfigured = useMemo(() => !!getSupabaseClient(), []);
     const [isLogin, setIsLogin] = useState(true);
     const [designMode, setDesignMode] = useState<'minimal' | 'glass'>('glass');
     const [loading, setLoading] = useState(false);
@@ -154,13 +155,10 @@ export default function LoginPage() {
                 router.replace(next);
                 return;
             }
-            if (isAdmin) {
-                router.replace('/admin');
-            } else if (!profileLoading) {
-                router.replace('/dashboard');
-            }
+            const admin = isAdmin || isAdminAccess(profile?.role, user.email ?? undefined);
+            router.replace(admin ? '/admin' : '/dashboard');
         }
-    }, [authLoading, user, profileLoading, isAdmin, router, searchParams]);
+    }, [authLoading, user, profile?.role, isAdmin, router, searchParams]);
 
     useEffect(() => {
         setPasskeySupported(typeof window !== 'undefined' && 'PublicKeyCredential' in window);
@@ -265,10 +263,10 @@ export default function LoginPage() {
             }
             const next = safeInternalNextPath(searchParams.get('next'));
             if (next) {
-                router.push(next);
+                router.replace(next);
             } else {
-                const shouldGoAdmin = isAdmin || isAdminAccess(undefined, formData.email);
-                router.push(shouldGoAdmin ? '/admin' : '/dashboard');
+                const shouldGoAdmin = isAdminAccess(profile?.role, formData.email);
+                router.replace(shouldGoAdmin ? '/admin' : '/dashboard');
             }
         } catch (err: any) {
             setError(getAuthErrorMessage(err));
@@ -464,6 +462,13 @@ export default function LoginPage() {
                     <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-padel-primary/30 to-transparent" />
 
                     <div className="p-8 sm:p-10">
+                        {!supabaseConfigured ? (
+                            <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+                                Supabase no está configurado en este despliegue. Revisa en Vercel las variables{' '}
+                                <code className="text-red-100">NEXT_PUBLIC_SUPABASE_URL</code> y{' '}
+                                <code className="text-red-100">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>.
+                            </div>
+                        ) : null}
                         {/* Selector Tab - Glowing Text Style */}
                         <div className="flex justify-center gap-12 mb-12 border-b border-white/5 pb-4">
                             <button
