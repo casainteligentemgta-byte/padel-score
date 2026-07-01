@@ -1,8 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Trash2, Users, LayoutGrid, Trophy } from 'lucide-react';
+import { Loader2, Play, Plus, Trash2, Users, LayoutGrid, Trophy } from 'lucide-react';
+import { createAmericanoSession } from '@/app/actions/americanoActions';
 import { AMERICANO_POINTS_PRESETS } from '@/lib/americano/pointsPresets';
 import {
   generateAmericanoIndividualSchedule,
@@ -15,7 +17,11 @@ function newPlayer(index: number): AmericanoPlayer {
 }
 
 export default function AmericanoLabPage() {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [createError, setCreateError] = useState<string | null>(null);
   const [eventName, setEventName] = useState('Americano de prueba');
+  const [baseVenue, setBaseVenue] = useState('El Bodeguero');
   const [numCourts, setNumCourts] = useState(2);
   const [pointsGoal, setPointsGoal] = useState<AmericanoPointsGoal>(24);
   const [players, setPlayers] = useState<AmericanoPlayer[]>(() =>
@@ -44,6 +50,24 @@ export default function AmericanoLabPage() {
 
   const updateName = (id: string, name: string) => {
     setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, name } : p)));
+  };
+
+  const startSession = () => {
+    setCreateError(null);
+    startTransition(async () => {
+      const result = await createAmericanoSession({
+        name: eventName,
+        baseVenue,
+        courtCount: numCourts,
+        pointsGoal,
+        playerNames: players.map((p) => p.name),
+      });
+      if (!result.ok) {
+        setCreateError(result.error);
+        return;
+      }
+      router.push(`/americano/session/${result.data.sessionId}`);
+    });
   };
 
   return (
@@ -85,6 +109,16 @@ export default function AmericanoLabPage() {
             />
           </label>
           <label className="block space-y-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-500">
+              Sede (publicidad TV)
+            </span>
+            <input
+              value={baseVenue}
+              onChange={(e) => setBaseVenue(e.target.value)}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none focus:border-padel-primary/50"
+            />
+          </label>
+          <label className="block space-y-1.5 sm:col-span-2 sm:max-w-xs">
             <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-neutral-500">
               <LayoutGrid className="h-3.5 w-3.5" /> Canchas
             </span>
@@ -160,10 +194,24 @@ export default function AmericanoLabPage() {
         </section>
 
         <section className="rounded-2xl border border-padel-primary/25 bg-padel-primary/5 p-4">
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-black uppercase tracking-wide text-padel-primary">
-            <Trophy className="h-4 w-4" />
-            Resumen
-          </h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-padel-primary">
+              <Trophy className="h-4 w-4" />
+              Resumen
+            </h2>
+            <button
+              type="button"
+              disabled={pending || schedule.rounds.length === 0}
+              onClick={startSession}
+              className="inline-flex items-center gap-2 rounded-xl bg-padel-primary px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-black disabled:opacity-50"
+            >
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              Crear sesión y controlar
+            </button>
+          </div>
+          {createError ? (
+            <p className="mb-3 text-xs text-red-400">{createError}</p>
+          ) : null}
           <ul className="space-y-1 text-sm text-neutral-300">
             <li>
               <strong>{schedule.totalRounds}</strong> rondas · ~

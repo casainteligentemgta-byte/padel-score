@@ -4,24 +4,35 @@ Desarrollo en rama **`staging`** → despliega en **padel-score-mgti**.
 
 Producción (`main` / smartpadel58.com) **no** incluye este módulo hasta merge explícito.
 
-## Estado actual (MVP)
+## Estado actual
 
 | Pieza | Ruta / archivo | Estado |
 |-------|----------------|--------|
-| Tipos | `src/types/americano.ts` | ✅ |
+| Tipos schedule | `src/types/americano.ts` | ✅ |
+| Lógica + tipos sesión | `src/lib/americano/logic.ts` | ✅ |
 | Presets puntos (16–40) | `src/lib/americano/pointsPresets.ts` | ✅ |
-| Motor rotaciones | `src/lib/americano/rotationEngine.ts` | ✅ MVP |
+| Motor rotaciones | `rotationEngine.ts` → `generateRotativeRotation` | ✅ |
+| BD Supabase | `supabase/migrations/072_americano_sessions.sql` | ✅ (aplicar en Supabase) |
+| Server actions | `src/app/actions/americanoActions.ts` | ✅ |
+| Realtime TV | `src/lib/americano/useAmericanoRealtime.ts` | ✅ |
 | UI laboratorio | `/americano` | ✅ |
-| BD / Supabase | — | Pendiente |
-| Marcador por partido | — | Pendiente |
-| Ranking acumulado | — | Pendiente |
-| Integración torneos | parcial vía `AMERICANO_INDIVIDUAL` existente | Legacy |
+| Control admin | `/americano/session/[sessionId]` | ✅ |
+| Pantalla TV | `/americano/tv/[sessionId]` | ✅ |
+| Ranking acumulado | leaderboard + puntos por partido | ✅ |
+| Integración torneos legacy | `AMERICANO_INDIVIDUAL` en master-generator | Sin tocar |
+
+**Aislamiento:** no modifica `expressScoring.ts`, `express_matches` ni el flujo Express de canchas.
 
 ## Probar en staging
 
-```
-https://padel-score-mgti.vercel.app/americano
-```
+1. Aplicar migración `072_americano_sessions.sql` en Supabase (staging/prod según entorno).
+2. Laboratorio: `https://padel-score-mgti.vercel.app/americano`
+3. Crear sesión → control → abrir TV desde el panel.
+
+URLs:
+
+- Control: `/americano/session/{uuid}`
+- TV: `/americano/tv/{uuid}` (publicidad vía `ExpressTvPublicidadDock` + sede del evento)
 
 ## Flujo de trabajo
 
@@ -35,31 +46,14 @@ git merge staging
 git push origin main      # producción cuando esté listo
 ```
 
-## Roadmap
+## Roadmap restante
 
-### Fase 1 — Generador (actual)
-- [x] Config: jugadores, canchas, puntos
-- [x] Cuadrante de rondas con descansos
-- [ ] Exportar PDF / compartir WhatsApp
-
-### Fase 2 — Sesión en BD
-- [ ] Tabla `americano_sessions` + jugadores + rondas
-- [ ] Admin crea evento y guarda fixture
-
-### Fase 3 — Marcador
-- [ ] Partido a N puntos (como Express pero americano)
-- [ ] Suma individual de puntos por jugador
-
-### Fase 4 — Ranking y cierre
-- [ ] Clasificación en vivo
-- [ ] Podio / informe Telegram
-
-## Relación con código existente
-
-- `TournamentType.AMERICANO_INDIVIDUAL` en torneos clásicos (`/admin/master-generator`)
-- Este módulo apunta a un **flujo dedicado** más simple que el wizard de torneo completo
+- [ ] Exportar PDF / compartir WhatsApp del cuadrante
+- [ ] Marcador táctil por cancha (opcional; hoy se cargan resultados en el panel)
+- [ ] Podio / informe Telegram al cerrar sesión
+- [ ] Parejas más equilibradas (social golfer)
 
 ## Algoritmo de rotación (v1)
 
-Rotación circular de jugadores + bloques de 4 por cancha.  
-Mejoras futuras: parejas más equilibradas (social golfer / partner matrix).
+`generateRotativeRotation`: rotación circular + bloques de 4 por cancha.  
+Cada jugador suma los puntos de su lado en cada partido terminado.
