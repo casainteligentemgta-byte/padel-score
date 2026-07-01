@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { isValidEmail, isValidPassword, validateSignupPassword } from '@/lib/authValidators';
-import { getAuthErrorMessage } from '@/lib/authErrorMessages';
+import { getAuthErrorMessage, shouldShowVerboseAuthErrors } from '@/lib/authErrorMessages';
 import { useRouter } from 'next/navigation';
 import BouncingBall from '@/components/BouncingBall';
 import { useAppSettings } from '@/lib/AppSettingsContext';
@@ -143,7 +143,8 @@ export default function HomePage() {
             const shouldGoAdmin = isAdminAccess(profile?.role, formData.email);
             router.replace(shouldGoAdmin ? '/admin' : '/dashboard');
 
-        } catch (err: any) {
+        } catch (err: unknown) {
+            console.error('[Home login]', err);
             setError(getAuthErrorMessage(err));
         } finally {
             setLoading(false);

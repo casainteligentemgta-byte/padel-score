@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { isValidEmail, isValidPassword, validateSignupPassword } from '@/lib/authValidators';
-import { getAuthErrorMessage } from '@/lib/authErrorMessages';
+import { getAuthErrorMessage, shouldShowVerboseAuthErrors } from '@/lib/authErrorMessages';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import BouncingBall from '@/components/BouncingBall';
@@ -147,6 +147,7 @@ export default function LoginPage() {
     const [smartConsentModalOpen, setSmartConsentModalOpen] = useState(false);
     const [smartConsentSavePending, setSmartConsentSavePending] = useState(false);
     const [smartConsentSaving, setSmartConsentSaving] = useState(false);
+    const [authStatus, setAuthStatus] = useState<{ ok: boolean; detail: string | null } | null>(null);
 
     useEffect(() => {
         if (!authLoading && user) {
@@ -162,6 +163,37 @@ export default function LoginPage() {
 
     useEffect(() => {
         setPasskeySupported(typeof window !== 'undefined' && 'PublicKeyCredential' in window);
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch('/api/auth/status', { cache: 'no-store' });
+                const json = await res.json();
+                if (cancelled) return;
+                if (!json?.supabase?.urlConfigured || !json?.supabase?.anonConfigured) {
+                    setAuthStatus({
+                        ok: false,
+                        detail: 'Faltan NEXT_PUBLIC_SUPABASE_URL o NEXT_PUBLIC_SUPABASE_ANON_KEY en Vercel.',
+                    });
+                    return;
+                }
+                if (json.supabase.authReachable === false) {
+                    setAuthStatus({
+                        ok: false,
+                        detail: `No se puede contactar Supabase (${json.supabase.host || 'sin host'})${json.supabase.authDetail ? `: ${json.supabase.authDetail}` : ''}.`,
+                    });
+                    return;
+                }
+                setAuthStatus({ ok: true, detail: null });
+            } catch {
+                if (!cancelled) setAuthStatus(null);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     useEffect(() => {
@@ -268,7 +300,8 @@ export default function LoginPage() {
                 const shouldGoAdmin = isAdminAccess(profile?.role, formData.email);
                 router.replace(shouldGoAdmin ? '/admin' : '/dashboard');
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
+            console.error('[Login submit]', err);
             setError(getAuthErrorMessage(err));
         } finally {
             setLoading(false);
@@ -462,12 +495,23 @@ export default function LoginPage() {
                     <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-padel-primary/30 to-transparent" />
 
                     <div className="p-8 sm:p-10">
-                        {!supabaseConfigured ? (
+                        {!supabaseConfigured || authStatus?.ok === false ? (
                             <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-200">
-                                Supabase no está configurado en este despliegue. Revisa en Vercel las variables{' '}
-                                <code className="text-red-100">NEXT_PUBLIC_SUPABASE_URL</code> y{' '}
-                                <code className="text-red-100">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>.
+                                {!supabaseConfigured ? (
+                                    <>
+                                        Supabase no está configurado en este despliegue. Revisa en Vercel las variables{' '}
+                                        <code className="text-red-100">NEXT_PUBLIC_SUPABASE_URL</code> y{' '}
+                                        <code className="text-red-100">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>.
+                                    </>
+                                ) : (
+                                    authStatus?.detail
+                                )}
                             </div>
+                        ) : null}
+                        {shouldShowVerboseAuthErrors() ? (
+                            <p className="mb-4 text-center text-[10px] uppercase tracking-widest text-amber-400/80">
+                                Modo diagnóstico staging · los errores de login se muestran con detalle
+                            </p>
                         ) : null}
                         {/* Selector Tab - Glowing Text Style */}
                         <div className="flex justify-center gap-12 mb-12 border-b border-white/5 pb-4">
