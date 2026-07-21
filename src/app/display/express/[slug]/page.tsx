@@ -248,25 +248,11 @@ export default function ExpressTvDisplay() {
         if (cancelled) return;
 
         if (!res.ok || !json.match) {
-          const { data: created, error: insertError } = await supabase
-            .from('express_matches')
-            .insert([{ cancha_code: slug }])
-            .select('*')
-            .single();
-
-          if (cancelled) return;
-
-          if (insertError || !created) {
-            setErrorMessage(
-              String(json.error || insertError?.message || 'No se pudo crear la cancha express.') +
-                ' — Ejecuta 056_express_matches.sql en Supabase.',
-            );
-            setLoadState('error');
-            return;
-          }
-
-          setMatch(normalizeExpressMatch(created));
-          setLoadState('ready');
+          setErrorMessage(
+            String(json.error || 'No se pudo crear la cancha express.') +
+              ' — Ejecuta las migraciones Express en Supabase.',
+          );
+          setLoadState('error');
           return;
         }
 

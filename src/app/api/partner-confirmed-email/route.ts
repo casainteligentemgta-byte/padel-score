@@ -13,6 +13,13 @@ export async function POST(req: Request) {
     const resend = new Resend(apiKey);
 
     try {
+        const apiKey = process.env.RESEND_API_KEY?.trim();
+        if (!apiKey) {
+            console.error('[partner-confirmed-email] RESEND_API_KEY is missing');
+            return NextResponse.json({ error: 'Service configuration error' }, { status: 500 });
+        }
+
+        const resend = new Resend(apiKey);
         const { to, guestName, tournamentName } = await req.json();
         const hubUrl = `${getAppBaseUrl()}/dashboard`;
 
