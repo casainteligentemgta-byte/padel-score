@@ -71,7 +71,14 @@ export default function ConfirmarParejaPage() {
             setFetching(false);
             return;
         }
+        if (authLoading) return;
+        if (!user) {
+            setFetching(false);
+            setError('Inicia sesión para ver y confirmar la invitación.');
+            return;
+        }
         let cancelled = false;
+        setFetching(true);
         (async () => {
             try {
                 const row = await dataService.getInscriptionById(inscriptionId);
@@ -85,7 +92,7 @@ export default function ConfirmarParejaPage() {
         return () => {
             cancelled = true;
         };
-    }, [inscriptionId, idValid]);
+    }, [inscriptionId, idValid, authLoading, user]);
 
     useEffect(() => {
         if (!success) return;

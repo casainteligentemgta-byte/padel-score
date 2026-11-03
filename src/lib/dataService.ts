@@ -1849,56 +1849,35 @@ export const dataService = {
         if (!uid) {
             throw new Error('No se pudo determinar tu usuario. Cierra sesión, vuelve a entrar e intenta otra vez.');
         }
-        const tid = String(data.tournamentId ?? '').trim();
-        const catKey = sanitizeString(data.categoryKey);
-        if (tid && catKey) {
-            const existing = await this.getMyInscriptionsForTournament(uid, tid);
-            const blocking = existing.some(
-                (row) =>
-                    row.categoryKey === catKey &&
-                    String(row.paymentStatus || '').toLowerCase() !== 'rechazado',
-            );
-            if (blocking) {
-                throw new Error(
-                    'Ya tienes una inscripción activa en esta categoría. Si el club rechazó tu pago, podrás volver a intentar cuando el estado sea «Rechazado».',
-                );
-            }
+        const res = await fetch('/api/inscriptions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+            body: JSON.stringify({
+                tournamentId: data.tournamentId,
+                tournamentName: data.tournamentName,
+                categoryKey: data.categoryKey,
+                participantName: data.participantName,
+                participantEmail: data.participantEmail,
+                participantId: data.participantId,
+                amountExtracted: data.amountExtracted ?? data.paymentAmount,
+                receiptUrl: data.receiptUrl,
+                paymentMethod: data.paymentMethod,
+                paymentDate: data.paymentDate,
+                paymentBank: data.paymentBank,
+                paymentAmount: data.paymentAmount,
+                paymentReference: data.paymentReference,
+                partnerId: data.partnerId,
+                partnerName: data.partnerName,
+                legalSignaturePath: data.legalSignaturePath,
+                legalBiometricPath: data.legalBiometricPath,
+                acceptedTermsVersion: data.acceptedTermsVersion,
+            }),
+        });
+        const json = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
+        if (!res.ok || !json.id) {
+            throw new Error(json.error || 'No se pudo crear la inscripción.');
         }
-        const { data: row, error } = await supabase()
-            .from('inscriptions')
-            .insert({
-                user_id: uid,
-                owner_id: uid,
-                tournament_id: data.tournamentId || null,
-                tournament_name: sanitizeString(data.tournamentName),
-                category_key: sanitizeString(data.categoryKey),
-                category_price: data.categoryPrice,
-                participant_name: sanitizeString(data.participantName),
-                participant_email: sanitizeString(data.participantEmail),
-                participant_id: data.participantId,
-                amount_extracted: data.amountExtracted,
-                receipt_url: data.receiptUrl,
-                payment_status: data.paymentStatus ?? 'pending',
-                alert_message: sanitizeString(data.alertMessage),
-                data: sanitizeObject({
-                    paymentMethod: data.paymentMethod,
-                    paymentDate: data.paymentDate,
-                    paymentBank: data.paymentBank,
-                    paymentAmount: data.paymentAmount,
-                    paymentReference: data.paymentReference,
-                    partnerId: data.partnerId,
-                    partnerName: data.partnerName,
-                    legalSignaturePath: data.legalSignaturePath,
-                    legalBiometricPath: data.legalBiometricPath,
-                    acceptedTermsVersion: data.acceptedTermsVersion,
-                }),
-                created_at: now(),
-                updated_at: now(),
-            })
-            .select('id')
-            .single();
-        throwIfError(error);
-        return { id: (row as any)?.id };
+        return { id: json.id };
     },
 
     /**
@@ -2352,12 +2331,20 @@ export const dataService = {
     },
 
     async updateInscription(id: string, data: Partial<InscriptionData>) {
-        const upd: any = { updated_at: now() };
-        if (data.paymentStatus != null) upd.payment_status = data.paymentStatus;
-        if (data.alertMessage !== undefined) upd.alert_message = data.alertMessage ?? null;
-        if (data.receiptUrl != null) upd.receipt_url = data.receiptUrl;
-        const { error } = await supabase().from('inscriptions').update(upd).eq('id', id);
-        throwIfError(error);
+        const res = await fetch('/api/admin/inscriptions', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+            body: JSON.stringify({
+                id,
+                paymentStatus: data.paymentStatus,
+                alertMessage: data.alertMessage,
+                receiptUrl: data.receiptUrl,
+            }),
+        });
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+            throw new Error(json.error || 'No se pudo actualizar la inscripción.');
+        }
     },
 
     /**

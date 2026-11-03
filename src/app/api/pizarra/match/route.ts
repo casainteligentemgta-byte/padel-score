@@ -22,7 +22,7 @@ export async function GET(req: Request) {
 
   const { data, error } = await supabase
     .from('tournament_matches')
-    .select('*')
+    .select('id, tournament_id, owner_id, data, created_at, updated_at')
     .eq('tournament_id', tournamentId)
     .eq('id', matchId)
     .maybeSingle();

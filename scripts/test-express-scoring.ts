@@ -9,6 +9,7 @@ import {
   expressMatchWinner,
   EXPRESS_SIDE_CHANGE_MS,
 } from '../src/lib/expressSessionMeta';
+import { isExpressQrWindowOpen, isExpressSessionWriteAllowed } from '../src/lib/expressQrWindow';
 import type { ExpressMatch } from '../src/types/expressMatch';
 
 function run(name: string, fn: () => void) {
@@ -139,6 +140,28 @@ run('pickExpressScorePatch incluye meta de sesión', () => {
   const patch = pickExpressScorePatch(s);
   assert.equal(patch.chrono_elapsed_sec, 120);
   assert.ok(patch.side_change_until);
+});
+
+run('QR window y escritura de sesión', () => {
+  const now = Date.parse('2026-11-03T12:00:00.000Z');
+  const open = baseMatch({
+    is_active: false,
+    match_ended_at: null,
+    qr_expires_at: '2026-11-03T12:04:00.000Z',
+  });
+  const expired = baseMatch({
+    is_active: false,
+    match_ended_at: null,
+    qr_expires_at: '2026-11-03T11:59:00.000Z',
+  });
+  const noQr = baseMatch({ is_active: false, match_ended_at: null, qr_expires_at: null });
+  const live = baseMatch({ is_active: true, qr_expires_at: null });
+  assert.equal(isExpressQrWindowOpen(open, now), true);
+  assert.equal(isExpressQrWindowOpen(expired, now), false);
+  assert.equal(isExpressSessionWriteAllowed(open, now), true);
+  assert.equal(isExpressSessionWriteAllowed(expired, now), false);
+  assert.equal(isExpressSessionWriteAllowed(noQr, now), false);
+  assert.equal(isExpressSessionWriteAllowed(live, now), true);
 });
 
 console.log('\nTodos los tests express scoring pasaron.');

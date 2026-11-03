@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { updateExpressMatchBySession } from '@/lib/expressMatchDb';
+import { isExpressSessionWriteAllowed } from '@/lib/expressQrWindow';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { normalizeExpressMatch, type ExpressMatch } from '@/types/expressMatch';
 
@@ -35,7 +36,6 @@ const ALLOWED_UPDATE_KEYS = new Set<keyof ExpressMatch | string>([
     'display_name_scale',
     'display_media_scale',
     'display_ticker_phrases',
-    'qr_expires_at',
     'server_team',
     'server_player',
     'warmup_ends_at',
@@ -107,6 +107,33 @@ export async function PATCH(req: Request, { params }: Ctx) {
     const updates = sanitizeUpdates(body.updates ?? body);
     if (Object.keys(updates).length === 0) {
         return NextResponse.json({ error: 'Sin cambios permitidos', reason: 'error' }, { status: 400 });
+    }
+
+    const { data: current, error: curErr } = await supabase
+        .from('express_matches')
+        .select('*')
+        .eq('session_id', sessionId)
+        .maybeSingle();
+    if (curErr) {
+        return NextResponse.json({ error: curErr.message, reason: 'error' }, { status: 500 });
+    }
+    if (!current) {
+        return NextResponse.json(
+            { error: 'Sesión no encontrada (¿reset desde Telegram?). Escanea el QR de nuevo.', reason: 'stale_session' },
+            { status: 409 }
+        );
+    }
+
+    const currentMatch = normalizeExpressMatch(current as Record<string, unknown>);
+    if (!isExpressSessionWriteAllowed(currentMatch)) {
+        return NextResponse.json(
+            { error: 'La ventana del QR expiró. Pide al encargado un nuevo código en Telegram.', reason: 'expired_qr' },
+            { status: 403 }
+        );
+    }
+
+    if (updates.is_active === true && !currentMatch.is_active) {
+        updates.qr_expires_at = null;
     }
 
     const result = await updateExpressMatchBySession(supabase, sessionId, updates);
