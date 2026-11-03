@@ -91,3 +91,17 @@ export function validatePaymentAgainstCategoryPrice(input: ValidationInput): Val
         alertMessage: `Monto extraído (${amount.toFixed(2)}) no coincide con el precio de la categoría (${categoryPrice.toFixed(2)}). Revisar comprobante (o configure tasa BCV en servidor / BCV_VES_PER_USD).`,
     };
 }
+
+/** Checkout de Mercado Pago retirado: se rechaza en API y se oculta en UI. */
+export function isMercadoPagoMethod(method: string | null | undefined): boolean {
+    const s = String(method || '').toLowerCase().replace(/\s+/g, '');
+    return s.includes('mercadopago') || s === 'mp';
+}
+
+const AMOUNT_TOLERANCE = 0.05;
+
+export function amountsMatch(expected: number, received: number, tolerance = AMOUNT_TOLERANCE): boolean {
+    if (!Number.isFinite(expected) || !Number.isFinite(received)) return false;
+    if (expected <= 0 || received <= 0) return false;
+    return Math.abs(expected - received) <= tolerance;
+}

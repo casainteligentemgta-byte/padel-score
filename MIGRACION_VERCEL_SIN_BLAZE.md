@@ -41,7 +41,6 @@ Copiar desde tu entorno productivo actual. No pegar secretos en cliente.
 - `TWILIO_WHATSAPP_NUMBER`
 - `ADMIN_ALERT_WHATSAPP` (opcional)
 - `CEO_ALERT_WHATSAPP` (opcional)
-- `MERCADOPAGO_ACCESS_TOKEN`
 - `DATABASE_URL` (si usan rutas con Prisma en produccion)
 - `DIRECT_URL` (si aplica a Prisma)
 - `LEGAL_BULK_EMAIL_SECRET` (si usan endpoint de legal masivo)
@@ -79,7 +78,7 @@ Validar como minimo:
 4. Confirmacion de pareja (`/accept-invite`).
 5. Validacion de pagos en admin.
 6. Endpoints de WhatsApp/Twilio.
-7. Webhook de MercadoPago.
+7. Pago móvil / transferencia + validación admin (`/admin/validacion-pagos`).
 
 ## Paso D - Cutover de dominio
 

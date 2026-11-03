@@ -183,23 +183,6 @@ export default function InscribirmePage() {
     const inscribirmeScrollRef = useRef<HTMLDivElement>(null);
     const legalInscriptionRef = useRef<LegalContainerRef | null>(null);
 
-    // Retorno de Mercado Pago (mp=success | failure | pending)
-    useEffect(() => {
-        const mp = searchParams.get('mp');
-        if (!mp) return;
-        if (mp === 'success') {
-            setSuccess(true);
-            router.replace(`/tournaments/${tournamentId}/inscribirme`, { scroll: false });
-        } else if (mp === 'failure') {
-            setError('El pago fue rechazado o cancelado. Tu inscripción quedó pendiente; puedes volver a intentar el pago desde Validación de pagos.');
-            router.replace(`/tournaments/${tournamentId}/inscribirme`, { scroll: false });
-        } else if (mp === 'pending') {
-            setSuccess(true);
-            setError(null);
-            router.replace(`/tournaments/${tournamentId}/inscribirme`, { scroll: false });
-        }
-    }, [searchParams, tournamentId, router]);
-
     // Sincronizar código de pareja desde URL (cuando se llega desde Hub / compañeros recientes)
     useEffect(() => {
         if (codeFromUrl.length === 6 && codeFromUrl !== partnerCode) {
@@ -636,7 +619,6 @@ export default function InscribirmePage() {
 
         setError(null);
         setSubmitting(true);
-        const isMercadoPago = paymentData.method === 'Mercado Pago';
 
         try {
             const participantName = profile?.name || user.displayName || user.email || 'Jugador';
@@ -657,7 +639,7 @@ export default function InscribirmePage() {
             }
 
             // Registrar un único log antifraude por referencia para que aparezca en Admin/Pagos.
-            if (!isMercadoPago && totalPrice > 0 && paymentData.reference?.trim()) {
+            if (totalPrice > 0 && paymentData.reference?.trim()) {
                 const amountInput = paymentData.amount
                     ? parseFloat(String(paymentData.amount).replace(',', '.'))
                     : undefined;
@@ -688,14 +670,12 @@ export default function InscribirmePage() {
                 }
             }
 
-            const createdInscriptionIds: string[] = [];
-
             for (const key of selectedCategories) {
                 const cat = categories.find((c) => c.key === key);
                 if (!cat) continue;
 
                 const amountPaid = paymentData.amount ? parseFloat(String(paymentData.amount).replace(',', '.')) : undefined;
-                const verification = !isMercadoPago && cat.price > 0 && amountPaid != null
+                const verification = cat.price > 0 && amountPaid != null
                     ? validatePaymentAgainstCategoryPrice({
                           amountExtracted: amountPaid,
                           categoryPrice: cat.price,
@@ -712,7 +692,7 @@ export default function InscribirmePage() {
                         participantName,
                         participantEmail,
                         participantId,
-                        paymentStatus: isMercadoPago ? 'pending' : (cat.price === 0 ? 'paid' : verification.paymentStatus),
+                        paymentStatus: cat.price === 0 ? 'paid' : verification.paymentStatus,
                         alertMessage: verification.alertMessage || undefined,
                         paymentMethod: paymentData.method,
                         paymentBank: paymentData.bank,
@@ -728,9 +708,8 @@ export default function InscribirmePage() {
                     },
                     user.uid
                 );
-                createdInscriptionIds.push(inscriptionId);
 
-                if (!isIndividual && currentPartner?.id && !isMercadoPago) {
+                if (!isIndividual && currentPartner?.id) {
                     try {
                         await dataService.setInscriptionAwaitingPartnerConfirmation(
                             inscriptionId,
@@ -741,10 +720,7 @@ export default function InscribirmePage() {
                     }
                 }
 
-                if (isMercadoPago) continue;
-
-                // Sincronizar equipos del torneo (solo si no es Mercado Pago; con MP el webhook lo hará al aprobar)
-                // Se guarda el id del equipo del torneo para enlazarlo con la invitación (código del compañero)
+                // Sincronizar equipos del torneo (se guarda el id para enlazarlo con la invitación del compañero)
                 let tournamentTeamId: string | null = null;
                 if (participantId) {
                     const participantInfo = {
@@ -831,31 +807,6 @@ export default function InscribirmePage() {
                         }
                     }
                 }
-            }
-
-            // --- Pago con Mercado Pago: redirigir al checkout ---
-            if (isMercadoPago && createdInscriptionIds.length > 0 && totalPrice > 0) {
-                try {
-                    const res = await fetch('/api/mercadopago/create-preference', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
-                        body: JSON.stringify({
-                            inscriptionIds: createdInscriptionIds,
-                            payerEmail: participantEmail,
-                        }),
-                    });
-                    const data = await res.json();
-                    if (data.initPoint) {
-                        window.location.href = data.initPoint;
-                        return;
-                    }
-                    setError(data.error || 'No se pudo abrir el pago con Mercado Pago.');
-                } catch (mpErr: any) {
-                    setError(mpErr?.message || 'Error al conectar con Mercado Pago.');
-                } finally {
-                    setSubmitting(false);
-                }
-                return;
             }
 
             // --- EMAIL NOTIFICATION (aviso al club) ---
