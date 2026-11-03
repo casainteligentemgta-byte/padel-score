@@ -164,7 +164,7 @@ Es recomendable que, en cualquier flujo donde el usuario formalice una inscripci
 - **Auto‑inscripción desde la app:** Pantalla “Inscribirme” en un torneo: elegir categoría, aceptar términos, subir comprobante y crear inscripción (con `paymentStatus: pending` o validación automática si hay OCR).
 - **Email al inscribir:** Envío de confirmación o enlace al comprobante al email del participante.
 - **Cupos por categoría:** Límite de plazas por categoría y comprobación antes de guardar la inscripción.
-- **Pago en línea:** Integración con pasarela de pago y marcar `paid` automáticamente al confirmar el pago.
+- **Pago:** Pago Móvil o transferencia bancaria, con comprobante y validación en `/admin/validacion-pagos`. El precio lo calcula el servidor (categoría del torneo + tasa BCV). Mercado Pago se retiró.
 
 ---
 

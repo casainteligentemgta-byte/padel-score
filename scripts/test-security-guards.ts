@@ -1,12 +1,4 @@
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
-import {
-  amountsMatch,
-  buildMercadoPagoManifest,
-  mercadoPagoDataId,
-  parseMercadoPagoSignatureHeader,
-  verifyMercadoPagoWebhookSignature,
-} from '../src/lib/mercadopagoWebhook';
 import {
   categoryPriceFromTournament,
   expectedAmountForInscription,
@@ -15,7 +7,11 @@ import {
 } from '../src/lib/inscriptionPricing';
 import { timingSafeEqualString } from '../src/lib/apiGuard';
 import { isAdminAccess, isLegacyAdminEmail } from '../src/lib/adminAccess';
-import { validatePaymentAgainstCategoryPrice } from '../src/lib/paymentValidation';
+import {
+  amountsMatch,
+  isMercadoPagoMethod,
+  validatePaymentAgainstCategoryPrice,
+} from '../src/lib/paymentValidation';
 
 function run(name: string, fn: () => void) {
   try {
@@ -26,49 +22,6 @@ function run(name: string, fn: () => void) {
     throw e;
   }
 }
-
-run('parse x-signature', () => {
-  const p = parseMercadoPagoSignatureHeader(
-    'ts=1704908010,v1=618c85345248dd820d5fd456117c2ab2ef8eda45a0282ff693eac24131a5e839'
-  );
-  assert.equal(p?.ts, '1704908010');
-  assert.ok(p?.v1?.startsWith('618c'));
-  assert.equal(parseMercadoPagoSignatureHeader(null), null);
-  assert.equal(parseMercadoPagoSignatureHeader('nope'), null);
-});
-
-run('manifest + HMAC oficial', () => {
-  const secret = 'test-secret';
-  const dataId = '999999999';
-  const requestId = 'req-1';
-  const ts = '1704908010';
-  const manifest = buildMercadoPagoManifest({ dataId, requestId, ts });
-  assert.equal(manifest, 'id:999999999;request-id:req-1;ts:1704908010;');
-  const v1 = createHmac('sha256', secret).update(manifest).digest('hex');
-  assert.equal(
-    verifyMercadoPagoWebhookSignature({
-      xSignature: `ts=${ts},v1=${v1}`,
-      xRequestId: requestId,
-      dataId,
-      secret,
-    }),
-    true
-  );
-  assert.equal(
-    verifyMercadoPagoWebhookSignature({
-      xSignature: `ts=${ts},v1=${v1}`,
-      xRequestId: requestId,
-      dataId,
-      secret: 'otro',
-    }),
-    false
-  );
-});
-
-run('data.id query en minúsculas', () => {
-  const url = 'https://app.example/api/webhooks/mercadopago?data.id=AbC123';
-  assert.equal(mercadoPagoDataId(url, 'ZZZ'), 'abc123');
-});
 
 run('precios desde torneo, no del cliente', () => {
   const tournament = {
@@ -135,6 +88,14 @@ run('pago móvil Bs vs precio USD con tasa BCV', () => {
     bcvVesPerUsd: 56.7,
   });
   assert.equal(bad.paymentStatus, 'alert');
+});
+
+run('Mercado Pago se reconoce como método retirado', () => {
+  assert.equal(isMercadoPagoMethod('Mercado Pago'), true);
+  assert.equal(isMercadoPagoMethod('mercadopago'), true);
+  assert.equal(isMercadoPagoMethod('MP'), true);
+  assert.equal(isMercadoPagoMethod('Pago Móvil'), false);
+  assert.equal(isMercadoPagoMethod('Transferencia Bancaria'), false);
 });
 
 console.log('Todos los guards de seguridad OK');

@@ -6,17 +6,12 @@ import {
     categoryPriceFromTournament,
     flattenTournamentRow,
 } from '@/lib/inscriptionPricing';
-import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
+import { isMercadoPagoMethod, validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
 import { checkPaymentRateLimit } from '@/lib/rateLimit';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
 const UUID_RE =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function isMercadoPagoMethod(method: string): boolean {
-    const s = method.toLowerCase().replace(/\s+/g, '');
-    return s.includes('mercadopago') || s === 'mp';
-}
 
 function sanitizeJsonValue(value: unknown): unknown {
     if (typeof value === 'string') return sanitizeString(value);
@@ -101,7 +96,12 @@ export async function POST(request: Request) {
     const tournament = flattenTournamentRow(trow as { id: string; data?: Record<string, unknown> | null });
     const categoryPrice = categoryPriceFromTournament(tournament, categoryKey);
     const paymentMethod = sanitizeString(body.paymentMethod);
-    const mp = isMercadoPagoMethod(paymentMethod);
+    if (isMercadoPagoMethod(paymentMethod)) {
+        return NextResponse.json(
+            { error: 'Mercado Pago ya no está disponible. Usa Pago Móvil o Transferencia bancaria.' },
+            { status: 400 }
+        );
+    }
 
     const amountExtractedRaw = body.amountExtracted ?? body.paymentAmount;
     const amountExtracted =
@@ -117,9 +117,6 @@ export async function POST(request: Request) {
 
     if (categoryPrice <= 0) {
         paymentStatus = 'paid';
-        alertMessage = null;
-    } else if (mp) {
-        paymentStatus = 'pending';
         alertMessage = null;
     } else if (amountExtracted != null && Number.isFinite(amountExtracted)) {
         const verification = validatePaymentAgainstCategoryPrice({

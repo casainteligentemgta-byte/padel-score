@@ -40,7 +40,7 @@ La autenticación y perfiles usan **Firebase Auth** y un perfil extendido (nombr
 5. **Marcador en vivo:** partidos se cargan en /tournaments/[id]/score/[matchId]; el marcador se actualiza en tiempo real y puede verse en pantallas de display (/display, /display/tv/[courtId], etc.). Los marcadores (markers) tienen vistas por cancha para cargar y actualizar resultados.
 6. **Pantallas del club:** la publicidad y playlists por sede/cancha se gestionan en /admin/publicidad; en /display/tv, /display/court/[courtId] o rutas similares se muestran marcadores, publicidad y tira informativa para TVs en las instalaciones.
 7. **Publicidad:** en /admin/publicidad se gestionan banners y patrocinadores que se muestran en las pantallas; puede haber animaciones Lottie y tira informativa (API /api/tira-informativa).
-8. **Validación de pagos:** en /admin/validacion-pagos se revisan inscripciones y pagos (puede integrar Mercado Pago u otros).
+8. **Validación de pagos:** en /admin/validacion-pagos se revisan inscripciones con Pago Móvil o transferencia (precio de categoría en servidor + tasa BCV). Mercado Pago ya no forma parte del producto.
 9. **Agentes AI:** sección /agents (o /admin/agents) para funcionalidades de inteligencia artificial asociadas al club.
 
 ---

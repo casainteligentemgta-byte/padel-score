@@ -1,0 +1,12 @@
+-- =============================================================================
+-- 074 (OPCIONAL — NO REQUERIDA)
+--
+-- Mercado Pago se retiró de la app. Esta migración NO debe aplicarse por
+-- defecto. La tabla `mercadopago_processed_payments` puede quedarse: no la
+-- usa ningún código y no afecta inscripciones ni pago móvil.
+--
+-- Solo descomenta y ejecuta en el SQL Editor si quieres borrar el historial
+-- de webhooks de MP. No hay DROP de columnas de `inscriptions`.
+-- =============================================================================
+
+-- DROP TABLE IF EXISTS public.mercadopago_processed_payments;

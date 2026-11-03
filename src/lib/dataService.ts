@@ -10,6 +10,7 @@ import {
   TEST_PARTNER_EMAIL,
   TEST_PARTNER_USER_ID,
 } from './testPartnerProfile';
+import { isMercadoPagoMethod } from './paymentValidation';
 
 const supabase = () => {
     const c = getSupabaseClient();
@@ -2565,6 +2566,7 @@ export const dataService = {
         return rows
             .filter(isPaymentMethodRowActive)
             .map((row, i) => normalizePaymentMethodRow(row, i))
+            .filter((m) => !isMercadoPagoMethod(m.name))
             .sort((a, b) => a.name.localeCompare(b.name, 'es'));
     },
 
