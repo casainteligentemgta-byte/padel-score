@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { isGuardResponse, requireAuth } from '@/lib/apiGuard';
 import { sanitizeString } from '@/lib/apiValidation';
+import { getBcvVesPerUsd } from '@/lib/bcvRate';
 import {
     categoryPriceFromTournament,
     flattenTournamentRow,
 } from '@/lib/inscriptionPricing';
 import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
+import { checkPaymentRateLimit } from '@/lib/rateLimit';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
 const UUID_RE =
@@ -36,6 +38,10 @@ function sanitizeJsonValue(value: unknown): unknown {
 export async function POST(request: Request) {
     const auth = await requireAuth(request);
     if (isGuardResponse(auth)) return auth;
+
+    if (!checkPaymentRateLimit(request, 'inscriptions')) {
+        return NextResponse.json({ error: 'Demasiadas inscripciones. Intenta más tarde.' }, { status: 429 });
+    }
 
     const supabase = getSupabaseServiceClient();
     if (!supabase) {
@@ -102,11 +108,9 @@ export async function POST(request: Request) {
         amountExtractedRaw === undefined || amountExtractedRaw === null || amountExtractedRaw === ''
             ? null
             : Number(String(amountExtractedRaw).replace(',', '.'));
-    const bcvRaw = body.bcvVesPerUsd;
-    const bcvVesPerUsd =
-        bcvRaw === undefined || bcvRaw === null || bcvRaw === ''
-            ? null
-            : Number(String(bcvRaw).replace(',', '.'));
+    // Tasa BCV solo del servidor (el cliente no puede inventar equivalencia Bs/USD).
+    const bcv = await getBcvVesPerUsd();
+    const bcvVesPerUsd = bcv.vesPerUsd;
 
     let paymentStatus: string = 'pending';
     let alertMessage: string | null = sanitizeString(body.alertMessage) || null;

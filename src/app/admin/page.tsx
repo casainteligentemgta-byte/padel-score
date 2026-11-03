@@ -30,7 +30,7 @@ import { useEffect } from 'react';
 import BouncingBall from '@/components/BouncingBall';
 
 export default function AdminHubPage() {
-    const { isAdmin, loading, profile, logout } = useAuth();
+    const { isAdmin, loading, profile, logout, user } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
@@ -170,7 +170,7 @@ export default function AdminHubPage() {
                         <div className="flex items-center gap-3 sm:gap-4 border-l border-white/10 pl-4 sm:pl-6">
                             <div className="text-right">
                                 <p className="text-[8px] sm:text-[10px] font-black normal-case tracking-tight text-white">
-                                    casainteligentemgta@gmail.com
+                                    {user?.email || profile?.email || profile?.name || 'Admin'}
                                 </p>
                             </div>
                             <div className="relative group">

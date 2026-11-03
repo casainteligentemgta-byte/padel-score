@@ -107,7 +107,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             return;
         }
 
-        (window as any).enableDevMode = enableDevMode;
+        if (process.env.NODE_ENV === 'development') {
+            (window as any).enableDevMode = () => {
+                void enableDevMode();
+            };
+        }
 
         const safetyTimeout = setTimeout(() => setLoading(false), 3000);
 
@@ -209,6 +213,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }, [supabase]);
 
     const enableDevMode = async () => {
+        if (process.env.NODE_ENV !== 'development') {
+            return;
+        }
         if (!supabase) {
             console.warn('AuthContext: enableDevMode ignorado (Supabase no configurado).');
             return;

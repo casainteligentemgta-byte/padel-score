@@ -12,7 +12,7 @@ export async function GET() {
       {
         ok: true,
         supabase: 'unconfigured' as const,
-        detail: 'Falta SUPABASE_SERVICE_ROLE_KEY en el servidor.',
+        detail: 'supabase_unconfigured',
       },
       { status: 200 }
     );
@@ -24,7 +24,7 @@ export async function GET() {
       {
         ok: false,
         supabase: 'error' as const,
-        detail: error.message,
+        detail: 'supabase_error',
       },
       { status: 503 }
     );

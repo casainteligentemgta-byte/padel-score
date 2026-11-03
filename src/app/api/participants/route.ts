@@ -13,17 +13,10 @@ function pickParticipantListData(data: Record<string, unknown> | null | undefine
     level: d.level ?? null,
     position: d.position ?? null,
     dni: d.dni ?? null,
-    birthDate: d.birthDate ?? null,
     email: d.email ?? null,
     phone: d.phone ?? null,
     whatsapp: d.whatsapp ?? null,
     instagram: d.instagram ?? null,
-    suitSize: d.suitSize ?? null,
-    shortSize: d.shortSize ?? null,
-    shoeSize: d.shoeSize ?? null,
-    bloodType: d.bloodType ?? null,
-    allergies: d.allergies ?? null,
-    medicalConditions: d.medicalConditions ?? null,
   };
 
   // En listados evitamos cargar fotos base64 (data URL) para no saturar el payload.
@@ -55,7 +48,7 @@ export async function GET(req: Request) {
       .from('participants')
       .select('id, owner_id, data, created_at, updated_at')
       .order('created_at', { ascending: false })
-      .limit(2000);
+      .limit(200);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

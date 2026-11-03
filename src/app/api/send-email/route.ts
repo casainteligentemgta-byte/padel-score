@@ -111,22 +111,32 @@ Inscripción registrada en el sistema.`;
       sendCEOMessage(whatsappInsc).catch((e) => console.warn('[send-email] WhatsApp CEO:', e?.message || e));
     }
 
+    const notifyTo = (process.env.ADMIN_NOTIFY_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAILS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)[0];
+    if (!notifyTo) {
+      return NextResponse.json(
+        { error: 'Falta ADMIN_NOTIFY_EMAIL (o NEXT_PUBLIC_ADMIN_EMAILS) para avisos.' },
+        { status: 501 }
+      );
+    }
+
     const { error } = await resend.emails.send({
       from: fromEmail,
-      // Por petición, siempre enviamos solo al email principal
-      to: ['casainteligentemgta@gmail.com'],
+      to: [notifyTo],
       subject: subject,
       html: html,
     });
 
     if (error) {
       console.error('[send-email] Resend error:', error);
-      return NextResponse.json({ error }, { status: 400 });
+      return NextResponse.json({ error: 'No se pudo enviar el aviso.' }, { status: 400 });
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[send-email] Unexpected error:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'Error interno al enviar el aviso.' }, { status: 500 });
   }
 }

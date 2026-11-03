@@ -703,11 +703,11 @@ export default function LoginPage() {
                     }}
                 />
 
-                {/* Footer Controls (Simplificado / Oculto) */}
+                {process.env.NODE_ENV === 'development' && (
                 <div className="mt-8 flex flex-col items-center gap-6">
                     <button
                         onClick={() => {
-                            enableDevMode();
+                            void enableDevMode();
                             router.push('/tournaments');
                         }}
                         className="flex items-center gap-2 text-[9px] font-black text-padel-primary/10 hover:text-padel-primary uppercase tracking-[0.3em] transition-all bg-transparent border-none p-0 outline-none"
@@ -715,6 +715,7 @@ export default function LoginPage() {
                         <Zap className="w-3 h-3" /> Sandbox Node
                     </button>
                 </div>
+                )}
             </motion.div>
         </div>
     );

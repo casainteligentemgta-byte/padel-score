@@ -131,7 +131,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ ok: true, skipped: 'not_pending' });
         }
 
-        const tournamentIds = [...new Set(payable.map((i) => String(i.tournament_id || '')).filter(Boolean))];
+        // Monto esperado = todas las inscripciones cubiertas (pagadas o pendientes).
+        // Así un reintento tras un update parcial no compara el total de MP contra un subconjunto.
+        const covered = inscriptions.filter((ins) => {
+            const st = String(ins.payment_status || '').toLowerCase();
+            return st === 'paid' || isPayableInscriptionStatus(ins.payment_status);
+        });
+        const tournamentIds = [...new Set(covered.map((i) => String(i.tournament_id || '')).filter(Boolean))];
         const tournamentById = new Map<string, TournamentPriceSource>();
         if (tournamentIds.length > 0) {
             const { data: trows } = await supabase.from('tournaments').select('id, data').in('id', tournamentIds);
@@ -140,7 +146,7 @@ export async function POST(request: Request) {
             }
         }
 
-        const expectedAmount = payable.reduce(
+        const expectedAmount = covered.reduce(
             (sum, ins) => sum + expectedAmountForInscription(ins, tournamentById.get(String(ins.tournament_id || ''))),
             0
         );
@@ -158,20 +164,8 @@ export async function POST(request: Request) {
             return NextResponse.json({ ok: true, skipped: 'amount_mismatch' });
         }
 
-        const { error: lockErr } = await supabase.from('mercadopago_processed_payments').insert({
-            payment_id: paymentId,
-            inscription_ids: inscriptionIds,
-            amount: transactionAmount,
-            currency_id: currencyId || MERCADOPAGO_EXPECTED_CURRENCY,
-        });
-        if (lockErr) {
-            if (String(lockErr.message || '').includes('duplicate') || lockErr.code === '23505') {
-                return NextResponse.json({ ok: true, idempotent: true });
-            }
-            console.error('[webhooks/mercadopago] lock:', lockErr);
-            return NextResponse.json({ error: 'No se pudo registrar el pago' }, { status: 500 });
-        }
-
+        // Primero las inscripciones; el lock va DESPUÉS. Si el proceso cae a mitad,
+        // Mercado Pago reintenta y no damos el pago por cerrado sin haber acreditado.
         for (const ins of payable) {
             try {
                 const { data: updated, error: upErr } = await supabase
@@ -187,7 +181,7 @@ export async function POST(request: Request) {
                     .maybeSingle();
                 if (upErr) {
                     console.error('[webhooks/mercadopago] update', ins.id, upErr);
-                    continue;
+                    return NextResponse.json({ error: 'Error actualizando inscripción' }, { status: 500 });
                 }
                 if (!updated) continue;
                 try {
@@ -205,6 +199,28 @@ export async function POST(request: Request) {
                 }
             } catch (e) {
                 console.error('[webhooks/mercadopago] Error actualizando inscripción', ins.id, e);
+                return NextResponse.json({ error: 'Webhook error' }, { status: 500 });
+            }
+        }
+
+        const lockRow = {
+            payment_id: paymentId,
+            inscription_ids: inscriptionIds,
+            amount: transactionAmount,
+            currency_id: currencyId || MERCADOPAGO_EXPECTED_CURRENCY,
+        };
+        const { error: lockErr } = await supabase.from('mercadopago_processed_payments').insert(lockRow);
+        if (lockErr) {
+            if (String(lockErr.message || '').includes('duplicate') || lockErr.code === '23505') {
+                return NextResponse.json({ ok: true, idempotent: true });
+            }
+            console.error('[webhooks/mercadopago] lock:', lockErr);
+            const { error: upsertErr } = await supabase
+                .from('mercadopago_processed_payments')
+                .upsert(lockRow, { onConflict: 'payment_id' });
+            if (upsertErr) {
+                console.error('[webhooks/mercadopago] lock upsert:', upsertErr);
+                return NextResponse.json({ error: 'No se pudo registrar el pago' }, { status: 500 });
             }
         }
 
