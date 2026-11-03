@@ -162,13 +162,17 @@ export default function AdminUsersPage() {
 
             const user = users.find(u => u.uid === uid);
             if (user) {
-                await rtdbService.setRTDBUserRole(
-                    uid,
-                    newRole.toLowerCase() as any,
-                    user.name || 'Sin nombre',
-                    user.email || 'no-email@padel-smart.tk',
-                    (update.markerCanchas && update.markerCanchas.length > 0) ? update.markerCanchas[0] : undefined
-                );
+                try {
+                    await rtdbService.setRTDBUserRole(
+                        uid,
+                        newRole.toLowerCase() as any,
+                        user.name || 'Sin nombre',
+                        user.email || 'no-email@padel-smart.tk',
+                        (update.markerCanchas && update.markerCanchas.length > 0) ? update.markerCanchas[0] : undefined
+                    );
+                } catch (e) {
+                    console.warn('[rtdb fan-out] rol no sincronizado (Firebase opcional):', e);
+                }
             }
 
             setUsers(users.map(u => u.uid === uid ? { ...u, ...update } : u));

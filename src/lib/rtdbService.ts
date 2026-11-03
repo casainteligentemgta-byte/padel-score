@@ -1,8 +1,11 @@
 import { ref, set, update, get, serverTimestamp, onValue, off } from 'firebase/database';
 import { rtdb } from '@/lib/rtdb';
 
+/** Fan-out opcional. Si no hay RTDB, las escrituras se omiten. */
 function requireRtdb() {
-    if (!rtdb) throw new Error('Realtime Database no configurada. Añade NEXT_PUBLIC_FIREBASE_DATABASE_URL en .env.local (ej: https://tu-proyecto-default-rtdb.firebaseio.com)');
+    if (!rtdb) {
+        throw new Error('RTDB_DISABLED');
+    }
     return rtdb;
 }
 
