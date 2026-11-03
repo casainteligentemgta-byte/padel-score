@@ -91,7 +91,7 @@ export default function AdminUsersPage() {
         setApiError(null);
         setLoading(true);
         try {
-            const res = await fetch('/api/participants');
+            const res = await fetch('/api/participants', { headers: await getAuthHeaders() });
             if (res.ok) {
                 const data = await res.json();
                 setUsers(Array.isArray(data) ? data : []);

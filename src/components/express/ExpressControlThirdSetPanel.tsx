@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Trophy } from 'lucide-react';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { patchExpressMatchBySession } from '@/lib/expressSessionApi';
 import type { ExpressMatch } from '@/types/expressMatch';
 import {
   EXPRESS_THIRD_SET_MODE_OPTIONS,
@@ -19,7 +19,6 @@ type Props = {
 };
 
 export function ExpressControlThirdSetPanel({ match, sessionId, onModeSaved, embedded }: Props) {
-  const supabase = getSupabaseClient();
   const [open, setOpen] = useState(!embedded);
   const [saving, setSaving] = useState<ExpressThirdSetMode | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,19 +27,16 @@ export function ExpressControlThirdSetPanel({ match, sessionId, onModeSaved, emb
   const locked = match.current_set >= 3;
 
   const applyMode = async (mode: ExpressThirdSetMode) => {
-    if (!supabase || locked) return;
+    if (locked) return;
     if (mode === currentMode) return;
 
     setSaving(mode);
     setError(null);
-    const { error: upErr } = await supabase
-      .from('express_matches')
-      .update({ third_set_mode: mode })
-      .eq('session_id', sessionId);
+    const result = await patchExpressMatchBySession(sessionId, { third_set_mode: mode });
 
     setSaving(null);
-    if (upErr) {
-      setError(upErr.message);
+    if (!result.ok) {
+      setError(result.message);
       return;
     }
     onModeSaved(mode);

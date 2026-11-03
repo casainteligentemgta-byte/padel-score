@@ -255,7 +255,7 @@ function RegistrationFormContent() {
                             : '';
                     const emailRes = await fetch('/api/send-email', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                         body: JSON.stringify({
                             type: 'NEW_PLAYER',
                             data: {

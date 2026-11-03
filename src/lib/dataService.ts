@@ -2305,7 +2305,7 @@ export const dataService = {
             if (ownerEmail) {
                 fetch('/api/partner-confirmed-email', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                     body: JSON.stringify({
                         to: ownerEmail,
                         hostName: player1Name,
@@ -2854,7 +2854,7 @@ export const confirmReservedTeam = async (inscriptionId: string) => {
 
     fetch('/api/partner-confirmed-email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
             to: row?.player1?.email,
             hostName: row?.player1?.name ?? null,

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/lib/AuthContext';
+import { getAuthHeaders } from '@/lib/apiAuth';
 import { dataService } from '@/lib/dataService';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -489,7 +490,7 @@ export default function MarkerControlPage() {
                 try {
                     await fetch('/api/pizarra-cancha', {
                         method: 'DELETE',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                         body: JSON.stringify({ courtNumber }),
                     });
                 } catch (e) {
@@ -1068,7 +1069,7 @@ export default function MarkerControlPage() {
                 try {
                     await fetch('/api/pizarra-cancha', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                         body: JSON.stringify({
                             courtNumber,
                             tournamentId: String(tid),
@@ -1136,7 +1137,7 @@ export default function MarkerControlPage() {
                     try {
                         await fetch('/api/pizarra-cancha', {
                             method: 'DELETE',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                             body: JSON.stringify({ courtNumber }),
                         });
                     } catch (e) {

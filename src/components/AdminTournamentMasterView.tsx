@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { MatchStatus, TournamentType } from '@/types/tournament';
 import { dataService } from '@/lib/dataService';
+import { getAuthHeaders } from '@/lib/apiAuth';
 import Link from 'next/link';
 
 interface AdminTournamentMasterViewProps {
@@ -147,7 +148,7 @@ export default function AdminTournamentMasterView({ tournamentId, isAdmin }: Adm
         try {
             const res = await fetch('/api/admin/inscriptions/notify-whatsapp', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                 body: JSON.stringify({
                     phone: '+584122117270',
                     playerName: 'Admin Pro',

@@ -36,7 +36,7 @@ import {
   expressMatchEndedSummary,
   expressWarmupEndsAtMs,
 } from '@/lib/expressSessionMeta';
-import { updateExpressMatchBySession } from '@/lib/expressMatchDb';
+import { patchExpressMatchBySession } from '@/lib/expressSessionApi';
 import { ExpressTvTopLeftBlock } from '@/components/express/ExpressTvBrandMark';
 import { ExpressMatchCenterPanel } from '@/components/express/ExpressMatchCenterPanel';
 import { expressPistaLabel } from '@/lib/expressDisplayHeader';
@@ -259,8 +259,7 @@ export default function MobileExpressControl() {
       fallback: ExpressMatch,
       updateGen?: number,
     ): Promise<boolean> => {
-      if (!supabase) return false;
-      const result = await updateExpressMatchBySession(supabase, sessionId, updates);
+      const result = await patchExpressMatchBySession(sessionId, updates);
 
       if (!result.ok) {
         console.error('[ExpressControl] update error:', result.message);
@@ -280,7 +279,7 @@ export default function MobileExpressControl() {
       }
       return true;
     },
-    [sessionId, supabase, applyMatch],
+    [sessionId, applyMatch],
   );
 
   useEffect(() => {
@@ -367,7 +366,7 @@ export default function MobileExpressControl() {
       const endedSummary = expressMatchEndedSummary(normalized);
 
       if (!endedSummary && !normalized.is_active) {
-        const activated = await updateExpressMatchBySession(supabase, sessionId, {
+        const activated = await patchExpressMatchBySession(sessionId, {
           is_active: true,
           qr_expires_at: null,
           match_ended_at: null,
@@ -564,13 +563,9 @@ export default function MobileExpressControl() {
 
     const newSessionId = crypto.randomUUID();
     const reset = buildExpressSessionReset(newSessionId);
-    const { error } = await supabase
-      .from('express_matches')
-      .update(reset)
-      .eq('session_id', sessionId);
-
-    if (error) {
-      console.error('[ExpressControl] end session error:', error);
+    const ended = await patchExpressMatchBySession(sessionId, reset);
+    if (!ended.ok) {
+      console.error('[ExpressControl] end session error:', ended.message);
       return;
     }
 

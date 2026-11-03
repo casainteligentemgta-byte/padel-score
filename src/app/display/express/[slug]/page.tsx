@@ -51,7 +51,6 @@ import {
 } from '@/lib/expressSessionMeta';
 import { mergeExpressTickerMessages } from '@/lib/expressTickerMessages';
 import {
-  expressMatchSlugCodes,
   expressSlugDisplayLabel,
   isLegacyExpressSlug,
   normalizeExpressSlug,
@@ -201,72 +200,18 @@ export default function ExpressTvDisplay() {
       setLoadState('loading');
       setErrorMessage(null);
 
-      let existing: Record<string, unknown> | null = null;
-      for (const code of expressMatchSlugCodes(slug)) {
-        const { data, error: fetchError } = await supabase
-          .from('express_matches')
-          .select('*')
-          .eq('cancha_code', code)
-          .maybeSingle();
-
-        if (cancelled) return;
-
-        if (fetchError && fetchError.code !== 'PGRST116') {
-          console.error('[ExpressTv] fetch error:', fetchError);
-          setErrorMessage(fetchError.message);
-          setLoadState('error');
-          return;
-        }
-
-        if (data) {
-          existing = data as Record<string, unknown>;
-          break;
-        }
-      }
-
-      if (existing && String(existing.cancha_code ?? '') !== slug) {
-        const { data: migrated } = await supabase
-          .from('express_matches')
-          .update({ cancha_code: slug })
-          .eq('id', String(existing.id))
-          .select('*')
-          .maybeSingle();
-        if (migrated) existing = migrated as Record<string, unknown>;
-      }
-
-      if (cancelled) return;
-
-      if (existing) {
-        setMatch(normalizeExpressMatch(existing));
-        setLoadState('ready');
-        return;
-      }
-
       try {
-        const res = await fetch(`/api/express-matches/${encodeURIComponent(slug)}`);
+        const qs = urlBaseVenue ? `?base_venue=${encodeURIComponent(urlBaseVenue)}` : '';
+        const res = await fetch(`/api/express-matches/${encodeURIComponent(slug)}${qs}`);
         const json = await res.json();
         if (cancelled) return;
 
         if (!res.ok || !json.match) {
-          const { data: created, error: insertError } = await supabase
-            .from('express_matches')
-            .insert([{ cancha_code: slug }])
-            .select('*')
-            .single();
-
-          if (cancelled) return;
-
-          if (insertError || !created) {
-            setErrorMessage(
-              String(json.error || insertError?.message || 'No se pudo crear la cancha express.') +
-                ' — Ejecuta 056_express_matches.sql en Supabase.',
-            );
-            setLoadState('error');
-            return;
-          }
-
-          setMatch(normalizeExpressMatch(created));
-          setLoadState('ready');
+          setErrorMessage(
+            String(json.error || 'No se pudo crear la cancha express.') +
+              ' — Ejecuta 056_express_matches.sql en Supabase.',
+          );
+          setLoadState('error');
           return;
         }
 
@@ -285,7 +230,7 @@ export default function ExpressTvDisplay() {
     return () => {
       cancelled = true;
     };
-  }, [slug, supabase]);
+  }, [slug, supabase, urlBaseVenue]);
 
   useEffect(() => {
     if (!supabase || !match?.id) return;
@@ -314,19 +259,16 @@ export default function ExpressTvDisplay() {
   }, [slug, supabase, match?.id]);
 
   useEffect(() => {
-    if (!supabase || !match?.id || !urlBaseVenue.trim()) return;
+    if (!match?.id || !urlBaseVenue.trim()) return;
     const target = urlBaseVenue.trim();
     const current = String(match.base_venue ?? '').trim();
     if (current === target || syncedBaseVenueRef.current === target) return;
     syncedBaseVenueRef.current = target;
-    void supabase
-      .from('express_matches')
-      .update({ base_venue: target })
-      .eq('cancha_code', slug)
-      .then(({ error }) => {
-        if (error) syncedBaseVenueRef.current = null;
-      });
-  }, [supabase, match?.id, match?.base_venue, urlBaseVenue, slug]);
+    const qs = `?base_venue=${encodeURIComponent(target)}`;
+    void fetch(`/api/express-matches/${encodeURIComponent(slug)}${qs}`).then(async (res) => {
+      if (!res.ok) syncedBaseVenueRef.current = null;
+    });
+  }, [match?.id, match?.base_venue, urlBaseVenue, slug]);
 
   if (!isValidExpressSlug(slugRaw)) {
     notFound();

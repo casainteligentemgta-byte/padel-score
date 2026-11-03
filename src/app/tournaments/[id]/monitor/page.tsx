@@ -8,6 +8,7 @@ import { Monitor, Wifi, WifiOff, Maximize2, Brush, EyeOff } from 'lucide-react';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/AuthContext';
+import { getAuthHeaders } from '@/lib/apiAuth';
 
 // ── Grid layouts según número de canchas activas ─────────────────────────────
 // Máximo 6 canchas (La Margarita)
@@ -582,7 +583,7 @@ function CourtCell({
         try {
             await fetch('/api/pizarra-cancha', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                 body: JSON.stringify({ courtNumber: courtNum, tournamentId, matchId: match.id }),
             });
         } finally {

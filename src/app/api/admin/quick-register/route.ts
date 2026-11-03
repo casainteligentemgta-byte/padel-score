@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { isGuardResponse, requireAdmin } from '@/lib/apiGuard';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { sendAdminNewProfileAlert } from '@/services/whatsappService';
 
@@ -51,6 +52,9 @@ async function buildUniquePartnerCode(supabase: ReturnType<typeof getSupabaseSer
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin(request);
+  if (isGuardResponse(auth)) return auth;
+
   try {
     const supabase = getSupabaseServiceClient();
     if (!supabase) {

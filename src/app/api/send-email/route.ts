@@ -1,10 +1,14 @@
 import { Resend } from 'resend';
 import { NextResponse } from 'next/server';
 import { validateEmailBody, sanitizeString } from '@/lib/apiValidation';
+import { isGuardResponse, requireAuth } from '@/lib/apiGuard';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { sendCEOMessage } from '@/lib/ceo-messenger';
 
 export async function POST(request: Request) {
+  const auth = await requireAuth(request);
+  if (isGuardResponse(auth)) return auth;
+
   if (!checkRateLimit(request)) {
     return NextResponse.json({ error: 'Límite de envíos excedido. Intenta más tarde.' }, { status: 429 });
   }

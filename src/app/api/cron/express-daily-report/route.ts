@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
+import { isGuardResponse, requireCronSecret } from '@/lib/apiGuard';
 import {
   buildExpressDailyReportMessage,
   expressReportDayBoundsUtc,
   fetchPizarraActivationsForDay,
-  isCronAuthorized,
 } from '@/lib/expressActivityReport';
 import { isPrimaryProductionDeployment } from '@/lib/deploymentTier';
 import { notifyTelegramAdmin } from '@/lib/telegramBot';
@@ -14,9 +14,8 @@ export const maxDuration = 60;
 
 /** Informe diario 23:59 VE — activaciones de pizarra Express (Vercel Cron). */
 export async function GET(req: Request) {
-  if (!isCronAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const cron = requireCronSecret(req);
+  if (isGuardResponse(cron)) return cron;
 
   if (!isPrimaryProductionDeployment()) {
     return NextResponse.json({ ok: true, skipped: true, reason: 'staging deployment' });
