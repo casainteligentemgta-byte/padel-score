@@ -1,5 +1,14 @@
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/authServerSupabase';
+import { getBcvVesPerUsd } from '@/lib/bcvRate';
+import {
+    expectedAmountForInscription,
+    flattenTournamentRow,
+    isPayableInscriptionStatus,
+    type InscriptionPriceRow,
+} from '@/lib/inscriptionPricing';
+import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
+import { checkPaymentRateLimit } from '@/lib/rateLimit';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
 type PaymentReportBody = {
@@ -23,6 +32,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (authResult instanceof NextResponse) return authResult;
     const userId = authResult.uid;
 
+    if (!checkPaymentRateLimit(req, 'pago-movil')) {
+        return NextResponse.json({ error: 'Demasiados reportes de pago. Intenta más tarde.' }, { status: 429 });
+    }
+
     const { id: tournamentId } = await params;
     if (!tournamentId) return NextResponse.json({ error: 'ID de torneo requerido' }, { status: 400 });
 
@@ -41,8 +54,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             ? null
             : Number(String(body.amountBs).replace(',', '.'));
 
-  if (!bankOrigin) return NextResponse.json({ error: 'Banco de origen requerido' }, { status: 400 });
-  if (!/^\d{3,}$/.test(referenceNumber)) return NextResponse.json({ error: 'Número de referencia inválido (mínimo 3 dígitos)' }, { status: 400 });
+    if (!bankOrigin) return NextResponse.json({ error: 'Banco de origen requerido' }, { status: 400 });
+    if (!/^\d{3,}$/.test(referenceNumber)) return NextResponse.json({ error: 'Número de referencia inválido (mínimo 3 dígitos)' }, { status: 400 });
     if (amountBs == null || !Number.isFinite(amountBs) || amountBs <= 0) {
         return NextResponse.json({ error: 'Monto en Bs requerido y debe ser > 0' }, { status: 400 });
     }
@@ -50,6 +63,53 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const supabase = getSupabaseServiceClient();
     if (!supabase) {
         return NextResponse.json({ error: 'Configuración del servidor: falta SUPABASE_SERVICE_ROLE_KEY' }, { status: 501 });
+    }
+
+    const { data: trow, error: tErr } = await supabase
+        .from('tournaments')
+        .select('id, data')
+        .eq('id', tournamentId)
+        .maybeSingle();
+    if (tErr || !trow) {
+        return NextResponse.json({ error: 'Torneo no encontrado.' }, { status: 404 });
+    }
+    const tournament = flattenTournamentRow(trow as { id: string; data?: Record<string, unknown> | null });
+
+    const { data: insRows } = await supabase
+        .from('inscriptions')
+        .select('id, tournament_id, category_key, category_price, payment_status')
+        .eq('tournament_id', tournamentId)
+        .or(`user_id.eq.${userId},owner_id.eq.${userId}`);
+
+    const relevant = ((insRows || []) as InscriptionPriceRow[]).filter((ins) =>
+        isPayableInscriptionStatus(ins.payment_status)
+    );
+    const expectedUsd = relevant.reduce(
+        (sum, ins) => sum + expectedAmountForInscription(ins, tournament),
+        0
+    );
+
+    if (expectedUsd > 0) {
+        const bcv = await getBcvVesPerUsd();
+        if (bcv.vesPerUsd == null) {
+            return NextResponse.json(
+                { error: 'No se pudo verificar el monto (tasa BCV no disponible). Intenta más tarde.' },
+                { status: 503 }
+            );
+        }
+        const verification = validatePaymentAgainstCategoryPrice({
+            amountExtracted: amountBs,
+            categoryPrice: expectedUsd,
+            bcvVesPerUsd: bcv.vesPerUsd,
+        });
+        if (verification.paymentStatus === 'alert') {
+            return NextResponse.json(
+                {
+                    error: 'El monto en Bs no coincide con el precio de tu inscripción (tasa BCV). Revisa el monto.',
+                },
+                { status: 400 }
+            );
+        }
     }
 
     // 1) Bloqueo estricto: referencia ya utilizada?
@@ -68,29 +128,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     // 2) Insertar en payment_logs con estado pending
-  const base = {
-    user_id: userId,
-    tournament_id: tournamentId,
-    reference_number: referenceNumber,
-    amount_bs: amountBs,
-    status: 'pending',
-    created_at: new Date().toISOString(),
-  };
-  const attempts = [
-    { owner_id: userId, bank_origin: bankOrigin, phone_emitter: phoneEmitter || null, ...base },
-    { bank_origin: bankOrigin, phone_emitter: phoneEmitter || null, ...base },
-    { bank_origin: bankOrigin, ...base },
-    { ...base },
-  ] as const;
+    const base = {
+        user_id: userId,
+        tournament_id: tournamentId,
+        reference_number: referenceNumber,
+        amount_bs: amountBs,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+    };
+    const attempts = [
+        { owner_id: userId, bank_origin: bankOrigin, phone_emitter: phoneEmitter || null, ...base },
+        { bank_origin: bankOrigin, phone_emitter: phoneEmitter || null, ...base },
+        { bank_origin: bankOrigin, ...base },
+        { ...base },
+    ] as const;
 
-  let insertErr: any = null;
-  for (const payload of attempts) {
-    const res = await supabase.from('payment_logs').insert(payload as any);
-    insertErr = res.error;
-    if (!insertErr) break;
-    // En conflicto por referencia, no seguimos intentando variaciones.
-    if (String((insertErr as any)?.message || '').toLowerCase().includes('reference_number')) break;
-  }
+    let insertErr: any = null;
+    for (const payload of attempts) {
+        const res = await supabase.from('payment_logs').insert(payload as any);
+        insertErr = res.error;
+        if (!insertErr) break;
+        // En conflicto por referencia, no seguimos intentando variaciones.
+        if (String((insertErr as any)?.message || '').toLowerCase().includes('reference_number')) break;
+    }
 
     if (insertErr) {
         // Carrera: si el UNIQUE(reference_number) salta a último momento.
@@ -102,4 +162,3 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     return NextResponse.json({ ok: true });
 }
-

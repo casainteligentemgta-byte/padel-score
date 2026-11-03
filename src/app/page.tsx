@@ -373,11 +373,11 @@ export default function HomePage() {
                     </div>
                 </div>
 
-                {/* Footer Controls (Simplificado / Oculto) */}
+                {process.env.NODE_ENV === 'development' && (
                 <div className="mt-16 flex flex-col items-center">
                     <button
                         onClick={() => {
-                            enableDevMode();
+                            void enableDevMode();
                             router.push('/tournaments');
                         }}
                         className="flex items-center gap-2 text-[9px] font-bold text-white/5 hover:text-white/20 uppercase tracking-[0.4em] transition-all bg-transparent border-none p-0 outline-none"
@@ -385,6 +385,7 @@ export default function HomePage() {
                         <Zap className="w-3 h-3" /> Sandbox Mode
                     </button>
                 </div>
+                )}
             </motion.div>
 
             <LegalModal

@@ -9,6 +9,7 @@ import {
     type InscriptionPriceRow,
     type TournamentPriceSource,
 } from '@/lib/inscriptionPricing';
+import { checkPaymentRateLimit } from '@/lib/rateLimit';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
 function getClient(): Preference | null {
@@ -29,6 +30,10 @@ const UUID_RE =
 export async function POST(request: Request) {
     const auth = await requireAuth(request);
     if (isGuardResponse(auth)) return auth;
+
+    if (!checkPaymentRateLimit(request, 'mp-preference')) {
+        return NextResponse.json({ error: 'Demasiadas solicitudes de pago. Intenta más tarde.' }, { status: 429 });
+    }
 
     const client = getClient();
     if (!client) {

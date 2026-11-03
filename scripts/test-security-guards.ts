@@ -14,6 +14,8 @@ import {
   isPayableInscriptionStatus,
 } from '../src/lib/inscriptionPricing';
 import { timingSafeEqualString } from '../src/lib/apiGuard';
+import { isAdminAccess, isLegacyAdminEmail } from '../src/lib/adminAccess';
+import { validatePaymentAgainstCategoryPrice } from '../src/lib/paymentValidation';
 
 function run(name: string, fn: () => void) {
   try {
@@ -102,6 +104,37 @@ run('timingSafeEqualString', () => {
   assert.equal(timingSafeEqualString('abc', 'abc'), true);
   assert.equal(timingSafeEqualString('abc', 'abd'), false);
   assert.equal(timingSafeEqualString('abc', 'ab'), false);
+});
+
+run('admin extra solo por lista exacta de env', () => {
+  const prevPublic = process.env.NEXT_PUBLIC_ADMIN_EMAILS;
+  const prevAdmin = process.env.ADMIN_EMAILS;
+  process.env.NEXT_PUBLIC_ADMIN_EMAILS = 'owner@example.com';
+  delete process.env.ADMIN_EMAILS;
+  assert.equal(isLegacyAdminEmail('owner@example.com'), true);
+  assert.equal(isLegacyAdminEmail('casainteligentemgta@gmail.com'), false);
+  assert.equal(isAdminAccess('admin', 'x@y.com'), true);
+  assert.equal(isAdminAccess('player', 'owner@example.com'), true);
+  assert.equal(isAdminAccess('player', 'otro@example.com'), false);
+  if (prevPublic === undefined) delete process.env.NEXT_PUBLIC_ADMIN_EMAILS;
+  else process.env.NEXT_PUBLIC_ADMIN_EMAILS = prevPublic;
+  if (prevAdmin === undefined) delete process.env.ADMIN_EMAILS;
+  else process.env.ADMIN_EMAILS = prevAdmin;
+});
+
+run('pago móvil Bs vs precio USD con tasa BCV', () => {
+  const ok = validatePaymentAgainstCategoryPrice({
+    amountExtracted: 2268,
+    categoryPrice: 40,
+    bcvVesPerUsd: 56.7,
+  });
+  assert.equal(ok.paymentStatus, 'paid');
+  const bad = validatePaymentAgainstCategoryPrice({
+    amountExtracted: 5,
+    categoryPrice: 40,
+    bcvVesPerUsd: 56.7,
+  });
+  assert.equal(bad.paymentStatus, 'alert');
 });
 
 console.log('Todos los guards de seguridad OK');
