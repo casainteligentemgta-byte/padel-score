@@ -1,11 +1,23 @@
 import { NextResponse } from 'next/server';
+import { isGuardResponse, requireAdmin, requireInternalWebhookSecret } from '@/lib/apiGuard';
 import { sendCEOMessage } from '@/lib/ceo-messenger';
 
 /**
  * GET: Verifica que las variables de Twilio estén configuradas (sin mostrar valores).
  * POST: Envía un mensaje de prueba a WhatsApp para comprobar que todo funciona.
  */
-export async function GET() {
+async function authorizeTest(req: Request) {
+  const secret = requireInternalWebhookSecret(req);
+  if (!isGuardResponse(secret)) return { ok: true as const };
+  const admin = await requireAdmin(req);
+  if (!isGuardResponse(admin)) return { ok: true as const };
+  return admin;
+}
+
+export async function GET(req: Request) {
+  const auth = await authorizeTest(req);
+  if (isGuardResponse(auth)) return auth;
+
   const accountSid = !!process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = !!process.env.TWILIO_AUTH_TOKEN?.trim();
   const fromNumber = !!process.env.TWILIO_WHATSAPP_NUMBER?.trim();
@@ -30,7 +42,10 @@ export async function GET() {
   });
 }
 
-export async function POST() {
+export async function POST(req: Request) {
+  const auth = await authorizeTest(req);
+  if (isGuardResponse(auth)) return auth;
+
   const testMessage = `🧪 *Smart Padel – Prueba IA CEO*\n\nSi recibes este mensaje, la integración Twilio + WhatsApp está funcionando correctamente.\n\n_Enviado desde el test del webhook._`;
 
   const result = await sendCEOMessage(testMessage);

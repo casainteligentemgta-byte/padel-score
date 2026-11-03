@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireTelegramWebhookSecret } from '@/lib/apiGuard';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import {
   applyExpressBoardReset,
@@ -36,6 +37,9 @@ async function sendStaffMenu(
 }
 
 export async function POST(req: Request) {
+  const secret = requireTelegramWebhookSecret(req);
+  if (secret instanceof NextResponse) return secret;
+
   try {
     const supabase = getSupabaseServiceClient();
     if (!supabase) {

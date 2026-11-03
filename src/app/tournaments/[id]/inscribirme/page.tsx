@@ -836,20 +836,12 @@ export default function InscribirmePage() {
             // --- Pago con Mercado Pago: redirigir al checkout ---
             if (isMercadoPago && createdInscriptionIds.length > 0 && totalPrice > 0) {
                 try {
-                    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
                     const res = await fetch('/api/mercadopago/create-preference', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                         body: JSON.stringify({
                             inscriptionIds: createdInscriptionIds,
-                            amount: totalPrice,
-                            title: `Inscripción: ${tournament.name}`,
                             payerEmail: participantEmail,
-                            tournamentId,
-                            baseUrl,
-                            successUrl: `${baseUrl}/tournaments/${tournamentId}/inscribirme?mp=success`,
-                            failureUrl: `${baseUrl}/tournaments/${tournamentId}/inscribirme?mp=failure`,
-                            pendingUrl: `${baseUrl}/tournaments/${tournamentId}/inscribirme?mp=pending`,
                         }),
                     });
                     const data = await res.json();
@@ -879,7 +871,7 @@ export default function InscribirmePage() {
 
                 const emailRes = await fetch('/api/send-email', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                     body: JSON.stringify({
                         type: 'NEW_INSCRIPTION',
                         data: {

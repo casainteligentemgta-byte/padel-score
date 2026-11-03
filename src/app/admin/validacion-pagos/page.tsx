@@ -447,7 +447,7 @@ export default function AdminValidacionPagosPage() {
         try {
             const res = await fetch('/api/admin/inscriptions/notify-whatsapp', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
                 body: JSON.stringify({
                     inscriptionId: id,
                     phone,

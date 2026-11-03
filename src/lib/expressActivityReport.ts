@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isGuardResponse, requireCronSecret } from '@/lib/apiGuard';
 import { getAppBaseUrl } from '@/lib/brand';
 import { expressVenuePathSlug } from '@/lib/expressShortUrl';
 import { resolveCanonicalExpressVenue } from '@/lib/expressVenueCourts';
@@ -135,9 +136,7 @@ export function buildExpressDailyReportMessage(rows: PizarraRow[], dayLabel: str
   );
 }
 
+/** Compat: cron Vercel. Preferir requireCronSecret en rutas nuevas. */
 export function isCronAuthorized(req: Request): boolean {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) return process.env.NODE_ENV !== 'production';
-  const auth = req.headers.get('authorization');
-  return auth === `Bearer ${secret}`;
+  return !isGuardResponse(requireCronSecret(req));
 }

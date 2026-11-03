@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { isGuardResponse, requireAdmin } from '@/lib/apiGuard';
 import { sendPaymentStatusUpdateMessage } from '@/services/whatsappService';
 import { sanitizeString } from '@/lib/apiValidation';
 
@@ -11,6 +12,9 @@ type Status =
   | 'pending';
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin(request);
+  if (isGuardResponse(auth)) return auth;
+
   try {
     const body = await request.json();
     const inscriptionId = sanitizeString(body?.inscriptionId);

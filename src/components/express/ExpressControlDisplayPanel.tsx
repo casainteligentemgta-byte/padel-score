@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, MonitorPlay, Type } from 'lucide-react';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { patchExpressMatchBySession } from '@/lib/expressSessionApi';
 import type { ExpressMatch } from '@/types/expressMatch';
 import {
   EXPRESS_DISPLAY_NAME_SCALE_MAX,
@@ -146,7 +146,6 @@ export function ExpressControlDisplayPanel({
   embedded,
   mode = 'all',
 }: Props) {
-  const supabase = getSupabaseClient();
   const [open, setOpen] = useState(!embedded);
   const [savingName, setSavingName] = useState<ExpressNameScalePresetId | 'slider' | null>(null);
   const [savingMedia, setSavingMedia] = useState<ExpressMediaScalePresetId | 'slider' | null>(null);
@@ -171,75 +170,54 @@ export function ExpressControlDisplayPanel({
 
   const persistNameScale = useCallback(
     async (raw: number) => {
-      if (!supabase) {
-        setError('Supabase no configurado.');
-        return;
-      }
       const scale = normalizeExpressDisplayNameScale(raw);
       setSavingName('slider');
       setError(null);
-      const { error: upErr } = await supabase
-        .from('express_matches')
-        .update({ display_name_scale: scale })
-        .eq('session_id', sessionId);
+      const result = await patchExpressMatchBySession(sessionId, { display_name_scale: scale });
 
       setSavingName(null);
-      if (upErr) {
-        setError(upErr.message);
+      if (!result.ok) {
+        setError(result.message);
         setNameDraft(currentNameScale);
         return;
       }
       onNameScaleSaved(scale);
     },
-    [supabase, sessionId, onNameScaleSaved, currentNameScale],
+    [sessionId, onNameScaleSaved, currentNameScale],
   );
 
   const persistMediaScale = useCallback(
     async (raw: number) => {
-      if (!supabase) {
-        setError('Supabase no configurado.');
-        return;
-      }
       const scale = normalizeExpressDisplayMediaScale(raw);
       setSavingMedia('slider');
       setError(null);
-      const { error: upErr } = await supabase
-        .from('express_matches')
-        .update({ display_media_scale: scale })
-        .eq('session_id', sessionId);
+      const result = await patchExpressMatchBySession(sessionId, { display_media_scale: scale });
 
       setSavingMedia(null);
-      if (upErr) {
-        setError(upErr.message);
+      if (!result.ok) {
+        setError(result.message);
         setMediaDraft(currentMediaScale);
         return;
       }
       onMediaScaleSaved(scale);
     },
-    [supabase, sessionId, onMediaScaleSaved, currentMediaScale],
+    [sessionId, onMediaScaleSaved, currentMediaScale],
   );
 
   const debouncedSaveName = useDebouncedScaleSave(persistNameScale);
   const debouncedSaveMedia = useDebouncedScaleSave(persistMediaScale);
 
   const applyNamePreset = async (presetId: ExpressNameScalePresetId) => {
-    if (!supabase) {
-      setError('Supabase no configurado.');
-      return;
-    }
     const preset = EXPRESS_NAME_SCALE_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
 
     setSavingName(presetId);
     setError(null);
-    const { error: upErr } = await supabase
-      .from('express_matches')
-      .update({ display_name_scale: preset.value })
-      .eq('session_id', sessionId);
+    const result = await patchExpressMatchBySession(sessionId, { display_name_scale: preset.value });
 
     setSavingName(null);
-    if (upErr) {
-      setError(upErr.message);
+    if (!result.ok) {
+      setError(result.message);
       return;
     }
     setNameDraft(preset.value);
@@ -247,23 +225,16 @@ export function ExpressControlDisplayPanel({
   };
 
   const applyMediaPreset = async (presetId: ExpressMediaScalePresetId) => {
-    if (!supabase) {
-      setError('Supabase no configurado.');
-      return;
-    }
     const preset = EXPRESS_MEDIA_SCALE_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
 
     setSavingMedia(presetId);
     setError(null);
-    const { error: upErr } = await supabase
-      .from('express_matches')
-      .update({ display_media_scale: preset.value })
-      .eq('session_id', sessionId);
+    const result = await patchExpressMatchBySession(sessionId, { display_media_scale: preset.value });
 
     setSavingMedia(null);
-    if (upErr) {
-      setError(upErr.message);
+    if (!result.ok) {
+      setError(result.message);
       return;
     }
     setMediaDraft(preset.value);

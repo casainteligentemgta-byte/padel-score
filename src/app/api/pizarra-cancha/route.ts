@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { isGuardResponse, requireAdminOrStaff } from '@/lib/apiGuard';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
 function parsePositiveCourtInteger(raw: unknown): number | null {
@@ -8,6 +9,9 @@ function parsePositiveCourtInteger(raw: unknown): number | null {
 }
 
 export async function POST(req: Request) {
+    const auth = await requireAdminOrStaff(req);
+    if (isGuardResponse(auth)) return auth;
+
     const supabase = getSupabaseServiceClient();
     if (!supabase) {
         return NextResponse.json({ error: 'No configurado' }, { status: 501 });
@@ -44,6 +48,9 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+    const auth = await requireAdminOrStaff(req);
+    if (isGuardResponse(auth)) return auth;
+
     const supabase = getSupabaseServiceClient();
     if (!supabase) {
         return NextResponse.json({ error: 'No configurado' }, { status: 501 });

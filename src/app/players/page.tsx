@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
+import { getAuthHeaders } from '@/lib/apiAuth';
 import {
     Users,
     Search,
@@ -58,7 +59,7 @@ function PlayersListContent() {
         (async () => {
             try {
                 if (isAdmin) {
-                    const res = await fetch('/api/participants');
+                    const res = await fetch('/api/participants', { headers: await getAuthHeaders() });
                     if (cancelled) return;
                     if (res.ok) {
                         const data = await res.json();

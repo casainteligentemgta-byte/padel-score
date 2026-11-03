@@ -8,13 +8,22 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const sessionId = String(body?.session_id ?? '').trim();
 
-    if (!sessionId) {
+    if (!sessionId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
       return NextResponse.json({ ok: false }, { status: 400 });
     }
 
     const supabase = getSupabaseServiceClient();
     if (!supabase) {
       return NextResponse.json({ ok: true });
+    }
+
+    const { data: match } = await supabase
+      .from('express_matches')
+      .select('id')
+      .eq('session_id', sessionId)
+      .maybeSingle();
+    if (!match) {
+      return NextResponse.json({ ok: false }, { status: 404 });
     }
 
     await notifyTelegramMatchStarted(supabase, sessionId);

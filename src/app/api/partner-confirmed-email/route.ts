@@ -1,9 +1,13 @@
 import { Resend } from 'resend';
 import { PartnerConfirmedEmail } from '@/emails/PartnerConfirmedEmail';
 import { NextResponse } from 'next/server';
+import { isGuardResponse, requireAuth } from '@/lib/apiGuard';
 import { getAppBaseUrl } from '@/lib/brand';
 
 export async function POST(req: Request) {
+    const auth = await requireAuth(req);
+    if (isGuardResponse(auth)) return auth;
+
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
         console.error('[partner-confirmed-email] RESEND_API_KEY is missing');

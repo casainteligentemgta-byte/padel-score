@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { patchExpressMatchBySession } from '@/lib/expressSessionApi';
 import type { ExpressMatch } from '@/types/expressMatch';
 import {
   EXPRESS_TICKER_PHRASE_CHAR_MAX,
@@ -17,7 +17,6 @@ type Props = {
 };
 
 export function ExpressControlTickerPanel({ match, onPhrasesSaved, embedded }: Props) {
-  const supabase = getSupabaseClient();
   const [draft, setDraft] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,21 +36,14 @@ export function ExpressControlTickerPanel({ match, onPhrasesSaved, embedded }: P
   };
 
   const save = async () => {
-    if (!supabase) {
-      setError('Supabase no configurado.');
-      return;
-    }
     const phrases = normalizeExpressTickerPhrases(draft);
     setSaving(true);
     setError(null);
-    const { error: upErr } = await supabase
-      .from('express_matches')
-      .update({ display_ticker_phrases: phrases })
-      .eq('cancha_code', match.cancha_code);
+    const result = await patchExpressMatchBySession(match.session_id, { display_ticker_phrases: phrases });
 
     setSaving(false);
-    if (upErr) {
-      setError(upErr.message);
+    if (!result.ok) {
+      setError(result.message);
       return;
     }
     setDraft(phrases);

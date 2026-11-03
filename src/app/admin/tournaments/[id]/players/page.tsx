@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { UserPlus, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
+import { getAuthHeaders } from '@/lib/apiAuth';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import Sidebar from '@/components/Sidebar';
 
@@ -104,7 +105,7 @@ export default function AdminTournamentPlayersPage() {
 
       const res = await fetch('/api/admin/quick-register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
           tournamentId,
           categoryKey: categoryKey || undefined,

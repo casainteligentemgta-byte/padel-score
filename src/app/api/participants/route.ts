@@ -38,7 +38,10 @@ function pickParticipantListData(data: Record<string, unknown> | null | undefine
  * GET: lista todos los participantes (jugadores) del sistema.
  * Usa service role para evitar restricciones RLS; así el admin puede ver la lista en /players.
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const auth = await requireRole(req, ['admin']);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const supabase = getSupabaseServiceClient();
     if (!supabase) {

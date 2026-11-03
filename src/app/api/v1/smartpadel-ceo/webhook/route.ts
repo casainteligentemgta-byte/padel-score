@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { isGuardResponse, requireInternalWebhookSecret } from '@/lib/apiGuard';
 import { sendCEOMessage } from '@/lib/ceo-messenger';
 
 const PADEL_LOG = '[Smart Padel · CEO Webhook]';
@@ -20,6 +21,9 @@ type SupabaseWebhookPayload = {
 };
 
 export async function POST(request: Request) {
+  const secret = requireInternalWebhookSecret(request);
+  if (isGuardResponse(secret)) return secret;
+
   try {
     const body = (await request.json().catch(() => ({}))) as SupabaseWebhookPayload;
     const { table, record = {}, type } = body;
