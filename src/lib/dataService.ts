@@ -4,12 +4,6 @@ import { getAuthHeaders } from './apiAuth';
 import { getScoringRules } from './matchScoringRules';
 import { syncMatchOrderFields } from './matchOrderMeta';
 import { selectCanchaPublicidadPlaylist } from './canchaPublicidadQuery';
-import {
-  isTestPartnerCode,
-  TEST_PARTNER_DISPLAY_NAME,
-  TEST_PARTNER_EMAIL,
-  TEST_PARTNER_USER_ID,
-} from './testPartnerProfile';
 import { isMercadoPagoMethod } from './paymentValidation';
 
 const supabase = () => {
@@ -1088,11 +1082,35 @@ export const dataService = {
 
     async getParticipant(id: string) {
         const { data, error } = await supabase().from('participants').select('*').eq('id', id).single();
+        if (!error && data) {
+            return { id: data.id, ...data.data, ownerId: data.owner_id, createdAt: data.created_at, updatedAt: data.updated_at };
+        }
+        const pub = await this.getPublicParticipant(id);
+        return pub;
+    },
+
+    async getPublicParticipant(id: string) {
+        const { data, error } = await supabase().rpc('get_public_participant', { p_id: id });
         if (error || !data) return null;
-        return { id: data.id, ...data.data, ownerId: data.owner_id, createdAt: data.created_at, updatedAt: data.updated_at };
+        const row = typeof data === 'object' ? data : null;
+        if (!row || !row.id) return null;
+        return row;
     },
 
     async checkParticipantExistence(field: string, value: string, excludeId?: string) {
+        if (field === 'dni') {
+            const authHeaders = await getAuthHeaders();
+            const res = await fetch('/api/participants/check-dni', {
+                method: 'POST',
+                headers: { ...authHeaders, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dni: value, excludeId: excludeId || undefined }),
+            });
+            const json = (await res.json().catch(() => ({}))) as { taken?: boolean; error?: string };
+            if (!res.ok) {
+                throw new Error(json.error || 'No se pudo verificar la cédula.');
+            }
+            return Boolean(json.taken);
+        }
         const { data, error } = await supabase()
             .from('participants')
             .select('id')
@@ -1391,7 +1409,6 @@ export const dataService = {
         const cleanedCode = code.trim().toUpperCase().replace(/\s/g, '');
         if (!/^[A-Z0-9]{6}$/.test(cleanedCode)) return null;
 
-        // Con sesión, el API valida que el id exista en profiles (p. ej. 888888 y fichas con owner en profiles).
         try {
             const authHeaders = await getAuthHeaders();
             if (authHeaders.Authorization) {
@@ -1400,30 +1417,16 @@ export const dataService = {
                     { headers: authHeaders }
                 );
                 if (res.ok) return await res.json();
+                if (res.status === 429) {
+                    throw new Error('Demasiadas búsquedas de código. Espera un momento e intenta de nuevo.');
+                }
                 if (res.status === 404 || res.status === 400) return null;
+                return null;
             }
-        } catch {
-            /* fallback abajo */
+        } catch (e) {
+            if (e instanceof Error && /Demasiadas búsquedas/.test(e.message)) throw e;
         }
-
-        if (isTestPartnerCode(cleanedCode)) {
-            return {
-                id: TEST_PARTNER_USER_ID,
-                name: TEST_PARTNER_DISPLAY_NAME,
-                email: TEST_PARTNER_EMAIL,
-            };
-        }
-
-        const { data, error } = await supabase()
-            .from('profiles')
-            .select('id, name, email')
-            .eq('unique_code', cleanedCode)
-            .single();
-        if (error) {
-            if (error.code === 'PGRST116') return null;
-            throw error;
-        }
-        return data;
+        return null;
     },
 
     /** Obtiene nombre completo para mostrar: prioriza ficha del jugador (participants name+lastName) para que en grupos, grilla y pizarra aparezca "Nombre Apellido" de A y de B; si no hay ficha, usa profiles.name */
@@ -1435,8 +1438,9 @@ export const dataService = {
             const full = [d.name, d.lastName].filter(Boolean).join(' ').trim();
             if (full) return full;
         }
-        const { data: profile } = await db.from('profiles').select('name').eq('id', userId).single();
-        const fromProfile = (profile?.name || '').trim();
+        const { data: names } = await db.rpc('lookup_profiles_display', { p_ids: [userId] });
+        const row = Array.isArray(names) ? names[0] : names;
+        const fromProfile = (row?.display_name || '').trim();
         return fromProfile || '';
     },
 
@@ -1475,8 +1479,7 @@ export const dataService = {
         const throwForeignKeyTeams = () => {
             throw new Error(
                 'El compañero no tiene un perfil válido en el sistema (referencia a usuario inexistente). ' +
-                    'Si usas el código 888888, ejecuta en Supabase la migración 054_test_partner_888888. ' +
-                    'En otros casos, asegúrate de que el compañero tenga cuenta y perfil activo.'
+                    'Asegúrate de que el compañero tenga cuenta y perfil activo.'
             );
         };
 

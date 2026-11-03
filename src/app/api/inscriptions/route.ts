@@ -6,7 +6,7 @@ import {
     categoryPriceFromTournament,
     flattenTournamentRow,
 } from '@/lib/inscriptionPricing';
-import { isMercadoPagoMethod, validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
+import { isMercadoPagoMethod, resolveManualInscriptionPaymentStatus } from '@/lib/paymentValidation';
 import { checkPaymentRateLimit } from '@/lib/rateLimit';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
@@ -112,21 +112,13 @@ export async function POST(request: Request) {
     const bcv = await getBcvVesPerUsd();
     const bcvVesPerUsd = bcv.vesPerUsd;
 
-    let paymentStatus: string = 'pending';
-    let alertMessage: string | null = sanitizeString(body.alertMessage) || null;
-
-    if (categoryPrice <= 0) {
-        paymentStatus = 'paid';
-        alertMessage = null;
-    } else if (amountExtracted != null && Number.isFinite(amountExtracted)) {
-        const verification = validatePaymentAgainstCategoryPrice({
-            amountExtracted,
-            categoryPrice,
-            bcvVesPerUsd,
-        });
-        paymentStatus = verification.paymentStatus;
-        alertMessage = verification.alertMessage;
-    }
+    const resolved = resolveManualInscriptionPaymentStatus({
+        categoryPrice,
+        amountExtracted,
+        bcvVesPerUsd,
+    });
+    const paymentStatus = resolved.paymentStatus;
+    const alertMessage = resolved.alertMessage;
 
     const nowIso = new Date().toISOString();
     const tournamentName =

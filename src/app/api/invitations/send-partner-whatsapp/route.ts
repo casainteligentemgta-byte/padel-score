@@ -3,7 +3,6 @@ import { requireAuth } from '@/lib/authServerSupabase';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { sendPartnerAcceptInviteMessage } from '@/services/whatsappService';
 import { sanitizeString } from '@/lib/apiValidation';
-import { isTestPartnerUserId } from '@/lib/testPartnerProfile';
 
 type Body = {
   teamId?: string;
@@ -86,9 +85,6 @@ export async function POST(request: Request) {
     }
 
     const partnerId = String((team as { player_b_id: string }).player_b_id);
-    if (isTestPartnerUserId(partnerId)) {
-      return NextResponse.json({ success: true, skipped: true, reason: 'test_partner' });
-    }
 
     const phone = await getPhoneForUser(supabase, partnerId);
     if (!phone) {

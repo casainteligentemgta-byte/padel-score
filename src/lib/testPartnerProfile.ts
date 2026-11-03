@@ -1,6 +1,6 @@
 /**
- * Perfil de prueba: código 888888 — mismo UUID en toda la app, migración 054 (auth + profiles) y atajos en API.
- * "Smart Padel Player Test" acepta la reserva de pareja automáticamente vía /api/inscriptions/auto-confirm-test-partner
+ * Constantes históricas del perfil de prueba 888888 (migración 054).
+ * El atajo de auto-confirmación se retiró de producción.
  */
 
 export const TEST_PARTNER_CODE = '888888';

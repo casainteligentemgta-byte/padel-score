@@ -14,7 +14,7 @@ interface AuthContextType {
     loading: boolean;
     signInWithGoogle: () => Promise<void>;
     signInWithEmail: (email: string, pass: string) => Promise<void>;
-    signUpWithEmail: (email: string, pass: string, name: string) => Promise<void>;
+    signUpWithEmail: (email: string, pass: string, name: string) => Promise<{ needsEmailConfirmation: boolean }>;
     forgotPassword: (email: string) => Promise<void>;
     enableDevMode: () => void | Promise<void>;
     logout: () => Promise<void>;
@@ -45,7 +45,7 @@ const AuthContext = createContext<AuthContextType>({
     loading: true,
     signInWithGoogle: async () => { },
     signInWithEmail: async () => { },
-    signUpWithEmail: async () => { },
+    signUpWithEmail: async () => ({ needsEmailConfirmation: false }),
     forgotPassword: async () => { },
     enableDevMode: () => { },
     logout: async () => { },
@@ -147,6 +147,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                     fetchProfile(appUser.uid, {
                         email: appUser.email ?? undefined,
                         name: appUser.displayName ?? undefined,
+                    }).then(async (prof) => {
+                        const metaTerms = session?.user?.user_metadata?.accepted_terms_version as string | undefined;
+                        const alreadyAccepted = Boolean(
+                            prof && 'acceptedTermsVersion' in prof && (prof as { acceptedTermsVersion?: string }).acceptedTermsVersion
+                        );
+                        if (
+                            metaTerms &&
+                            prof &&
+                            !alreadyAccepted &&
+                            supabase
+                        ) {
+                            try {
+                                await dataService.updateProfileLegalAcceptance(appUser.uid, {
+                                    acceptedTermsVersion: metaTerms,
+                                    signaturePath: null,
+                                    biometricPhotoPath: null,
+                                });
+                                await fetchProfile(appUser.uid);
+                            } catch (e) {
+                                console.warn('[Auth] No se pudo persistir términos del metadata:', e);
+                            }
+                        }
                     }).catch(err => console.error('AuthContext: Profile fetch error', err));
                 } else {
                     setProfile(null);
@@ -258,26 +280,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             const keyExists = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
             throw new Error(`Supabase no está configurado. URL:${urlExists} Key:${keyExists}. Revisa .env.local y reinicia el servidor de desarrollo.`);
         }
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
         const { data, error } = await supabase.auth.signUp({
             email,
             password: pass,
-            options: { data: { full_name: name, name } },
+            options: {
+                data: {
+                    full_name: name,
+                    name,
+                    accepted_terms_version: CURRENT_TERMS_VERSION,
+                    pending_ficha: true,
+                },
+                emailRedirectTo: origin ? `${origin}/login?confirmed=1` : undefined,
+            },
         });
         if (error) throw error;
-        if (data.user) {
-            const newProfile = {
-                role: ROLES.PLAYER,
-                email,
-                name,
-                acceptedTermsVersion: CURRENT_TERMS_VERSION,
-                legalVersion: CURRENT_TERMS_VERSION,
-                statusLegal: 'accepted',
-                legalTimestamp: new Date().toISOString(),
-                createdAt: new Date().toISOString(),
-            };
-            await dataService.setUserProfile(data.user.id, newProfile);
-            setProfile(newProfile);
+        if (!data.session) {
+            return { needsEmailConfirmation: true };
         }
+        if (data.user) {
+            try {
+                await fetchProfile(data.user.id, { email, name });
+            } catch (e) {
+                console.warn('[Auth] Perfil post-registro:', e);
+            }
+        }
+        return { needsEmailConfirmation: false };
     };
 
     const forgotPassword = async (email: string) => {

@@ -146,9 +146,17 @@ export default function LoginPage() {
     const [smartConsentModalOpen, setSmartConsentModalOpen] = useState(false);
     const [smartConsentSavePending, setSmartConsentSavePending] = useState(false);
     const [smartConsentSaving, setSmartConsentSaving] = useState(false);
+    const [holdForFicha, setHoldForFicha] = useState(false);
 
     useEffect(() => {
-        if (!authLoading && user) {
+        if (searchParams.get('confirmed') === '1') {
+            setSuccess('Correo confirmado. Inicia sesión para completar tu ficha de jugador.');
+            setIsLogin(true);
+        }
+    }, [searchParams]);
+
+    useEffect(() => {
+        if (!authLoading && user && !holdForFicha) {
             const next = safeInternalNextPath(searchParams.get('next'));
             if (next) {
                 router.replace(next);
@@ -160,7 +168,7 @@ export default function LoginPage() {
                 router.replace('/dashboard');
             }
         }
-    }, [authLoading, user, profileLoading, isAdmin, router, searchParams]);
+    }, [authLoading, user, profileLoading, isAdmin, router, searchParams, holdForFicha]);
 
     useEffect(() => {
         setPasskeySupported(typeof window !== 'undefined' && 'PublicKeyCredential' in window);
@@ -228,15 +236,34 @@ export default function LoginPage() {
         try {
             if (isLogin) {
                 await signInWithEmail(formData.email, formData.password);
+                const nextAfterLogin = safeInternalNextPath(searchParams.get('next'));
+                if (nextAfterLogin) {
+                    router.push(nextAfterLogin);
+                    return;
+                }
+                try {
+                    const meta = (await getSupabaseClient()?.auth.getUser())?.data?.user?.user_metadata;
+                    if (meta?.pending_ficha) {
+                        setHoldForFicha(true);
+                        router.push('/players/register');
+                        return;
+                    }
+                } catch {
+                    /* dashboard por defecto */
+                }
             } else {
                 if (!smartConsentAccepted) {
                     setError('Debes aceptar el Contrato de Adhesión y Exoneración de Responsabilidad.');
                     setLoading(false);
                     return;
                 }
-                await signUpWithEmail(formData.email, formData.password, formData.name);
+                const signup = await signUpWithEmail(formData.email, formData.password, formData.name);
+                if (signup.needsEmailConfirmation) {
+                    setSuccess('Revisa tu correo para confirmar la cuenta. Cuando confirmes, inicia sesión y completa tu ficha de jugador.');
+                    setLoading(false);
+                    return;
+                }
 
-                // Persistimos Smart Consent cuando ya existe sesión.
                 if (smartConsentAccepted) {
                     setSmartConsentSaving(true);
                     try {
@@ -262,6 +289,14 @@ export default function LoginPage() {
                         setSmartConsentSaving(false);
                     }
                 }
+                setHoldForFicha(true);
+                const next = safeInternalNextPath(searchParams.get('next'));
+                const fichaUrl = next
+                    ? `/players/register?next=${encodeURIComponent(next)}`
+                    : '/players/register';
+                router.push(fichaUrl);
+                setLoading(false);
+                return;
             }
             const next = safeInternalNextPath(searchParams.get('next'));
             if (next) {

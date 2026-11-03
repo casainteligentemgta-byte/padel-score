@@ -60,8 +60,8 @@ export default function TeamRegistration({ onSuccess }: TeamRegistrationProps) {
             } else {
                 setError('Jugador no encontrado. Verifique el código.');
             }
-        } catch (err) {
-            setError('Error al buscar el jugador.');
+        } catch (err: any) {
+            setError(err?.message || 'Error al buscar el jugador.');
             console.error(err);
         } finally {
             setSearching(false);
