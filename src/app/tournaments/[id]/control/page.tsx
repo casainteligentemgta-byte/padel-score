@@ -680,10 +680,6 @@ export default function ControlPanel() {
             if (currentTournament) updateData(currentTournament, currentMatches);
         });
 
-        // 2. Firestore Subscriptions (Removed as they cause state conflicts with Supabase)
-        // let unsubFT = () => { };
-        // let unsubFM = () => { };
-
         // Safety timeout
         const timeout = setTimeout(() => setLoading(false), 10000);
 

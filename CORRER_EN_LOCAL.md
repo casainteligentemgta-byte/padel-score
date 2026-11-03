@@ -24,7 +24,7 @@
    - Usa exactamente la que salga en la terminal (ej. `http://localhost:3000` o `http://localhost:3003`).
 
 5. **Si usas un archivo `.env.local`**
-   - Asegúrate de que existe y tiene las variables que pide el proyecto (por ejemplo Firebase). Sin ellas, la app puede quedarse en blanco o fallar al cargar.
+   - Asegúrate de que existe y tiene `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Sin ellas, la app puede quedarse en blanco o fallar al cargar.
 
 ## Resumen rápido
 
@@ -36,4 +36,4 @@ npm run dev
 
 Luego abre en el navegador la URL que indique la terminal (normalmente `http://localhost:3000`).
 
-**Comprobar que el servidor responde:** abre `http://localhost:3000/ping` (o el mismo puerto que uses). Si ves "OK — Smart Padel está funcionando", el servidor y Next están bien; si la página principal sigue en blanco, el fallo está en la app (auth, Firebase o consola del navegador).
+**Comprobar que el servidor responde:** abre `http://localhost:3000/ping` (o el mismo puerto que uses). Si ves "OK — Smart Padel está funcionando", el servidor y Next están bien; si la página principal sigue en blanco, el fallo está en la app (auth de Supabase o consola del navegador).

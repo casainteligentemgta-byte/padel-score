@@ -8,8 +8,6 @@ import { dataService } from '@/lib/dataService';
 import { createClient } from '@/lib/supabase/client';
 import { MatchStatus } from '@/types/tournament';
 import { useAdBanner } from '@/lib/useAdBanner';
-import { rtdb } from '@/lib/rtdb';
-import { ref, onValue, off } from 'firebase/database';
 import { Trophy, Star, Megaphone, Thermometer, Clock, Video, ExternalLink, ImageIcon, Play, Eye, Users, EyeOff, X, MessageSquare, ChevronUp, ChevronDown, Plus, Calendar, Activity } from 'lucide-react';
 import { BouncingBall } from '@/components/BouncingBall';
 import { SmartPadelBallIcon } from '@/components/SmartPadelBallIcon';
@@ -335,9 +333,6 @@ export default function FullScreenDisplay() {
     const [recentResults, setRecentResults] = useState<any[]>([]);
     const [allMatches, setAllMatches] = useState<any[]>([]);
     const [temp, setTemp] = useState<number | null>(null);
-    const [carouselImages, setCarouselImages] = useState<{ url: string; orden: number }[]>([]);
-    const [carouselIdx, setCarouselIdx] = useState(0);
-    const [carouselInterval, setCarouselInterval] = useState(8);
     const prevScore = useRef<string>('');
     const adBanner = useAdBanner();
     const [activeTemplate, setActiveTemplate] = useState<DisplayTemplate | null>(null);
@@ -1100,30 +1095,6 @@ export default function FullScreenDisplay() {
         );
     };
 
-    // ── Carrusel de imágenes (panel publicidad → imagenes) ─────────────────
-    useEffect(() => {
-        if (!rtdb) return;
-        const adRef = ref(rtdb, 'publicidad_master');
-        const handler = (snap: any) => {
-            const val = snap.val();
-            if (!val?.imagenes) { setCarouselImages([]); return; }
-            const imgs = Object.values(val.imagenes as Record<string, any>)
-                .filter((img: any) => img.activa && img.url)
-                .sort((a: any, b: any) => a.orden - b.orden) as { url: string; orden: number }[];
-            setCarouselImages(imgs);
-            setCarouselIdx(0);
-            setCarouselInterval(val.carrusel_intervalo_seg || 8);
-        };
-        onValue(adRef, handler);
-        return () => off(adRef, 'value', handler);
-    }, []);
-
-    useEffect(() => {
-        if (carouselImages.length <= 1) return;
-        const id = setInterval(() => setCarouselIdx(prev => (prev + 1) % carouselImages.length), carouselInterval * 1000);
-        return () => clearInterval(id);
-    }, [carouselImages.length, carouselInterval]);
-
     // Sponsors Cycle
     useEffect(() => {
         const sponsors = tournament?.broadcastingSettings?.sponsors?.filter((s: any) => s.active) || [];
@@ -1202,7 +1173,7 @@ export default function FullScreenDisplay() {
         return () => clearTimeout(t);
     }, [animacionActual?.id, animacionActual?.ts]);
 
-    // Data Sync (Supabase & Firestore)
+    // Data Sync (Supabase)
     useEffect(() => {
         if (!id) return;
         setLoading(true);

@@ -4,10 +4,10 @@
  * SmartDisplay — pizarra TV con layout dinámico por template.
  *
  * Arquitectura:
- *  • Suscripción dual:
+ *  • Suscripción:
  *    1. Supabase: tabla `tournament_matches` → refresh de datos de partido.
  *    2. Supabase: tabla `canchas`            → recarga de template en vivo.
- *  • Firebase RTDB: `canchas/${canchaId}`   → marcador en tiempo real (canal rápido).
+ *    3. Supabase: `pizarra_cancha_state`     → marcador en tiempo real.
  *  • El layout CSS grid se recalcula desde los campos del DisplayTemplate:
  *    header_vh / score_vh / media_vh / ticker_vh.
  *  • orientation + split_ratio: en landscape columnas (vídeo|carousel); en portrait filas.

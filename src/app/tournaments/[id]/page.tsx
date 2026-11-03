@@ -728,7 +728,7 @@ export default function TournamentDashboard() {
         try {
             await dataService.updateMatch(id, matchId, { sets, games, points: points || null, server: server || null, score: scoreStr });
         } catch (error) {
-            console.error("[Dashboard] Error updating score in Firebase:", error);
+            console.error("[Dashboard] Error updating score:", error);
         }
     };
 
@@ -809,7 +809,7 @@ export default function TournamentDashboard() {
                 const dateStr = isNaN(d.getTime()) ? defaultDateStr : d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const time = isNaN(d.getTime()) ? (timeRaw ? String(timeRaw) : '-') : d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
                 // Misma prioridad que las tarjetas del dashboard: team1/team2 vienen enriquecidos
-                // con buildTeamDisplay (nombres desde tournament.teams); team1Name en Firebase puede quedar desactualizado.
+                // con buildTeamDisplay (nombres desde tournament.teams); team1Name en el JSON puede quedar desactualizado.
                 const mm = m as { team1?: { name?: string }; team2?: { name?: string }; team1Name?: string; team2Name?: string; status?: string; score?: string; court?: string | number; courtIndex?: number | null; stage?: string; bracketPosition?: { round?: number; matchInRound?: number } | null; matchNumber?: number; order?: number; orden?: number; id?: string };
                 const label1 = mm.team1?.name ?? mm.team1Name ?? 'Por definir';
                 const label2 = mm.team2?.name ?? mm.team2Name ?? 'Por definir';
@@ -1068,7 +1068,7 @@ export default function TournamentDashboard() {
     // ── Pre-compute "Por Comenzar" data ONCE (fuera del .filter) ─────────────
     const _toMsT = (v: any): number => {
         if (!v) return 0;
-        if (typeof v?.toDate === 'function') return v.toDate().getTime();          // Firestore Timestamp
+        if (typeof v?.toDate === 'function') return v.toDate().getTime();
         if (typeof v?.seconds === 'number') return v.seconds * 1000 + Math.floor((v.nanoseconds ?? 0) / 1e6); // Serialized TS
         if (typeof v === 'string') return new Date(v).getTime();
         if (v instanceof Date) return v.getTime();
@@ -1088,7 +1088,7 @@ export default function TournamentDashboard() {
     // 1. KNOWN_COMPLEXES[complexName]: fuente de verdad del complejo (máxima prioridad)
     //    courtNames puede tener datos de otro complejo si el usuario cambió de complejo.
     // 2. Canchas únicas en el primer slot de matches (datos reales del fixture generado)
-    // 3. totalCourts (campo Firestore)
+    // 3. totalCourts
     // 4. courtNames.length (menos fiable — puede estar desactualizado)
     // 5. 1 (fallback de seguridad)
     let _numCanchas = 0;
@@ -3547,7 +3547,7 @@ function formatTime(dateVal: any) {
     if (!dateVal) return 'TBD';
     try {
         let date: Date;
-        // Manejar Timestamps de Firestore
+        // Manejar timestamps con toDate() (datos legacy)
         if (dateVal && typeof dateVal.toDate === 'function') {
             date = dateVal.toDate();
         } else {

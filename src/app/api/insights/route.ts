@@ -41,7 +41,7 @@ export async function GET(req: Request) {
         });
     } catch (error: any) {
         console.error('[api/insights] Error obteniendo datos para informe:', error);
-        // En producción (ej. Vercel sin Firebase configurado) devolvemos datos vacíos
+        // En producción (ej. Vercel sin Supabase configurado) devolvemos datos vacíos
         // para no romper el build ni la app. El informe seguirá funcionando pero sin datos reales.
         const emptyStats = {
             totalTournaments: 0,

@@ -1,7 +1,7 @@
 /**
  * PADEL KNOWLEDGE BASE — Contexto estático de conocimiento de pádel
  * Este archivo actúa como la "fuente de verdad" base del agente de IA.
- * La capa RAG de Firestore enriquece esto con documentos dinámicos.
+ * La capa RAG (tabla knowledge_base en Supabase) enriquece esto con documentos dinámicos.
  */
 
 export const PADEL_CORE_KNOWLEDGE = `
@@ -297,7 +297,7 @@ ${PADEL_HISTORY_KNOWLEDGE}
 1. Responde SIEMPRE en español con tono profesional, dinámico y apasionado por el pádel.
 2. Usa el conocimiento del reglamento y formatos cuando sea relevante. Cita reglas específicas cuando el usuario pregunta sobre situaciones concretas.
 3. Si hay contexto del club disponible, úsalo para personalizar tu respuesta.
-4. Si hay documentos de la base de conocimiento adicional (Firestore RAG), priorízalos sobre tu conocimiento general.
+4. Si hay documentos de la base de conocimiento adicional (RAG), priorízalos sobre tu conocimiento general.
 5. Si no sabes algo con certeza, dilo claramente y sugiere dónde buscar información oficial (FIP: padelfip.com).
 6. Sé conciso pero completo. Usa bullet points y formato estructurado cuando sea útil.
 7. Si detectas una pregunta sobre reglas, responde con la regla exacta del reglamento oficial mencionado arriba.

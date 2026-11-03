@@ -2595,6 +2595,12 @@ export const dataService = {
         throwIfError(error);
     },
 
+    /** Fusiona un parche en `pizarra_cancha_state.data` (p. ej. animación de marcador). */
+    async patchPizarraCanchaState(canchaId: string, patch: Record<string, unknown>): Promise<void> {
+        const cur = await this.getPizarraCanchaState(canchaId);
+        await this.setPizarraCanchaState(canchaId, { ...(cur?.data || {}), ...patch });
+    },
+
     /**
      * Pone `estado: finalizado` y limpia ids en todas las pistas donde aún figure este partido.
      * Evita hub/pantallas colgadas en EN VIVO si se finalizó desde el hub, control con court=0, o hubo desfase de pista.

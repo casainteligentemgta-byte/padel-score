@@ -27,7 +27,7 @@ Smart Padel (también referido como "Padel Score" en el repositorio) es una **pl
 - **Marcador (marker):** puede llevar el marcador en vivo de partidos en canchas asignadas. Tiene un rol por cancha (p. ej. cancha_1, cancha_2). Se usa en pantallas de control de partido y en vistas de marcador por cancha.
 - **Jugador (player):** usuario estándar. Accede al Hub (/hub), a Mi perfil (/mi-cuenta), a la lista de torneos (/tournaments), inscripciones, ranking y (si aplica) a su ficha de jugador en /players/register o /players/[id].
 
-La autenticación y perfiles usan **Firebase Auth** y un perfil extendido (nombre, rol, uniqueCode, markerCanchas, etc.) que puede estar en **Supabase** (tabla profiles) o sincronizado con **Firebase Realtime Database** para roles de marcador en tiempo real.
+La autenticación y perfiles usan **Supabase Auth** y un perfil extendido (nombre, rol, uniqueCode, markerCanchas, etc.) en la tabla `profiles`. El marcador en vivo va por Supabase Realtime (`pizarra_cancha_state`).
 
 ---
 
@@ -48,9 +48,9 @@ La autenticación y perfiles usan **Firebase Auth** y un perfil extendido (nombr
 ## Stack técnico (resumen)
 
 - **Frontend:** Next.js (App Router), React, Tailwind CSS, Framer Motion, Lucide icons. Estilo: fondo oscuro (#0a0a0a, #050505), acento "padel-primary" (amarillo/verde limón), tipografía Outfit, componentes con bordes redondeados y glass.
-- **Auth:** Firebase Auth (email/password, Google). Perfiles en Supabase (profiles) y/o Firebase RTDB para rol de marcador.
-- **Backend / datos:** Supabase (PostgreSQL): tablas como `participants`, `profiles`, `tournaments`, `tournament_matches`, `teams`, `ads`, `tira_informativa`, etc. Cliente anónimo en el navegador (sujeto a RLS) y cliente con **service role** en rutas API (p. ej. /api/participants, /api/tira-informativa) cuando se necesita omitir RLS para el admin.
-- **Variables de entorno importantes:** NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (o SUPABASE_SERVICE_KEY) para APIs que listan todos los participantes; variables de Firebase para Auth y RTDB.
+- **Auth:** Supabase Auth (email/password, Google). Perfiles en `profiles`.
+- **Backend / datos:** Supabase (PostgreSQL): tablas como `participants`, `profiles`, `tournaments`, `tournament_matches`, `teams`, `ads`, `tira_informativa`, `pizarra_cancha_state`, etc. Cliente anónimo en el navegador (sujeto a RLS) y cliente con **service role** en rutas API (p. ej. /api/participants, /api/tira-informativa) cuando se necesita omitir RLS para el admin.
+- **Variables de entorno importantes:** NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (o SUPABASE_SERVICE_KEY) para APIs que listan todos los participantes.
 - **Despliegue:** típicamente Vercel; dominio de producción puede ser smartpadel58.com.
 
 ---
@@ -58,7 +58,7 @@ La autenticación y perfiles usan **Firebase Auth** y un perfil extendido (nombr
 ## Convenciones de código y UX
 
 - Rutas de admin bajo /admin/*; jugadores /players, /players/register, /players/[id]; torneos /tournaments y /tournaments/[id]/...; display /display y variantes.
-- Servicios: dataService (Supabase CRUD, perfiles, participantes, torneos, partidos, inscripciones), rtdbService (Firebase RTDB para marcadores), formatters (formatDate, formatDNI para Venezuela).
+- Servicios: dataService (Supabase CRUD, perfiles, participantes, torneos, partidos, inscripciones, pizarra), formatters (formatDate, formatDNI para Venezuela).
 - Formato de fecha: fechas solo día (YYYY-MM-DD) se interpretan en hora local para evitar desfase de un día (ej. 24/01/1979 no debe mostrarse como 23/01).
 - Idioma principal de la UI: español (Venezuela/LATAM); etiquetas en mayúsculas y estilo "uppercase italic" en títulos.
 - La lista de jugadores en "Control de jugadores" (/admin/users) y en /players depende de la API GET /api/participants (service role); si falta SUPABASE_SERVICE_ROLE_KEY en el entorno, la lista puede aparecer vacía y se muestra un aviso al usuario para configurarla.

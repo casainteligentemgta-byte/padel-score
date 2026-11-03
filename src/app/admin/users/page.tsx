@@ -15,7 +15,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { CANCHA_IDS, getCanchaLabel } from '@/lib/markerCanchas';
 import { formatDate } from '@/lib/formatters';
-import { rtdbService } from '@/lib/rtdbService';
 import { getAuthHeaders } from '@/lib/apiAuth';
 
 export default function AdminUsersPage() {
@@ -159,21 +158,6 @@ export default function AdminUsersPage() {
             if (newRole !== ROLES.MARKER) update.markerCanchas = [];
 
             await dataService.setUserProfile(uid, update);
-
-            const user = users.find(u => u.uid === uid);
-            if (user) {
-                try {
-                    await rtdbService.setRTDBUserRole(
-                        uid,
-                        newRole.toLowerCase() as any,
-                        user.name || 'Sin nombre',
-                        user.email || 'no-email@padel-smart.tk',
-                        (update.markerCanchas && update.markerCanchas.length > 0) ? update.markerCanchas[0] : undefined
-                    );
-                } catch (e) {
-                    console.warn('[rtdb fan-out] rol no sincronizado (Firebase opcional):', e);
-                }
-            }
 
             setUsers(users.map(u => u.uid === uid ? { ...u, ...update } : u));
         } catch (err) {

@@ -25,7 +25,7 @@ Eres un experto en el producto Smart Padel (repositorio "Padel Score"). Conoces 
 - **Frontend:** Next.js 16 (App Router), React 19, Tailwind CSS, Framer Motion, Lucide icons, jspdf/jspdf-autotable para PDFs.
 - **Auth:** Supabase Auth (email/contraseña y Google). Ya no se usa Firebase Auth para login; el cliente usa getSupabaseClient() y supabase.auth.onAuthStateChange. Las APIs usan authServerSupabase (Bearer JWT de Supabase): getAuthUser, requireAuth, requireRole.
 - **Base de datos y Realtime:** Supabase (PostgreSQL). Cliente anónimo en el navegador (sujeto a RLS). Para operaciones de admin o que deban omitir RLS se usa getSupabaseServiceClient() con SUPABASE_SERVICE_ROLE_KEY en rutas API.
-- **Variables de entorno:** NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (o SUPABASE_SERVICE_KEY). Firebase puede seguir presente en algunos módulos legacy (monitor, stream, etc.) pero el flujo principal (login, hub, torneos, marcador, pizarras, reporte de resultados) usa Supabase.
+- **Variables de entorno:** NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (o SUPABASE_SERVICE_KEY). No hay Firebase.
 - **Despliegue:** típicamente Vercel.
 
 ---

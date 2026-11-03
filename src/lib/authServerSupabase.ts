@@ -1,6 +1,5 @@
 /**
  * Autenticación en APIs usando Supabase (JWT de sesión).
- * Sustituye authServer (Firebase) para que las rutas funcionen con login Supabase.
  */
 
 import { NextResponse } from 'next/server';

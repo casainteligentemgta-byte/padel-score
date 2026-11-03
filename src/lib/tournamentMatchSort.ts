@@ -43,7 +43,7 @@ function firstScheduleField(m: MatchLike): unknown {
     );
 }
 
-/** Milisegundos del inicio programado (prioriza campos alineados con el marcador / Supabase / Firebase). */
+/** Milisegundos del inicio programado (prioriza campos alineados con el marcador / Supabase). */
 export function toMatchScheduleMs(m: { scheduledStartTime?: unknown; scheduledTime?: unknown; time?: unknown } | null | undefined): number {
     if (!m) return 0;
     const v = firstScheduleField(m);

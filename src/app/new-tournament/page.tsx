@@ -192,7 +192,7 @@ export default function NewTournamentPage() {
         const generationTimeout = setTimeout(() => {
             setLoading(false);
             console.warn('[NewTournament] Process timed out after 15s');
-            alert('La conexión con Firebase está tardando demasiado. Verifica tu conexión e intenta de nuevo.');
+            alert('La conexión con el servidor está tardando demasiado. Verifica tu conexión e intenta de nuevo.');
         }, 15000);
 
         try {
@@ -542,7 +542,7 @@ export default function NewTournamentPage() {
                 sponsorLogoUrl: DEFAULT_EVENT_SPONSOR_LOGO_URL,
             };
 
-            console.log('[NewTournament] Saving to Firestore...');
+            console.log('[NewTournament] Saving tournament...');
             const docRef = await dataService.createTournament(tournamentToSave, user.uid);
             console.log('[NewTournament] Document created with ID:', docRef.id);
 
