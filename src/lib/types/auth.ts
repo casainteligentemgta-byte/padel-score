@@ -1,5 +1,5 @@
 /**
- * Usuario de la app (compatible con Firebase User para migración a Supabase).
+ * Usuario de la app.
  * Supabase usa user.id (UUID); exponemos también uid = id para no cambiar toda la app.
  */
 export interface AppUser {

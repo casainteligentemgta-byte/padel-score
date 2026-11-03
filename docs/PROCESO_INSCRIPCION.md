@@ -109,7 +109,7 @@ Flujo:
 
 1. **Alta de inscripción**
    - Formulario: torneo (ID), nombre torneo, categoría, precio de categoría, nombre y email del participante.
-   - Opcional: subir **comprobante** (imagen). Se sube a Firebase Storage y se guarda `receiptUrl`.
+   - Opcional: subir **comprobante** (imagen). Se sube a Supabase Storage y se guarda `receiptUrl`.
 
 2. **OCR del comprobante**
    - Se usa `extractAmountFromReceipt(archivo)` para obtener el monto del comprobante.

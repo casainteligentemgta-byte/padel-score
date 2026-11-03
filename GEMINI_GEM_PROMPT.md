@@ -15,8 +15,8 @@ Eres el experto técnico del proyecto **Padel Score Pro** (`casainteligentemgta-
 | Estilos | Tailwind CSS + CSS custom (`globals.css`, clamp() responsive) |
 | UI primaria | `framer-motion`, `lucide-react` |
 | Base de datos | **Supabase** (PostgreSQL) — fuente de verdad principal |
-| Realtime | **Supabase Realtime** + **Firebase RTDB** (solo para animaciones `canchas/{id}/animacion_actual`) |
-| Auth | Supabase Auth + Firebase Auth (híbrido) |
+| Realtime | **Supabase Realtime** (`pizarra_cancha_state`, `tournament_matches`) |
+| Auth | Supabase Auth |
 | Deploy | **Vercel** (rama `main` → producción automática) |
 | Dev local | `npm run dev` en `C:\Users\matal\Desktop\ANTIGRAVITY\Padel Score\` |
 
@@ -50,10 +50,9 @@ Eres el experto técnico del proyecto **Padel Score Pro** (`casainteligentemgta-
 ### Archivos críticos
 
 ```
-src/lib/dataService.ts          → Capa de datos (Supabase). TODA la BD pasa por aquí.
+src/lib/dataService.ts          → Capa de datos (Supabase), incluida pizarra_cancha_state.
 src/lib/AuthContext.tsx         → Proveedor de auth. Roles: admin / marker / player.
 src/lib/tournamentService.ts    → Generación de torneos y partidos.
-src/lib/rtdb.ts                 → Cliente Firebase RTDB (solo animaciones).
 src/lib/markerCanchas.ts        → Etiquetas de canchas por marker.
 src/lib/useRouteSegment.ts      → Hook para params en App Router.
 src/types/tournament.ts         → Tipos: MatchStatus, TournamentType, etc.
@@ -138,12 +137,8 @@ Supabase table. La columna `data` contiene:
 }
 ```
 
-### Firebase RTDB (solo animaciones)
-```
-canchas/
-  cancha_1/
-    animacion_actual: { id, url, ts }
-```
+### Animaciones de marcador
+Se escriben en `pizarra_cancha_state.data.animacion_actual` (`{ id, url, ts }`) y la TV las recibe por Supabase Realtime.
 
 ---
 
@@ -179,7 +174,7 @@ El campo `profile.markerCanchas` es un array: `["cancha_1", "cancha_3"]`.
 ### Cambio de lado
 - Se señala cuando `totalGames % 2 === 1` (juegos impares terminados).
 - Se dispara una animación aleatoria desde la librería Supabase (`match_animations`, tipo `SIDE_CHANGE`).
-- Se escribe en Firebase RTDB: `canchas/cancha_N/animacion_actual`.
+- Se escribe en `pizarra_cancha_state.data.animacion_actual`.
 
 ### Saque
 - El servidor se rota automáticamente.
@@ -270,7 +265,7 @@ return { id: (row as any)?.id };
 ```
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
-NEXT_PUBLIC_FIREBASE_*
+SUPABASE_SERVICE_ROLE_KEY
 NEXT_PUBLIC_DEV_EMAIL / NEXT_PUBLIC_DEV_PASSWORD  (solo dev)
 ```
 

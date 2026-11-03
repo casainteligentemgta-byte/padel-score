@@ -31,7 +31,6 @@
     "@supabase/supabase-js": "^2.98.0",
     "cheerio": "^1.1.0",
     "clsx": "^2.1.1",
-    "firebase": "^12.10.0",
     "framer-motion": "^12.34.2",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",

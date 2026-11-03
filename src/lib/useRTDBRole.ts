@@ -1,7 +1,6 @@
 /**
  * Hook que devuelve el rol del usuario desde Supabase (profiles).
- * Sustituye la lectura desde Firebase RTDB (usuarios_roles) para centralizar en Supabase.
- * Mantiene la misma interfaz RTDBUserRole para no romper componentes.
+ * Mantiene la interfaz histórica RTDBUserRole para no romper componentes.
  */
 import { useAuth } from '@/lib/AuthContext';
 

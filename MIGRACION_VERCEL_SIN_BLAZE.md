@@ -1,15 +1,15 @@
-# Migracion a Vercel sin apagar Firebase (sin Blaze)
+# Migracion a Vercel
 
-Objetivo: desplegar Next.js en Vercel para eliminar la dependencia de Firebase Blaze, manteniendo Firebase activo temporalmente como respaldo.
+Objetivo: desplegar Next.js en Vercel. Firebase ya no forma parte del producto (auth, datos y realtime van por Supabase).
 
 ## 1) Estrategia recomendada (cero riesgo)
 
-1. Mantener Firebase como esta (sin tocar DNS de produccion al inicio).
+1. No tocar DNS de produccion al inicio.
 2. Levantar Vercel en paralelo con el mismo repo y rama `main`.
 3. Validar flujos criticos en URL preview de Vercel.
 4. Conectar un subdominio (`beta.tudominio.com`) y volver a validar.
 5. Hacer cutover del dominio principal a Vercel.
-6. Mantener Firebase 24-72h como rollback rapido.
+6. Mantener el despliegue anterior 24-72h como rollback rapido.
 
 ## 2) Variables de entorno requeridas en Vercel
 
@@ -22,14 +22,7 @@ Copiar desde tu entorno productivo actual. No pegar secretos en cliente.
 - `NEXT_PUBLIC_APP_URL` (URL publica final, ejemplo `https://smartpadel.app`)
 - `NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET` (si usan Storage)
 - `NEXT_PUBLIC_SUPPORT_WHATSAPP` (opcional)
-- `NEXT_PUBLIC_DEV_EMAIL` / `NEXT_PUBLIC_DEV_PASSWORD` (solo si los usan)
-- `NEXT_PUBLIC_FIREBASE_API_KEY` (opcional si aun conservan RTDB/display durante transicion)
-- `NEXT_PUBLIC_FIREBASE_PROJECT_ID` (opcional)
-- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` (opcional)
-- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` (opcional)
-- `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` (opcional)
-- `NEXT_PUBLIC_FIREBASE_APP_ID` (opcional)
-- `NEXT_PUBLIC_FIREBASE_DATABASE_URL` (opcional)
+- `NEXT_PUBLIC_DEV_EMAIL` / `NEXT_PUBLIC_DEV_PASSWORD` (solo local; no en produccion)
 
 ### Backend/Privadas
 
@@ -47,7 +40,6 @@ Copiar desde tu entorno productivo actual. No pegar secretos en cliente.
 - `GROQ_API_KEY` (si usan `/api/ai`)
 - `OPENROUTER_API_KEY` (si usan `/api/ai`)
 - `BCV_VES_PER_USD` (opcional)
-- `FIREBASE_SERVICE_ACCOUNT_KEY` (opcional; solo si una API aun valida token Firebase)
 
 ## 3) Checklist tecnico de migracion
 
@@ -92,7 +84,7 @@ Validar como minimo:
 
 Si algo falla tras el cutover:
 
-1. Revertir DNS al destino anterior (Firebase Hosting).
+1. Revertir DNS al destino anterior.
 2. Confirmar restauracion.
 3. Corregir en Vercel y repetir cutover.
 
@@ -100,9 +92,7 @@ Si algo falla tras el cutover:
 
 Con Next.js sirviendo en Vercel:
 
-- No dependes de Cloud Functions de Firebase para SSR.
-- No dependes de activar `cloudbuild.googleapis.com` / `artifactregistry.googleapis.com` en Firebase.
-- Puedes dejar Firebase solo como servicio puntual transitorio (si aun usas RTDB/display).
+- SSR y APIs corren en Vercel; datos y realtime en Supabase.
 
 ## 5) Tiempo estimado realista
 

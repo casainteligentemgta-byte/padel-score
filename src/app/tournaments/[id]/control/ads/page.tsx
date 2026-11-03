@@ -33,8 +33,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
-import { rtdb } from '@/lib/rtdb';
-import { ref as rtdbRef, set as rtdbSet, onValue, off } from 'firebase/database';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -136,6 +134,10 @@ export default function AdsManagement() {
                 setAdFrequency(bs.adFrequencySeconds || 60);
                 setAdDuration(bs.adDurationSeconds || 10);
                 setAdMediaUrls(bs.adMediaUrls || []);
+                if (Array.isArray(bs.carouselImages)) setCarouselImages(bs.carouselImages);
+                if (typeof bs.carouselInterval === 'number' && bs.carouselInterval > 0) {
+                    setCarouselInterval(bs.carouselInterval);
+                }
                 // BROADCAST
                 setPrimaryColor(bs.primaryColor || '#ccff00');
                 setBannerText(bs.bannerText || '');
@@ -170,24 +172,6 @@ export default function AdsManagement() {
         };
         void loadLibraryImages();
     }, [supabase]);
-
-    // ── Cargar carrusel desde RTDB
-    useEffect(() => {
-        if (!rtdb) return;
-        const carouselRef = rtdbRef(rtdb, 'publicidad_master');
-        const handler = (snap: any) => {
-            const val = snap.val();
-            if (val?.imagenes) {
-                const imgs = Object.entries(val.imagenes as Record<string, any>)
-                    .map(([key, img]: [string, any]) => ({ id: key, url: img.url || '', orden: img.orden ?? 0, activa: img.activa ?? true }))
-                    .sort((a, b) => a.orden - b.orden);
-                setCarouselImages(imgs);
-            }
-            if (val?.carrusel_intervalo_seg) setCarouselInterval(val.carrusel_intervalo_seg);
-        };
-        onValue(carouselRef, handler);
-        return () => off(carouselRef, 'value', handler);
-    }, []);
 
     // ── File upload helper (using dataService/Supabase)
     const handleFileUpload = async (file: File, type: 'ad' | 'sponsor', index: number) => {
@@ -226,7 +210,7 @@ export default function AdsManagement() {
     const addAd = () => setAdMediaUrls([...adMediaUrls, '']);
     const removeAd = (i: number) => setAdMediaUrls(adMediaUrls.filter((_, idx) => idx !== i));
 
-    // ── Carrusel helpers (using RTDB + Supabase Storage)
+    // ── Carrusel helpers (broadcastingSettings + Supabase Storage)
     const handleCarouselUpload = async (file: File, imgId?: string) => {
         const key = imgId || `new_${Date.now()}`;
         setUploadingCarousel(key);
@@ -247,18 +231,15 @@ export default function AdsManagement() {
     };
 
     const saveCarousel = async () => {
-        if (!rtdb) {
-            console.error("[Ads] RTDB not initialized");
-            return;
-        }
         setSavingCarousel(true);
         try {
-            const imagesObj: Record<string, any> = {};
-            carouselImages.forEach((img, i) => {
-                imagesObj[img.id] = { url: img.url, orden: i, activa: img.activa };
+            await dataService.updateTournament(id, {
+                broadcastingSettings: {
+                    ...tournament?.broadcastingSettings,
+                    carouselImages,
+                    carouselInterval,
+                },
             });
-            await rtdbSet(rtdbRef(rtdb, 'publicidad_master/imagenes'), imagesObj);
-            await rtdbSet(rtdbRef(rtdb, 'publicidad_master/carrusel_intervalo_seg'), carouselInterval);
             setShowSavedToast(true);
             setTimeout(() => setShowSavedToast(false), 2000);
         } catch (e) { console.error(e); }
@@ -293,6 +274,8 @@ export default function AdsManagement() {
                     adFrequencySeconds: adFrequency,
                     adDurationSeconds: adDuration,
                     adMediaUrls: adMediaUrls.length > 0 ? adMediaUrls : [SAMPLE_VIDEO],
+                    carouselImages,
+                    carouselInterval,
                     // BROADCAST
                     primaryColor,
                     bannerText,
@@ -1117,7 +1100,7 @@ export default function AdsManagement() {
                             {/* Status bar */}
                             <div className="flex items-center gap-4 px-4 py-2.5 bg-white/[0.02] border border-white/[0.04] rounded-xl">
                                 <Wifi className="w-3 h-3 text-green-500" />
-                                <span className="text-[8px] font-black uppercase tracking-widest text-gray-700">Firebase Sync</span>
+                                <span className="text-[8px] font-black uppercase tracking-widest text-gray-700">Supabase Sync</span>
                                 <span className="text-gray-800">·</span>
                                 <span className="text-[8px] text-gray-700 font-bold">{cameras.filter(c => c.url).length} streams activos de {cameras.length}</span>
                                 <span className="ml-auto text-[8px] font-black tracking-widest uppercase text-gray-800 italic">Padel Smart Pro · Broadcasting</span>

@@ -1,5 +1,7 @@
 # Estimación: migrar todo de Firebase a Supabase
 
+> **Histórico.** La migración ya está hecha: Firebase se retiró del repo. Este documento se conserva solo como referencia de lo que costó el plan.
+
 ## Qué ya está en Supabase
 
 - **Auth:** login, registro, sesión, recuperar contraseña.

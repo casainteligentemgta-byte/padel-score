@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/authServerSupabase';
 import { validateAiBody, sanitizeString } from '@/lib/apiValidation';
 import { checkRateLimit } from '@/lib/rateLimit';
-import { buildSystemPrompt } from '@/lib/padelKnowledge';
+import { retrieveRelevantDocs } from '@/lib/ragService';
+import { getSupabaseAnonServerClient, getSupabaseServiceClient } from '@/lib/supabase/server';
 
-// RAG: recupera documentos relevantes desde Firestore (server-side)
+// RAG: recupera documentos relevantes desde knowledge_base (Supabase)
 
 export async function POST(req: Request) {
     if (!checkRateLimit(req)) {
@@ -152,64 +153,15 @@ export async function POST(req: Request) {
 }
 
 // ── RAG RELEVANCE ENGINE (SERVER SIDE) ──────────────────────────────────────────
-async function fetchRAGContext(query: string, agentId: string) {
+async function fetchRAGContext(query: string, _agentId: string) {
     try {
-        const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-        const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-
-        if (!apiKey || !projectId) return { ragBlock: '', sources: [] };
-
-        const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/knowledge_base?key=${apiKey}&pageSize=100`;
-        const res = await fetch(url);
-        if (!res.ok) return { ragBlock: '', sources: [] };
-
-        const data = await res.json();
-        const docs = (data.documents || []).map((d: any) => ({
-            id: d.name.split('/').pop(),
-            title: d.fields.title?.stringValue || 'Sin Título',
-            content: d.fields.content?.stringValue || '',
-            tags: (d.fields.tags?.arrayValue?.values || []).map((v: any) => v.stringValue || ''),
-            category: d.fields.category?.stringValue || 'general'
-        }));
-
-        const queryLower = query.toLowerCase();
-        const queryWords = queryLower.split(/\s+/).filter(w => w.length > 3);
-
-        const scored = docs.map((doc: any) => {
-            let score = 0;
-            const titleLower = doc.title.toLowerCase();
-            queryWords.forEach(w => { if (titleLower.includes(w)) score += 5; });
-
-            doc.tags.forEach((tag: string) => {
-                const tagL = tag.toLowerCase();
-                queryWords.forEach(w => { if (tagL.includes(w)) score += 8; });
-            });
-
-            const contentMatches = queryWords.reduce((sum, w) => {
-                try {
-                    const escapedWord = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    const matches = (doc.content.toLowerCase().match(new RegExp(escapedWord, 'g')) || []).length;
-                    return sum + Math.min(matches, 5);
-                } catch {
-                    return sum;
-                }
-            }, 0);
-
-            score += contentMatches;
-            return { doc, score };
-        });
-
-        const relevant = scored
-            .filter((s: any) => s.score > 2)
-            .sort((a: any, b: any) => b.score - a.score)
-            .slice(0, 3);
-
-        const ragBlock = relevant.length > 0
-            ? `\nCONTEXTO DE CONOCIMIENTO:\n${relevant.map((s: any) => `[${s.doc.title}]: ${s.doc.content}`).join('\n')}\n`
+        const client = getSupabaseServiceClient() || getSupabaseAnonServerClient();
+        if (!client) return { ragBlock: '', sources: [] };
+        const { context, sources } = await retrieveRelevantDocs(query, 3, client);
+        const ragBlock = context
+            ? `\nCONTEXTO DE CONOCIMIENTO:\n${context}\n`
             : '';
-
-        return { ragBlock, sources: relevant.map((s: any) => s.doc.title) };
-
+        return { ragBlock, sources };
     } catch (e) {
         console.error('RAG Engine Error:', e);
         return { ragBlock: '', sources: [] };

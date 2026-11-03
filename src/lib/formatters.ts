@@ -17,7 +17,7 @@ export const formatDNI = (value: string) => {
 
 /**
  * Formatea una fecha en DD/MM/AAAA (orden venezolano: día → mes → año).
- * Acepta string ISO, Date, timestamp numérico, o Firestore Timestamp ({seconds}).
+ * Acepta string ISO, Date, timestamp numérico, o {seconds} (timestamps serializados).
  * Para strings YYYY-MM-DD (solo fecha) se interpretan como fecha local para evitar
  * que UTC muestre el día anterior (ej. 24/01/1979 guardado como 1979-01-24 → no mostrar 23/01).
  */

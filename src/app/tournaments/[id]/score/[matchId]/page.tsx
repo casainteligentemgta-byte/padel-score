@@ -28,8 +28,6 @@ import { useRouteSegment } from '@/lib/useRouteSegment';
 import { dataService } from '@/lib/dataService';
 import { persistMatchFinishWithPropagation } from '@/lib/matchFinishPropagation';
 import { getAuthHeaders } from '@/lib/apiAuth';
-import { rtdb } from '@/lib/rtdb';
-import { ref, update } from 'firebase/database';
 import { MatchStatus } from '@/types/tournament';
 import { useAuth } from '@/lib/AuthContext';
 import RefereeRemoteControl from '@/components/RefereeRemoteControl';
@@ -297,7 +295,7 @@ export default function RefereeScoreboard() {
 
 
     // ── Persistencia de datos: el reloj NO depende del estado del navegador ─────────────────
-    // La hora de inicio (startTime) está en Firestore (startedAt/actualStartTime). Al cerrar
+    // La hora de inicio (startTime) está en startedAt/actualStartTime. Al cerrar
     // o recargar la página, el cronómetro se restaura desde la BD.
     const getMatchStartTimeMs = (m: any): number | null => {
         const raw = m?.startedAt ?? m?.actualStartTime;
@@ -313,7 +311,7 @@ export default function RefereeScoreboard() {
     };
 
     // ── Timer robusto ────────────────────────────────────────────────────────
-    // El reloj usa startedAt/actualStartTime guardados en Firestore; al reabrir la página el tiempo se restaura.
+    // El reloj usa startedAt/actualStartTime; al reabrir la página el tiempo se restaura.
     const timerRef = useRef<any>(null);
 
     useEffect(() => {
@@ -1004,13 +1002,13 @@ export default function RefereeScoreboard() {
                 // Usamos un ID temporal o especial para indicar que viene de la biblioteca de Supabase
                 // Para que el display lo entienda, necesitamos que el display también pueda leer de Supabase
                 // O mandamos la URL directamente si el receptor lo soporta.
-                // Ajustemos dispararAnimacionMarcador para aceptar un objeto completo.
-                const pathRef = ref(rtdb!, `canchas/cancha_${matchCourt}/animacion_actual`);
-                update(pathRef, {
-                    id: randomAnim.id,
-                    url: randomAnim.url, // Pasamos la URL directamente para que el display no necesite buscarla
-                    ts: Date.now()
-                });
+                void dataService.patchPizarraCanchaState(`cancha_${matchCourt}`, {
+                    animacion_actual: {
+                        id: randomAnim.id,
+                        url: randomAnim.url,
+                        ts: Date.now(),
+                    },
+                }).catch((e) => console.warn('[winGame] animación pizarra:', e));
             }
         }
 
@@ -1153,27 +1151,6 @@ export default function RefereeScoreboard() {
                 await dataService.updateMatch(id, match.id, updatedData);
             }
 
-            // ── Broadcast al RTDB para sincronización en tiempo real con la Pizarra ──
-            if (rtdb) {
-                try {
-                    const canchaId = `cancha_${matchCourt}`;
-                    const rtdbRef = ref(rtdb, `canchas/${canchaId}/marcador`);
-                    update(rtdbRef, {
-                        sets: newSets,
-                        games: updatedData.games,
-                        setScores: newSetScores,
-                        superTiebreak: nextSuperTb,
-                        ...(updatedData.superTiebreakScore != null
-                            ? { superTiebreakScore: updatedData.superTiebreakScore }
-                            : {}),
-                        status: updatedData.status,
-                        ts: Date.now()
-                    });
-                } catch (rtdbErr) {
-                    console.warn('[winSet] RTDB broadcast error (non-fatal):', rtdbErr);
-                }
-            }
-
             if (isMatchFinished && id) {
                 // Al finalizar, forzar un refresco de la pizarra para que salga del modo LIVE
                 try {
@@ -1202,9 +1179,10 @@ export default function RefereeScoreboard() {
 
     const dispararAnimacionMarcador = (canchaId: string, animId: string) => {
         const a = animacionesMarcador[animId];
-        if (!rtdb || !a?.url) return;
-        const pathRef = ref(rtdb, `canchas/${canchaId}/animacion_actual`);
-        update(pathRef, { id: animId, url: a.url, ts: Date.now() });
+        if (!a?.url) return;
+        void dataService.patchPizarraCanchaState(canchaId, {
+            animacion_actual: { id: animId, url: a.url, ts: Date.now() },
+        }).catch((e) => console.warn('[dispararAnimacionMarcador]', e));
     };
 
     // ── Lógica de selección de sacador ───────────────────────────────────

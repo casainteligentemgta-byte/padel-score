@@ -1,22 +1,11 @@
 /**
- * RAG SERVICE — Retrieval-Augmented Generation con Firestore
- *
- * Estructura de la colección en Firestore:
- * knowledge_base/
- *   {docId}/
- *     title: string          — Título del documento
- *     content: string        — Contenido completo
- *     category: string       — "rules" | "news" | "strategy" | "history" | "formats" | "other"
- *     tags: string[]         — Palabras clave para búsqueda
- *     source: string         — URL o nombre de la fuente
- *     createdAt: Timestamp
- *     updatedAt: Timestamp
- *     isActive: boolean      — Si se usa en el RAG
+ * RAG SERVICE — Retrieval-Augmented Generation sobre `knowledge_base` (Supabase).
  *
  * El RAG funciona por coincidencia de keywords entre la pregunta del usuario
  * y los tags/títulos de los documentos, retornando los N más relevantes.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from './supabase/client';
 
 export interface KnowledgeDocument {
@@ -100,10 +89,10 @@ function mapToApp(dbDoc: any): KnowledgeDocument {
 // ── Obtener documentos relevantes para una query ────────────────────────────
 export async function retrieveRelevantDocs(
     userQuery: string,
-    maxDocs: number = 3
+    maxDocs: number = 3,
+    client: SupabaseClient | null = getSupabaseClient()
 ): Promise<{ context: string; sources: string[] }> {
     try {
-        const client = getSupabaseClient();
         if (!client) throw new Error('Supabase client not initialized');
 
         const { data, error } = await client
