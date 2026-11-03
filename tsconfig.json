@@ -38,8 +38,9 @@
   ],
   "exclude": [
     "node_modules",
-    "prisma",
     "supabase",
+    "scripts/find-ongoing-match.ts",
+    "src/scripts",
     "smart-padel",
     "src/app/_api",
     "src/app/api"
