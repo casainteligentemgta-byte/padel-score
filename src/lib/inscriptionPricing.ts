@@ -50,15 +50,14 @@ export function categoryPriceFromTournament(
 }
 
 /**
- * Precio esperado de una inscripción: precio persistido en la fila, o el de la
- * categoría del torneo. No acepta montos enviados por el navegador.
+ * Precio esperado de una inscripción: siempre el de la categoría del torneo.
+ * Ignora `category_price` persistido (el cliente pudo haberlo escrito antes del
+ * endurecimiento). El checkout y el webhook no deben fiarse de esa columna.
  */
 export function expectedAmountForInscription(
     inscription: InscriptionPriceRow,
     tournament: TournamentPriceSource | null | undefined
 ): number {
-    const stored = toPositiveNumber(inscription.category_price);
-    if (stored != null && stored > 0) return stored;
     return categoryPriceFromTournament(tournament, inscription.category_key);
 }
 

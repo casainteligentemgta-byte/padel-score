@@ -48,14 +48,7 @@ export async function POST(req: Request) {
     }
 
     if (existingDevice?.is_authorized && !deviceToken && existingDevice.device_token) {
-      await supabase
-        .from('tv_devices')
-        .update({ last_seen_at: new Date().toISOString() })
-        .eq('id', existingDevice.id);
-      return NextResponse.json({
-        status: 'authorized',
-        deviceToken: existingDevice.device_token,
-      });
+      return NextResponse.json({ status: 'pending_pin' });
     }
 
     if (

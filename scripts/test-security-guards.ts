@@ -78,7 +78,7 @@ run('precios desde torneo, no del cliente', () => {
   assert.equal(categoryPriceFromTournament(tournament, 'c7'), 40);
   assert.equal(
     expectedAmountForInscription({ id: '1', category_key: 'c8', category_price: 1 }, tournament),
-    1
+    35
   );
   assert.equal(
     expectedAmountForInscription({ id: '1', category_key: 'c8' }, tournament),

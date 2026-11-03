@@ -90,7 +90,6 @@ export default function ExpressTvDisplay() {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [uiTick, setUiTick] = useState(() => Date.now());
-  const syncedBaseVenueRef = useRef<string | null>(null);
 
   useEffect(() => {
     const id = setInterval(() => setUiTick(Date.now()), 1000);
@@ -201,15 +200,13 @@ export default function ExpressTvDisplay() {
       setErrorMessage(null);
 
       try {
-        const qs = urlBaseVenue ? `?base_venue=${encodeURIComponent(urlBaseVenue)}` : '';
-        const res = await fetch(`/api/express-matches/${encodeURIComponent(slug)}${qs}`);
+        const res = await fetch(`/api/express-matches/${encodeURIComponent(slug)}`);
         const json = await res.json();
         if (cancelled) return;
 
         if (!res.ok || !json.match) {
           setErrorMessage(
-            String(json.error || 'No se pudo crear la cancha express.') +
-              ' — Ejecuta 056_express_matches.sql en Supabase.',
+            String(json.error || 'Cancha no inicializada. El encargado debe activarla desde Telegram.'),
           );
           setLoadState('error');
           return;
@@ -230,7 +227,7 @@ export default function ExpressTvDisplay() {
     return () => {
       cancelled = true;
     };
-  }, [slug, supabase, urlBaseVenue]);
+  }, [slug, supabase]);
 
   useEffect(() => {
     if (!supabase || !match?.id) return;
@@ -258,17 +255,6 @@ export default function ExpressTvDisplay() {
     };
   }, [slug, supabase, match?.id]);
 
-  useEffect(() => {
-    if (!match?.id || !urlBaseVenue.trim()) return;
-    const target = urlBaseVenue.trim();
-    const current = String(match.base_venue ?? '').trim();
-    if (current === target || syncedBaseVenueRef.current === target) return;
-    syncedBaseVenueRef.current = target;
-    const qs = `?base_venue=${encodeURIComponent(target)}`;
-    void fetch(`/api/express-matches/${encodeURIComponent(slug)}${qs}`).then(async (res) => {
-      if (!res.ok) syncedBaseVenueRef.current = null;
-    });
-  }, [match?.id, match?.base_venue, urlBaseVenue, slug]);
 
   if (!isValidExpressSlug(slugRaw)) {
     notFound();

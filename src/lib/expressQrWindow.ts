@@ -13,6 +13,22 @@ export function isExpressQrWindowOpen(match: ExpressMatch, nowMs = Date.now()): 
   return t > nowMs;
 }
 
+/**
+ * El mando (session_id) solo puede escribir si el partido ya está activo/terminado
+ * o si el QR de Telegram sigue vigente. Sin ventana, el UUID no basta.
+ */
+export function isExpressSessionWriteAllowed(
+  match: Pick<ExpressMatch, 'is_active' | 'qr_expires_at' | 'match_ended_at'>,
+  nowMs = Date.now(),
+): boolean {
+  if (match.is_active) return true;
+  if (match.match_ended_at) return true;
+  return isExpressQrWindowOpen(
+    { is_active: false, qr_expires_at: match.qr_expires_at } as ExpressMatch,
+    nowMs,
+  );
+}
+
 export function expressQrWindowSecondsLeft(match: ExpressMatch, nowMs = Date.now()): number | null {
   if (!match.qr_expires_at) return null;
   const t = new Date(match.qr_expires_at).getTime();

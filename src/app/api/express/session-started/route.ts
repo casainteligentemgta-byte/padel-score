@@ -19,10 +19,10 @@ export async function POST(req: Request) {
 
     const { data: match } = await supabase
       .from('express_matches')
-      .select('id')
+      .select('id, is_active')
       .eq('session_id', sessionId)
       .maybeSingle();
-    if (!match) {
+    if (!match || !match.is_active) {
       return NextResponse.json({ ok: false }, { status: 404 });
     }
 
