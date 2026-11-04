@@ -14,7 +14,13 @@ import {
 } from '@/components/legal/LegalContainer';
 import PaymentInfo from '@/components/PaymentInfo';
 import AutoShrinkName from '@/components/AutoShrinkName';
-import { resolveManualInscriptionPaymentStatus } from '@/lib/paymentValidation';
+import {
+    isManualBankPaymentMethod,
+    normalizePaymentMethodSlug,
+    paymentMethodLabel,
+    resolveManualInscriptionPaymentStatus,
+} from '@/lib/paymentValidation';
+import { caracasTodayDateString, invitationExpiryMs, isCaracasInscriptionClosed } from '@/lib/caracasTime';
 import { CURRENT_TERMS_VERSION, isProfileTermsStale } from '@/lib/legal/termsVersion';
 import {
     ArrowLeft,
@@ -152,9 +158,9 @@ export default function InscribirmePage() {
         { categoryKey: string; paymentStatus: string }[]
     >([]);
     const [paymentData, setPaymentData] = useState({
-        method: '',
+        method: 'pago_movil',
         bank: '',
-        date: new Date().toISOString().split('T')[0],
+        date: caracasTodayDateString(),
         amount: '',
         reference: '',
         receiptUrl: ''
@@ -163,12 +169,9 @@ export default function InscribirmePage() {
     const [availableMethods, setAvailableMethods] = useState<any[]>([]);
     const [bcvVesPerUsdUi, setBcvVesPerUsdUi] = useState<number | null>(null);
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const now = new Date();
-    const is1600OrLater = now.getHours() > 16 || (now.getHours() === 16 && now.getMinutes() >= 0);
     const registrationStatus = tournament?.registrationStatus || 'open';
     const isIndividual = tournament?.type === TournamentType.AMERICANO_INDIVIDUAL;
-    const inscriptionClosed = registrationStatus === 'closed' || (tournament?.startDate && (tournament.startDate < todayStr || (tournament.startDate === todayStr && is1600OrLater)));
+    const inscriptionClosed = isCaracasInscriptionClosed(tournament?.startDate, registrationStatus);
 
     // Partner search state (puede venir de URL ?code= cuando se llega desde Hub / compañeros recientes)
     const codeFromUrl = searchParams.get('code') ?? '';
@@ -312,25 +315,34 @@ export default function InscribirmePage() {
         });
     }, [user?.uid, tournamentId]);
 
-    // Timer para el countdown de la reserva
+    // Timer para el countdown de la reserva (2 h). Tick inmediato: no mostrar 00:00 al entrar.
     useEffect(() => {
-        if (!pendingInvitation?.expires_at) return;
+        const expiryMs = invitationExpiryMs(pendingInvitation);
+        if (expiryMs == null) {
+            setTimeLeft('');
+            return;
+        }
 
-        const interval = setInterval(() => {
-            const now = new Date();
-            const expiry = new Date(pendingInvitation.expires_at);
-            const diff = expiry.getTime() - now.getTime();
-
+        const tick = () => {
+            const diff = expiryMs - Date.now();
             if (diff <= 0) {
+                setTimeLeft('00:00:00');
                 setPendingInvitation(null);
-                clearInterval(interval);
-            } else {
-                const minutes = Math.floor(diff / 60000);
-                const seconds = Math.floor((diff % 60000) / 1000);
-                setTimeLeft(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+                return false;
             }
-        }, 1000);
+            const hours = Math.floor(diff / 3600000);
+            const minutes = Math.floor((diff % 3600000) / 60000);
+            const seconds = Math.floor((diff % 60000) / 1000);
+            setTimeLeft(
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+            );
+            return true;
+        };
 
+        if (!tick()) return;
+        const interval = setInterval(() => {
+            if (!tick()) clearInterval(interval);
+        }, 1000);
         return () => clearInterval(interval);
     }, [pendingInvitation]);
 
@@ -341,7 +353,15 @@ export default function InscribirmePage() {
                 const methods = await dataService.getPaymentMethods();
                 if (!cancelled && methods && methods.length > 0) {
                     setAvailableMethods(methods);
-                    setPaymentData(prev => ({ ...prev, method: methods[0].name }));
+                    setPaymentData((prev) => ({
+                        ...prev,
+                        method: normalizePaymentMethodSlug(prev.method) || normalizePaymentMethodSlug(methods[0].name) || 'pago_movil',
+                    }));
+                } else if (!cancelled) {
+                    setPaymentData((prev) => ({
+                        ...prev,
+                        method: normalizePaymentMethodSlug(prev.method) || 'pago_movil',
+                    }));
                 }
             } catch (error) {
                 console.error("Error fetching payment methods:", error);
@@ -372,9 +392,9 @@ export default function InscribirmePage() {
     const categories: InscriptionCategoryOption[] = (Array.isArray(tournament?.inscriptionCategories) && tournament.inscriptionCategories.length > 0)
         ? tournament.inscriptionCategories
         : (tournament ? [{
-            key: 'GENERAL',
+            key: tournament.category || 'GENERAL',
             name: `${tournament.category || 'Categoría Única'} ${tournament.gender === 'MALE' ? 'Masculino' : tournament.gender === 'FEMALE' ? 'Femenino' : 'Mixto'}`,
-            price: tournament.inscriptionPrice || 0,
+            price: Number(tournament.inscriptionPrice || tournament.inscriptionCategories?.[0]?.price || 0) || 0,
             gender: tournament.gender || undefined,
         }] : []);
 
@@ -649,9 +669,13 @@ export default function InscribirmePage() {
             }
         }
         if (!effectiveLegal) return;
-        const needsRef = totalPrice > 0 && (paymentData.method === 'Pago Móvil' || paymentData.method === 'Transferencia Bancaria');
+        const needsRef = totalPrice > 0 && isManualBankPaymentMethod(paymentData.method);
         if (needsRef && !paymentData.reference?.trim()) {
             setError('Indica la referencia o número de confirmación del pago (aparece en tu comprobante de Pago Móvil o transferencia).');
+            return;
+        }
+        if (needsRef && !paymentData.receiptUrl?.trim()) {
+            setError('Sube el comprobante (foto o captura) del pago. Es obligatorio para Pago Móvil y Transferencia.');
             return;
         }
 
@@ -659,6 +683,7 @@ export default function InscribirmePage() {
         setSubmitting(true);
 
         try {
+            let createdInvitation = false;
             const participantName = profile?.name || user.displayName || user.email || 'Jugador';
             const participantEmail = user.email || undefined;
             const myParticipants = myFichas.length ? myFichas : await dataService.getMyParticipants(user.uid);
@@ -693,6 +718,7 @@ export default function InscribirmePage() {
                     categoryPrice: cat.price,
                     amountExtracted: amountPaid,
                     bcvVesPerUsd: bcvVesPerUsd ?? undefined,
+                    paymentMethod: paymentData.method,
                 });
 
                 const { id: inscriptionId } = await dataService.addInscription(
@@ -706,7 +732,7 @@ export default function InscribirmePage() {
                         participantId,
                         paymentStatus: verification.paymentStatus,
                         alertMessage: verification.alertMessage || undefined,
-                        paymentMethod: paymentData.method,
+                        paymentMethod: normalizePaymentMethodSlug(paymentData.method) || paymentData.method,
                         paymentBank: paymentData.bank,
                         paymentDate: paymentData.date,
                         paymentAmount: amountPaid,
@@ -765,7 +791,13 @@ export default function InscribirmePage() {
                 }
 
                 if (!isIndividual && currentPartner && currentPartner.id) {
-                    let inv: { id: string };
+                    let inv: {
+                        id: string;
+                        expires_at?: string | null;
+                        expiresAt?: string | null;
+                        created_at?: string | null;
+                        createdAt?: string | null;
+                    };
                     try {
                         inv = await dataService.createTeamInvitation(
                             tournamentId,
@@ -785,8 +817,14 @@ export default function InscribirmePage() {
                     }
                     setPendingInvitation({
                         ...inv,
-                        partner_name: currentPartner.name
+                        partner_name: currentPartner.name,
+                        expires_at:
+                            inv.expires_at ??
+                            inv.expiresAt ??
+                            new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+                        created_at: inv.created_at ?? inv.createdAt ?? new Date().toISOString(),
                     });
+                    createdInvitation = true;
                     try {
                         const inviterFirst = String(participantName || 'Jugador')
                             .trim()
@@ -887,7 +925,7 @@ export default function InscribirmePage() {
             } catch {
                 /* no bloquear éxito */
             }
-            setSuccess(true);
+            if (!createdInvitation) setSuccess(true);
         } catch (e: any) {
             setError(e?.message || 'Error al registrar la inscripción.');
         } finally {
@@ -965,7 +1003,7 @@ export default function InscribirmePage() {
                             </p>
                             <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
                                 <p className="text-[10px] font-black uppercase text-gray-500 tracking-[0.2em] mb-2">Tu lugar se liberará en:</p>
-                                <p className="text-4xl font-mono font-black text-[#ccff00]">{timeLeft || '00:00'}</p>
+                                <p className="text-4xl font-mono font-black text-[#ccff00]">{timeLeft || '--:--:--'}</p>
                             </div>
                             <p className="text-[10px] text-amber-500 uppercase font-black tracking-widest px-4">
                                 Tienes un lugar reservado por 2 horas para asegurar tu cupo.
@@ -1310,21 +1348,20 @@ export default function InscribirmePage() {
                                                             <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Metodo de Pago</label>
                                                             <div className="relative">
                                                                 <select
-                                                                    value={paymentData.method}
+                                                                    value={normalizePaymentMethodSlug(paymentData.method) || 'pago_movil'}
                                                                     onChange={(e) => setPaymentData({ ...paymentData, method: e.target.value })}
                                                                     className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-base sm:text-sm text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all appearance-none cursor-pointer"
                                                                 >
                                                                     {availableMethods.length > 0 ? (
                                                                         availableMethods.map((m) => (
-                                                                            <option key={m.id} value={m.name} className="bg-[#111]">
-                                                                                {m.name}
+                                                                            <option key={m.id} value={normalizePaymentMethodSlug(m.name) || m.name} className="bg-[#111]">
+                                                                                {paymentMethodLabel(m.name) || m.name}
                                                                             </option>
                                                                         ))
                                                                     ) : (
                                                                         <>
-                                                                            <option value="Pago Móvil" className="bg-[#111]">Pago Móvil</option>
-                                                                            <option value="Transferencia Bancaria" className="bg-[#111]">Transferencia Bancaria</option>
-                                                                            <option value="Zelle" disabled className="bg-[#111] opacity-50">Zelle (Próximamente)</option>
+                                                                            <option value="pago_movil" className="bg-[#111]">Pago Móvil</option>
+                                                                            <option value="transferencia" className="bg-[#111]">Transferencia Bancaria</option>
                                                                         </>
                                                                     )}
                                                                 </select>
@@ -1396,7 +1433,7 @@ export default function InscribirmePage() {
                                                         </div>
 
                                                         <div className="space-y-2 md:col-span-2">
-                                                            <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Referencia / Confirmación {(paymentData.method === 'Pago Móvil' || paymentData.method === 'Transferencia Bancaria') && totalPrice > 0 && <span className="text-amber-400">*</span>}</label>
+                                                            <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Referencia / Confirmación {isManualBankPaymentMethod(paymentData.method) && totalPrice > 0 && <span className="text-amber-400">*</span>}</label>
                                                             <div className="relative">
                                                                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
                                                                     <Hash className="w-5 h-5" />
@@ -1405,18 +1442,18 @@ export default function InscribirmePage() {
                                                                     type="text"
                                                                     value={paymentData.reference}
                                                                     onChange={(e) => setPaymentData({ ...paymentData, reference: e.target.value })}
-                                                                    placeholder={(paymentData.method === 'Pago Móvil' || paymentData.method === 'Transferencia Bancaria') ? 'Ej.: REF123456 o el número del comprobante' : 'Número de referencia'}
+                                                                    placeholder={isManualBankPaymentMethod(paymentData.method) ? 'Ej.: REF123456 o el número del comprobante' : 'Número de referencia'}
                                                                     className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-12 text-base sm:text-sm text-white font-bold outline-none focus:border-[#ccff00]/50 transition-all"
                                                                 />
                                                             </div>
-                                                            {(paymentData.method === 'Pago Móvil' || paymentData.method === 'Transferencia Bancaria') && (
+                                                            {isManualBankPaymentMethod(paymentData.method) && (
                                                                 <p className="text-[10px] text-white/50 mt-1">El club conciliará tu pago con esta referencia. Cópiala tal cual del comprobante.</p>
                                                             )}
                                                         </div>
                                                     </div>
 
                                                     <div className="space-y-2">
-                                                        <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Comprobante (Foto/Captura)</label>
+                                                        <label className="text-[10px] font-black uppercase text-gray-500 ml-2">Comprobante (Foto/Captura) {totalPrice > 0 && <span className="text-amber-400">*</span>}</label>
                                                         <div className="relative">
                                                             {paymentData.receiptUrl ? (
                                                                 <div className="relative rounded-2xl overflow-hidden border-2 border-[#ccff00]/30 aspect-video">
@@ -1451,6 +1488,7 @@ export default function InscribirmePage() {
                                                                         type="file"
                                                                         accept="image/*"
                                                                         className="hidden"
+                                                                        required={totalPrice > 0}
                                                                         onChange={handleFileUpload}
                                                                     />
                                                                 </div>

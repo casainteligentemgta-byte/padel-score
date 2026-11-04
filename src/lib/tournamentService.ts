@@ -1,5 +1,6 @@
 import { getSupabaseClient } from './supabase/client';
 import { dataService } from './dataService';
+import { caracasTodayDateString } from './caracasTime';
 import { TournamentType } from '@/types/tournament';
 import { MatchStatus } from '@/types/tournament';
 import { buildPlayoffsFromGroupResults, type Match as EngineMatch, type Team as EngineTeam } from './tournamentEngine';
@@ -145,7 +146,7 @@ export async function initializeTournamentWithPlaceholders(
     const ts = Date.now().toString(36);
     const teamIdToIndex = new Map(teams.map((t, idx) => [t.id, idx + 1]));
     
-    const startDate = (tournament as any).startDate ?? new Date().toISOString().split('T')[0];
+    const startDate = (tournament as any).startDate ?? caracasTodayDateString();
     const startTime = (tournament as any).startTime ?? '08:00';
     const [startH = 8, startM = 0] = startTime.split(':').map(Number);
     const matchDuration = 90;

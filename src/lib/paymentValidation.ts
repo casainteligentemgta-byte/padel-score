@@ -102,27 +102,56 @@ export function validatePaymentAgainstCategoryPrice(input: ValidationInput): Val
     };
 }
 
+export type ManualPaymentMethodSlug = 'pago_movil' | 'transferencia';
+
+/** Normaliza el método a slug estable (`pago_movil` / `transferencia`) o ''. */
+export function normalizePaymentMethodSlug(raw: string | null | undefined): string {
+    const s = String(raw || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[\s_-]+/g, '');
+    if (!s) return '';
+    if (s.includes('pagomovil') || (s.includes('pago') && s.includes('movil'))) return 'pago_movil';
+    if (s.includes('transfer')) return 'transferencia';
+    return s;
+}
+
+export function isManualBankPaymentMethod(raw: string | null | undefined): boolean {
+    const slug = normalizePaymentMethodSlug(raw);
+    return slug === 'pago_movil' || slug === 'transferencia';
+}
+
+export function paymentMethodLabel(slugOrName: string | null | undefined): string {
+    const slug = normalizePaymentMethodSlug(slugOrName);
+    if (slug === 'pago_movil') return 'Pago Móvil';
+    if (slug === 'transferencia') return 'Transferencia Bancaria';
+    return String(slugOrName || '').trim();
+}
+
 /**
  * Estado que debe persistirse al crear una inscripción de Pago Móvil / transferencia.
- * Nunca marca `paid` si hay precio: el admin valida a mano.
+ * Nunca marca `paid` si hay precio o método manual: el admin valida a mano.
  */
 export function resolveManualInscriptionPaymentStatus(input: {
     categoryPrice: number;
     amountExtracted?: number | null;
     bcvVesPerUsd?: number | null;
+    paymentMethod?: string | null;
 }): { paymentStatus: 'pending' | 'paid'; alertMessage: string | null } {
-    if (!(input.categoryPrice > 0)) {
-        return { paymentStatus: 'paid', alertMessage: null };
+    const manual = isManualBankPaymentMethod(input.paymentMethod) || !!normalizePaymentMethodSlug(input.paymentMethod);
+    if (manual || input.categoryPrice > 0) {
+        if (!(input.categoryPrice > 0)) {
+            return { paymentStatus: 'pending', alertMessage: null };
+        }
+        const verification = validatePaymentAgainstCategoryPrice({
+            amountExtracted: input.amountExtracted,
+            categoryPrice: input.categoryPrice,
+            bcvVesPerUsd: input.bcvVesPerUsd,
+        });
+        return { paymentStatus: 'pending', alertMessage: verification.alertMessage };
     }
-    const verification = validatePaymentAgainstCategoryPrice({
-        amountExtracted: input.amountExtracted,
-        categoryPrice: input.categoryPrice,
-        bcvVesPerUsd: input.bcvVesPerUsd,
-    });
-    return {
-        paymentStatus: 'pending',
-        alertMessage: verification.alertMessage,
-    };
+    return { paymentStatus: 'paid', alertMessage: null };
 }
 
 /** Checkout de Mercado Pago retirado: se rechaza en API y se oculta en UI. */

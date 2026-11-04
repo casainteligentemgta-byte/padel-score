@@ -8,6 +8,7 @@ import {
     RefreshCw, Trophy, ArrowLeft, Tv, FileText, Share2, Calendar, Clock
 } from 'lucide-react';
 import { dataService } from '@/lib/dataService';
+import { toCaracasDateString } from '@/lib/caracasTime';
 import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 import { useAuth } from '@/lib/AuthContext';
 import { MatchStatus } from '@/types/tournament';
@@ -77,7 +78,7 @@ function EventView() {
         const dates = new Set<string>();
         allMatches.forEach((m) => {
             const raw = m.scheduledTime || m.time || '';
-            const datePart = typeof raw === 'string' ? raw.split('T')[0] : (raw && new Date(raw).toISOString().split('T')[0]);
+            const datePart = typeof raw === 'string' ? raw.split('T')[0] : (raw ? toCaracasDateString(raw) : '');
             if (datePart) dates.add(datePart);
         });
         return Array.from(dates).sort();

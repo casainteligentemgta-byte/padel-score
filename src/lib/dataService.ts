@@ -5,6 +5,7 @@ import { getScoringRules } from './matchScoringRules';
 import { syncMatchOrderFields } from './matchOrderMeta';
 import { selectCanchaPublicidadPlaylist } from './canchaPublicidadQuery';
 import { isMercadoPagoMethod } from './paymentValidation';
+import { parseMaybeUtcTimestamp } from './caracasTime';
 
 const supabase = () => {
     const c = getSupabaseClient();
@@ -1548,7 +1549,8 @@ export const dataService = {
             if (t.status === 'accepted') return true;
             if (t.status === 'pending') {
                 if (!t.expires_at) return true; // Si no tiene fecha, lo contamos como pendiente eterno (si aplica)
-                return new Date(t.expires_at) > new Date();
+                const expiry = parseMaybeUtcTimestamp(t.expires_at);
+                return expiry ? expiry > new Date() : true;
             }
             return false;
         });
@@ -1586,7 +1588,8 @@ export const dataService = {
         const now = new Date();
         (data || []).forEach(t => {
             const isAccepted = t.status === 'accepted';
-            const isPendingValid = t.status === 'pending' && (!t.expires_at || new Date(t.expires_at) > now);
+            const expiry = parseMaybeUtcTimestamp(t.expires_at);
+            const isPendingValid = t.status === 'pending' && (!t.expires_at || !expiry || expiry > now);
 
             if (isAccepted || isPendingValid) {
                 counts[t.tournament_id] = (counts[t.tournament_id] || 0) + 1;
@@ -1615,7 +1618,8 @@ export const dataService = {
                 throw new Error('La reserva ha expirado o no existe, pide a tu compañero que te invite de nuevo.');
             }
 
-            if (team.status === 'pending' && team.expires_at && new Date(team.expires_at) < new Date()) {
+            const expiry = parseMaybeUtcTimestamp(team.expires_at);
+            if (team.status === 'pending' && expiry && expiry < new Date()) {
                 // Borrar automáticamente el equipo expirado
                 await supabase().from('teams').delete().eq('id', teamId);
                 throw new Error('La reserva ha expirado, pide a tu compañero que te invite de nuevo.');
@@ -2132,7 +2136,10 @@ export const dataService = {
         if (
             (team as any).status === 'pending' &&
             (team as any).expires_at &&
-            new Date(String((team as any).expires_at)) < new Date()
+            (() => {
+                const expiry = parseMaybeUtcTimestamp(String((team as any).expires_at));
+                return !!expiry && expiry < new Date();
+            })()
         ) {
             return null;
         }

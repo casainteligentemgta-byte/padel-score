@@ -12,6 +12,7 @@ import LoginButton from '@/components/LoginButton';
 import { BouncingBall } from '@/components/BouncingBall';
 import { formatDate } from '@/lib/formatters';
 import { formatCategory, formatGender } from '@/app/tournaments/event/utils';
+import { isCaracasInscriptionClosed } from '@/lib/caracasTime';
 
 export default function MyTournamentsPage() {
     const searchParams = useSearchParams();
@@ -256,14 +257,24 @@ export default function MyTournamentsPage() {
                                                             </div>
                                                         </Link>
                                                     )}
+                                                    {!isGrouped && (() => {
+                                                        const isOwnerOfFirst = first.ownerId === user?.uid;
+                                                        const showMainInscribirme = user && !isAdmin && !isOwnerOfFirst && !isCaracasInscriptionClosed(first.startDate, first.registrationStatus);
+                                                        if (!showMainInscribirme) return null;
+                                                        return (
+                                                            <Link
+                                                                href={partnerCode ? `/tournaments/${first.id}/inscribirme?code=${encodeURIComponent(partnerCode)}` : `/tournaments/${first.id}/inscribirme`}
+                                                                className="flex items-center justify-center gap-2 px-3 py-2.5 mb-1 rounded-xl bg-[#ccff00] text-black hover:bg-[#d8ff3d] text-[11px] font-black uppercase tracking-wider"
+                                                                title="Inscribirme"
+                                                            >
+                                                                <User className="w-3.5 h-3.5" />
+                                                                Inscribirme
+                                                            </Link>
+                                                        );
+                                                    })()}
                                                     {groupTournaments.map(t => {
                                                         const isOwnerOfT = t.ownerId === user?.uid;
-                                                        const todayStr = new Date().toISOString().split('T')[0];
-                                                        const now = new Date();
-                                                        const is1600OrLater = now.getHours() > 16 || (now.getHours() === 16 && now.getMinutes() >= 0);
-                                                        const isStarted = t.startDate && (t.startDate < todayStr || (t.startDate === todayStr && is1600OrLater));
-                                                        const registrationStatus = t.registrationStatus || 'open';
-                                                        const showInscribirme = user && !isAdmin && !isOwnerOfT && !isStarted && registrationStatus === 'open';
+                                                        const showInscribirme = user && !isAdmin && !isOwnerOfT && !isCaracasInscriptionClosed(t.startDate, t.registrationStatus);
                                                         return (
                                                             <div key={t.id} className="flex items-center justify-between gap-2 px-3 py-2 bg-white/5 hover:bg-padel-primary/10 rounded-xl border border-white/5 hover:border-padel-primary/30 transition-all group/btn">
                                                                 <Link href={`/tournaments/${t.id}`} className="flex items-center gap-2 min-w-0 flex-1">
@@ -279,7 +290,7 @@ export default function MyTournamentsPage() {
                                                                     <ChevronRight className="w-3.5 h-3.5 text-padel-primary flex-shrink-0" />
                                                                 </Link>
                                                                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                                                                    {showInscribirme && (
+                                                                    {showInscribirme && isGrouped && (
                                                                         <Link
                                                                             href={partnerCode ? `/tournaments/${t.id}/inscribirme?code=${encodeURIComponent(partnerCode)}` : `/tournaments/${t.id}/inscribirme`}
                                                                             onClick={(e) => e.stopPropagation()}

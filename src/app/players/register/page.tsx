@@ -31,8 +31,7 @@ import {
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { BackButton } from '@/components/BackButton';
 import LegalModal from '@/components/legal/LegalModal';
-import { CURRENT_TERMS_VERSION } from '@/lib/legal/termsVersion';
-import { isProfileTermsStale } from '@/lib/legal/termsVersion';
+import { CURRENT_TERMS_VERSION, firstAcceptedTermsVersion, isProfileTermsStale } from '@/lib/legal/termsVersion';
 
 function RegistrationFormContent() {
     const router = useRouter();
@@ -40,7 +39,7 @@ function RegistrationFormContent() {
     const editId = searchParams.get('edit');
     const fromMisDatos = searchParams.get('mis-datos') === '1';
     const nextPathRaw = searchParams.get('next');
-    const { user, loading: authLoading, profile } = useAuth();
+    const { user, loading: authLoading, profile, profileLoading } = useAuth();
     const [formError, setFormError] = useState<string | null>(null);
 
     const [loading, setLoading] = useState(false);
@@ -126,18 +125,22 @@ function RegistrationFormContent() {
         }
     }, [authLoading, user, router, searchParams]);
 
+    const acceptedTermsVersion = firstAcceptedTermsVersion(
+        profile?.acceptedTermsVersion,
+        profile?.accepted_terms_version,
+        profile?.legalVersion,
+        profile?.legal_version,
+        user?.acceptedTermsVersion,
+    );
+    const termsReady = !authLoading && !profileLoading;
+    const termsAlreadyOk = termsReady && !isProfileTermsStale(acceptedTermsVersion);
+
     useEffect(() => {
-        const acceptedVersion =
-            profile?.acceptedTermsVersion ??
-            profile?.accepted_terms_version ??
-            profile?.legalVersion ??
-            profile?.legal_version ??
-            null;
-        if (!isProfileTermsStale(acceptedVersion)) {
+        if (termsAlreadyOk) {
             setAcceptedTerms(true);
             setShowTermsModal(false);
         }
-    }, [profile]);
+    }, [termsAlreadyOk]);
 
     const updateField = (field: string, value: any) => {
         if (field === 'dni') {
@@ -264,13 +267,6 @@ function RegistrationFormContent() {
                 return;
             }
 
-            const termsAlreadyOk = !isProfileTermsStale(
-                profile?.acceptedTermsVersion ??
-                profile?.accepted_terms_version ??
-                profile?.legalVersion ??
-                profile?.legal_version ??
-                null
-            );
             if (acceptedTerms && user.uid && !termsAlreadyOk) {
                 try {
                     await dataService.updateProfileLegalAcceptance(user.uid, {
@@ -793,13 +789,15 @@ function RegistrationFormContent() {
                             </div>
                         )}
 
-                        {isProfileTermsStale(
-                            profile?.acceptedTermsVersion ??
-                            profile?.accepted_terms_version ??
-                            profile?.legalVersion ??
-                            profile?.legal_version ??
-                            null
-                        ) ? (
+                        {!termsReady ? (
+                            <div className="px-4 text-center text-[9px] font-bold uppercase tracking-widest text-zinc-600">
+                                Comprobando términos aceptados…
+                            </div>
+                        ) : termsAlreadyOk ? (
+                            <div className="px-4 text-center text-[9px] font-bold uppercase tracking-widest text-padel-primary/85">
+                                Términos ya aceptados al crear tu cuenta.
+                            </div>
+                        ) : (
                             <div className="px-4">
                                 <label className="flex items-center gap-3 cursor-pointer group">
                                     <div className="relative flex-shrink-0">
@@ -825,10 +823,6 @@ function RegistrationFormContent() {
                                         ).
                                     </div>
                                 </label>
-                            </div>
-                        ) : (
-                            <div className="px-4 text-center text-[9px] font-bold uppercase tracking-widest text-padel-primary/85">
-                                Términos ya aceptados al crear tu cuenta.
                             </div>
                         )}
 

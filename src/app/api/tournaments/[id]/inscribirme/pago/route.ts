@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/authServerSupabase';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
+import { caracasTodayDateString } from '@/lib/caracasTime';
 
 type PagoMavilReportBody = {
     bankOrigin?: string;
@@ -122,7 +123,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             phone: phoneEmitter,
             telefono: phoneEmitter,
             paymentReference: referenceNumber,
-            paymentDate: currentData?.paymentDate ?? new Date().toISOString().split('T')[0],
+            paymentDate: currentData?.paymentDate ?? caracasTodayDateString(),
         };
 
         const { error: updErr } = await supabase
