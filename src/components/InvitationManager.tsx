@@ -122,6 +122,8 @@ export default function InvitationManager({ compact = false, singlePageStrip = f
         try {
             await dataService.respondToInvitation(id, status);
             setInvitations(prev => prev.filter(inv => inv.id !== id));
+            const { showToast } = await import('@/components/AppToast');
+            showToast(status === 'accepted' ? 'Invitación aceptada. Pareja confirmada.' : 'Invitación rechazada.');
         } catch (err) {
             console.error('Error responding to invitation:', err);
         } finally {

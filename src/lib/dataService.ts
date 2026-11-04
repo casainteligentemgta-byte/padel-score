@@ -1668,11 +1668,53 @@ export const dataService = {
                     } catch (nError) {
                         console.error('[dataService] Error sending acceptance notification:', nError);
                     }
+
+                    await this.confirmInscriptionForAcceptedTeam(
+                        team.tournament_id,
+                        team.category,
+                        team.player_a_id,
+                        team.player_b_id,
+                    );
                 }
             } catch (syncErr) {
                 console.error('[dataService] Error syncing accepted team into tournament groups:', syncErr);
             }
         }
+    },
+
+    async confirmInscriptionForAcceptedTeam(
+        tournamentId: string,
+        categoryKey: string,
+        ownerId: string,
+        partnerId: string,
+    ): Promise<void> {
+        const ts = now();
+        const { data: rows, error } = await supabase()
+            .from('inscriptions')
+            .select('id, partner_id, data, inscription_status')
+            .eq('tournament_id', tournamentId)
+            .eq('category_key', categoryKey)
+            .or(`user_id.eq.${ownerId},owner_id.eq.${ownerId}`);
+        if (error || !rows?.length) return;
+        const match = rows.find((row: any) => {
+            const fromCol = row.partner_id != null ? String(row.partner_id) : '';
+            const fromData = row.data?.partnerId != null ? String(row.data.partnerId) : '';
+            return fromCol === partnerId || fromData === partnerId;
+        });
+        if (!match?.id) return;
+        if (String(match.inscription_status || '').toUpperCase() === 'CONFIRMED') return;
+        const { error: rpcErr } = await supabase().rpc('confirm_reserved_inscription', {
+            p_inscription_id: match.id,
+        });
+        if (!rpcErr) return;
+        await supabase()
+            .from('inscriptions')
+            .update({
+                inscription_status: 'CONFIRMED',
+                confirmed_at: ts,
+                updated_at: ts,
+            } as any)
+            .eq('id', match.id);
     },
 
     async getSentInvitations(tournamentId: string, playerAId: string) {
@@ -2147,15 +2189,17 @@ export const dataService = {
         const t = team as { tournament_id: string; category: string; player_a_id: string };
         const { data: ins, error: ie } = await db
             .from('inscriptions')
-            .select('id')
+            .select('id, partner_id, data')
             .eq('tournament_id', t.tournament_id)
             .eq('category_key', t.category)
-            .eq('user_id', t.player_a_id)
-            .eq('partner_id', user.id)
-            .maybeSingle();
+            .eq('user_id', t.player_a_id);
         if (ie) return null;
-        if (ins && (ins as { id?: string }).id) return String((ins as { id: string }).id);
-        return null;
+        const match = (ins || []).find((row: any) => {
+            const fromCol = row.partner_id != null ? String(row.partner_id) : '';
+            const fromData = row.data?.partnerId != null ? String(row.data.partnerId) : '';
+            return fromCol === user.id || fromData === user.id;
+        });
+        return match?.id ? String(match.id) : null;
     },
 
     /**
@@ -2242,35 +2286,41 @@ export const dataService = {
         const ts = now();
         let updated: any = null;
 
-        // Intento principal (especificación solicitada): status + embed tournament/player1.
-        const primary = await db
-            .from('inscriptions')
-            .update({
-                status: 'CONFIRMED',
-                confirmed_at: ts,
-                updated_at: ts,
-            } as any)
-            .eq('id', cleanId)
-            .select('*, tournament:tournaments(name), player1:participants!player1_id(name, email)')
-            .single();
+        const viaRpc = await db.rpc('confirm_reserved_inscription', { p_inscription_id: cleanId });
+        if (!viaRpc.error && viaRpc.data) {
+            const rpcRow = Array.isArray(viaRpc.data) ? viaRpc.data[0] : viaRpc.data;
+            if (rpcRow) updated = rpcRow;
+        }
 
-        if (primary.error) {
-            // Fallback para esquemas existentes del proyecto (inscription_status / participant_name / tournament_name).
-            const fb = await db
+        if (!updated) {
+            const primary = await db
                 .from('inscriptions')
                 .update({
                     inscription_status: 'CONFIRMED',
+                    status: 'CONFIRMED',
                     confirmed_at: ts,
                     updated_at: ts,
                 } as any)
                 .eq('id', cleanId)
-                .eq('inscription_status', 'RESERVED')
-                .select('*')
+                .select('*, tournament:tournaments(name), player1:participants!player1_id(name, email)')
                 .single();
-            if (fb.error) throw fb.error;
-            updated = fb.data as any;
-        } else {
-            updated = primary.data as any;
+
+            if (primary.error) {
+                const fb = await db
+                    .from('inscriptions')
+                    .update({
+                        inscription_status: 'CONFIRMED',
+                        confirmed_at: ts,
+                        updated_at: ts,
+                    } as any)
+                    .eq('id', cleanId)
+                    .select('*')
+                    .single();
+                if (fb.error) throw fb.error;
+                updated = fb.data as any;
+            } else {
+                updated = primary.data as any;
+            }
         }
 
         if (!updated) {
@@ -2839,12 +2889,12 @@ export const confirmReservedTeam = async (inscriptionId: string) => {
     }
 
     const ts = now();
-    const updateData: Record<string, unknown> = { confirmed_at: ts, updated_at: ts };
-    if (Object.prototype.hasOwnProperty.call(row, 'inscription_status')) {
-        updateData.inscription_status = 'CONFIRMED';
-    } else {
-        updateData.status = 'CONFIRMED';
-    }
+    const updateData: Record<string, unknown> = {
+        confirmed_at: ts,
+        updated_at: ts,
+        inscription_status: 'CONFIRMED',
+        status: 'CONFIRMED',
+    };
 
     const { data: updated, error: updateErr } = await db
         .from('inscriptions')

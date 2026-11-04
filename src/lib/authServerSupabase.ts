@@ -4,7 +4,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { isAdminAccess } from '@/lib/adminAccess';
+import { isServerAdminAccess } from '@/lib/adminAccess';
 
 type Request = globalThis.Request;
 
@@ -53,7 +53,7 @@ export async function getAuthUserWithRole(req: Request): Promise<AuthUserWithRol
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
     if (!url || !key) {
-        const role = isAdminAccess(undefined, user.email) ? 'admin' : 'player';
+        const role = isServerAdminAccess(undefined, user.email) ? 'admin' : 'player';
         return { ...user, role };
     }
     try {
@@ -66,10 +66,10 @@ export async function getAuthUserWithRole(req: Request): Promise<AuthUserWithRol
             .eq('id', user.uid)
             .single();
         const dbRole = (profile?.role as string) ?? 'player';
-        const role = isAdminAccess(dbRole, user.email) ? 'admin' : dbRole;
+        const role = isServerAdminAccess(dbRole, user.email) ? 'admin' : dbRole;
         return { ...user, role };
     } catch {
-        const role = isAdminAccess(undefined, user.email) ? 'admin' : 'player';
+        const role = isServerAdminAccess(undefined, user.email) ? 'admin' : 'player';
         return { ...user, role };
     }
 }

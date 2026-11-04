@@ -74,17 +74,18 @@ export default function HomePage() {
     };
 
     const handleForgotPassword = async () => {
-        if (!formData.email) {
-            setError('Ingresa tu email para restablecer la contraseña.');
+        if (!isValidEmail(formData.email)) {
+            setError('Ingresa un correo electrónico válido para restablecer la contraseña.');
             return;
         }
         setLoading(true);
         setError(null);
         try {
             await forgotPassword(formData.email);
-            setSuccess('Email de recuperación enviado. Revisa tu bandeja de entrada.');
+            setSuccess('Email de recuperación enviado. Revisa tu bandeja de entrada (y spam).');
         } catch (err: any) {
-            setError('Error al enviar el correo de recuperación.');
+            console.error('[Home] forgotPassword', err);
+            setError(getAuthErrorMessage(err) || 'Error al enviar el correo de recuperación.');
         } finally {
             setLoading(false);
         }

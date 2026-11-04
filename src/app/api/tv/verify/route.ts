@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { checkRateLimit } from '@/lib/rateLimit';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import {
   normalizeClubSlug,
@@ -6,6 +7,9 @@ import {
 } from '@/lib/tvDeviceAuth';
 
 export async function POST(req: Request) {
+  if (!checkRateLimit(req, { max: 8, windowMs: 60_000, bucket: 'tv-verify' })) {
+    return NextResponse.json({ error: 'Demasiados intentos de PIN. Espera un minuto.' }, { status: 429 });
+  }
   try {
     const supabase = getSupabaseServiceClient();
     if (!supabase) {

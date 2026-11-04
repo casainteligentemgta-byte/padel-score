@@ -8,6 +8,7 @@ import { isAdminAccess } from '@/lib/adminAccess';
 import type { AppUser } from '@/lib/types/auth';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal/termsVersion';
 import { validateSignupPassword } from '@/lib/authValidators';
+import { getPasswordRecoveryRedirectUrl, getPublicSiteUrl } from '@/lib/brand';
 
 interface AuthContextType {
     user: AppUser | null;
@@ -129,6 +130,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                     setProfile(null);
                     setLoading(false);
                     setProfileLoading(false);
+                    return;
+                }
+
+                if (event === 'PASSWORD_RECOVERY') {
+                    const recoveryUser = session?.user ? mapSupabaseUser(session.user) : null;
+                    setUser(recoveryUser);
+                    setLoading(false);
+                    setProfileLoading(false);
+                    clearTimeout(safetyTimeout);
                     return;
                 }
 
@@ -258,10 +268,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const signInWithGoogle = async () => {
         if (!supabase) throw new Error('Supabase no está configurado. Revisa .env.local (NEXT_PUBLIC_SUPABASE_*).');
-        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        const origin = getPublicSiteUrl();
         await supabase.auth.signInWithOAuth({
             provider: 'google',
-            options: { redirectTo: origin ? `${origin}/` : undefined },
+            options: { redirectTo: `${origin}/` },
         });
     };
 
@@ -286,7 +296,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (!passwordCheck.valid) {
             throw new Error(passwordCheck.error || 'La contraseña no cumple los requisitos.');
         }
-        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        const origin = getPublicSiteUrl();
         const { data, error } = await supabase.auth.signUp({
             email,
             password: pass,
@@ -297,7 +307,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                     accepted_terms_version: CURRENT_TERMS_VERSION,
                     pending_ficha: true,
                 },
-                emailRedirectTo: origin ? `${origin}/login?confirmed=1` : undefined,
+                emailRedirectTo: `${origin}/login?confirmed=1`,
             },
         });
         if (error) throw error;
@@ -316,10 +326,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const forgotPassword = async (email: string) => {
         if (!supabase) throw new Error('Supabase no está configurado. Revisa .env.local (NEXT_PUBLIC_SUPABASE_*).');
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/login`,
+        const redirectTo = getPasswordRecoveryRedirectUrl();
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+            redirectTo,
         });
-        if (error) throw error;
+        if (error) {
+            console.error('[Auth] resetPasswordForEmail:', error.message, { redirectTo });
+            throw error;
+        }
     };
 
     const logout = async () => {
