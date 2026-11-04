@@ -30,6 +30,7 @@ import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
 import { TournamentStepper } from '@/components/TournamentStepper';
 import { useEffect } from 'react';
+import { caracasTodayDateString, toCaracasDateString } from '@/lib/caracasTime';
 
 // ── Estado inicial del formulario ─────────────────────────────────────────
 const INITIAL_DATA = {
@@ -43,7 +44,7 @@ const INITIAL_DATA = {
     scoringSystem: 'GOLDEN_POINT' as 'GOLDEN_POINT' | 'TRADITIONAL',
     /** STB por defecto: en formatos a 2 sets el decisivo habitual es super tie-break a 10. */
     tieBreakType: 'STB' as 'TB' | 'STB',
-    startDate: new Date().toISOString().split('T')[0],
+    startDate: caracasTodayDateString(),
     startTime: '16:00',
     endTime: '23:30',
     complexName: '',
@@ -78,7 +79,7 @@ export default function NewTournamentPage() {
         const isAdmin = profile?.role === 'admin';
         if (!isAdmin) router.replace('/tournaments');
     }, [user, profile, authLoading, router]);
-    const [tournamentData, setTournamentData] = useState({ ...INITIAL_DATA, startDate: new Date().toISOString().split('T')[0] });
+    const [tournamentData, setTournamentData] = useState({ ...INITIAL_DATA, startDate: caracasTodayDateString() });
     const [loading, setLoading] = useState(false);
     const [viewDate, setViewDate] = useState(new Date());
     const [availableParticipants, setAvailableParticipants] = useState<any[]>([]);
@@ -88,7 +89,7 @@ export default function NewTournamentPage() {
     // ── Reset completo al montar: garantiza plantilla en blanco en cada visita ──
     useEffect(() => {
         setStep(1);
-        setTournamentData({ ...INITIAL_DATA, startDate: new Date().toISOString().split('T')[0] });
+        setTournamentData({ ...INITIAL_DATA, startDate: caracasTodayDateString() });
         setViewDate(new Date());
         setLoading(false);
         setAvailableParticipants([]);
@@ -1639,7 +1640,7 @@ export default function NewTournamentPage() {
                                                     {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => (<div key={i} className="text-center text-[6px] font-black text-gray-700 py-0.5">{d}</div>))}
                                                     {getDaysInMonth(viewDate.getFullYear(), viewDate.getMonth()).map((date, i) => {
                                                         if (!date) return <div key={i} />;
-                                                        const dateString = date.toISOString().split('T')[0];
+                                                        const dateString = toCaracasDateString(date);
                                                         const isSelected = tournamentData.startDate === dateString;
                                                         return (
                                                             <button

@@ -38,6 +38,7 @@ import { dataService } from '@/lib/dataService';
 import { getAuthHeaders } from '@/lib/apiAuth';
 import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 import { useRouter } from 'next/navigation';
+import { addCalendarDays, caracasTodayDateString, caracasTodayPlusDays, toCaracasDateString } from '@/lib/caracasTime';
 
 // Colores fijos por formato (icono siempre a color)
 const FORMAT_COLORS = {
@@ -136,8 +137,8 @@ const COMPLEXES = COMPLEXES_RAW.map((c, i) => ({ ...c, label: `A${i + 1}` }));
 const INITIAL_EVENT_DATA: MasterScheduleConfig = {
     tournamentName: '',
     complexName: '',
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
+    startDate: caracasTodayDateString(),
+    endDate: caracasTodayPlusDays(2),
     dailyStartTime: '16:00',
     dailyEndTime: '23:30',
     numCourts: 3,
@@ -184,8 +185,8 @@ export default function MasterGeneratorPage() {
     const [step, setStep] = useState(1);
     const [eventData, setEventData] = useState<MasterScheduleConfig>({
         ...INITIAL_EVENT_DATA,
-        startDate: new Date().toISOString().split('T')[0],
-        endDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
+        startDate: caracasTodayDateString(),
+        endDate: caracasTodayPlusDays(2),
     });
 
     const [generatedMatches, setGeneratedMatches] = useState<any[]>([]);
@@ -252,8 +253,8 @@ export default function MasterGeneratorPage() {
         setStep(1);
         setEventData({
             ...INITIAL_EVENT_DATA,
-            startDate: new Date().toISOString().split('T')[0],
-            endDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
+            startDate: caracasTodayDateString(),
+            endDate: caracasTodayPlusDays(2),
         });
         setGeneratedMatches([]);
         setIsGenerating(false);
@@ -587,7 +588,7 @@ export default function MasterGeneratorPage() {
                     const startD = new Date(eventData.startDate + 'T00:00:00');
                     const calculatedEnd = new Date(startD);
                     calculatedEnd.setDate(calculatedEnd.getDate() + (result as any).daysUsed - 1);
-                    const endStr = calculatedEnd.toISOString().split('T')[0];
+                    const endStr = toCaracasDateString(calculatedEnd) || addCalendarDays(eventData.startDate, (result as any).daysUsed - 1);
                     const startStr = eventData.startDate;
                     setEventData(prev => ({
                         ...prev,

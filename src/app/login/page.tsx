@@ -15,13 +15,11 @@ import {
     Eye,
     EyeOff,
     Shield,
-    ShieldCheck,
     Layout,
     Fingerprint,
-    Circle,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
-import { isValidEmail, isValidPassword, validateSignupPassword } from '@/lib/authValidators';
+import { isValidEmail, isValidPassword, SIGNUP_PASSWORD_REQUIREMENTS, validateSignupPassword } from '@/lib/authValidators';
 import { getAuthErrorMessage } from '@/lib/authErrorMessages';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -30,11 +28,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import LegalModal from '@/components/legal/LegalModal';
 import { getAuthHeaders } from '@/lib/apiAuth';
 import { isAdminAccess } from '@/lib/adminAccess';
-
-type PasswordRequirement = {
-    label: string;
-    regex: RegExp;
-};
+import { SignupPasswordValidator } from '@/components/SignupPasswordValidator';
 
 function safeInternalNextPath(raw: string | null | undefined): string | null {
     if (!raw) return null;
@@ -43,73 +37,6 @@ function safeInternalNextPath(raw: string | null | undefined): string | null {
         return null;
     }
     return t;
-}
-
-const PASSWORD_REQUIREMENTS: PasswordRequirement[] = [
-    { label: '6-12 caracteres', regex: /^.{6,12}$/ },
-    { label: 'Mayúscula y Minúscula', regex: /^(?=.*[a-z])(?=.*[A-Z]).+$/ },
-    { label: 'Un número (0-9)', regex: /[0-9]/ },
-    { label: 'Carácter especial', regex: /[!@#$%^&*(),.?":{}|<>]/ },
-];
-
-function PasswordValidator({ password }: { password: string }) {
-    const checks = useMemo(
-        () => PASSWORD_REQUIREMENTS.map((req) => ({ ...req, isMet: req.regex.test(password) })),
-        [password]
-    );
-    const score = checks.filter((check) => check.isMet).length;
-    const isStrong = score === 4;
-    const barColor = score <= 2 ? '#ef4444' : score === 3 ? '#fbbf24' : '#ccff00';
-
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35 }}
-            className="mt-4 p-4 rounded-2xl bg-[#0d0d0d] border border-white/5"
-        >
-            <div className="flex items-center gap-2.5 mb-3">
-                <ShieldCheck className={`w-5 h-5 ${isStrong ? 'text-[#ccff00]' : 'text-zinc-500'}`} />
-                <h4 className="text-[11px] font-black uppercase tracking-[0.14em] text-white">Seguridad de tu llave</h4>
-            </div>
-
-            <div className="flex gap-1.5 mb-4">
-                {[1, 2, 3, 4].map((step) => (
-                    <div
-                        key={step}
-                        className="h-1.5 flex-1 rounded-full transition-all duration-500"
-                        style={{ backgroundColor: step <= score ? barColor : '#1a1a1a' }}
-                    />
-                ))}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-4">
-                {checks.map((check, idx) => (
-                    <div key={idx} className={`flex items-center gap-2 text-[11px] transition-colors ${check.isMet ? 'text-[#ccff00]' : 'text-gray-600'}`}>
-                        <AnimatePresence mode="wait" initial={false}>
-                            {check.isMet ? (
-                                <motion.span
-                                    key="checked"
-                                    initial={{ scale: 0.5, opacity: 0 }}
-                                    animate={{ scale: 1, opacity: 1 }}
-                                    exit={{ scale: 0.5, opacity: 0 }}
-                                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                                    className="inline-flex"
-                                >
-                                    <CheckCircle2 size={14} className="shrink-0" />
-                                </motion.span>
-                            ) : (
-                                <motion.span key="unchecked" className="inline-flex">
-                                    <Circle size={14} className="shrink-0" />
-                                </motion.span>
-                            )}
-                        </AnimatePresence>
-                        <span className={check.isMet ? 'font-bold' : ''}>{check.label}</span>
-                    </div>
-                ))}
-            </div>
-        </motion.div>
-    );
 }
 
 export default function LoginPage() {
@@ -351,7 +278,7 @@ export default function LoginPage() {
     const isGlass = designMode === 'glass';
     const registerPassword = formData.password;
     const isSignupPasswordValid = useMemo(
-        () => PASSWORD_REQUIREMENTS.every((rule) => rule.regex.test(formData.password)),
+        () => SIGNUP_PASSWORD_REQUIREMENTS.every((rule) => rule.test(formData.password)),
         [formData.password]
     );
     const canSubmitSignup = useMemo(
@@ -476,7 +403,7 @@ export default function LoginPage() {
                     >
                         <Shield className="w-3.5 h-3.5 text-padel-primary" />
                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
-                            {isLogin ? 'Sistema de Control de Acceso' : 'Crea tu Cuenta de Administrador'}
+                            {isLogin ? 'Sistema de Control de Acceso' : 'Crea tu cuenta de jugador'}
                         </span>
                     </motion.div>
                 </div>
@@ -600,7 +527,7 @@ export default function LoginPage() {
                                 </button>
                             </div>
                             {!isLogin && (
-                                <PasswordValidator password={registerPassword} />
+                                <SignupPasswordValidator password={registerPassword} />
                             )}
 
                             <AnimatePresence>

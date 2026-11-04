@@ -12,3 +12,14 @@ export function isProfileTermsStale(accepted: string | null | undefined): boolea
     const a = accepted ? toSortable(accepted) : 0;
     return a < toSortable(CURRENT_TERMS_VERSION);
 }
+
+/** Primera versión no vacía entre perfil, metadata u otras fuentes. */
+export function firstAcceptedTermsVersion(
+    ...values: Array<string | null | undefined>
+): string | null {
+    for (const v of values) {
+        const s = typeof v === 'string' ? v.trim() : '';
+        if (s) return s;
+    }
+    return null;
+}

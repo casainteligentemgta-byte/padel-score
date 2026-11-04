@@ -6,11 +6,12 @@ import { Trophy, FileText, Plus } from 'lucide-react';
 import { MatchStatus } from '@/types/tournament';
 import { NextMatchCard, PlaceholderMatchCard, MatchCard } from './MatchCards';
 import { formatHHMM, toMinute, compareMatchesTodosView } from '../utils';
+import { toCaracasDateString } from '@/lib/caracasTime';
 
 function getDatePart(m: any): string {
     const raw = m.scheduledTime || m.time || '';
     if (typeof raw === 'string') return raw.split('T')[0];
-    if (raw && typeof raw === 'object') return new Date(raw).toISOString().split('T')[0];
+    if (raw && typeof raw === 'object') return toCaracasDateString(raw);
     return '';
 }
 

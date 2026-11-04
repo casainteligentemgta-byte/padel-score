@@ -5,6 +5,7 @@
 export type TournamentPriceSource = {
     inscriptionPrice?: unknown;
     inscriptionCategories?: unknown;
+    category?: unknown;
     data?: Record<string, unknown> | null;
 };
 
@@ -22,6 +23,14 @@ function toPositiveNumber(value: unknown): number | null {
     return n;
 }
 
+function normalizeCategoryToken(value: unknown): string {
+    return String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '');
+}
+
 function categoriesFromTournament(tournament: TournamentPriceSource | null | undefined): Array<{
     key?: string;
     price?: unknown;
@@ -34,19 +43,71 @@ function categoriesFromTournament(tournament: TournamentPriceSource | null | und
     return [];
 }
 
+export function resolveInscriptionCategory(
+    tournament: TournamentPriceSource | null | undefined,
+    categoryKey: string | null | undefined
+): { key: string; price: number } {
+    const cats = categoriesFromTournament(tournament);
+    const requested = (categoryKey || '').trim();
+    const tournamentCategory = String(
+        (tournament as { category?: unknown } | null | undefined)?.category ??
+            tournament?.data?.category ??
+            ''
+    ).trim();
+
+    const priceOf = (cat: { key?: string; price?: unknown } | undefined, fallbackKey: string) => ({
+        key: String(cat?.key || fallbackKey || 'GENERAL'),
+        price: toPositiveNumber(cat?.price) ?? 0,
+    });
+
+    if (requested && requested.toUpperCase() !== 'GENERAL') {
+        const requestedNorm = normalizeCategoryToken(requested);
+        const cat = cats.find((c) => {
+            const key = String(c?.key || '').trim();
+            const name = String((c as { name?: unknown }).name || '').trim();
+            return key === requested || name === requested || normalizeCategoryToken(key) === requestedNorm || normalizeCategoryToken(name) === requestedNorm;
+        });
+        if (cat) return priceOf(cat, requested);
+    }
+
+    if (tournamentCategory) {
+        const tournamentNorm = normalizeCategoryToken(tournamentCategory);
+        const cat = cats.find((c) => {
+            const key = String(c?.key || '').trim();
+            const name = String((c as { name?: unknown }).name || '').trim();
+            return (
+                key === tournamentCategory ||
+                name === tournamentCategory ||
+                normalizeCategoryToken(key) === tournamentNorm ||
+                normalizeCategoryToken(name).includes(tournamentNorm)
+            );
+        });
+        if (cat) return priceOf(cat, String(cat.key || tournamentCategory));
+    }
+
+    if (cats.length === 1) {
+        return priceOf(cats[0], requested || tournamentCategory || String(cats[0].key || 'GENERAL'));
+    }
+
+    const fallbackPrice =
+        toPositiveNumber(tournament?.inscriptionPrice ?? tournament?.data?.inscriptionPrice) ?? 0;
+    if (requested && requested.toUpperCase() !== 'GENERAL') {
+        return { key: requested, price: fallbackPrice };
+    }
+    if (tournamentCategory) {
+        return { key: tournamentCategory, price: fallbackPrice };
+    }
+    if (cats[0]?.key) {
+        return priceOf(cats[0], String(cats[0].key));
+    }
+    return { key: requested || 'GENERAL', price: fallbackPrice };
+}
+
 export function categoryPriceFromTournament(
     tournament: TournamentPriceSource | null | undefined,
     categoryKey: string | null | undefined
 ): number {
-    const key = (categoryKey || '').trim();
-    const cats = categoriesFromTournament(tournament);
-    if (key) {
-        const cat = cats.find((c) => String(c?.key || '') === key);
-        const fromCat = toPositiveNumber(cat?.price);
-        if (fromCat != null) return fromCat;
-    }
-    const fallback = toPositiveNumber(tournament?.inscriptionPrice ?? tournament?.data?.inscriptionPrice);
-    return fallback ?? 0;
+    return resolveInscriptionCategory(tournament, categoryKey).price;
 }
 
 /**
@@ -84,6 +145,7 @@ export function flattenTournamentRow(row: {
         inscriptionCategories: row.inscriptionCategories ?? data.inscriptionCategories,
         inscriptionPrice: row.inscriptionPrice ?? data.inscriptionPrice,
         name: (row.name as string | undefined) ?? (data.name as string | undefined),
+        category: (row as { category?: unknown }).category ?? data.category,
     };
 }
 

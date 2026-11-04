@@ -3,10 +3,10 @@
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { isProfileTermsStale } from '@/lib/legal/termsVersion';
+import { firstAcceptedTermsVersion, isProfileTermsStale } from '@/lib/legal/termsVersion';
 import { TermsReacceptanceOverlay } from '@/components/legal/TermsReacceptanceOverlay';
 
-const PUBLIC_PATH_PREFIXES = ['/login', '/auth', '/confirmar'];
+const PUBLIC_PATH_PREFIXES = ['/login', '/auth', '/confirmar', '/players/register'];
 
 function shouldBypassTermsGate(pathname: string | null): boolean {
     if (!pathname) return true;
@@ -17,12 +17,13 @@ export function TermsReacceptanceGate({ children }: { children: React.ReactNode 
     const pathname = usePathname();
     const { user, profile, profileLoading, isAdmin } = useAuth();
 
-    const resolvedAcceptedVersion =
-        profile?.acceptedTermsVersion ??
-        profile?.accepted_terms_version ??
-        profile?.legalVersion ??
-        profile?.legal_version ??
-        null;
+    const resolvedAcceptedVersion = firstAcceptedTermsVersion(
+        profile?.acceptedTermsVersion,
+        profile?.accepted_terms_version,
+        profile?.legalVersion,
+        profile?.legal_version,
+        user?.acceptedTermsVersion,
+    );
 
     useEffect(() => {
         if (user && !profileLoading) {

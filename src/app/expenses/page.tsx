@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
+import { caracasTodayDateString } from '@/lib/caracasTime';
 import {
     DollarSign,
     Plus,
@@ -28,7 +29,7 @@ export default function ExpensesPage() {
         description: '',
         amount: '',
         category: 'Insumos', // Insumos, Premios, Alquiler, Otros
-        date: new Date().toISOString().split('T')[0]
+        date: caracasTodayDateString()
     });
 
     const categories = ['Insumos', 'Premios', 'Alquiler', 'Marketing', 'Personal', 'Otros'];
@@ -68,7 +69,7 @@ export default function ExpensesPage() {
                 description: '',
                 amount: '',
                 category: 'Insumos',
-                date: new Date().toISOString().split('T')[0]
+                date: caracasTodayDateString()
             });
         } catch (err) {
             alert('Error al agregar gasto');

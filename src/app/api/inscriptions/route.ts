@@ -2,11 +2,14 @@ import { NextResponse } from 'next/server';
 import { isGuardResponse, requireAuth } from '@/lib/apiGuard';
 import { sanitizeString } from '@/lib/apiValidation';
 import { getBcvVesPerUsd } from '@/lib/bcvRate';
+import { flattenTournamentRow, resolveInscriptionCategory } from '@/lib/inscriptionPricing';
+import { caracasTodayDateString } from '@/lib/caracasTime';
 import {
-    categoryPriceFromTournament,
-    flattenTournamentRow,
-} from '@/lib/inscriptionPricing';
-import { isMercadoPagoMethod, resolveManualInscriptionPaymentStatus } from '@/lib/paymentValidation';
+    isManualBankPaymentMethod,
+    isMercadoPagoMethod,
+    normalizePaymentMethodSlug,
+    resolveManualInscriptionPaymentStatus,
+} from '@/lib/paymentValidation';
 import { checkPaymentRateLimit } from '@/lib/rateLimit';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
@@ -94,13 +97,45 @@ export async function POST(request: Request) {
     }
 
     const tournament = flattenTournamentRow(trow as { id: string; data?: Record<string, unknown> | null });
-    const categoryPrice = categoryPriceFromTournament(tournament, categoryKey);
-    const paymentMethod = sanitizeString(body.paymentMethod);
-    if (isMercadoPagoMethod(paymentMethod)) {
+    const resolvedCategory = resolveInscriptionCategory(tournament, categoryKey);
+    const persistedCategoryKey = resolvedCategory.key;
+    const categoryPrice = resolvedCategory.price;
+    if (
+        persistedCategoryKey !== categoryKey &&
+        (existing || []).some(
+            (row) =>
+                String(row.category_key || '') === persistedCategoryKey &&
+                String(row.payment_status || '').toLowerCase() !== 'rechazado'
+        )
+    ) {
+        return NextResponse.json(
+            {
+                error: 'Ya tienes una inscripción activa en esta categoría. Si el club rechazó tu pago, podrás volver a intentar cuando el estado sea «Rechazado».',
+            },
+            { status: 409 }
+        );
+    }
+    const paymentMethod = normalizePaymentMethodSlug(sanitizeString(body.paymentMethod));
+    if (isMercadoPagoMethod(paymentMethod) || isMercadoPagoMethod(sanitizeString(body.paymentMethod))) {
         return NextResponse.json(
             { error: 'Mercado Pago ya no está disponible. Usa Pago Móvil o Transferencia bancaria.' },
             { status: 400 }
         );
+    }
+    const receiptUrl = sanitizeString(body.receiptUrl);
+    if (categoryPrice > 0 || isManualBankPaymentMethod(paymentMethod)) {
+        if (!isManualBankPaymentMethod(paymentMethod)) {
+            return NextResponse.json(
+                { error: 'Elige Pago Móvil o Transferencia bancaria.' },
+                { status: 400 }
+            );
+        }
+        if (!receiptUrl) {
+            return NextResponse.json(
+                { error: 'El comprobante de pago es obligatorio.' },
+                { status: 400 }
+            );
+        }
     }
 
     const amountExtractedRaw = body.amountExtracted ?? body.paymentAmount;
@@ -116,6 +151,7 @@ export async function POST(request: Request) {
         categoryPrice,
         amountExtracted,
         bcvVesPerUsd,
+        paymentMethod,
     });
     const paymentStatus = resolved.paymentStatus;
     const alertMessage = resolved.alertMessage;
@@ -133,18 +169,18 @@ export async function POST(request: Request) {
             owner_id: auth.uid,
             tournament_id: tournamentId,
             tournament_name: tournamentName,
-            category_key: categoryKey,
+            category_key: persistedCategoryKey,
             category_price: categoryPrice,
             participant_name: sanitizeString(body.participantName),
             participant_email: sanitizeString(body.participantEmail),
             participant_id: body.participantId ? String(body.participantId).trim() : null,
             amount_extracted: amountExtracted != null && Number.isFinite(amountExtracted) ? amountExtracted : null,
-            receipt_url: sanitizeString(body.receiptUrl) || null,
+            receipt_url: receiptUrl || null,
             payment_status: paymentStatus,
             alert_message: alertMessage,
             data: sanitizeJsonValue({
                 paymentMethod,
-                paymentDate: sanitizeString(body.paymentDate),
+                paymentDate: sanitizeString(body.paymentDate) || caracasTodayDateString(),
                 paymentBank: sanitizeString(body.paymentBank),
                 paymentAmount: amountExtracted,
                 paymentReference: sanitizeString(body.paymentReference),
@@ -166,6 +202,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
         id: row?.id,
+        categoryKey: persistedCategoryKey,
         categoryPrice,
         paymentStatus,
         alertMessage,

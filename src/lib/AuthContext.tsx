@@ -7,6 +7,7 @@ import { dataService, ROLES } from '@/lib/dataService';
 import { isAdminAccess } from '@/lib/adminAccess';
 import type { AppUser } from '@/lib/types/auth';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal/termsVersion';
+import { validateSignupPassword } from '@/lib/authValidators';
 
 interface AuthContextType {
     user: AppUser | null;
@@ -36,6 +37,7 @@ function mapSupabaseUser(su: { id: string; email?: string; user_metadata?: Recor
         email: su.email || (meta.email as string) || null,
         displayName: (meta.full_name as string) || (meta.name as string) || su.email || null,
         photoURL: (meta.avatar_url as string) || (meta.picture as string) || null,
+        acceptedTermsVersion: typeof meta.accepted_terms_version === 'string' ? meta.accepted_terms_version : null,
     };
 }
 
@@ -279,6 +281,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             const urlExists = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
             const keyExists = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
             throw new Error(`Supabase no está configurado. URL:${urlExists} Key:${keyExists}. Revisa .env.local y reinicia el servidor de desarrollo.`);
+        }
+        const passwordCheck = validateSignupPassword(pass);
+        if (!passwordCheck.valid) {
+            throw new Error(passwordCheck.error || 'La contraseña no cumple los requisitos.');
         }
         const origin = typeof window !== 'undefined' ? window.location.origin : '';
         const { data, error } = await supabase.auth.signUp({

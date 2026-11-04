@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { isValidEmail, isValidPassword, validateSignupPassword } from '@/lib/authValidators';
+import { SignupPasswordValidator } from '@/components/SignupPasswordValidator';
 import { getAuthErrorMessage } from '@/lib/authErrorMessages';
 import { useRouter } from 'next/navigation';
 import BouncingBall from '@/components/BouncingBall';
@@ -313,6 +314,9 @@ export default function HomePage() {
                                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                                 </button>
                             </div>
+                            {!isLogin && (
+                                <SignupPasswordValidator password={formData.password} />
+                            )}
 
                             <AnimatePresence>
                                 {(error || success) && (

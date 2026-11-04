@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, ChevronLeft, ChevronRight, RefreshCw, Rocket } from 'lucide-react';
 import { generateTournamentStructure } from '@/lib/tournamentService';
 import { dataService } from '@/lib/dataService';
+import { caracasTodayDateString } from '@/lib/caracasTime';
 
 export type TournamentStepperFormData = {
   /** Si ya existe el torneo, pasar su ID. Si no, se creará con el payload. */
@@ -108,7 +109,7 @@ export function TournamentStepper({
         const { maxTeamsByCategory: _max, tournamentId: _tid, ...rest } = formData;
         const payload = {
           name: formData.name ?? 'Torneo',
-          startDate: formData.startDate ?? new Date().toISOString().split('T')[0],
+          startDate: formData.startDate ?? caracasTodayDateString(),
           startTime: formData.startTime ?? '08:00',
           endTime: formData.endTime ?? '22:00',
           complexName: formData.complexName ?? '',

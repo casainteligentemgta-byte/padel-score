@@ -4,12 +4,21 @@ import {
   expectedAmountForInscription,
   expectedAmountForInscriptions,
   isPayableInscriptionStatus,
+  resolveInscriptionCategory,
 } from '../src/lib/inscriptionPricing';
+import {
+  caracasTodayDateString,
+  invitationExpiryMs,
+  isCaracasInscriptionClosed,
+  toCaracasDateString,
+} from '../src/lib/caracasTime';
+import { validateSignupPassword } from '../src/lib/authValidators';
 import { timingSafeEqualString } from '../src/lib/apiGuard';
 import { isAdminAccess, isLegacyAdminEmail } from '../src/lib/adminAccess';
 import {
   amountsMatch,
   isMercadoPagoMethod,
+  normalizePaymentMethodSlug,
   resolveManualInscriptionPaymentStatus,
   validatePaymentAgainstCategoryPrice,
 } from '../src/lib/paymentValidation';
@@ -146,6 +155,72 @@ run('Mercado Pago se reconoce como método retirado', () => {
   assert.equal(isMercadoPagoMethod('MP'), true);
   assert.equal(isMercadoPagoMethod('Pago Móvil'), false);
   assert.equal(isMercadoPagoMethod('Transferencia Bancaria'), false);
+});
+
+run('fecha civil Caracas no usa UTC de toISOString', () => {
+  const after20Caracas = new Date('2026-11-05T01:30:00.000Z'); // 21:30 America/Caracas del 4
+  assert.equal(caracasTodayDateString(after20Caracas), '2026-11-04');
+  assert.equal(toCaracasDateString('2026-11-05'), '2026-11-05');
+  assert.equal(isCaracasInscriptionClosed('2026-11-05', 'open', after20Caracas), false);
+  assert.equal(isCaracasInscriptionClosed('2026-11-04', 'open', after20Caracas), true);
+  const beforeClose = new Date('2026-11-04T19:00:00.000Z'); // 15:00 Caracas
+  assert.equal(isCaracasInscriptionClosed('2026-11-04', 'open', beforeClose), false);
+});
+
+run('categoría real y precio, no GENERAL/0', () => {
+  const resolved = resolveInscriptionCategory(
+    {
+      category: 'QUINTA',
+      inscriptionPrice: 120,
+      inscriptionCategories: [{ key: 'QUINTA', name: 'QUINTA Masculino', price: 120 }],
+    },
+    'GENERAL'
+  );
+  assert.equal(resolved.key, 'QUINTA');
+  assert.equal(resolved.price, 120);
+  const fromName = resolveInscriptionCategory(
+    { inscriptionCategories: [{ key: 'quinta_masc', name: 'QUINTA Masculino', price: 120 }] },
+    'QUINTA Masculino'
+  );
+  assert.equal(fromName.key, 'quinta_masc');
+  assert.equal(fromName.price, 120);
+});
+
+run('pago móvil queda pending y normaliza método', () => {
+  assert.equal(normalizePaymentMethodSlug('Pago Móvil'), 'pago_movil');
+  assert.equal(normalizePaymentMethodSlug('Transferencia Bancaria'), 'transferencia');
+  const paidWouldBeWrong = resolveManualInscriptionPaymentStatus({
+    categoryPrice: 120,
+    amountExtracted: 120,
+    paymentMethod: 'pago_movil',
+  });
+  assert.equal(paidWouldBeWrong.paymentStatus, 'pending');
+});
+
+run('reserva de invitación 2h con timestamp naive UTC', () => {
+  const created = '2026-11-04T18:00:00';
+  const expires = '2026-11-04T20:00:00';
+  assert.equal(invitationExpiryMs({ expires_at: expires }), Date.parse('2026-11-04T20:00:00Z'));
+  assert.equal(invitationExpiryMs({ created_at: created }), Date.parse('2026-11-04T20:00:00Z'));
+});
+
+run('contraseña de registro unificada 8-16 con complejidad', () => {
+  assert.equal(validateSignupPassword('Abc1!xxx').valid, true);
+  assert.equal(validateSignupPassword('abc1!xxx').valid, false);
+  assert.equal(validateSignupPassword('Abcdefgh').valid, false);
+  assert.equal(validateSignupPassword('Ab1!x').valid, false);
+  assert.equal(validateSignupPassword('Abcdefghijklmno1!').valid, false);
+});
+
+run('migración 076 fuerza pending en INSERT', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const sql = readFileSync(
+    join(here, '../supabase/migrations/076_inscription_payment_pending.sql'),
+    'utf8'
+  );
+  assert.match(sql, /ALTER COLUMN payment_status SET DEFAULT 'pending'/);
+  assert.match(sql, /inscriptions_force_manual_pending/);
+  assert.match(sql, /BEFORE INSERT ON public.inscriptions/);
 });
 
 console.log('Todos los guards de seguridad OK');

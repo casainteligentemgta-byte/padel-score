@@ -62,6 +62,7 @@ import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { getFinishedMatchScoreLines } from '@/lib/matchFinishedScoreDisplay';
 import { buildPizarraConceptHref } from '@/app/tournaments/event/components/MatchCards';
 import { sortTournamentMatchesForDisplay } from '@/lib/tournamentMatchSort';
+import { isCaracasInscriptionClosed } from '@/lib/caracasTime';
 
 /** Mismo diseño para Marcador (en vivo) y celdas del dock — en móvil más compacto (~mitad de ancho por celda en rejilla 4 col) */
 const MATCH_CARD_ACTION_LINK =
@@ -130,6 +131,12 @@ export default function TournamentDashboard() {
     );
     const canManageMatches = isOwner || isAdmin || (profile?.role === 'marker' && (markerCanchas?.length ?? 0) > 0);
     const canManageTournament = isOwner || isAdmin;
+    const showInscribirme =
+        !!user &&
+        !isAdmin &&
+        !isOwner &&
+        !!tournament &&
+        !isCaracasInscriptionClosed(tournament.startDate, tournament.registrationStatus);
     /** Rol jugador sin permisos de staff: no mostrar dock de acciones (Control, Pizarra, Cámaras, ADS). */
     const isPurePlayerViewer = isPlayer && !canManageMatches && !canManageTournament;
 
@@ -2008,6 +2015,17 @@ export default function TournamentDashboard() {
                                 <ChevronRight className="w-4 h-4" />
                                 <span className="hidden sm:inline">Cuadro</span>
                             </button>
+                        )}
+
+                        {showInscribirme && (
+                            <Link
+                                href={`/tournaments/${id}/inscribirme`}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-[#ccff00] text-black text-[10px] font-black uppercase tracking-widest hover:bg-[#d8ff3d] transition-all"
+                                title="Inscribirme"
+                            >
+                                <User className="w-3.5 h-3.5" />
+                                <span>Inscribirme</span>
+                            </Link>
                         )}
 
                         {canManageTournament && (
