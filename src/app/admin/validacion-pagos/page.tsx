@@ -289,7 +289,7 @@ export default function AdminValidacionPagosPage() {
                     categoryPrice,
                     bcvVesPerUsd: bcvVesPerUsd != null ? bcvVesPerUsd : undefined,
                 });
-                if (result.paymentStatus === 'paid') {
+                if (result.amountMatches) {
                     await dataService.updateInscription(ins.id, { paymentStatus: 'paid', alertMessage: null });
                     try {
                         await dataService.assignPlayersToTournament(
@@ -334,11 +334,11 @@ export default function AdminValidacionPagosPage() {
             });
             setOcrResult({
                 amount: result.amountExtracted ?? null,
-                suggestion: validation.paymentStatus,
+                suggestion: validation.amountMatches ? 'paid' : validation.paymentStatus,
                 message:
                     validation.matchNote ||
                     validation.alertMessage ||
-                    (validation.paymentStatus === 'paid' ? 'Monto coincide con el precio de la categoría.' : ''),
+                    (validation.amountMatches ? 'Monto coincide con el precio de la categoría. Pendiente de validación admin.' : ''),
             });
         } catch (e) {
             console.error(e);

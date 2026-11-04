@@ -14,7 +14,7 @@ import {
 } from '@/components/legal/LegalContainer';
 import PaymentInfo from '@/components/PaymentInfo';
 import AutoShrinkName from '@/components/AutoShrinkName';
-import { validatePaymentAgainstCategoryPrice } from '@/lib/paymentValidation';
+import { resolveManualInscriptionPaymentStatus } from '@/lib/paymentValidation';
 import { CURRENT_TERMS_VERSION, isProfileTermsStale } from '@/lib/legal/termsVersion';
 import {
     ArrowLeft,
@@ -43,7 +43,6 @@ import {
 } from 'lucide-react';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { getAuthHeaders } from '@/lib/apiAuth';
-import { isTestPartnerUserId } from '@/lib/testPartnerProfile';
 import { TournamentType } from '@/types/tournament';
 
 /** Categorías de inscripción que el organizador puede configurar en el torneo (tournament.inscriptionCategories). */
@@ -144,6 +143,9 @@ export default function InscribirmePage() {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [playerProfile, setPlayerProfile] = useState<{ gender?: 'MALE' | 'FEMALE'; birthDate?: string } | null>(null);
+    const [myFichas, setMyFichas] = useState<any[]>([]);
+    const [fichasLoaded, setFichasLoaded] = useState(false);
+    const [selectedFichaId, setSelectedFichaId] = useState<string | null>(null);
     const [inscriptionCountByCategory, setInscriptionCountByCategory] = useState<Record<string, number>>({});
     /** Mis filas en este torneo (para no duplicar la misma categoría). */
     const [myInscriptionsInTournament, setMyInscriptionsInTournament] = useState<
@@ -219,19 +221,39 @@ export default function InscribirmePage() {
         let cancelled = false;
         dataService.getMyParticipants(user.uid).then((list) => {
             if (cancelled) return;
-            const first = list?.[0];
-            if (first) {
-                const gender = first.gender === 'MALE' || first.gender === 'FEMALE' ? first.gender : undefined;
-                const birthDate = typeof first.birthDate === 'string' ? first.birthDate : undefined;
+            const rows = list || [];
+            setMyFichas(rows);
+            setFichasLoaded(true);
+            const pick =
+                (selectedFichaId && rows.find((p: any) => p.id === selectedFichaId)) ||
+                rows[0] ||
+                null;
+            if (pick) {
+                const gender = pick.gender === 'MALE' || pick.gender === 'FEMALE' ? pick.gender : undefined;
+                const birthDate = typeof pick.birthDate === 'string' ? pick.birthDate : undefined;
+                setSelectedFichaId(pick.id);
                 setPlayerProfile({ gender, birthDate });
             } else {
                 setPlayerProfile(null);
+                setSelectedFichaId(null);
             }
         }).catch(() => {
-            if (!cancelled) setPlayerProfile(null);
+            if (!cancelled) {
+                setMyFichas([]);
+                setFichasLoaded(true);
+                setPlayerProfile(null);
+            }
         });
         return () => { cancelled = true; };
     }, [user?.uid]);
+
+    useEffect(() => {
+        if (authLoading || !user || !fichasLoaded || !tournamentId) return;
+        if (myFichas.length === 0) {
+            const next = `/tournaments/${tournamentId}/inscribirme`;
+            router.replace(`/players/register?next=${encodeURIComponent(next)}`);
+        }
+    }, [authLoading, user, fichasLoaded, myFichas.length, tournamentId, router]);
 
     useEffect(() => {
         if (!tournamentId) return;
@@ -274,10 +296,11 @@ export default function InscribirmePage() {
     }, [tournamentId, tournament?.inscriptionCategories, user?.uid]);
 
     useEffect(() => {
-        if (!authLoading && !user) {
-            router.replace('/login?from=inscribirme');
+        if (!authLoading && !user && tournamentId) {
+            const next = `/tournaments/${tournamentId}/inscribirme`;
+            router.replace(`/login?next=${encodeURIComponent(next)}`);
         }
-    }, [user, authLoading, router]);
+    }, [user, authLoading, router, tournamentId]);
 
     // Consultar si yo envié alguna invitación pendiente en este torneo
     useEffect(() => {
@@ -441,8 +464,8 @@ export default function InscribirmePage() {
             }
             setPartnerError('Jugador no encontrado. Verifique el código.');
             return false;
-        } catch (err) {
-            setPartnerError('Error al buscar el jugador.');
+        } catch (err: any) {
+            setPartnerError(err?.message || 'Error al buscar el jugador.');
             console.error(err);
             return false;
         } finally {
@@ -498,6 +521,10 @@ export default function InscribirmePage() {
     const handleWizardNext = async () => {
         setError(null);
         if (wizardStep === 0) {
+            if (myFichas.length > 1 && !selectedFichaId) {
+                setError('Elige con qué ficha te inscribes.');
+                return;
+            }
             if (selectedCategories.size === 0) {
                 setError('Selecciona al menos una categoría.');
                 return;
@@ -590,27 +617,38 @@ export default function InscribirmePage() {
             return;
         }
 
-        let fromPad: LegalAcceptPayload | null = null;
-        try {
-            fromPad = (await legalInscriptionRef.current?.submitSignature()) ?? null;
-        } catch (e: any) {
-            setError(e?.message || 'Error al guardar la firma o el consentimiento legal.');
-            return;
+        let effectiveLegal: { signaturePath: string | null; biometricPath: string | null; version: string } | null =
+            null;
+        if (hasCurrentLegalAccepted) {
+            effectiveLegal = legalArtifacts || {
+                signaturePath: profile?.signatureUrl ?? profile?.signature_url ?? null,
+                biometricPath: profile?.biometricPhotoUrl ?? profile?.biometric_photo_url ?? null,
+                version: acceptedProfileVersion || CURRENT_TERMS_VERSION,
+            };
+        } else {
+            let fromPad: LegalAcceptPayload | null = null;
+            try {
+                fromPad = (await legalInscriptionRef.current?.submitSignature()) ?? null;
+            } catch (e: any) {
+                setError(e?.message || 'Error al guardar la firma o el consentimiento legal.');
+                return;
+            }
+            effectiveLegal =
+                fromPad != null
+                    ? {
+                          signaturePath: fromPad.signaturePath,
+                          biometricPath: fromPad.biometricPath,
+                          version: fromPad.version,
+                      }
+                    : legalArtifacts;
+            if (!effectiveLegal) {
+                setError(
+                    'Debes completar la firma digital, la validación facial y el botón «Aceptar y continuar» en el contrato antes de inscribirte.',
+                );
+                return;
+            }
         }
-        const effectiveLegal =
-            fromPad != null
-                ? {
-                      signaturePath: fromPad.signaturePath,
-                      biometricPath: fromPad.biometricPath,
-                      version: fromPad.version,
-                  }
-                : legalArtifacts;
-        if (!effectiveLegal) {
-            setError(
-                'Debes completar la firma digital, la validación facial y el botón «Aceptar y continuar» en el contrato antes de inscribirte.',
-            );
-            return;
-        }
+        if (!effectiveLegal) return;
         const needsRef = totalPrice > 0 && (paymentData.method === 'Pago Móvil' || paymentData.method === 'Transferencia Bancaria');
         if (needsRef && !paymentData.reference?.trim()) {
             setError('Indica la referencia o número de confirmación del pago (aparece en tu comprobante de Pago Móvil o transferencia).');
@@ -623,9 +661,17 @@ export default function InscribirmePage() {
         try {
             const participantName = profile?.name || user.displayName || user.email || 'Jugador';
             const participantEmail = user.email || undefined;
-            const myParticipants = await dataService.getMyParticipants(user.uid);
-            const participantRecord = myParticipants?.[0];
-            const participantId = participantRecord?.id ?? undefined;
+            const myParticipants = myFichas.length ? myFichas : await dataService.getMyParticipants(user.uid);
+            const participantRecord =
+                (selectedFichaId && myParticipants.find((p: any) => p.id === selectedFichaId)) ||
+                myParticipants[0] ||
+                null;
+            if (!participantRecord?.id) {
+                const next = `/tournaments/${tournamentId}/inscribirme`;
+                router.replace(`/players/register?next=${encodeURIComponent(next)}`);
+                throw new Error('Completa tu ficha de jugador antes de inscribirte.');
+            }
+            const participantId = participantRecord.id as string;
 
             let bcvVesPerUsd: number | undefined;
             try {
@@ -638,7 +684,132 @@ export default function InscribirmePage() {
                 /* validación cae a solo cifra vs cifra */
             }
 
-            // Registrar un único log antifraude por referencia para que aparezca en Admin/Pagos.
+            for (const key of selectedCategories) {
+                const cat = categories.find((c) => c.key === key);
+                if (!cat) continue;
+
+                const amountPaid = paymentData.amount ? parseFloat(String(paymentData.amount).replace(',', '.')) : undefined;
+                const verification = resolveManualInscriptionPaymentStatus({
+                    categoryPrice: cat.price,
+                    amountExtracted: amountPaid,
+                    bcvVesPerUsd: bcvVesPerUsd ?? undefined,
+                });
+
+                const { id: inscriptionId } = await dataService.addInscription(
+                    {
+                        tournamentId,
+                        tournamentName: tournament.name,
+                        categoryKey: cat.key,
+                        categoryPrice: cat.price,
+                        participantName,
+                        participantEmail,
+                        participantId,
+                        paymentStatus: verification.paymentStatus,
+                        alertMessage: verification.alertMessage || undefined,
+                        paymentMethod: paymentData.method,
+                        paymentBank: paymentData.bank,
+                        paymentDate: paymentData.date,
+                        paymentAmount: amountPaid,
+                        paymentReference: paymentData.reference,
+                        receiptUrl: paymentData.receiptUrl || undefined,
+                        partnerId: currentPartner?.id,
+                        partnerName: currentPartner?.name,
+                        legalSignaturePath: effectiveLegal.signaturePath,
+                        legalBiometricPath: effectiveLegal.biometricPath,
+                        acceptedTermsVersion: effectiveLegal.version,
+                    },
+                    user.uid
+                );
+
+                if (!isIndividual && currentPartner?.id) {
+                    try {
+                        await dataService.setInscriptionAwaitingPartnerConfirmation(
+                            inscriptionId,
+                            currentPartner.id
+                        );
+                    } catch (markErr: any) {
+                        throw new Error(
+                            markErr?.message ||
+                                'La inscripción se creó, pero no se pudo marcar para confirmación del compañero.'
+                        );
+                    }
+                }
+
+                let tournamentTeamId: string | null = null;
+                const participantInfo = {
+                    id: participantId,
+                    name: participantRecord?.name || participantName,
+                    lastName: participantRecord?.lastName || '',
+                };
+
+                let partnerInfo: { id: string; name: string; lastName?: string } | null = null;
+                if (currentPartner && currentPartner.id) {
+                    partnerInfo = {
+                        id: currentPartner.id,
+                        name: currentPartner.name,
+                        lastName: (currentPartner as any).lastName || '',
+                    };
+                }
+
+                try {
+                    tournamentTeamId = await dataService.syncTeamsFromInscription(
+                        tournamentId,
+                        participantInfo,
+                        partnerInfo
+                    );
+                } catch (syncErr: any) {
+                    throw new Error(
+                        syncErr?.message ||
+                            'La inscripción se creó, pero no se pudo sincronizar el equipo del torneo.'
+                    );
+                }
+
+                if (!isIndividual && currentPartner && currentPartner.id) {
+                    let inv: { id: string };
+                    try {
+                        inv = await dataService.createTeamInvitation(
+                            tournamentId,
+                            cat.key,
+                            user.uid,
+                            currentPartner.id,
+                            tournamentTeamId ?? undefined
+                        );
+                    } catch (invErr: any) {
+                        throw new Error(
+                            invErr?.message ||
+                                'La inscripción se creó, pero no se pudo enviar la invitación al compañero.'
+                        );
+                    }
+                    if (!inv?.id) {
+                        throw new Error('La inscripción se creó, pero no se pudo enviar la invitación al compañero.');
+                    }
+                    setPendingInvitation({
+                        ...inv,
+                        partner_name: currentPartner.name
+                    });
+                    try {
+                        const inviterFirst = String(participantName || 'Jugador')
+                            .trim()
+                            .split(/\s+/)[0];
+                        const whRes = await fetch('/api/invitations/send-partner-whatsapp', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+                            body: JSON.stringify({
+                                teamId: inv.id,
+                                tournamentDisplayName: tournament.name,
+                                inviterFirstName: inviterFirst,
+                            }),
+                        });
+                        if (!whRes.ok) {
+                            const j = await whRes.json().catch(() => ({}));
+                            console.warn('WhatsApp a compañero no enviado:', (j as { error?: string })?.error || whRes.status);
+                        }
+                    } catch (waErr) {
+                        console.warn('Error al enviar WhatsApp a compañero:', waErr);
+                    }
+                }
+            }
+
             if (totalPrice > 0 && paymentData.reference?.trim()) {
                 const amountInput = paymentData.amount
                     ? parseFloat(String(paymentData.amount).replace(',', '.'))
@@ -666,146 +837,10 @@ export default function InscribirmePage() {
                 });
                 if (!paymentLogRes.ok) {
                     const j = await paymentLogRes.json().catch(() => ({} as { error?: string }));
-                    throw new Error(j?.error || 'No se pudo registrar el comprobante de pago.');
-                }
-            }
-
-            for (const key of selectedCategories) {
-                const cat = categories.find((c) => c.key === key);
-                if (!cat) continue;
-
-                const amountPaid = paymentData.amount ? parseFloat(String(paymentData.amount).replace(',', '.')) : undefined;
-                const verification = cat.price > 0 && amountPaid != null
-                    ? validatePaymentAgainstCategoryPrice({
-                          amountExtracted: amountPaid,
-                          categoryPrice: cat.price,
-                          bcvVesPerUsd: bcvVesPerUsd ?? undefined,
-                      })
-                    : cat.price === 0 ? { paymentStatus: 'paid' as const, alertMessage: null } : { paymentStatus: 'pending' as const, alertMessage: null };
-
-                const { id: inscriptionId } = await dataService.addInscription(
-                    {
-                        tournamentId,
-                        tournamentName: tournament.name,
-                        categoryKey: cat.key,
-                        categoryPrice: cat.price,
-                        participantName,
-                        participantEmail,
-                        participantId,
-                        paymentStatus: cat.price === 0 ? 'paid' : verification.paymentStatus,
-                        alertMessage: verification.alertMessage || undefined,
-                        paymentMethod: paymentData.method,
-                        paymentBank: paymentData.bank,
-                        paymentDate: paymentData.date,
-                        paymentAmount: amountPaid,
-                        paymentReference: paymentData.reference,
-                        receiptUrl: paymentData.receiptUrl || undefined,
-                        partnerId: currentPartner?.id,
-                        partnerName: currentPartner?.name,
-                        legalSignaturePath: effectiveLegal.signaturePath,
-                        legalBiometricPath: effectiveLegal.biometricPath,
-                        acceptedTermsVersion: effectiveLegal.version,
-                    },
-                    user.uid
-                );
-
-                if (!isIndividual && currentPartner?.id) {
-                    try {
-                        await dataService.setInscriptionAwaitingPartnerConfirmation(
-                            inscriptionId,
-                            currentPartner.id
-                        );
-                    } catch (markErr) {
-                        console.error('No se pudo marcar la inscripción para confirmación del compañero:', markErr);
-                    }
-                }
-
-                // Sincronizar equipos del torneo (se guarda el id para enlazarlo con la invitación del compañero)
-                let tournamentTeamId: string | null = null;
-                if (participantId) {
-                    const participantInfo = {
-                        id: participantId,
-                        name: participantRecord?.name || participantName,
-                        lastName: participantRecord?.lastName || '',
-                    };
-
-                    let partnerInfo: { id: string; name: string; lastName?: string } | null = null;
-                    if (currentPartner && currentPartner.id) {
-                        partnerInfo = {
-                            id: currentPartner.id,
-                            name: currentPartner.name,
-                            lastName: (currentPartner as any).lastName || '',
-                        };
-                    }
-
-                    try {
-                        tournamentTeamId = await dataService.syncTeamsFromInscription(
-                            tournamentId,
-                            participantInfo,
-                            partnerInfo
-                        );
-                    } catch (syncErr) {
-                        console.error('Error syncing teams from inscription:', syncErr);
-                    }
-                }
-
-                // Also create a team record/invitation (solo si el compañero tiene id real), enlazando el equipo del torneo
-                if (!isIndividual && currentPartner && currentPartner.id) {
-                    const inv = await dataService.createTeamInvitation(
-                        tournamentId,
-                        cat.key,
-                        user.uid,
-                        currentPartner.id,
-                        tournamentTeamId ?? undefined
+                    throw new Error(
+                        j?.error ||
+                            'Tu inscripción se creó, pero no se pudo registrar el comprobante de pago. Revisa el monto e inténtalo de nuevo desde el organizador.'
                     );
-                    setPendingInvitation({
-                        ...inv,
-                        partner_name: currentPartner.name
-                    });
-                    try {
-                        const inviterFirst = String(participantName || 'Jugador')
-                            .trim()
-                            .split(/\s+/)[0];
-                        const whRes = await fetch('/api/invitations/send-partner-whatsapp', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
-                            body: JSON.stringify({
-                                teamId: inv.id,
-                                tournamentDisplayName: tournament.name,
-                                inviterFirstName: inviterFirst,
-                            }),
-                        });
-                        if (!whRes.ok) {
-                            const j = await whRes.json().catch(() => ({}));
-                            console.warn('WhatsApp a compañero no enviado:', (j as { error?: string })?.error || whRes.status);
-                        }
-                    } catch (waErr) {
-                        console.warn('Error al enviar WhatsApp a compañero:', waErr);
-                    }
-                    if (isTestPartnerUserId(currentPartner.id)) {
-                        try {
-                            const ac = await fetch('/api/inscriptions/auto-confirm-test-partner', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    ...(await getAuthHeaders()),
-                                },
-                                body: JSON.stringify({
-                                    teamId: inv.id,
-                                    inscriptionId,
-                                }),
-                            });
-                            if (!ac.ok) {
-                                const j = await ac.json().catch(() => ({}));
-                                console.warn(
-                                    'Auto-confirmación pareja de prueba 888888:',
-                                    (j as { error?: string })?.error || ac.status
-                                );
-                            }
-                        } catch (acErr) {
-                            console.warn('Auto-confirm test partner:', acErr);
-                        }
-                    }
                 }
             }
 
@@ -860,20 +895,7 @@ export default function InscribirmePage() {
         }
     };
 
-    const handleProfileClick = async () => {
-        if (!user?.uid) {
-            router.push('/login');
-            return;
-        }
-        const participants = await dataService.getMyParticipants(user.uid);
-        if (participants.length > 0) {
-            router.push('/mi-cuenta');
-        } else {
-            router.push('/players/register');
-        }
-    };
-
-    if (authLoading || loading) {
+    if (authLoading || loading || (user && !fichasLoaded) || (fichasLoaded && myFichas.length === 0)) {
         return (
             <div className="ipad-screen-container bg-[#0a0a0a] text-white flex items-center justify-center">
                 <Loader2 className="w-10 h-10 text-[#ccff00] animate-spin" />
@@ -980,12 +1002,17 @@ export default function InscribirmePage() {
                                     <p className="text-gray-400 text-sm mb-4">
                                         Para inscribirte, necesitamos tu <strong>sexo</strong> y <strong>fecha de nacimiento</strong>. Así solo verás categorías que correspondan a tu perfil (edad y género).
                                     </p>
-                                    <button
-                                        onClick={handleProfileClick}
+                                    <Link
+                                        href={`/players/register?${new URLSearchParams({
+                                            ...(selectedFichaId || myFichas[0]?.id
+                                                ? { edit: String(selectedFichaId || myFichas[0].id) }
+                                                : {}),
+                                            next: `/tournaments/${tournamentId}/inscribirme`,
+                                        }).toString()}`}
                                         className="inline-block px-5 py-3 rounded-2xl bg-[#ccff00] text-black font-black text-sm uppercase"
                                     >
-                                        Ir a Mis datos / Registrar jugador
-                                    </button>
+                                        Completar ficha de jugador
+                                    </Link>
                                     <Link href={`/tournaments/${tournamentId}`} className="block mt-3 text-[#ccff00] text-sm font-bold">
                                         Volver al torneo
                                     </Link>
@@ -1026,6 +1053,43 @@ export default function InscribirmePage() {
                                     )}
                                     {wizardStep === 0 && (
                                     <section className="mb-8">
+                                        {myFichas.length > 1 && (
+                                            <div className="mb-6 space-y-2">
+                                                <h2 className="mb-2 text-xs font-black uppercase tracking-widest text-[#ccff00]">
+                                                    ¿Con qué ficha te inscribes?
+                                                </h2>
+                                                <div className="space-y-2">
+                                                    {myFichas.map((ficha: any) => {
+                                                        const label = [ficha.name, ficha.lastName].filter(Boolean).join(' ').trim() || ficha.fullName || 'Jugador';
+                                                        return (
+                                                            <label
+                                                                key={ficha.id}
+                                                                className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-3 ${
+                                                                    selectedFichaId === ficha.id
+                                                                        ? 'border-[#ccff00]/40 bg-[#ccff00]/10'
+                                                                        : 'border-white/10 bg-white/5'
+                                                                }`}
+                                                            >
+                                                                <input
+                                                                    type="radio"
+                                                                    name="ficha"
+                                                                    checked={selectedFichaId === ficha.id}
+                                                                    onChange={() => {
+                                                                        setSelectedFichaId(ficha.id);
+                                                                        const gender = ficha.gender === 'MALE' || ficha.gender === 'FEMALE' ? ficha.gender : undefined;
+                                                                        const birthDate = typeof ficha.birthDate === 'string' ? ficha.birthDate : undefined;
+                                                                        setPlayerProfile({ gender, birthDate });
+                                                                        setSelectedCategories(new Set());
+                                                                    }}
+                                                                    className="h-4 w-4 accent-[#ccff00]"
+                                                                />
+                                                                <span className="text-sm font-bold">{label}</span>
+                                                            </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                         <h2 className="mb-3 text-xs font-black uppercase tracking-widest text-[#ccff00]">
                                             Elige categorías (según tu edad y sexo)
                                         </h2>

@@ -104,13 +104,14 @@ export async function getLastPartners(currentUserId: string): Promise<LastPartne
   if (uniquePartnerIds.length === 0) return [];
 
   // 4) Nombres y fotos: profiles (name) y participants (data.photo) por owner_id
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, name')
-    .in('id', uniquePartnerIds);
+  const { data: profiles } = await supabase.rpc('lookup_profiles_display', {
+    p_ids: uniquePartnerIds,
+  });
 
   const profileMap = new Map<string, { name: string }>();
-  (profiles || []).forEach((p: any) => profileMap.set(p.id, { name: (p.name || '').trim() || 'Jugador' }));
+  (profiles || []).forEach((p: any) =>
+    profileMap.set(p.id, { name: (p.display_name || '').trim() || 'Jugador' })
+  );
 
   const { data: participants } = await supabase
     .from('participants')

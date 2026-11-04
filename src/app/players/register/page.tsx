@@ -6,27 +6,29 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Camera,
     User,
-    Instagram,
-    Phone,
-    ArrowRight,
     Shirt,
     Footprints,
     Upload,
     X,
-    HeartPulse,
     AlertCircle,
     Stethoscope,
     Save,
     RefreshCw,
-    Target,
     Award,
     CircleDot
 } from 'lucide-react';
 import { dataService } from '@/lib/dataService';
 import { getAuthHeaders } from '@/lib/apiAuth';
 import { useAuth } from '@/lib/AuthContext';
-import { formatDNI } from '@/lib/formatters';
-import Sidebar from '@/components/Sidebar';
+import { persistPlayerPhoto } from '@/lib/playerPhoto';
+import {
+    formatVeCedulaInput,
+    isValidBirthDate,
+    isValidPersonName,
+    isValidVeCedula,
+    isValidVeMobile,
+} from '@/lib/veIdentity';
+import { getSupabaseClient } from '@/lib/supabase/client';
 import { BackButton } from '@/components/BackButton';
 import LegalModal from '@/components/legal/LegalModal';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal/termsVersion';
@@ -37,7 +39,9 @@ function RegistrationFormContent() {
     const searchParams = useSearchParams();
     const editId = searchParams.get('edit');
     const fromMisDatos = searchParams.get('mis-datos') === '1';
+    const nextPathRaw = searchParams.get('next');
     const { user, loading: authLoading, profile } = useAuth();
+    const [formError, setFormError] = useState<string | null>(null);
 
     const [loading, setLoading] = useState(false);
     const [fetching, setFetching] = useState(false);
@@ -114,6 +118,15 @@ function RegistrationFormContent() {
     }, [editId, authLoading, user]);
 
     useEffect(() => {
+        if (authLoading) return;
+        if (!user) {
+            const qs = searchParams.toString();
+            const dest = `/players/register${qs ? `?${qs}` : ''}`;
+            router.replace(`/login?next=${encodeURIComponent(dest)}`);
+        }
+    }, [authLoading, user, router, searchParams]);
+
+    useEffect(() => {
         const acceptedVersion =
             profile?.acceptedTermsVersion ??
             profile?.accepted_terms_version ??
@@ -128,7 +141,7 @@ function RegistrationFormContent() {
 
     const updateField = (field: string, value: any) => {
         if (field === 'dni') {
-            setFormData(prev => ({ ...prev, [field]: formatDNI(value) }));
+            setFormData(prev => ({ ...prev, [field]: formatVeCedulaInput(value) }));
         } else {
             setFormData(prev => ({ ...prev, [field]: value }));
         }
@@ -190,34 +203,75 @@ function RegistrationFormContent() {
     };
 
     // --- SAVE LOGIC ---
+    const goAfterSave = (playerId: string) => {
+        const next = nextPathRaw && nextPathRaw.startsWith('/') && !nextPathRaw.startsWith('//') && !nextPathRaw.includes('://')
+            ? nextPathRaw
+            : null;
+        if (next) {
+            router.push(next);
+        } else if (fromMisDatos) {
+            router.push('/mi-cuenta');
+        } else {
+            router.push(`/players/${playerId}`);
+        }
+    };
+
     const handleSave = async () => {
         if (!user) {
-            alert('Debes iniciar sesión para registrar jugadores');
+            const qs = searchParams.toString();
+            const dest = `/players/register${qs ? `?${qs}` : ''}`;
+            router.replace(`/login?next=${encodeURIComponent(dest)}`);
             return;
         }
 
-        if (!formData.name) {
-            alert('El nombre es obligatorio');
+        if (!isValidPersonName(formData.name)) {
+            setFormError('El nombre es obligatorio (solo letras, mínimo 2 caracteres).');
+            return;
+        }
+        if (!isValidPersonName(formData.lastName)) {
+            setFormError('El apellido es obligatorio (solo letras, mínimo 2 caracteres).');
+            return;
+        }
+        if (formData.gender !== 'MALE' && formData.gender !== 'FEMALE') {
+            setFormError('Selecciona el sexo.');
+            return;
+        }
+        if (!isValidBirthDate(formData.birthDate)) {
+            setFormError('Indica una fecha de nacimiento válida (edad entre 5 y 100 años).');
+            return;
+        }
+        if (!isValidVeMobile(formData.phone)) {
+            setFormError('Indica un teléfono móvil venezolano válido (0412, 0414, 0416, 0422, 0424 o 0426).');
+            return;
+        }
+        if (!isValidVeCedula(formData.dni)) {
+            setFormError('Indica una cédula venezolana válida (V o E, 6 a 9 dígitos).');
             return;
         }
 
         if (!acceptedTerms) {
-            alert('Debes aceptar los términos y condiciones para continuar');
+            setFormError('Debes aceptar los términos y condiciones para continuar.');
             return;
         }
 
+        setFormError(null);
         setLoading(true);
         try {
-            if (formData.dni) {
-                const dniExists = await dataService.checkParticipantExistence('dni', formData.dni, editId || undefined);
-                if (dniExists) {
-                    alert('Esta cédula ya está registrada con otro jugador.');
-                    setLoading(false);
-                    return;
-                }
+            const dniExists = await dataService.checkParticipantExistence('dni', formData.dni, editId || undefined);
+            if (dniExists) {
+                setFormError('Esta cédula ya está registrada con otro jugador.');
+                setLoading(false);
+                return;
             }
 
-            if (acceptedTerms && user.uid) {
+            const termsAlreadyOk = !isProfileTermsStale(
+                profile?.acceptedTermsVersion ??
+                profile?.accepted_terms_version ??
+                profile?.legalVersion ??
+                profile?.legal_version ??
+                null
+            );
+            if (acceptedTerms && user.uid && !termsAlreadyOk) {
                 try {
                     await dataService.updateProfileLegalAcceptance(user.uid, {
                         acceptedTermsVersion: CURRENT_TERMS_VERSION,
@@ -229,23 +283,35 @@ function RegistrationFormContent() {
                 }
             }
 
-            console.log('[Registration] Intentando guardar con:', { userId: user.uid, editId });
+            let photoUrl = formData.photo || '';
+            if (photoUrl.startsWith('data:')) {
+                photoUrl = await persistPlayerPhoto(photoUrl, user.uid);
+            }
+
+            const payload = {
+                ...formData,
+                photo: photoUrl,
+                fullName: `${formData.name} ${formData.lastName}`.trim(),
+            };
 
             if (editId) {
                 await dataService.updateParticipant(editId, {
-                    ...formData,
-                    fullName: `${formData.name} ${formData.lastName}`.trim(),
+                    ...payload,
                     updatedAt: new Date()
                 });
                 alert('¡Perfil actualizado con éxito!');
-                router.push(`/players/${editId}`);
+                goAfterSave(editId);
             } else {
                 const result = await dataService.addParticipant({
-                    ...formData,
-                    fullName: `${formData.name} ${formData.lastName}`.trim(),
+                    ...payload,
                     registeredAt: new Date(),
                     status: 'Activo'
                 }, user.uid);
+                try {
+                    await getSupabaseClient()?.auth.updateUser({ data: { pending_ficha: false } });
+                } catch {
+                    /* metadata opcional */
+                }
 
                 // --- EMAIL NOTIFICATION (aviso al club) ---
                 try {
@@ -297,12 +363,12 @@ function RegistrationFormContent() {
                 }
 
                 alert('¡Jugador registrado con éxito!');
-                router.push(`/players/${result.id}`);
+                goAfterSave(result.id);
             }
         } catch (error: any) {
             console.error('Error saving player:', error);
             const detail = error.message || error.code || JSON.stringify(error);
-            alert(`Error al guardar: ${detail}. Por favor, verifica que las tablas en Supabase existan y que tengas permisos.`);
+            setFormError(`Error al guardar: ${detail}`);
         } finally {
             setLoading(false);
         }
@@ -312,7 +378,7 @@ function RegistrationFormContent() {
     const sizes = ['S', 'M', 'L', 'XL', 'XXL'];
     const bloodTypes = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
 
-    if (fetching) {
+    if (fetching || authLoading || !user) {
         return (
             <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
                 <div className="relative">
@@ -429,7 +495,7 @@ function RegistrationFormContent() {
                             <div className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-1">
-                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Nombres</label>
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Nombres *</label>
                                         <div className="relative group/input">
                                             <input
                                                 type="text"
@@ -442,7 +508,7 @@ function RegistrationFormContent() {
                                         </div>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Apellidos</label>
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Apellidos *</label>
                                         <input
                                             type="text"
                                             placeholder="Apellidos"
@@ -455,7 +521,7 @@ function RegistrationFormContent() {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div className="flex justify-between items-center pl-1">
-                                        <label className="text-[8px] font-black uppercase text-white tracking-widest">Cédula</label>
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest">Cédula *</label>
                                         <span className="text-[7px] text-zinc-600 italic font-bold">Teclea "E" para Extranjero o "V" para Venezolano</span>
                                     </div>
                                     <input
@@ -466,7 +532,7 @@ function RegistrationFormContent() {
                                         onChange={e => updateField('dni', e.target.value)}
                                     />
                                     <div className="space-y-1">
-                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Fecha de Nacimiento</label>
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">Fecha de Nacimiento *</label>
                                         <input
                                             type="date"
                                             className="w-full bg-zinc-950 border border-white/20 rounded-xl px-4 py-3 text-xs font-bold focus:border-padel-primary focus:bg-black outline-none transition-all h-[42px] [color-scheme:dark] text-white"
@@ -478,7 +544,7 @@ function RegistrationFormContent() {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div className="space-y-1">
-                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">WhatsApp</label>
+                                        <label className="text-[8px] font-black uppercase text-white tracking-widest pl-1">WhatsApp *</label>
                                         <input
                                             type="text"
                                             placeholder="+58 412 0000000"
@@ -538,7 +604,7 @@ function RegistrationFormContent() {
 
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="space-y-2">
-                                            <label className="text-[8px] font-black uppercase text-white tracking-widest text-center block">SEXO</label>
+                                            <label className="text-[8px] font-black uppercase text-white tracking-widest text-center block">SEXO *</label>
                                             <div className="grid grid-cols-2 gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
                                                 <button
                                                     key="MALE"
@@ -720,6 +786,13 @@ function RegistrationFormContent() {
                         </div>
 
                         {/* Terms and Conditions Checkbox */}
+                        {formError && (
+                            <div className="px-4 flex items-start gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 p-3">
+                                <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                                <p className="text-[11px] font-bold text-red-200">{formError}</p>
+                            </div>
+                        )}
+
                         {isProfileTermsStale(
                             profile?.acceptedTermsVersion ??
                             profile?.accepted_terms_version ??

@@ -25,6 +25,7 @@ import { useAppSettings } from '@/lib/AppSettingsContext';
 import { isAdminAccess } from '@/lib/adminAccess';
 import LegalModal from '@/components/legal/LegalModal';
 import { getAuthHeaders } from '@/lib/apiAuth';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
 export default function HomePage() {
     const { user, isAdmin, loading: authLoading, profileLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, forgotPassword, enableDevMode } = useAuth();
@@ -45,16 +46,17 @@ export default function HomePage() {
     const [smartConsentAccepted, setSmartConsentAccepted] = useState(false);
     const [smartConsentModalOpen, setSmartConsentModalOpen] = useState(false);
     const [smartConsentSaving, setSmartConsentSaving] = useState(false);
+    const [holdForFicha, setHoldForFicha] = useState(false);
 
     useEffect(() => {
-        if (!authLoading && user) {
+        if (!authLoading && user && !holdForFicha) {
             if (isAdmin) {
                 router.replace('/admin');
             } else if (!profileLoading) {
                 router.replace('/dashboard');
             }
         }
-    }, [authLoading, user, profileLoading, isAdmin, router]);
+    }, [authLoading, user, profileLoading, isAdmin, router, holdForFicha]);
 
     const handleGoogleSignIn = async () => {
         setLoading(true);
@@ -112,15 +114,29 @@ export default function HomePage() {
         try {
             if (isLogin) {
                 await signInWithEmail(formData.email, formData.password);
+                try {
+                    const meta = (await getSupabaseClient()?.auth.getUser())?.data?.user?.user_metadata;
+                    if (meta?.pending_ficha) {
+                        setHoldForFicha(true);
+                        router.push('/players/register');
+                        return;
+                    }
+                } catch {
+                    /* dashboard */
+                }
             } else {
                 if (!smartConsentAccepted) {
                     setError('Debes aceptar el acuerdo único (términos, privacidad e inscripción a torneos).');
                     setLoading(false);
                     return;
                 }
-                await signUpWithEmail(formData.email, formData.password, formData.name);
+                const signup = await signUpWithEmail(formData.email, formData.password, formData.name);
+                if (signup.needsEmailConfirmation) {
+                    setSuccess('Revisa tu correo para confirmar la cuenta. Cuando confirmes, inicia sesión y completa tu ficha de jugador.');
+                    setLoading(false);
+                    return;
+                }
 
-                // Persistimos el consentimiento legal
                 try {
                     let headers = await getAuthHeaders();
                     let tries = 0;
@@ -140,6 +156,9 @@ export default function HomePage() {
                 } catch (e) {
                     console.error('Error persisting legal consent:', e);
                 }
+                setHoldForFicha(true);
+                router.push('/players/register');
+                return;
             }
             const shouldGoAdmin = isAdmin || isAdminAccess(undefined, formData.email);
             router.push(shouldGoAdmin ? '/admin' : '/dashboard');
