@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/authServerSupabase';
+import { isServerAdminAccess } from '@/lib/adminAccess';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import {
     buildPizarraCanchaPayload,
@@ -57,7 +58,7 @@ export async function POST(req: Request, ctx: Ctx) {
     const canchaFromId = `cancha_${fromCourt}`;
 
     const isOwner = tRow.owner_id === auth.uid;
-    const isAdmin = role === 'admin';
+    const isAdmin = isServerAdminAccess(role, auth.email);
     const isMarkerHere = role === 'marker' && markerCanchas.includes(canchaFromId);
 
     if (!isOwner && !isAdmin && !isMarkerHere) {

@@ -164,7 +164,8 @@ function RegistrationFormContent() {
             }
         } catch (err) {
             console.error("Camera error:", err);
-            alert("No se pudo acceder a la cámara");
+            const { showToast } = await import('@/components/AppToast');
+            showToast('No se pudo acceder a la cámara', 'err');
             setIsCameraActive(false);
         }
     };
@@ -295,7 +296,8 @@ function RegistrationFormContent() {
                     ...payload,
                     updatedAt: new Date()
                 });
-                alert('¡Perfil actualizado con éxito!');
+                const { showToast } = await import('@/components/AppToast');
+                showToast('Perfil actualizado con éxito.');
                 goAfterSave(editId);
             } else {
                 const result = await dataService.addParticipant({
@@ -358,7 +360,8 @@ function RegistrationFormContent() {
                     console.warn('Aviso admin (WhatsApp):', adminErr);
                 }
 
-                alert('¡Jugador registrado con éxito!');
+                const { showToast } = await import('@/components/AppToast');
+                showToast('Jugador registrado con éxito.');
                 goAfterSave(result.id);
             }
         } catch (error: any) {

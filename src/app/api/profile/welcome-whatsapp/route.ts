@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/authServerSupabase';
+import { checkRateLimit } from '@/lib/rateLimit';
 import { sendProfileWelcomeMessage } from '@/services/whatsappService';
 import { sanitizeString } from '@/lib/apiValidation';
 
@@ -8,6 +9,9 @@ import { sanitizeString } from '@/lib/apiValidation';
  * Requiere sesión; el teléfono debe ser el del usuario (mismo flujo que el formulario de registro).
  */
 export async function POST(request: Request) {
+  if (!checkRateLimit(request, { max: 4, windowMs: 60_000, bucket: 'welcome-whatsapp' })) {
+    return NextResponse.json({ error: 'Demasiados envíos. Intenta más tarde.' }, { status: 429 });
+  }
   const auth = await requireAuth(request);
   if (auth instanceof NextResponse) return auth;
 

@@ -79,6 +79,9 @@ export default function LoginPage() {
         if (searchParams.get('confirmed') === '1') {
             setSuccess('Correo confirmado. Inicia sesión para completar tu ficha de jugador.');
             setIsLogin(true);
+        } else if (searchParams.get('reset') === '1') {
+            setSuccess('Contraseña actualizada. Inicia sesión con tu nueva clave.');
+            setIsLogin(true);
         }
     }, [searchParams]);
 
@@ -122,17 +125,18 @@ export default function LoginPage() {
     };
 
     const handleForgotPassword = async () => {
-        if (!formData.email) {
-            setError('Ingresa tu email para restablecer la contraseña.');
+        if (!isValidEmail(formData.email)) {
+            setError('Ingresa un correo electrónico válido para restablecer la contraseña.');
             return;
         }
         setLoading(true);
         setError(null);
         try {
             await forgotPassword(formData.email);
-            setSuccess('Email de recuperación enviado. Revisa tu bandeja de entrada.');
+            setSuccess('Email de recuperación enviado. Revisa tu bandeja de entrada (y spam). El enlace abre /reset-password.');
         } catch (err: any) {
-            setError('Error al enviar el correo de recuperación.');
+            console.error('[Login] forgotPassword', err);
+            setError(getAuthErrorMessage(err) || 'Error al enviar el correo de recuperación.');
         } finally {
             setLoading(false);
         }

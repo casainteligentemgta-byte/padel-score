@@ -131,8 +131,8 @@ export default function MiCuentaPage() {
             const list = await dataService.getMyInvitations(user!.uid);
             setInvitations(list);
             if (status === 'accepted') {
-                // Si aceptó, tal vez redirigir o mostrar éxito
-                alert('¡Invitación aceptada con éxito! Ya estás inscrito.');
+                const { showToast } = await import('@/components/AppToast');
+                showToast('Invitación aceptada. Tu pareja quedó confirmada.');
             }
         } catch (err: any) {
             setError(err.message || 'Error al procesar la invitación.');

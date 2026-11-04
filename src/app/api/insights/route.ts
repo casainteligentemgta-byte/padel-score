@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/authServerSupabase';
+import { isGuardResponse, requireAdmin } from '@/lib/apiGuard';
 import { checkRateLimit } from '@/lib/rateLimit';
 
 export async function GET(req: Request) {
     if (!checkRateLimit(req)) {
         return NextResponse.json({ error: 'Demasiadas solicitudes de informes. Intenta más tarde.' }, { status: 429 });
     }
-    const authResult = await requireAuth(req);
-    if (authResult instanceof NextResponse) return authResult;
+    const authResult = await requireAdmin(req);
+    if (isGuardResponse(authResult)) return authResult;
     try {
         const { dataService } = await import('@/lib/dataService');
         const [tournaments, expenses, players] = await Promise.all([

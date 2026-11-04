@@ -17,7 +17,14 @@ export function createClient(): SupabaseClient {
         throw new Error(errorMsg);
     }
     if (!client) {
-        client = createSupabaseClient(supabaseUrl, supabaseAnonKey);
+        client = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: true,
+                flowType: 'pkce',
+            },
+        });
     }
     return client;
 }
@@ -27,6 +34,15 @@ export function getSupabaseClient(): SupabaseClient | null {
     if (!supabaseUrl || !supabaseAnonKey) {
         return null;
     }
-    if (!client) client = createSupabaseClient(supabaseUrl, supabaseAnonKey);
+    if (!client) {
+        client = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: true,
+                flowType: 'pkce',
+            },
+        });
+    }
     return client;
 }

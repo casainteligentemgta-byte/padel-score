@@ -7,13 +7,29 @@ import RootErrorBoundary from "./RootErrorBoundary";
 import { InstallAppBanner } from "@/components/InstallAppBanner";
 import { TermsReacceptanceGate } from "@/components/TermsReacceptanceGate";
 import { DevServiceWorkerReset } from "@/components/DevServiceWorkerReset";
+import { ToastHost } from "@/components/AppToast";
+import { PUBLIC_APP_ORIGIN } from "@/lib/brand";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
+    metadataBase: new URL(PUBLIC_APP_ORIGIN),
     title: "Smart Padel | Tournament Manager",
     description: "La plataforma inteligente para gestionar torneos de pádel.",
     manifest: "/manifest.json",
+    openGraph: {
+        title: "Smart Padel",
+        description: "Gestiona torneos de pádel en vivo: inscripciones, marcador y TV.",
+        url: PUBLIC_APP_ORIGIN,
+        siteName: "Smart Padel",
+        locale: "es_VE",
+        type: "website",
+    },
+    twitter: {
+        card: "summary",
+        title: "Smart Padel",
+        description: "Gestiona torneos de pádel en vivo: inscripciones, marcador y TV.",
+    },
     appleWebApp: {
         capable: true,
         statusBarStyle: "black-translucent",
@@ -58,6 +74,7 @@ export default function RootLayout({
                                     {children}
                                 </main>
                                 <InstallAppBanner />
+                                <ToastHost />
                             </AppSettingsProvider>
                         </TermsReacceptanceGate>
                     </AuthProvider>

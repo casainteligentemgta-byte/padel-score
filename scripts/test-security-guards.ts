@@ -14,7 +14,8 @@ import {
 } from '../src/lib/caracasTime';
 import { validateSignupPassword } from '../src/lib/authValidators';
 import { timingSafeEqualString } from '../src/lib/apiGuard';
-import { isAdminAccess, isLegacyAdminEmail } from '../src/lib/adminAccess';
+import { isAdminAccess, isLegacyAdminEmail, isServerAdminAccess } from '../src/lib/adminAccess';
+import { getPasswordRecoveryRedirectUrl, getPublicSiteUrl, PUBLIC_APP_ORIGIN } from '../src/lib/brand';
 import {
   amountsMatch,
   isMercadoPagoMethod,
@@ -221,6 +222,48 @@ run('migración 076 fuerza pending en INSERT', () => {
   assert.match(sql, /ALTER COLUMN payment_status SET DEFAULT 'pending'/);
   assert.match(sql, /inscriptions_force_manual_pending/);
   assert.match(sql, /BEFORE INSERT ON public.inscriptions/);
+});
+
+run('recuperación de contraseña usa SITE_URL canónico', () => {
+  const prevSite = process.env.NEXT_PUBLIC_SITE_URL;
+  const prevApp = process.env.NEXT_PUBLIC_APP_URL;
+  delete process.env.NEXT_PUBLIC_SITE_URL;
+  delete process.env.NEXT_PUBLIC_APP_URL;
+  assert.equal(getPublicSiteUrl(), PUBLIC_APP_ORIGIN);
+  assert.equal(getPasswordRecoveryRedirectUrl(), `${PUBLIC_APP_ORIGIN}/reset-password`);
+  process.env.NEXT_PUBLIC_SITE_URL = 'https://smartpadel58.com/';
+  assert.equal(getPasswordRecoveryRedirectUrl(), 'https://smartpadel58.com/reset-password');
+  if (prevSite === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+  else process.env.NEXT_PUBLIC_SITE_URL = prevSite;
+  if (prevApp === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+  else process.env.NEXT_PUBLIC_APP_URL = prevApp;
+});
+
+run('admin de API prefiere ADMIN_EMAILS', () => {
+  const prevPublic = process.env.NEXT_PUBLIC_ADMIN_EMAILS;
+  const prevAdmin = process.env.ADMIN_EMAILS;
+  process.env.NEXT_PUBLIC_ADMIN_EMAILS = 'public@example.com';
+  process.env.ADMIN_EMAILS = 'server@example.com';
+  assert.equal(isServerAdminAccess('player', 'server@example.com'), true);
+  assert.equal(isServerAdminAccess('player', 'public@example.com'), false);
+  assert.equal(isServerAdminAccess('admin', 'x@y.com'), true);
+  delete process.env.ADMIN_EMAILS;
+  assert.equal(isServerAdminAccess('player', 'public@example.com'), true);
+  if (prevPublic === undefined) delete process.env.NEXT_PUBLIC_ADMIN_EMAILS;
+  else process.env.NEXT_PUBLIC_ADMIN_EMAILS = prevPublic;
+  if (prevAdmin === undefined) delete process.env.ADMIN_EMAILS;
+  else process.env.ADMIN_EMAILS = prevAdmin;
+});
+
+run('migración 077 confirma inscripción reservada', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const sql = readFileSync(
+    join(here, '../supabase/migrations/077_confirm_reserved_inscription.sql'),
+    'utf8'
+  );
+  assert.match(sql, /confirm_reserved_inscription/);
+  assert.match(sql, /inscription_status = 'CONFIRMED'/);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION public.confirm_reserved_inscription/);
 });
 
 console.log('Todos los guards de seguridad OK');

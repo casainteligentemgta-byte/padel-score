@@ -18,11 +18,15 @@ export async function POST(req: Request) {
 
     try {
         const { to, guestName, tournamentName } = await req.json();
+        const dest = String(to || '').trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dest)) {
+            return NextResponse.json({ error: 'Destino de correo inválido.' }, { status: 400 });
+        }
         const hubUrl = `${getAppBaseUrl()}/dashboard`;
 
         await resend.emails.send({
             from: process.env.RESEND_FROM_EMAIL || 'Smart Padel <onboarding@resend.dev>',
-            to: [to],
+            to: [dest],
             subject: `🎾 ¡Pareja Confirmada! - ${tournamentName}`,
             react: PartnerConfirmedEmail({ guestName, tournamentName, hubUrl }),
         });

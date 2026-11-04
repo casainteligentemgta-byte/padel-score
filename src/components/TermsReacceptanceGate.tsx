@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { firstAcceptedTermsVersion, isProfileTermsStale } from '@/lib/legal/termsVersion';
 import { TermsReacceptanceOverlay } from '@/components/legal/TermsReacceptanceOverlay';
 
-const PUBLIC_PATH_PREFIXES = ['/login', '/auth', '/confirmar', '/players/register'];
+const PUBLIC_PATH_PREFIXES = ['/login', '/auth', '/confirmar', '/players/register', '/reset-password'];
 
 function shouldBypassTermsGate(pathname: string | null): boolean {
     if (!pathname) return true;
@@ -26,7 +26,7 @@ export function TermsReacceptanceGate({ children }: { children: React.ReactNode 
     );
 
     useEffect(() => {
-        if (user && !profileLoading) {
+        if (process.env.NODE_ENV === 'development' && user && !profileLoading) {
             const stale = isProfileTermsStale(resolvedAcceptedVersion);
             console.log('[TermsGate] User:', user.email, 'ProfileVersion:', resolvedAcceptedVersion, 'Stale:', stale);
         }
