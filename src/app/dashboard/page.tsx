@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Home, Trophy, Medal, User, QrCode, X, Swords, TrendingUp, Flame } from 'lucide-react';
+import { Home, Trophy, Medal, User, QrCode, X, Swords, TrendingUp, Flame, Bell } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
@@ -163,10 +163,18 @@ export default function DashboardPage() {
                 <button
                     type="button"
                     onClick={() => setQrOpen(true)}
-                    className="mb-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-[#CCFF00] bg-[#CCFF00] px-4 py-3 font-black text-black"
+                    className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-[#CCFF00] bg-[#CCFF00] px-4 py-3 font-black text-black"
                 >
                     <QrCode className="h-4 w-4" />
                     QR Quick Access
+                </button>
+                <button
+                    type="button"
+                    onClick={() => router.push('/notifications')}
+                    className="mb-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-[#121212] px-4 py-3 font-black text-white"
+                >
+                    <Bell className="h-4 w-4 text-[#CCFF00]" />
+                    Avisos
                 </button>
 
                 <section className="mb-6 grid grid-cols-3 gap-2.5">

@@ -38,6 +38,7 @@ import { dataService } from '@/lib/dataService';
 import { getAuthHeaders } from '@/lib/apiAuth';
 import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 import { useRouter } from 'next/navigation';
+import { showToast } from '@/components/AppToast';
 import { addCalendarDays, caracasTodayDateString, caracasTodayPlusDays, toCaracasDateString } from '@/lib/caracasTime';
 
 // Colores fijos por formato (icono siempre a color)
@@ -283,13 +284,13 @@ export default function MasterGeneratorPage() {
 
         const maxSize = 5 * 1024 * 1024; // 5 MB
         if (file.size > maxSize) {
-            alert('El archivo es demasiado grande. Usa una imagen de menos de 5 MB.');
+            showToast('El archivo es demasiado grande. Usa una imagen de menos de 5 MB.', 'err');
             e.target.value = '';
             return;
         }
         const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
         if (!allowed.includes(file.type)) {
-            alert('Formato no válido. Usa JPG, PNG, GIF o WebP.');
+            showToast('Formato no válido. Usa JPG, PNG, GIF o WebP.', 'err');
             e.target.value = '';
             return;
         }
@@ -307,14 +308,14 @@ export default function MasterGeneratorPage() {
             const msg = (error?.message || String(error)).toLowerCase();
 
             if (msg.includes('row-level security') || msg.includes('rls') || msg.includes('policy') || msg.includes('new row violates row-level security policy')) {
-                alert('Storage bloqueado por políticas RLS. En Supabase: Storage → bucket "patrocinantes" → Policies → New policy: permite INSERT y SELECT para el bucket "patrocinantes". Mientras tanto puedes pegar la URL del logo en el campo de texto.');
+                showToast('Storage bloqueado por políticas RLS. En Supabase: Storage → bucket "patrocinantes" → Policies → New policy: permite INSERT y SELECT para el bucket "patrocinantes". Mientras tanto puedes pegar la URL del logo en el campo de texto.', 'err');
             } else if (msg.includes('bucket') || msg.includes('not found') || msg.includes('storage')) {
                 const bucket = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET?.trim() ? process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET : 'public';
-                alert(`Bucket "${bucket}" no encontrado. Comprueba en Supabase → Storage que exista un bucket con ese nombre exacto (minúsculas) y "Public bucket" activado.`);
+                showToast(`Bucket "${bucket}" no encontrado. Comprueba en Supabase → Storage que exista un bucket con ese nombre exacto (minúsculas) y "Public bucket" activado.`, 'err');
             } else if (msg.includes('configurado') || msg.includes('falta url') || msg.includes('falta anon key')) {
-                alert('Supabase no está configurado localmente. Revisa el archivo .env.local.');
+                showToast('Supabase no está configurado localmente. Revisa el archivo .env.local.', 'err');
             } else {
-                alert(`Error al subir el logo: ${error?.message || 'Error desconocido'}. Revisa la consola para más detalles o pega directamente una URL.`);
+                showToast(`Error al subir el logo: ${error?.message || 'Error desconocido'}. Revisa la consola para más detalles o pega directamente una URL.`, 'err');
             }
         } finally {
             setIsUploadingLogo(false);
@@ -345,10 +346,10 @@ export default function MasterGeneratorPage() {
             const path = `sponsors/${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
             const publicUrl = await dataService.uploadFile(file, path, 'patrocinantes');
             setEventData(prev => ({ ...prev, sponsorLogoUrl: publicUrl }));
-            alert('¡Imagen importada con éxito a tu galería!');
+            showToast('¡Imagen importada con éxito a tu galería!');
         } catch (error: any) {
             console.error('Error al subir desde URL:', error);
-            alert('No se pudo "subir" automáticamente desde esta URL debido a protecciones de seguridad del sitio externo (CORS). El logo se usará directamente desde su enlace original.');
+            showToast('No se pudo "subir" automáticamente desde esta URL debido a protecciones de seguridad del sitio externo (CORS). El logo se usará directamente desde su enlace original.', 'err');
         } finally {
             setIsUploadingLogo(false);
         }
@@ -538,12 +539,12 @@ export default function MasterGeneratorPage() {
 
     const handleGenerate = () => {
         if (eventData.categories.length === 0) {
-            alert('⚠️ Debes añadir al menos una categoría antes de generar el fixture.');
+            showToast('⚠️ Debes añadir al menos una categoría antes de generar el fixture.', 'err');
             return;
         }
         const totalTeams = eventData.categories.reduce((acc, c) => acc + (c.teams?.length || 0), 0);
         if (totalTeams < 2) {
-            alert('⚠️ Cada categoría necesita al menos 2 parejas para generar partidos.');
+            showToast('⚠️ Cada categoría necesita al menos 2 parejas para generar partidos.', 'err');
             return;
         }
 
@@ -572,14 +573,14 @@ export default function MasterGeneratorPage() {
 
                 if (result.totalMatches === 0) {
                     setIsGenerating(false);
-                    alert(
+                    showToast(
                         `⚠️ No se generaron partidos.\n\n` +
                         `Verifica:\n` +
                         `• Horario: ${eventData.dailyStartTime} - ${eventData.dailyEndTime}\n` +
                         `• Duración de partido: ${eventData.matchDurationMinutes} min\n` +
                         `• Debe haber al menos una franja que quepa.\n\n` +
                         `Revisa la consola (F12) para más detalles.`
-                    );
+                    , 'err');
                     return;
                 }
 
@@ -605,7 +606,7 @@ export default function MasterGeneratorPage() {
                 setStep(4);
             } catch (e: any) {
                 console.error('[handleGenerate] Error:', e);
-                alert('Error inesperado al generar: ' + e.message);
+                showToast('Error inesperado al generar: ' + e.message, 'err');
             } finally {
                 setIsGenerating(false);
             }
@@ -639,12 +640,12 @@ export default function MasterGeneratorPage() {
     };
 
     const handleFinalSave = async () => {
-        if (!user) return alert('Debes iniciar sesión para crear torneos');
+        if (!user) return showToast('Debes iniciar sesión para crear torneos', 'err');
         if (!user?.uid) {
-            alert('Sesión no detectada. Por favor, inicia sesión de nuevo.');
+            showToast('Sesión no detectada. Por favor, inicia sesión de nuevo.', 'err');
             return;
         }
-        if (generatedMatches.length === 0) return alert('No hay partidos generados para guardar');
+        if (generatedMatches.length === 0) return showToast('No hay partidos generados para guardar', 'err');
 
         setIsSaving(true);
         try {
@@ -762,10 +763,10 @@ export default function MasterGeneratorPage() {
             }
 
             if (results.length === 0) {
-                alert('No se pudo crear ningún torneo. Asegúrate de que cada categoría tenga partidos generados.');
+                showToast('No se pudo crear ningún torneo. Asegúrate de que cada categoría tenga partidos generados.', 'err');
                 return;
             }
-            alert(`¡Evento creado! Se guardaron ${results.length} torneo(s): ${results.map(r => r.name).join(', ')}`);
+            showToast(`¡Evento creado! Se guardaron ${results.length} torneo(s): ${results.map(r => r.name).join(', ')}`);
             router.push('/tournaments');
         } catch (error: any) {
             console.error('Error saving master event:', error);
@@ -773,13 +774,13 @@ export default function MasterGeneratorPage() {
             const msg = error?.message || String(error);
             const isPermission = code === 'permission-denied' || msg.toLowerCase().includes('permission');
             if (isPermission) {
-                alert(
+                showToast(
                     `Error de permisos (${code || 'permission-denied'}).\n\n` +
                     '• Cierra sesión, vuelve a entrar y prueba de nuevo.\n' +
                     '• Si sigue fallando, contacta al soporte técnico para verificar tus permisos de administrador.'
-                );
+                , 'err');
             } else {
-                alert(`Error al guardar: ${msg}`);
+                showToast(`Error al guardar: ${msg}`, 'err');
             }
         } finally {
             setIsSaving(false);
@@ -974,7 +975,7 @@ export default function MasterGeneratorPage() {
 
     const handleGeneratePoster = async () => {
         if (!posterData.title.trim()) {
-            alert('Indica el título del torneo para generar el póster.');
+            showToast('Indica el título del torneo para generar el póster.', 'err');
             return;
         }
         setIsGeneratingPoster(true);
@@ -1005,7 +1006,7 @@ export default function MasterGeneratorPage() {
             }
 
             if (res.status === 401 || res.status === 403) {
-                alert(j.error || 'No autorizado. Inicia sesión como administrador.');
+                showToast(j.error || 'No autorizado. Inicia sesión como administrador.', 'err');
                 return;
             }
 
@@ -1015,23 +1016,23 @@ export default function MasterGeneratorPage() {
 
             if (missingNanoKey) {
                 setPosterImage(generatePosterCanvasLocal());
-                alert(
+                showToast(
                     'Nano Banana 2: falta NANOPHOTO_API_KEY en el servidor (Vercel / .env). Se generó el póster simple en canvas.'
                 );
                 return;
             }
 
-            alert(j.error || `Nano Banana 2 no disponible (HTTP ${res.status}).`);
+            showToast(j.error || `Nano Banana 2 no disponible (HTTP ${res.status}).`, 'err');
         } catch (err: unknown) {
             try {
                 setPosterImage(generatePosterCanvasLocal());
-                alert(
+                showToast(
                     `Error de red con Nano Banana 2: ${err instanceof Error ? err.message : 'desconocido'}. Se usó el póster simple.`
-                );
+                , 'err');
             } catch (fallbackErr: unknown) {
-                alert(
+                showToast(
                     fallbackErr instanceof Error ? fallbackErr.message : 'No se pudo generar el póster.'
-                );
+                , 'err');
             }
         } finally {
             setIsGeneratingPoster(false);

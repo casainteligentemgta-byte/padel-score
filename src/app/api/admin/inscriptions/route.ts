@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isGuardResponse, requireAdmin } from '@/lib/apiGuard';
 import { sanitizeString } from '@/lib/apiValidation';
+import { notifyPlayerPaymentStatus, type PaymentNotifyStatus } from '@/lib/paymentApprovalNotify';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
 const UUID_RE =
@@ -61,9 +62,47 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: 'Sin cambios' }, { status: 400 });
     }
 
+    const { data: previous, error: prevErr } = await supabase
+        .from('inscriptions')
+        .select('id, participant_name, participant_email, tournament_name, owner_id, user_id, participant_id, payment_status, data')
+        .eq('id', id)
+        .maybeSingle();
+    if (prevErr) {
+        return NextResponse.json({ error: prevErr.message }, { status: 500 });
+    }
+
     const { error } = await supabase.from('inscriptions').update(upd).eq('id', id);
     if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    return NextResponse.json({ ok: true });
+
+    const nextStatus = typeof upd.payment_status === 'string' ? upd.payment_status : null;
+    const prevStatus = previous?.payment_status != null ? String(previous.payment_status) : null;
+    let notify: Awaited<ReturnType<typeof notifyPlayerPaymentStatus>> | undefined;
+    if (nextStatus && nextStatus !== prevStatus) {
+        try {
+            notify = await notifyPlayerPaymentStatus({
+                row: previous || { id },
+                status: nextStatus as PaymentNotifyStatus,
+                note: typeof upd.alert_message === 'string' ? upd.alert_message : null,
+            });
+            if (nextStatus === 'paid') {
+                const recipient =
+                    previous?.participant_id || previous?.owner_id || previous?.user_id || null;
+                if (recipient) {
+                    await supabase.from('notifications').insert({
+                        user_id: recipient,
+                        sender_id: auth.uid,
+                        type: 'payment_approved',
+                        message: `Tu pago para ${previous?.tournament_name || 'el torneo'} fue aprobado.`,
+                        is_read: false,
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn('[admin/inscriptions] aviso al jugador:', e);
+        }
+    }
+
+    return NextResponse.json({ ok: true, notify });
 }

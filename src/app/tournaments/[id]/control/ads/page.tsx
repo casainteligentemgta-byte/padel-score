@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
+import { showToast } from '@/components/AppToast';
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -193,7 +194,7 @@ export default function AdsManagement() {
             } else {
                 throw new Error('No URL returned from upload');
             }
-        } catch (error) { console.error(error); alert('Error al subir el archivo'); }
+        } catch (error) { console.error(error); showToast('Error al subir el archivo', 'err'); }
         finally { setUploading(null); }
     };
 
@@ -226,7 +227,7 @@ export default function AdsManagement() {
                     setCarouselImages(prev => [...prev, newImg]);
                 }
             }
-        } catch (e) { console.error(e); alert('Error al subir imagen'); }
+        } catch (e) { console.error(e); showToast('Error al subir imagen', 'err'); }
         finally { setUploadingCarousel(null); }
     };
 
@@ -293,7 +294,7 @@ export default function AdsManagement() {
             });
             setShowSavedToast(true);
             setTimeout(() => setShowSavedToast(false), 3000);
-        } catch (error) { console.error(error); alert('Error al guardar'); }
+        } catch (error) { console.error(error); showToast('Error al guardar', 'err'); }
         finally { setSaving(false); }
     };
 

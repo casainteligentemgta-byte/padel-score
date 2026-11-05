@@ -6,6 +6,7 @@ import { syncMatchOrderFields } from './matchOrderMeta';
 import { selectCanchaPublicidadPlaylist } from './canchaPublicidadQuery';
 import { isMercadoPagoMethod } from './paymentValidation';
 import { parseMaybeUtcTimestamp } from './caracasTime';
+import { mapPublicInscriptionRow, type PublicTournamentInscription } from './publicInscriptions';
 
 const supabase = () => {
     const c = getSupabaseClient();
@@ -2081,31 +2082,63 @@ export const dataService = {
         }));
     },
 
-    async getInscriptionsByTournament(tournamentId: string) {
-        const { data, error } = await supabase()
-            .from('inscriptions')
-            .select('*')
-            .eq('tournament_id', tournamentId);
+    async getInscriptionsByTournament(tournamentId: string): Promise<PublicTournamentInscription[]> {
+        const tid = String(tournamentId ?? '').trim();
+        if (!tid) return [];
+
+        try {
+            const res = await fetch(`/api/tournaments/${encodeURIComponent(tid)}/inscriptions-public`, {
+                method: 'GET',
+                cache: 'no-store',
+            });
+            if (res.ok) {
+                const json = (await res.json()) as { inscriptions?: PublicTournamentInscription[] };
+                if (Array.isArray(json.inscriptions)) return json.inscriptions;
+            }
+        } catch {
+            // cae al RPC
+        }
+
+        const { data, error } = await supabase().rpc('list_tournament_inscriptions_public', {
+            p_tournament_id: tid,
+        });
         throwIfError(error);
+        return (data || []).map((r: Record<string, unknown>) => mapPublicInscriptionRow(r));
+    },
+
+    async getMyNotifications(userId: string) {
+        const uid = String(userId ?? '').trim();
+        if (!uid) return [];
+        const { data, error } = await supabase()
+            .from('notifications')
+            .select('id, user_id, sender_id, team_id, type, message, is_read, created_at')
+            .eq('user_id', uid)
+            .order('created_at', { ascending: false })
+            .limit(50);
+        if (error) {
+            console.error('[dataService] getMyNotifications:', error);
+            return [];
+        }
         return (data || []).map((r: any) => ({
-            id: r.id,
-            tournamentId: r.tournament_id,
-            tournamentName: r.tournament_name,
-            categoryKey: r.category_key,
-            categoryPrice: r.category_price,
-            participantName: r.participant_name,
-            participantEmail: r.participant_email,
-            participantId: r.participant_id,
-            amountExtracted: r.amount_extracted,
-            receiptUrl: r.receipt_url,
-            paymentStatus: r.payment_status,
-            alertMessage: r.alert_message,
-            isPlaceholder: r.is_placeholder === true,
-            groupName: r.group_name ?? null,
-            data: r.data ?? {},
-            createdAt: r.created_at,
-            updatedAt: r.updated_at,
+            id: String(r.id),
+            userId: r.user_id,
+            senderId: r.sender_id,
+            teamId: r.team_id,
+            type: String(r.type || 'info'),
+            message: String(r.message || ''),
+            isRead: r.is_read === true,
+            createdAt: r.created_at || null,
         }));
+    },
+
+    async markNotificationRead(id: string) {
+        const nid = String(id ?? '').trim();
+        if (!nid) return;
+        const { error } = await supabase()
+            .from('notifications')
+            .update({ is_read: true })
+            .eq('id', nid);
+        if (error) console.error('[dataService] markNotificationRead:', error);
     },
 
     async getAllInscriptions() {
