@@ -18,6 +18,12 @@ import {
     shouldEnterSetTiebreak,
     winsTiebreakPoints,
 } from '@/lib/matchScoringRules';
+import {
+    applyAmericanoPoint,
+    isAmericanoMatchComplete,
+    isAmericanoPointsMode,
+    resolveAmericanoPointsGoal,
+} from '@/lib/americanoDupla';
 import Link from 'next/link';
 import {
     PIZARRA_CALENTAMIENTO_MS,
@@ -327,12 +333,15 @@ export default function MarkerControlPage() {
             let match_format: string | undefined;
             let tie_break_type: 'TB' | 'STB' | undefined;
             let golden_point = false;
+            let tourneyForRules: any = null;
+            let foundMatch: any = null;
             // Siempre tomamos match_format / tie_break_type del torneo si está disponible.
             // Esto evita que, si el partido viene como `live_...` (por perdida de querystring al salir/volver),
             // el scoring caiga al default `ONE_SET_6` y termine el partido al primer set.
             if (torneoIdActivar) {
                 try {
                     const tourney = await dataService.getTournament(torneoIdActivar);
+                    tourneyForRules = tourney;
                     // El scoring espera uno de: ONE_SET_6 | ONE_SET_9 | TWO_SHORT_SETS | TWO_NORMAL_SETS
                     // En tu generador el "a cuántos games es el partido" se guarda en `rrMatchFormat`.
                     // `matchFormat` en cambio se usa para "2SETS_STB" / "3SETS", así que no debe usarse aquí.
@@ -349,6 +358,7 @@ export default function MarkerControlPage() {
                 try {
                     const matches = await dataService.getMatches(torneoIdActivar);
                     const found = matches.find((x: any) => x.id === partidoIdActivar);
+                    foundMatch = found;
                     match_format = found?.rrMatchFormat ?? found?.matchFormat ?? match_format;
                     tie_break_type = found?.tieBreakType || tie_break_type;
                 } catch (e) {
@@ -356,6 +366,13 @@ export default function MarkerControlPage() {
                 }
             }
             const sets_to_win_match = deriveSetsToWinMatch(match_format, tie_break_type);
+            const americanoMode = isAmericanoPointsMode(
+                { match_format, matchFormat: match_format, type: foundMatch?.type },
+                tourneyForRules,
+            );
+            const points_goal = americanoMode
+                ? resolveAmericanoPointsGoal(foundMatch?.pointsGoal ?? tourneyForRules?.pointsGoal)
+                : undefined;
 
             await dataService.setPizarraCanchaState(canchaId, {
                 estado: 'en_vivo',
@@ -369,12 +386,13 @@ export default function MarkerControlPage() {
                     games: { local: 0, visitante: 0 },
                     puntos: { local: '0', visitante: '0' },
                     historico_sets: [],
-                    modo_puntos: 'normal',
+                    modo_puntos: americanoMode ? 'americano_points' : 'normal',
                     golden_point: false,
                     super_tiebreak: false,
-                    match_format,
+                    match_format: americanoMode ? 'AMERICANO_POINTS' : match_format,
                     tie_break_type,
                     sets_to_win_match,
+                    ...(points_goal != null && { points_goal }),
                     equipo_1: equipo1,
                     equipo_2: equipo2,
                     cronometro: { running: false, startedAt: null, elapsedSec: 0 },
@@ -824,20 +842,35 @@ export default function MarkerControlPage() {
             local: Number(s?.t1 ?? s?.local ?? 0) || 0,
             visitante: Number(s?.t2 ?? s?.visitante ?? 0) || 0,
         }));
-        let modo_puntos: 'normal' | 'tiebreak' | 'super_tiebreak' = 'normal';
-        if (found?.superTiebreak) modo_puntos = 'super_tiebreak';
+        const americanoMode = isAmericanoPointsMode({ matchFormat: mf, match_format: mf }, tourney);
+        const points_goal = americanoMode
+            ? resolveAmericanoPointsGoal(found?.pointsGoal ?? tourney?.pointsGoal)
+            : undefined;
+        let modo_puntos: 'normal' | 'tiebreak' | 'super_tiebreak' | 'americano_points' = 'normal';
+        if (americanoMode) modo_puntos = 'americano_points';
+        else if (found?.superTiebreak) modo_puntos = 'super_tiebreak';
         else if (found?.isTiebreak) modo_puntos = 'tiebreak';
+        const americanoPts = americanoMode
+            ? {
+                local: String(Number(found?.games?.t1 ?? pts?.t1 ?? 0) || 0),
+                visitante: String(Number(found?.games?.t2 ?? pts?.t2 ?? 0) || 0),
+            }
+            : { local: String(pts?.t1 ?? '0'), visitante: String(pts?.t2 ?? '0') };
         return {
             sets: { local: Number(found?.sets?.t1) || 0, visitante: Number(found?.sets?.t2) || 0 },
-            games: { local: Number(found?.games?.t1) || 0, visitante: Number(found?.games?.t2) || 0 },
-            puntos: { local: String(pts?.t1 ?? '0'), visitante: String(pts?.t2 ?? '0') },
+            games: {
+                local: americanoMode ? Number(americanoPts.local) : Number(found?.games?.t1) || 0,
+                visitante: americanoMode ? Number(americanoPts.visitante) : Number(found?.games?.t2) || 0,
+            },
+            puntos: americanoPts,
             historico_sets: hist,
             modo_puntos,
             golden_point: tourney?.scoringSystem === 'GOLDEN_POINT',
             super_tiebreak: !!found?.superTiebreak,
-            match_format: mf,
+            match_format: americanoMode ? 'AMERICANO_POINTS' : mf,
             tie_break_type: tb,
             sets_to_win_match,
+            ...(points_goal != null && { points_goal }),
             equipo_1: { nombre: lines.team1 || 'Equipo 1', color: '#CCFF00' },
             equipo_2: { nombre: lines.team2 || 'Equipo 2', color: '#FF5500' },
             cronometro: { running: false, startedAt: null, elapsedSec: 0 },
@@ -952,7 +985,10 @@ export default function MarkerControlPage() {
     // Blindaje de reglas: en formato esperado "2 sets + STB", nunca cerrar partido al primer set
     // aunque llegue un match_format inconsistente desde datos antiguos.
     const getRulesSafe = (m: any) => {
-        const base = getScoringRules(m?.match_format, m?.tie_break_type);
+        const base = getScoringRules(m?.match_format, m?.tie_break_type, {
+            pointsGoal: m?.points_goal,
+            tournamentType: isAmericanoPointsMode(m) ? 'AMERICANO_DUPLA' : undefined,
+        });
         const explicitSetsToWin = Number(m?.sets_to_win_match || 0);
         if (explicitSetsToWin >= 1) {
             return {
@@ -992,6 +1028,7 @@ export default function MarkerControlPage() {
         superTiebreakScore?: { t1: number; t2: number } | null;
         /** Puntos finales del tie-break de set (t1/t2) cuando el partido termina en ese TB. */
         tiebreakScoreFinal?: { t1: number; t2: number } | null;
+        americanoPoints?: { t1: number; t2: number } | null;
     }): Promise<boolean> => {
         const curData = canchaDataRef.current || {};
         const tid = curData?.torneo_id;
@@ -1013,6 +1050,7 @@ export default function MarkerControlPage() {
                     : params.tiebreakScoreFinal != null
                       ? { t1: String(params.tiebreakScoreFinal.t1), t2: String(params.tiebreakScoreFinal.t2) }
                       : { t1: '0', t2: '0' };
+            const americanoPts = params.americanoPoints;
             await dataService.updateMatch(String(tid), String(pid), {
                 status: 'FINISHED',
                 finishedAt: nowIso,
@@ -1020,10 +1058,13 @@ export default function MarkerControlPage() {
                 updatedAt: nowIso,
                 sets: { t1: params.sets.local || 0, t2: params.sets.visitante || 0 },
                 games: {
-                    t1: params.finalGames?.local ?? 0,
-                    t2: params.finalGames?.visitante ?? 0,
+                    t1: americanoPts?.t1 ?? params.finalGames?.local ?? 0,
+                    t2: americanoPts?.t2 ?? params.finalGames?.visitante ?? 0,
                 },
-                points: finalPointsTiebreak,
+                points: americanoPts
+                    ? { t1: String(americanoPts.t1), t2: String(americanoPts.t2) }
+                    : finalPointsTiebreak,
+                ...(americanoPts ? { score: `${americanoPts.t1}-${americanoPts.t2}` } : {}),
                 setScores,
                 ...(params.superTiebreakScore ? { superTiebreakScore: params.superTiebreakScore } : {}),
                 ...(params.tiebreakScoreFinal && !params.superTiebreakScore
@@ -1095,6 +1136,13 @@ export default function MarkerControlPage() {
                     golden_point = tournament.scoringSystem === 'GOLDEN_POINT';
                 }
                 const sets_to_win_match = deriveSetsToWinMatch(match_format, tie_break_type);
+                const nextAmericano = isAmericanoPointsMode(
+                    { match_format, matchFormat: match_format },
+                    tournament,
+                );
+                const nextPointsGoal = nextAmericano
+                    ? resolveAmericanoPointsGoal((nextMatch as any)?.pointsGoal ?? (tournament as any)?.pointsGoal)
+                    : undefined;
 
                 await dataService.setPizarraCanchaState(canchaId, {
                     estado: 'ready',
@@ -1108,12 +1156,13 @@ export default function MarkerControlPage() {
                         games: { local: 0, visitante: 0 },
                         puntos: { local: '0', visitante: '0' },
                         historico_sets: [],
-                        modo_puntos: 'normal',
+                        modo_puntos: nextAmericano ? 'americano_points' : 'normal',
                         golden_point,
                         super_tiebreak: false,
-                        match_format,
+                        match_format: nextAmericano ? 'AMERICANO_POINTS' : match_format,
                         tie_break_type,
                         sets_to_win_match,
+                        ...(nextPointsGoal != null && { points_goal: nextPointsGoal }),
                         court: courtNumber,
                         equipo_1: { nombre: team1 || 'Equipo 1', color: '#CCFF00' },
                         equipo_2: { nombre: team2 || 'Equipo 2', color: '#FF5500' },
@@ -1267,6 +1316,39 @@ export default function MarkerControlPage() {
         const otroEquipo = equipo === 'local' ? 'visitante' : 'local';
         const puntosActual = currentMarcador.puntos || {};
         const modo = currentMarcador.modo_puntos || 'normal';
+
+        if (modo === 'americano_points' || isAmericanoPointsMode(currentMarcador)) {
+            const goal = resolveAmericanoPointsGoal(currentMarcador.points_goal);
+            const local = parseInt(String(puntosActual.local ?? currentMarcador.games?.local ?? 0), 10) || 0;
+            const visitante = parseInt(String(puntosActual.visitante ?? currentMarcador.games?.visitante ?? 0), 10) || 0;
+            const next = applyAmericanoPoint(local, visitante, equipo, delta);
+            const done = delta === 1 && isAmericanoMatchComplete(next.local, next.visitante, goal);
+            const winner = next.local === next.visitante ? null : next.local > next.visitante ? 'local' : 'visitante';
+            await actualizarMarcadorLocal({
+                puntos: { local: String(next.local), visitante: String(next.visitante) },
+                games: { local: next.local, visitante: next.visitante },
+                sets: {
+                    local: winner === 'local' ? 1 : 0,
+                    visitante: winner === 'visitante' ? 1 : 0,
+                },
+                modo_puntos: 'americano_points',
+                points_goal: goal,
+                ...(done ? { cronometro: freezeCronometro(currentMarcador.cronometro) } : {}),
+            });
+            if (done) {
+                await persistFinishedMatchFromMarker({
+                    sets: {
+                        local: winner === 'local' ? 1 : 0,
+                        visitante: winner === 'visitante' ? 1 : 0,
+                    },
+                    historicoSets: [],
+                    finalGames: { local: next.local, visitante: next.visitante },
+                    americanoPoints: { t1: next.local, t2: next.visitante },
+                });
+                showToast(`¡Partido terminado! ${next.local}-${next.visitante}`);
+            }
+            return;
+        }
 
         if (modo === 'normal') {
             const actual = puntosActual[equipo];
@@ -1637,6 +1719,10 @@ export default function MarkerControlPage() {
 
     const formatoMarcadorLabel = useMemo(() => {
         const r = getRulesSafe(marcador);
+        if (r.scoringMode === 'points' || marcador?.modo_puntos === 'americano_points') {
+            const goal = resolveAmericanoPointsGoal(marcador?.points_goal ?? r.pointsGoal);
+            return `Americano a ${goal} pts (el partido termina cuando la suma llega a ${goal})`;
+        }
         const mf = String(marcador?.match_format || 'ONE_SET_6');
         const tbt = marcador?.tie_break_type;
         const decisiveIf11 =
@@ -2043,6 +2129,11 @@ export default function MarkerControlPage() {
                         {/* Marcador compacto: puntos a los lados, games/sets al centro */}
                         <CompactScoreRow
                             modoPuntos={marcador.modo_puntos}
+                            americanoGoal={
+                                marcador.modo_puntos === 'americano_points'
+                                    ? resolveAmericanoPointsGoal(marcador.points_goal)
+                                    : undefined
+                            }
                             puntosLocal={marcador.puntos.local}
                             puntosVisitante={marcador.puntos.visitante}
                             gamesLocal={marcador.games.local}
@@ -2064,7 +2155,7 @@ export default function MarkerControlPage() {
                         />
 
                         {/* Modo de puntos: Tiebreak / Super Tie Break (STB) */}
-                        <div className="grid grid-cols-2 gap-3">
+                        {marcador.modo_puntos !== 'americano_points' && <div className="grid grid-cols-2 gap-3">
                             <button
                                 onClick={() => setModoPuntosLocal(
                                     marcador.modo_puntos === 'tiebreak' ? 'normal' : 'tiebreak'
@@ -2091,9 +2182,10 @@ export default function MarkerControlPage() {
                                     ? `STB ACTIVO (${scoringUi.superTiebreakPointsToWin})`
                                     : `Super TB (${scoringUi.superTiebreakPointsToWin})`}
                             </button>
-                        </div>
+                        </div>}
 
                         {/* Golden Point */}
+                        {marcador.modo_puntos !== 'americano_points' && (
                         <button
                             onClick={toggleGoldenPoint}
                             className={`w-full py-4 rounded-2xl font-black uppercase italic tracking-widest text-xs flex items-center justify-center gap-3 transition-all border-2 ${marcador.golden_point
@@ -2104,6 +2196,7 @@ export default function MarkerControlPage() {
                             <Zap className="w-4 h-4" />
                             {marcador.golden_point ? 'PUNTO DE ORO ACTIVADO' : 'Activar Punto de Oro'}
                         </button>
+                        )}
 
                         {/* Terminar partido */}
                         <button
@@ -2221,6 +2314,7 @@ export default function MarkerControlPage() {
 // ── Componente reutilizable de fila de puntaje ─────────────────────────────
 function CompactScoreRow({
     modoPuntos,
+    americanoGoal,
     puntosLocal,
     puntosVisitante,
     gamesLocal,
@@ -2241,6 +2335,7 @@ function CompactScoreRow({
     onSetDownVisitante,
 }: {
     modoPuntos: string;
+    americanoGoal?: number;
     puntosLocal: string | number;
     puntosVisitante: string | number;
     gamesLocal: string | number;
@@ -2260,15 +2355,17 @@ function CompactScoreRow({
     onSetUpVisitante: () => void;
     onSetDownVisitante: () => void;
 }) {
-    const puntosLabel =
-        `PUNTOS${modoPuntos === 'tiebreak' ? ' — TIEBREAK' : modoPuntos === 'super_tiebreak' ? ' — SUPER TIE BREAK' : ''}`;
+    const isAmericano = modoPuntos === 'americano_points';
+    const puntosLabel = isAmericano
+        ? `PUNTOS · A ${americanoGoal ?? 24} (SUMA)`
+        : `PUNTOS${modoPuntos === 'tiebreak' ? ' — TIEBREAK' : modoPuntos === 'super_tiebreak' ? ' — SUPER TIE BREAK' : ''}`;
 
     return (
         <div className="rounded-3xl border bg-white/5 border-white/10 p-4 space-y-3">
             <p className="text-center text-[9px] font-black uppercase tracking-[0.35em] text-gray-500">
                 {puntosLabel}
             </p>
-            <div className="grid grid-cols-[1fr_auto_auto_1fr] items-center gap-3">
+            <div className={`grid items-center gap-3 ${isAmericano ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-[1fr_auto_auto_1fr]'}`}>
                 {/* Puntos equipo 1 (izquierda) */}
                 <TeamScoreControl
                     value={puntosLocal}
@@ -2277,6 +2374,16 @@ function CompactScoreRow({
                     highlight
                 />
 
+                {isAmericano ? (
+                    <div className="flex flex-col items-center px-2">
+                        <span className="text-[8px] font-black uppercase tracking-[0.3em] text-gray-500">Suma</span>
+                        <span className="text-lg font-black tabular-nums text-padel-primary">
+                            {(Number(puntosLocal) || 0) + (Number(puntosVisitante) || 0)}
+                            <span className="text-gray-500">/{americanoGoal ?? 24}</span>
+                        </span>
+                    </div>
+                ) : (
+                    <>
                 {/* Games al centro */}
                 <MiniScoreControl
                     label="JUEGOS"
@@ -2298,6 +2405,8 @@ function CompactScoreRow({
                     onUpVisitante={onSetUpVisitante}
                     onDownVisitante={onSetDownVisitante}
                 />
+                    </>
+                )}
 
                 {/* Puntos equipo 2 (derecha) */}
                 <TeamScoreControl

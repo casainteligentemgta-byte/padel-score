@@ -200,6 +200,9 @@ function courtSetCell(
   const hist = marcador?.historico_sets || [];
   const games = marcador?.games || { local: 0, visitante: 0 };
   const modo = marcador?.modo_puntos || 'normal';
+  if (modo === 'americano_points' || String(marcador?.match_format || '').toUpperCase() === 'AMERICANO_POINTS') {
+    return Number(marcador?.puntos?.[team] ?? games[team] ?? 0);
+  }
   if (setIdx < currentSet) {
     const h = hist[setIdx - 1];
     return h?.[team] ?? 0;
@@ -354,6 +357,8 @@ export function PizarraTableScoreboard({
   const currentSet =
     expressCurrentSet >= 1 && expressCurrentSet <= 3 ? expressCurrentSet : setsL + setsV + 1;
   const fmt = String(marcador.match_format || '');
+  const isAmericanoPoints =
+    marcador.modo_puntos === 'americano_points' || fmt.toUpperCase() === 'AMERICANO_POINTS';
   const twoPlusStb =
     fmt === 'TWO_SHORT_SETS' || fmt === 'TWO_NORMAL_SETS' || fmt === '2SETS_STB';
   const visibleBase = visibleSetNumbersForScoreboard({
@@ -369,7 +374,9 @@ export function PizarraTableScoreboard({
     (Number(marcador.games?.local ?? 0) >= 6 || Number(marcador.games?.visitante ?? 0) >= 6);
   const oneSetOnly = fmt === 'ONE_SET_6' || fmt === 'ONE_SET_9';
   let visible = shouldForceSecondSetCol ? [1, 2] : visibleBase;
-  if (!oneSetOnly) {
+  if (isAmericanoPoints) {
+    visible = [];
+  } else if (!oneSetOnly) {
     visible = Array.from(new Set([...visible, 1, 2])).sort((a, b) => a - b);
   }
   const scoreboardCol3Tb =
@@ -477,7 +484,7 @@ export function PizarraTableScoreboard({
                 : undefined
             }
           >
-            POINTS
+            {isAmericanoPoints ? 'PTS' : 'POINTS'}
           </div>
         </div>
       </div>

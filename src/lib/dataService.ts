@@ -297,7 +297,14 @@ export const dataService = {
         const tbtUp = String(tbtRaw || '').toUpperCase();
         const tbtArg: 'TB' | 'STB' | undefined =
             tbtUp === 'STB' ? 'STB' : tbtUp === 'TB' ? 'TB' : undefined;
-        const rules = getScoringRules(mf, tbtArg);
+        const rules = getScoringRules(mf, tbtArg, {
+            pointsGoal: (m as any)?.pointsGoal ?? (m as any)?.points_goal,
+        });
+        if (rules.scoringMode === 'points') {
+            const a = Number(m?.games?.t1 ?? m?.games?.local ?? 0) || 0;
+            const b = Number(m?.games?.t2 ?? m?.games?.visitante ?? 0) || 0;
+            if (a + b >= (rules.pointsGoal || 24)) return true;
+        }
         let need = rules.setsToWinMatch;
         const needRaw = Number(m?.sets_to_win_match ?? m?.setsToWinMatch);
         if (Number.isFinite(needRaw) && needRaw >= 1) need = needRaw;

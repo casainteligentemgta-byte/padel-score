@@ -3,6 +3,11 @@ import {
     MatchStatus,
     ScheduleConfig
 } from '../types/tournament';
+import {
+    americanoSlotMinutes,
+    courtsForAmericanoDupla,
+    isAmericanoDuplaType,
+} from '../lib/americanoDupla';
 
 export class ScheduleEngine {
     /**
@@ -32,7 +37,13 @@ export class ScheduleEngine {
             type
         } = config;
 
-        const slotMinutes = ScheduleEngine.SLOT_MINUTES; // 85 min entre partidos en la misma cancha
+        const isAmericanoDupla = isAmericanoDuplaType(type);
+        const slotMinutes = isAmericanoDupla
+            ? americanoSlotMinutes(matchDurationMinutes, config.bufferMinutes)
+            : ScheduleEngine.SLOT_MINUTES;
+        const courtsUsed = isAmericanoDupla
+            ? Math.max(1, courtsForAmericanoDupla(numTeams, numCourts))
+            : numCourts;
 
         let pairings: [number, number][] = [];
         if (
@@ -53,7 +64,7 @@ export class ScheduleEngine {
         }
         */
 
-        console.log(`[ScheduleEngine] ${pairings.length} pairings for ${numTeams} teams, ${numCourts} courts`);
+        console.log(`[ScheduleEngine] ${pairings.length} pairings for ${numTeams} teams, ${courtsUsed} courts`);
 
         // Parse club hours
         const [startH, startM] = (clubHoursStart || '08:00').split(':').map(Number);
@@ -67,7 +78,7 @@ export class ScheduleEngine {
         if (clubClose <= clubOpen) clubClose.setDate(clubClose.getDate() + 1);
 
         // ── Cada cancha tiene su propio timeline, todas empiezan en clubOpen ──
-        const courtNextTime: Date[] = Array.from({ length: numCourts }, () => new Date(clubOpen));
+        const courtNextTime: Date[] = Array.from({ length: courtsUsed }, () => new Date(clubOpen));
         const teamLastSlot: { [k: number]: number } = {}; // evitar descanso 0 entre partidos
 
         const matches: any[] = [];
@@ -78,7 +89,7 @@ export class ScheduleEngine {
         while (pairingIndex < totalPairings) {
             let assignedThisRound = false;
 
-            for (let c = 0; c < numCourts && pairingIndex < totalPairings; c++) {
+            for (let c = 0; c < courtsUsed && pairingIndex < totalPairings; c++) {
                 const courtTime = courtNextTime[c];
                 const matchEnd = new Date(courtTime.getTime() + matchDurationMinutes * 60000);
                 if (matchEnd > clubClose) continue; // cancha cerrada
@@ -129,7 +140,7 @@ export class ScheduleEngine {
             totalMatches: matches.length,
             pairingsGenerated: totalPairings,
             notScheduled: totalPairings - matches.length,
-            estimatedHours: (matches.length / numCourts) * (slotMinutes / 60)
+            estimatedHours: (matches.length / Math.max(1, courtsUsed)) * (slotMinutes / 60)
         };
     }
 

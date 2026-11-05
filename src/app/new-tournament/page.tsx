@@ -28,6 +28,14 @@ import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { DEFAULT_EVENT_SPONSOR_LOGO_URL } from '@/lib/brand';
 import { ScheduleEngine } from '@/services/ScheduleEngine';
+import {
+    AMERICANO_POINTS_FORMAT,
+    AMERICANO_POINTS_GOAL_OPTIONS,
+    courtsForAmericanoDupla,
+    isAmericanoDuplaType,
+    matchDurationForAmericanoGoal,
+    resolveAmericanoPointsGoal,
+} from '@/lib/americanoDupla';
 import { TournamentStepper } from '@/components/TournamentStepper';
 import { useEffect } from 'react';
 import { caracasTodayDateString, toCaracasDateString } from '@/lib/caracasTime';
@@ -207,6 +215,8 @@ export default function NewTournamentPage() {
                     case 'TWO_NORMAL_SETS': matchDuration = 90; break;
                     default: matchDuration = 40;
                 }
+            } else if (isAmericanoDuplaType(tournamentData.type)) {
+                matchDuration = matchDurationForAmericanoGoal(tournamentData.pointsGoal);
             } else {
                 if (tournamentData.pointsGoal === 16) matchDuration = 10;
                 else if (tournamentData.pointsGoal === 24) matchDuration = 15;
@@ -470,10 +480,14 @@ export default function NewTournamentPage() {
                 const startDateLocal = y ? new Date(y, m - 1, d) : new Date();
 
                 // Original Generation Logic
+                const availableCourts = Math.max(1, tournamentData.courtNames.length || tournamentData.totalCourts || 1);
+                const scheduleCourts = isAmericanoDuplaType(tournamentData.type)
+                    ? Math.max(1, courtsForAmericanoDupla(tournamentData.teams.length, availableCourts))
+                    : availableCourts;
                 const schedule = ScheduleEngine.generateSchedule({
                     tournamentId: 'temporary',
                     numTeams: tournamentData.teams.length,
-                    numCourts: Math.max(1, tournamentData.courtNames.length),
+                    numCourts: scheduleCourts,
                     clubHoursStart: tournamentData.startTime || "08:00",
                     clubHoursEnd: tournamentData.endTime || "22:00",
                     startDate: startDateLocal,
@@ -487,7 +501,12 @@ export default function NewTournamentPage() {
                         id: `match-${idx}-${Date.now()}`,
                         ...m,
                         courtName: tournamentData.courtNames?.[m.courtIndex] || `Pista ${m.courtIndex + 1}`,
-                        status: 'PENDING'
+                        status: 'PENDING',
+                        ...(isAmericanoDuplaType(tournamentData.type) && {
+                            matchFormat: AMERICANO_POINTS_FORMAT,
+                            pointsGoal: resolveAmericanoPointsGoal(tournamentData.pointsGoal),
+                            stage: 'GROUP_STAGE',
+                        }),
                     };
                 });
             }
@@ -527,10 +546,14 @@ export default function NewTournamentPage() {
                 bufferMinutes: tournamentData.bufferMinutes,
                 teams: tournamentData.teams,
                 matches: enrichedMatches,
-                pointsGoal: tournamentData.pointsGoal,
+                pointsGoal: isAmericanoDuplaType(tournamentData.type)
+                    ? resolveAmericanoPointsGoal(tournamentData.pointsGoal)
+                    : tournamentData.pointsGoal,
                 groupSize: tournamentData.groupSize,
                 isReduced: tournamentData.isReduced,
-                matchFormat: tournamentData.matchFormat,
+                matchFormat: isAmericanoDuplaType(tournamentData.type)
+                    ? AMERICANO_POINTS_FORMAT
+                    : tournamentData.matchFormat,
                 scoringSystem: tournamentData.scoringSystem,
                 tieBreakType: tournamentData.tieBreakType,
                 groupAssignments: groupAssignments,
@@ -1104,7 +1127,7 @@ export default function NewTournamentPage() {
                                         {
                                             id: TournamentType.AMERICANO_DUPLA,
                                             title: 'Dupla Fija',
-                                            description: 'Parejas estables, sistema de puntuación acumulada.',
+                                            description: 'Parejas fijas. Todos contra todos a puntos (16 / 24 / 32).',
                                             icon: (
                                                 <svg viewBox="0 0 100 100" className="w-16 h-16 text-padel-primary">
                                                     <rect x="30" y="30" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -1112,7 +1135,7 @@ export default function NewTournamentPage() {
                                                     <path d="M40 55 L40 75 M62 55 L62 75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                                                 </svg>
                                             ),
-                                            options: ['12 Pt', '16 Pt', '24 Pt']
+                                            options: ['16 Pt', '24 Pt', '32 Pt']
                                         },
                                         {
                                             id: TournamentType.KNOCKOUT,
@@ -1201,6 +1224,33 @@ export default function NewTournamentPage() {
                                         </button>
                                     ))}
                                 </div>
+
+                                {tournamentData.type === TournamentType.AMERICANO_DUPLA && (
+                                    <div className="mt-4 p-5 bg-[#ccff00]/5 border border-[#ccff00]/20 rounded-[2rem] space-y-3">
+                                        <h4 className="text-[10px] font-black uppercase tracking-widest text-[#ccff00]">
+                                            Objetivo de puntos (suma de ambos lados)
+                                        </h4>
+                                        <div className="grid grid-cols-3 gap-3">
+                                            {AMERICANO_POINTS_GOAL_OPTIONS.map((pts) => (
+                                                <button
+                                                    key={pts}
+                                                    type="button"
+                                                    onClick={() => setTournamentData({ ...tournamentData, pointsGoal: pts })}
+                                                    className={`min-h-[44px] py-3 rounded-xl border-2 font-black italic text-sm transition-all ${
+                                                        resolveAmericanoPointsGoal(tournamentData.pointsGoal) === pts
+                                                            ? 'bg-padel-primary border-padel-primary text-black'
+                                                            : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'
+                                                    }`}
+                                                >
+                                                    {pts}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <p className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
+                                            El partido termina al llegar a {resolveAmericanoPointsGoal(tournamentData.pointsGoal)} puntos sumados (ej. 15-9). Sin fase eliminatoria.
+                                        </p>
+                                    </div>
+                                )}
 
                                 {/* ── Selector de tamaño de grupo (ROUND_ROBIN / CRUZADO) ── */}
                                 {(tournamentData.type === TournamentType.ROUND_ROBIN || tournamentData.type === TournamentType.CRUZADO) && (

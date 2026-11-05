@@ -77,9 +77,11 @@ export interface Tournament {
     clubHoursStart: string; // HH:mm
     clubHoursEnd: string;   // HH:mm
     groupSize?: number;
-    matchFormat?: 'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS';
+    matchFormat?: 'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS' | 'AMERICANO_POINTS';
     scoringSystem?: 'GOLDEN_POINT' | 'TRADITIONAL';
     tieBreakType?: 'TB' | 'STB';
+    /** Americano dupla fija: meta de puntos (suma de ambos lados). */
+    pointsGoal?: number;
     groupAssignments?: { [groupName: string]: string[] }; // groupName -> list of teamIds
     broadcastingSettings?: {
         primaryColor?: string;

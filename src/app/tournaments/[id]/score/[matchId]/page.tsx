@@ -156,9 +156,13 @@ export default function RefereeScoreboard() {
         match?.match_format ||
         (tournament as any)?.rrMatchFormat ||
         tournament?.matchFormat;
+    const tournamentPointsGoal = (tournament as any)?.pointsGoal;
     const scoringRules = useMemo(
-        () => getScoringRules(matchFormatForRules, tournament?.tieBreakType),
-        [matchFormatForRules, tournament?.tieBreakType]
+        () => getScoringRules(matchFormatForRules, tournament?.tieBreakType, {
+            pointsGoal: match?.pointsGoal ?? tournamentPointsGoal,
+            tournamentType: tournament?.type,
+        }),
+        [matchFormatForRules, tournament?.tieBreakType, match?.pointsGoal, tournamentPointsGoal, tournament?.type]
     );
 
     const handleFinishMatch = async () => {

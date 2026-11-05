@@ -6,18 +6,28 @@
  * - ONE_SET_9: un set “largo” a 9 juegos (TB de set en 8-8).
  * - TWO_SHORT_SETS: dos sets cortos a 4 juegos; si el partido va 1-1 en sets → tramo decisivo (STB o TB según tieBreakType).
  * - TWO_NORMAL_SETS: dos sets largos a 6 juegos; si 1-1 en sets → mismo decisivo.
+ * - AMERICANO_POINTS: carrera de puntos (dupla fija); el partido termina cuando la suma llega a pointsGoal.
  *
  * - Juego: puntos 0/15/30/40/AD (o punto de oro si aplica).
  * - Tie-break **dentro** de un set (6-6, 4-4, 8-8…): siempre a 7 con margen 2 (no usa tieBreakType del torneo).
  * - Tras **1-1 en sets** (solo formatos con usesSuperTiebreakDecider): tieBreakType STB → 10 puntos con margen 2; TB → 7.
  */
 
+import {
+    isAmericanoDuplaType,
+    isAmericanoPointsFormat,
+    resolveAmericanoPointsGoal,
+} from '@/lib/americanoDupla';
+
 export type MatchFormatId =
     | 'ONE_SET_6'
     | 'ONE_SET_9'
     | 'TWO_SHORT_SETS'
     | 'TWO_NORMAL_SETS'
+    | 'AMERICANO_POINTS'
     | string;
+
+export type ScoringMode = 'sets' | 'points';
 
 export interface ScoringRules {
     /** Juegos necesarios para ganar el set (salvo TB). */
@@ -32,16 +42,33 @@ export interface ScoringRules {
     usesSuperTiebreakDecider: boolean;
     /** Puntos para ganar el super tie-break (10 o 7 según torneo). */
     superTiebreakPointsToWin: number;
+    /** sets = tenis/pádel clásico; points = carrera Americano (suma = pointsGoal). */
+    scoringMode?: ScoringMode;
+    /** Meta de puntos Americano (16 / 24 / 32). */
+    pointsGoal?: number;
 }
 
 const DEFAULT_SET_TB = 7;
 
 export function getScoringRules(
     matchFormat: MatchFormatId | undefined,
-    tieBreakType: 'TB' | 'STB' | undefined
+    tieBreakType: 'TB' | 'STB' | undefined,
+    extras?: { pointsGoal?: number; tournamentType?: string }
 ): ScoringRules {
     const stbPts = tieBreakType === 'STB' ? 10 : 7;
     const fmt = String(matchFormat || '').toUpperCase();
+    if (isAmericanoPointsFormat(fmt) || isAmericanoDuplaType(extras?.tournamentType)) {
+        return {
+            gamesToWinSet: 0,
+            tiebreakGamesEntry: 0,
+            setTiebreakPointsToWin: DEFAULT_SET_TB,
+            setsToWinMatch: 1,
+            usesSuperTiebreakDecider: false,
+            superTiebreakPointsToWin: stbPts,
+            scoringMode: 'points',
+            pointsGoal: resolveAmericanoPointsGoal(extras?.pointsGoal),
+        };
+    }
 
     switch (fmt) {
         // Legacy aliases used by older generator records.
