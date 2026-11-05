@@ -150,34 +150,9 @@ export default function AdminValidacionPagosPage() {
                 setSelectedInscription({ ...selectedInscription, paymentStatus: status, alertMessage: message });
             }
 
-            if (inscription) {
-                const phone = getInscriptionWhatsPhone(inscription);
-                if (phone) {
-                    try {
-                        const res = await fetch('/api/admin/inscriptions/notify-payment-status-whatsapp', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
-                            body: JSON.stringify({
-                                inscriptionId: inscription.id,
-                                phone,
-                                playerName: inscription.participantName || 'Jugador',
-                                tournamentName: inscription.tournamentName || 'Torneo',
-                                status,
-                                note: message || undefined,
-                            }),
-                        });
-                        if (!res.ok) {
-                            const j = await res.json().catch(() => ({}));
-                            console.warn('WhatsApp estado de pago no enviado:', (j as { error?: string })?.error || res.status);
-                        }
-                    } catch (waErr) {
-                        console.warn('Error enviando WhatsApp de estado de pago:', waErr);
-                    }
-                }
-            }
         } catch (e) {
             console.error(e);
-            alert('Error al actualizar el estado.');
+            toast.error('Error al actualizar el estado.');
         }
     };
 

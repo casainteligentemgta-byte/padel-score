@@ -25,6 +25,7 @@ import {
     useWarmupRemainingSec,
 } from '@/components/PizarraWarmupOverlay';
 import { SmartPadelBallIcon } from '@/components/SmartPadelBallIcon';
+import { showToast } from '@/components/AppToast';
 
 const PUNTOS_NORMAL = ['0', '15', '30', '40', 'AD'];
 const PUNTOS_TB = Array.from({ length: 21 }, (_, i) => String(i)); // 0..20 (más que suficiente)
@@ -394,7 +395,7 @@ export default function MarkerControlPage() {
             setShowSetup(false);
         } catch (err) {
             console.error('[Marker] Error activando cancha:', err);
-            alert('Error al activar la cancha. Intenta de nuevo.');
+            showToast('Error al activar la cancha. Intenta de nuevo.', 'err');
         } finally {
             setActivando(false);
         }
@@ -422,7 +423,7 @@ export default function MarkerControlPage() {
             setTimeout(() => setRefrescoExitoso(false), 2000);
         } catch (err) {
             console.error('[Marker] Refrescar pizarra:', err);
-            alert('No se pudo enviar el refresco a la pizarra. Revisa la conexión.');
+            showToast('No se pudo enviar el refresco a la pizarra. Revisa la conexión.', 'err');
         } finally {
             setRefrescandoPizarra(false);
         }
@@ -466,10 +467,10 @@ export default function MarkerControlPage() {
             const pidEarly = String(curData?.partido_id || '').trim();
             // Partido real del torneo: no vaciar pizarra sin FINISHED en BD (el hub no lo mostraría en Finalizados).
             if (tidEarly && pidEarly && !pidEarly.startsWith('live_')) {
-                alert(
+                showToast(
                     'No se pudo guardar el partido como finalizado en el torneo (conexión o error al escribir). ' +
-                        'La pizarra no se ha limpiado para no perder el estado. Revisa la red e inténtalo de nuevo.',
-                );
+                        'La pizarra no se ha limpiado para no perder el estado. Revisa la red e inténtalo de nuevo.'
+                , 'err');
                 return;
             }
 
@@ -505,7 +506,7 @@ export default function MarkerControlPage() {
             }
         } catch (err) {
             console.error('[Marker] Error desactivando cancha:', err);
-            alert('No se pudo terminar el partido. Revisa la conexión e inténtalo nuevamente.');
+            showToast('No se pudo terminar el partido. Revisa la conexión e inténtalo nuevamente.', 'err');
         }
     };
 
@@ -527,7 +528,7 @@ export default function MarkerControlPage() {
         // Build next state based on current best-known state (ref)
         const curData = canchaDataRef.current || {};
         if (finishedLockRef.current) {
-            alert('Este partido ya está FINALIZADO y no puede modificarse.');
+            showToast('Este partido ya está FINALIZADO y no puede modificarse.', 'err');
             return;
         }
         const tid = String(curData?.torneo_id || '').trim();
@@ -542,18 +543,18 @@ export default function MarkerControlPage() {
                     lastFinishedCheckRef.current = { at: nowMs, finished: isFinished };
                     if (isFinished) {
                         finishedLockRef.current = true;
-                        alert('Este partido ya está FINALIZADO y no permite cambios.');
+                        showToast('Este partido ya está FINALIZADO y no permite cambios.', 'err');
                         return;
                     }
                 } catch (err) {
                     if (err instanceof Error && err.message.includes('FINISHED')) {
-                        alert('Este partido ya está FINALIZADO y no permite cambios.');
+                        showToast('Este partido ya está FINALIZADO y no permite cambios.', 'err');
                         return;
                     }
                 }
             } else if (lastFinishedCheckRef.current.finished) {
                 finishedLockRef.current = true;
-                alert('Este partido ya está FINALIZADO y no permite cambios.');
+                showToast('Este partido ya está FINALIZADO y no permite cambios.', 'err');
                 return;
             }
         }
@@ -854,16 +855,16 @@ export default function MarkerControlPage() {
      */
     const handleRecuperarMarcador = async () => {
         if (!user) {
-            alert('Inicia sesión para recuperar el marcador.');
+            showToast('Inicia sesión para recuperar el marcador.', 'err');
             return;
         }
         const cur = canchaDataRef.current || {};
         let tid = String(cur.torneo_id || tParam || '').trim();
         let pid = String(cur.partido_id || mParam || '').trim();
         if (!tid) {
-            alert(
-                'No hay torneo vinculado en la pizarra. Abre el marcador desde el hub del torneo (enlace con ?t= y ?m=) o usa la sala de árbitro.',
-            );
+            showToast(
+                'No hay torneo vinculado en la pizarra. Abre el marcador desde el hub del torneo (enlace con ?t= y ?m=) o usa la sala de árbitro.'
+            , 'err');
             return;
         }
         setRecuperandoMarcador(true);
@@ -892,16 +893,16 @@ export default function MarkerControlPage() {
             if (found) {
                 const st = String(found.status || '').toUpperCase();
                 if (st === 'FINISHED') {
-                    alert('Este partido ya está finalizado. No se puede marcar de nuevo desde aquí.');
+                    showToast('Este partido ya está finalizado. No se puede marcar de nuevo desde aquí.', 'err');
                     return;
                 }
                 finishedLockRef.current = false;
                 nextMarcador = buildMarcadorFromTournamentMatch(found, tourney);
                 finalPid = String(found.id);
             } else if (resolvedPid && !resolvedPid.startsWith('live_')) {
-                alert(
-                    'No se encontró el partido en el torneo. Vuelve a abrir el marcador desde la grilla del torneo.',
-                );
+                showToast(
+                    'No se encontró el partido en el torneo. Vuelve a abrir el marcador desde la grilla del torneo.'
+                , 'err');
                 return;
             } else {
                 const mf =
@@ -942,7 +943,7 @@ export default function MarkerControlPage() {
             await dataService.setPizarraCanchaState(canchaId, nextData);
         } catch (e) {
             console.error('[Marker] Recuperar marcador:', e);
-            alert('No se pudo recuperar el marcador. Revisa la conexión o usa la sala de árbitro.');
+            showToast('No se pudo recuperar el marcador. Revisa la conexión o usa la sala de árbitro.', 'err');
         } finally {
             setRecuperandoMarcador(false);
         }
@@ -1205,7 +1206,7 @@ export default function MarkerControlPage() {
                 historicoSets: newHistorico,
                 finalGames: newGames,
             });
-            alert(
+            showToast(
                 `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${newSets.local}-${newSets.visitante})`
             );
             return;
@@ -1357,7 +1358,7 @@ export default function MarkerControlPage() {
                             historicoSets: nextHistorico,
                             superTiebreakScore: { t1: finalLocal, t2: finalVisit },
                         });
-                        alert(
+                        showToast(
                             `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${newSets.local}-${newSets.visitante})`
                         );
                     } else {
@@ -1402,7 +1403,7 @@ export default function MarkerControlPage() {
                                 finalGames: hist,
                                 tiebreakScoreFinal: { t1: finalTbLocal, t2: finalTbVisit },
                             });
-                            alert(
+                            showToast(
                                 `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${newSets.local}-${newSets.visitante})`
                             );
                         } else if (enterStb) {
@@ -1511,7 +1512,7 @@ export default function MarkerControlPage() {
                 sets: setsFinal,
                 historicoSets: currentMarcador.historico_sets || [],
             });
-            alert(
+            showToast(
                 `¡Partido terminado! Ganador: Equipo ${equipo === 'local' ? '1' : '2'} (sets ${setsFinal.local}-${setsFinal.visitante})`
             );
         }
@@ -1567,7 +1568,7 @@ export default function MarkerControlPage() {
         const elapsedSec = Number(curCron.elapsedSec ?? 0) || 0;
 
         if (curCron.running && curCron.startedAt != null) {
-            alert('El tiempo de partido oficial no se puede pausar una vez iniciado. Solo se detiene al finalizar el partido.');
+            showToast('El tiempo de partido oficial no se puede pausar una vez iniciado. Solo se detiene al finalizar el partido.', 'err');
             return;
         } else {
             await actualizarMarcadorLocal({

@@ -19,6 +19,7 @@ import { persistMatchFinishWithPropagation } from '@/lib/matchFinishPropagation'
 import Sidebar from '@/components/Sidebar';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { showToast } from '@/components/AppToast';
 import { useRouteSegment } from '@/lib/useRouteSegment';
 import { closeGroupsAndGeneratePlayoffs, validateTournamentIntegrity } from '@/lib/tournamentService';
 
@@ -702,7 +703,7 @@ export default function ControlPanel() {
             if (!canLive) {
                 const preview = issues.slice(0, 3).join('\n  • ');
                 const more = issues.length > 3 ? `\n  ...y ${issues.length - 3} más.` : '';
-                alert(`⚠️ No se puede iniciar: hay equipos con nombres genéricos.\n\n  • ${preview}${more}\n\nCorrígelos en el generador antes de continuar.`);
+                showToast(`⚠️ No se puede iniciar: hay equipos con nombres genéricos.\n\n  • ${preview}${more}\n\nCorrígelos en el generador antes de continuar.`, 'err');
                 return;
             }
         }
@@ -711,7 +712,7 @@ export default function ControlPanel() {
         const c = courtNum(match);
         const otherLiveOnCourt = matches.some(m => m.id !== matchId && m.status === MatchStatus.LIVE && courtNum(m) === c);
         if (otherLiveOnCourt) {
-            alert(`No puede haber dos partidos en vivo en la misma pista. Ya hay un partido en vivo en la pista ${c}.`);
+            showToast(`No puede haber dos partidos en vivo en la misma pista. Ya hay un partido en vivo en la pista ${c}.`, 'err');
             return;
         }
         setUpdatingId(matchId);
@@ -744,7 +745,7 @@ export default function ControlPanel() {
             await dataService.updateMatch(id, matchId, updatedData);
         } catch (e) { 
             console.error(e);
-            alert('Error al iniciar el partido. Reintentando sincronización...');
+            showToast('Error al iniciar el partido. Reintentando sincronización...', 'err');
             // Error: the realtime subscription will eventually fix the state, 
             // but we could also force a reload if needed.
         }
@@ -780,7 +781,7 @@ export default function ControlPanel() {
             });
         } catch (e) { 
             console.error(e);
-            alert('Error al finalizar el partido. Verifica tu conexión.');
+            showToast('Error al finalizar el partido. Verifica tu conexión.', 'err');
         }
         finally { setUpdatingId(null); }
     };
@@ -797,7 +798,7 @@ export default function ControlPanel() {
             await dataService.updateMatch(id, matchId, { ...stripMatchForDb(match), isStreaming: val });
         } catch (e) { 
             console.error(e);
-            alert('Error al cambiar el estado del stream.');
+            showToast('Error al cambiar el estado del stream.', 'err');
         }
         finally { setUpdatingId(null); }
     };
@@ -814,7 +815,7 @@ export default function ControlPanel() {
             await dataService.updateMatch(id, matchId, { ...stripMatchForDb(match), forcedAds: val });
         } catch (e) { 
             console.error(e);
-            alert('Error al cambiar el estado de la publicidad.');
+            showToast('Error al cambiar el estado de la publicidad.', 'err');
         }
         finally { setUpdatingId(null); }
     };
@@ -859,7 +860,7 @@ export default function ControlPanel() {
             });
         } catch (e) {
             console.error(e);
-            alert('Error al actualizar los nombres.');
+            showToast('Error al actualizar los nombres.', 'err');
         }
     };
 
@@ -903,7 +904,7 @@ export default function ControlPanel() {
             await dataService.updateMatch(id, matchId, updatedData);
         } catch (e) { 
             console.error(e);
-            alert('Error al revertir el partido.');
+            showToast('Error al revertir el partido.', 'err');
         }
         finally { setUpdatingId(null); }
     };

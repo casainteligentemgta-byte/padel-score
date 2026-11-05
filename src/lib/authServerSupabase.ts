@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isServerAdminAccess } from '@/lib/adminAccess';
+import { getAccessTokenFromRequest } from '@/lib/authCookie';
 
 type Request = globalThis.Request;
 
@@ -15,10 +16,8 @@ const getSupabaseServer = () => {
     return createClient(url, key);
 };
 
-function getBearerToken(req: Request): string | null {
-    const auth = req.headers.get('authorization');
-    if (!auth?.startsWith('Bearer ')) return null;
-    return auth.slice(7).trim() || null;
+function getRequestToken(req: Request): string | null {
+    return getAccessTokenFromRequest(req);
 }
 
 export type AuthUser = { uid: string; email?: string };
@@ -28,8 +27,7 @@ export type AuthUserWithRole = AuthUser & { role: string };
  * Obtiene el usuario a partir del JWT de Supabase (Bearer token).
  * Opcionalmente lee el rol desde la tabla profiles.
  */
-export async function getAuthUser(req: Request): Promise<AuthUser | null> {
-    const token = getBearerToken(req);
+export async function getAuthUserFromToken(token: string | null | undefined): Promise<AuthUser | null> {
     if (!token) return null;
     const supabase = getSupabaseServer();
     if (!supabase) return null;
@@ -42,19 +40,24 @@ export async function getAuthUser(req: Request): Promise<AuthUser | null> {
     }
 }
 
+export async function getAuthUser(req: Request): Promise<AuthUser | null> {
+    return getAuthUserFromToken(getRequestToken(req));
+}
+
 /**
  * Igual que getAuthUser pero además devuelve el rol desde profiles.
  */
-export async function getAuthUserWithRole(req: Request): Promise<AuthUserWithRole | null> {
-    const token = getBearerToken(req);
+export async function getAuthUserWithRoleFromToken(token: string | null | undefined): Promise<AuthUserWithRole | null> {
     if (!token) return null;
-    const user = await getAuthUser(req);
+    const user = await getAuthUserFromToken(token);
     if (!user) return null;
+    if (isServerAdminAccess(undefined, user.email)) {
+        return { ...user, role: 'admin' };
+    }
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
     if (!url || !key) {
-        const role = isServerAdminAccess(undefined, user.email) ? 'admin' : 'player';
-        return { ...user, role };
+        return { ...user, role: 'player' };
     }
     try {
         const clientWithToken = createClient(url, key, {
@@ -69,9 +72,12 @@ export async function getAuthUserWithRole(req: Request): Promise<AuthUserWithRol
         const role = isServerAdminAccess(dbRole, user.email) ? 'admin' : dbRole;
         return { ...user, role };
     } catch {
-        const role = isServerAdminAccess(undefined, user.email) ? 'admin' : 'player';
-        return { ...user, role };
+        return { ...user, role: 'player' };
     }
+}
+
+export async function getAuthUserWithRole(req: Request): Promise<AuthUserWithRole | null> {
+    return getAuthUserWithRoleFromToken(getRequestToken(req));
 }
 
 function isAuthConfigured(): boolean {

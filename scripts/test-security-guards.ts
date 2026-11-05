@@ -15,6 +15,16 @@ import {
 import { validateSignupPassword } from '../src/lib/authValidators';
 import { timingSafeEqualString } from '../src/lib/apiGuard';
 import { isAdminAccess, isLegacyAdminEmail, isServerAdminAccess } from '../src/lib/adminAccess';
+import { ACCESS_TOKEN_COOKIE, getAccessTokenFromRequest } from '../src/lib/authCookie';
+import {
+  assertNoSensitivePublicInscription,
+  mapPublicInscriptionRow,
+} from '../src/lib/publicInscriptions';
+import {
+  extractInscriptionEmail,
+  extractInscriptionPhone,
+  paymentApprovedEmailHtml,
+} from '../src/lib/paymentApprovalNotify';
 import { getPasswordRecoveryRedirectUrl, getPublicSiteUrl, PUBLIC_APP_ORIGIN } from '../src/lib/brand';
 import {
   amountsMatch,
@@ -264,6 +274,92 @@ run('migración 077 confirma inscripción reservada', () => {
   assert.match(sql, /confirm_reserved_inscription/);
   assert.match(sql, /inscription_status = 'CONFIRMED'/);
   assert.match(sql, /GRANT EXECUTE ON FUNCTION public.confirm_reserved_inscription/);
+});
+
+run('migración 078 cierra inscriptions_public_read y publica RPC sin PII', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const sql = readFileSync(
+    join(here, '../supabase/migrations/078_inscriptions_select_own_or_admin.sql'),
+    'utf8'
+  );
+  assert.match(sql, /DROP POLICY IF EXISTS "inscriptions_public_read"/);
+  assert.match(sql, /inscriptions_select_own_or_admin/);
+  assert.match(sql, /owner_id::text = auth\.uid\(\)::text/);
+  assert.match(sql, /user_id::text = auth\.uid\(\)::text/);
+  assert.match(sql, /participant_id::text = auth\.uid\(\)::text/);
+  assert.match(sql, /partner_id::text = auth\.uid\(\)::text/);
+  assert.match(sql, /data->>'partnerId'/);
+  assert.match(sql, /is_admin_user\(\)/);
+  assert.match(sql, /list_tournament_inscriptions_public/);
+  assert.match(sql, /i\.id::uuid/);
+  assert.match(sql, /i\.tournament_id::uuid/);
+  assert.match(sql, /i\.category_key::text/);
+  assert.match(sql, /i\.tournament_id::text = p_tournament_id::text/);
+  assert.match(sql, /data->>'groupName'/);
+  assert.match(sql, /data->>'isPlaceholder'/);
+  assert.match(sql, /user_id::text = auth\.uid\(\)::text OR public\.is_admin_user\(\)/);
+  assert.doesNotMatch(sql, /i\.group_name/);
+  assert.doesNotMatch(sql, /i\.is_placeholder/);
+  assert.doesNotMatch(sql, /pizarra_cancha/);
+  assert.doesNotMatch(sql, /participant_email/);
+  assert.doesNotMatch(sql, /payment_status/);
+  assert.doesNotMatch(sql, /receipt_url/);
+  assert.doesNotMatch(sql, /auth\.uid\(\) = owner_id(?!::)/);
+});
+
+run('roster público no filtra email ni pago', () => {
+  const mapped = mapPublicInscriptionRow({
+    id: '11111111-1111-4111-8111-111111111111',
+    tournament_id: '22222222-2222-4222-8222-222222222222',
+    category_key: 'c7',
+    participant_name: 'Ana',
+    participant_email: 'hidden@example.com',
+    receipt_url: 'https://secret',
+    payment_status: 'paid',
+    data: {
+      partnerName: 'Luis',
+      phone: '04141234567',
+      email: 'hidden@example.com',
+      groupName: 'A',
+      isPlaceholder: false,
+    },
+  });
+  assert.equal(mapped.participantName, 'Ana');
+  assert.equal(mapped.data.partnerName, 'Luis');
+  assert.equal(mapped.groupName, 'A');
+  assert.equal(mapped.isPlaceholder, false);
+  assert.equal(mapped.categoryKey, 'c7');
+  assert.equal((mapped as { participantEmail?: string }).participantEmail, undefined);
+  assert.equal((mapped as { paymentStatus?: string }).paymentStatus, undefined);
+  assertNoSensitivePublicInscription(mapped);
+});
+
+run('cookie JWT se lee de Bearer o Cookie', () => {
+  const bearer = new Request('https://x.test', {
+    headers: { authorization: 'Bearer abc.def' },
+  });
+  assert.equal(getAccessTokenFromRequest(bearer), 'abc.def');
+  const cookie = new Request('https://x.test', {
+    headers: { cookie: `${ACCESS_TOKEN_COOKIE}=tok123; other=1` },
+  });
+  assert.equal(getAccessTokenFromRequest(cookie), 'tok123');
+});
+
+run('aviso de pago extrae email y teléfono del JSONB', () => {
+  const row = {
+    participant_email: 'ana@example.com',
+    participant_name: 'Ana',
+    data: { phone: '+584121234567', partnerName: 'Luis' },
+  };
+  assert.equal(extractInscriptionEmail(row), 'ana@example.com');
+  assert.equal(extractInscriptionPhone(row), '+584121234567');
+  const html = paymentApprovedEmailHtml({
+    playerName: 'Ana',
+    tournamentName: 'Open',
+    dashboardUrl: 'https://smartpadel58.com/dashboard',
+  });
+  assert.match(html, /aprobado/);
+  assert.match(html, /Open/);
 });
 
 console.log('Todos los guards de seguridad OK');

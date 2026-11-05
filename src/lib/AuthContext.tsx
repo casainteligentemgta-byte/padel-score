@@ -9,6 +9,7 @@ import type { AppUser } from '@/lib/types/auth';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal/termsVersion';
 import { validateSignupPassword } from '@/lib/authValidators';
 import { getPasswordRecoveryRedirectUrl, getPublicSiteUrl } from '@/lib/brand';
+import { syncAuthSessionCookie } from '@/lib/authSessionCookie';
 
 interface AuthContextType {
     user: AppUser | null;
@@ -126,6 +127,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                     console.warn('[Auth] Sesión no renovada; cerrando sesión.');
                     clearSupabaseBrowserStorage();
                     await supabase.auth.signOut();
+                    await syncAuthSessionCookie(null);
                     setUser(null);
                     setProfile(null);
                     setLoading(false);
@@ -143,6 +145,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 }
 
                 if (event === 'SIGNED_OUT' || (event as string) === 'USER_DELETED') {
+                    await syncAuthSessionCookie(null);
                     setUser(null);
                     setProfile(null);
                     setLoading(false);
@@ -150,6 +153,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                     return;
                 }
 
+                await syncAuthSessionCookie(session?.access_token ?? null, session?.expires_in);
                 const appUser = session?.user ? mapSupabaseUser(session.user) : null;
                 setUser(appUser);
                 setLoading(false);
@@ -195,6 +199,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
         supabase.auth.getSession()
             .then(async ({ data: { session } }) => {
+                await syncAuthSessionCookie(session?.access_token ?? null, session?.expires_in);
                 const appUser = session?.user ? mapSupabaseUser(session.user) : null;
                 setUser(appUser);
                 setLoading(false); // Immediate resolution
@@ -283,6 +288,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
         const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
         if (error) throw error;
+        await syncAuthSessionCookie(data.session?.access_token ?? null, data.session?.expires_in);
         if (data.user) await fetchProfile(data.user.id, { email: data.user.email ?? undefined, name: (data.user.user_metadata?.full_name as string) || (data.user.user_metadata?.name as string) });
     };
 
@@ -344,6 +350,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 console.error('AuthContext: Error during signOut:', e);
             }
         }
+        await syncAuthSessionCookie(null);
         clearSupabaseBrowserStorage();
         setUser(null);
         setProfile(null);

@@ -110,9 +110,10 @@ export async function initializeTournamentWithPlaceholders(
       receipt_url: null,
       payment_status: 'pending',
       alert_message: null,
-      is_placeholder: true,
-      group_name: String.fromCharCode(65 + Math.floor(i / gsForInsert)),
-      data: {},
+      data: {
+        isPlaceholder: true,
+        groupName: String.fromCharCode(65 + Math.floor(i / gsForInsert)),
+      },
       created_at: now(),
       updated_at: now(),
     }));
@@ -270,23 +271,23 @@ export async function replacePlaceholderWithRealTeam(
 
   const { data: placeholder } = await supabase
     .from('inscriptions')
-    .select('id')
+    .select('id, data')
     .eq('tournament_id', tournamentId)
     .eq('category_key', categoryKey)
-    .eq('is_placeholder', true)
+    .is('participant_id', null)
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
 
   if (!placeholder) return null;
 
+  const existingData = ((placeholder as { data?: Record<string, unknown> }).data || {}) as Record<string, unknown>;
   const updatePayload: Record<string, unknown> = {
     participant_name: realTeamData.participant_name ?? null,
     participant_email: realTeamData.participant_email ?? null,
     participant_id: realTeamData.participant_id ?? null,
     payment_status: realTeamData.payment_status ?? 'paid',
-    is_placeholder: false,
-    data: realTeamData.data ?? {},
+    data: { ...existingData, ...(realTeamData.data ?? {}), isPlaceholder: false },
     updated_at: now(),
   };
 
@@ -358,18 +359,23 @@ export async function handleRealInscription(
 
   try {
     // 1) Buscar primer placeholder disponible en esa categoría, priorizando grupos A, B, C...
-    const { data: placeholder, error: searchError } = await supabase
+    const { data: candidates, error: searchError } = await supabase
       .from('inscriptions')
-      .select('id, group_name, data')
+      .select('id, data, created_at')
       .eq('tournament_id', tournamentId)
       .eq('category_key', categoryKey)
-      .eq('is_placeholder', true)
-      .order('group_name', { ascending: true, nullsFirst: true })
+      .is('participant_id', null)
       .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
+      .limit(30);
 
     if (searchError) throw searchError;
+    const placeholder = (candidates || [])
+      .slice()
+      .sort((a: { data?: Record<string, unknown> }, b: { data?: Record<string, unknown> }) => {
+        const ga = String(a.data?.groupName ?? a.data?.group_name ?? '');
+        const gb = String(b.data?.groupName ?? b.data?.group_name ?? '');
+        return ga.localeCompare(gb);
+      })[0];
     if (!placeholder) {
       return {
         success: false,
@@ -385,6 +391,7 @@ export async function handleRealInscription(
       user1Id: teamData.user1Id ?? existingData.user1Id ?? null,
       user2Id: teamData.user2Id ?? existingData.user2Id ?? null,
       ...teamData.extraData,
+      isPlaceholder: false,
     };
 
     const paymentStatus = teamData.paymentStatus ?? 'paid';
@@ -395,7 +402,6 @@ export async function handleRealInscription(
         participant_name: teamData.teamName,
         participant_id: teamData.player1ParticipantId,
         payment_status: paymentStatus,
-        is_placeholder: false,
         data: mergedData,
         updated_at: now(),
       })
