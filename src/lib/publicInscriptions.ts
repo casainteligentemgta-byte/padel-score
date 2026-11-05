@@ -28,13 +28,41 @@ const SENSITIVE_KEYS = [
     'dni',
 ];
 
+function flagFromUnknown(value: unknown): boolean | null {
+    if (value === true || value === 1) return true;
+    if (value === false || value === 0) return false;
+    if (typeof value === 'string') {
+        const s = value.trim().toLowerCase();
+        if (s === 'true' || s === 't' || s === '1') return true;
+        if (s === 'false' || s === 'f' || s === '0') return false;
+    }
+    return null;
+}
+
+function firstText(...values: unknown[]): string | null {
+    for (const value of values) {
+        if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return null;
+}
+
+/** Prod no tiene columnas group_name / is_placeholder: viven en data jsonb o en el RPC. */
 export function mapPublicInscriptionRow(row: Record<string, unknown>): PublicTournamentInscription {
     const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Record<string, unknown>;
     const partnerName =
-        (typeof row.partner_name === 'string' && row.partner_name) ||
-        (typeof row.partnerName === 'string' && row.partnerName) ||
-        (typeof data.partnerName === 'string' && data.partnerName) ||
-        '';
+        firstText(row.partner_name, row.partnerName, data.partnerName) || '';
+    const groupName = firstText(
+        row.group_name,
+        row.groupName,
+        data.groupName,
+        data.group_name,
+    );
+    const isPlaceholder =
+        flagFromUnknown(row.is_placeholder) ??
+        flagFromUnknown(row.isPlaceholder) ??
+        flagFromUnknown(data.isPlaceholder) ??
+        flagFromUnknown(data.is_placeholder) ??
+        false;
 
     return {
         id: String(row.id ?? ''),
@@ -45,12 +73,8 @@ export function mapPublicInscriptionRow(row: Record<string, unknown>): PublicTou
             : typeof row.participantName === 'string'
                 ? row.participantName
                 : '',
-        isPlaceholder: row.is_placeholder === true || row.isPlaceholder === true,
-        groupName: row.group_name != null
-            ? String(row.group_name)
-            : row.groupName != null
-                ? String(row.groupName)
-                : null,
+        isPlaceholder,
+        groupName,
         inscriptionStatus: row.inscription_status != null
             ? String(row.inscription_status)
             : row.inscriptionStatus != null

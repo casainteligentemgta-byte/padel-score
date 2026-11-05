@@ -21,7 +21,7 @@ export async function GET(
     if (service) {
         const { data, error } = await service
             .from('inscriptions')
-            .select('id, tournament_id, category_key, participant_name, group_name, is_placeholder, inscription_status, data')
+            .select('id, tournament_id, category_key, participant_name, inscription_status, data')
             .eq('tournament_id', id);
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });

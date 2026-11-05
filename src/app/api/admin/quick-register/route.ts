@@ -255,11 +255,11 @@ export async function POST(request: Request) {
         participant_email: email,
         participant_id: pid,
         payment_status: 'pending',
-        is_placeholder: false,
         data: {
           quick_registered: true,
           is_ghost: !profileExisted,
           source: 'admin_quick_register',
+          isPlaceholder: false,
         },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

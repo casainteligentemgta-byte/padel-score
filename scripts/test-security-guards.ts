@@ -295,7 +295,11 @@ run('migración 078 cierra inscriptions_public_read y publica RPC sin PII', () =
   assert.match(sql, /i\.tournament_id::uuid/);
   assert.match(sql, /i\.category_key::text/);
   assert.match(sql, /i\.tournament_id::text = p_tournament_id::text/);
+  assert.match(sql, /data->>'groupName'/);
+  assert.match(sql, /data->>'isPlaceholder'/);
   assert.match(sql, /user_id::text = auth\.uid\(\)::text OR public\.is_admin_user\(\)/);
+  assert.doesNotMatch(sql, /i\.group_name/);
+  assert.doesNotMatch(sql, /i\.is_placeholder/);
   assert.doesNotMatch(sql, /pizarra_cancha/);
   assert.doesNotMatch(sql, /participant_email/);
   assert.doesNotMatch(sql, /payment_status/);
@@ -312,12 +316,18 @@ run('roster público no filtra email ni pago', () => {
     participant_email: 'hidden@example.com',
     receipt_url: 'https://secret',
     payment_status: 'paid',
-    group_name: 'A',
-    is_placeholder: false,
-    data: { partnerName: 'Luis', phone: '04141234567', email: 'hidden@example.com' },
+    data: {
+      partnerName: 'Luis',
+      phone: '04141234567',
+      email: 'hidden@example.com',
+      groupName: 'A',
+      isPlaceholder: false,
+    },
   });
   assert.equal(mapped.participantName, 'Ana');
   assert.equal(mapped.data.partnerName, 'Luis');
+  assert.equal(mapped.groupName, 'A');
+  assert.equal(mapped.isPlaceholder, false);
   assert.equal(mapped.categoryKey, 'c7');
   assert.equal((mapped as { participantEmail?: string }).participantEmail, undefined);
   assert.equal((mapped as { paymentStatus?: string }).paymentStatus, undefined);
