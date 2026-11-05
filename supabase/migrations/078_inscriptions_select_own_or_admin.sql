@@ -7,11 +7,14 @@
 -- - El jugador ve solo sus filas (owner/user/participant/partner o data.partnerId)
 -- - El admin (is_admin_user) ve todas
 -- - RPC pública sin PII para grillas / cupos de torneo
+-- - Comparaciones y RETURNS TABLE casteadas a text/uuid (prod tiene IDs TEXT)
 -- - No toca políticas de pizarra / TV
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
 -- SELECT: quitar políticas abiertas y recrear least-privilege
+-- owner_id / user_id / participant_id / partner_id pueden ser uuid O text.
+-- auth.uid() es uuid. Comparar siempre como text.
 -- -----------------------------------------------------------------------------
 DROP POLICY IF EXISTS "inscriptions_public_read" ON public.inscriptions;
 DROP POLICY IF EXISTS "Allow public view for inscriptions" ON public.inscriptions;
@@ -22,18 +25,22 @@ CREATE POLICY "inscriptions_select_own_or_admin"
   ON public.inscriptions FOR SELECT
   TO authenticated
   USING (
-    auth.uid() = owner_id
-    OR auth.uid() = user_id
-    OR auth.uid() = participant_id
-    OR auth.uid() = partner_id
+    owner_id::text = auth.uid()::text
+    OR user_id::text = auth.uid()::text
+    OR participant_id::text = auth.uid()::text
+    OR partner_id::text = auth.uid()::text
     OR (data->>'partnerId') = auth.uid()::text
     OR public.is_admin_user()
   );
 
 -- -----------------------------------------------------------------------------
 -- Roster público (nombres / grupo / categoría). Sin email, teléfono, pago, recibo.
+-- Casts explícitos: en prod id/tournament_id pueden ser text.
+-- DROP + CREATE para poder cambiar tipos OUT si se reaplica.
 -- -----------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.list_tournament_inscriptions_public(p_tournament_id uuid)
+DROP FUNCTION IF EXISTS public.list_tournament_inscriptions_public(uuid);
+
+CREATE FUNCTION public.list_tournament_inscriptions_public(p_tournament_id uuid)
 RETURNS TABLE (
   id uuid,
   tournament_id uuid,
@@ -50,16 +57,16 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT
-    i.id,
-    i.tournament_id,
-    i.category_key,
-    i.participant_name,
-    NULLIF(btrim(COALESCE(i.data->>'partnerName', '')), ''),
-    i.group_name,
-    COALESCE(i.is_placeholder, false),
-    i.inscription_status
+    i.id::uuid,
+    i.tournament_id::uuid,
+    i.category_key::text,
+    i.participant_name::text,
+    NULLIF(btrim(COALESCE(i.data->>'partnerName', '')), '')::text,
+    i.group_name::text,
+    COALESCE(i.is_placeholder::boolean, false),
+    i.inscription_status::text
   FROM public.inscriptions i
-  WHERE i.tournament_id = p_tournament_id;
+  WHERE i.tournament_id::text = p_tournament_id::text;
 $$;
 
 REVOKE ALL ON FUNCTION public.list_tournament_inscriptions_public(uuid) FROM PUBLIC;
@@ -70,6 +77,7 @@ COMMENT ON FUNCTION public.list_tournament_inscriptions_public(uuid) IS
 
 -- -----------------------------------------------------------------------------
 -- notifications: fuente para /notifications (si aún no existe)
+-- user_id / sender_id pueden ser uuid O text si la tabla ya existía.
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -88,15 +96,15 @@ DROP POLICY IF EXISTS "notifications_select_own" ON public.notifications;
 CREATE POLICY "notifications_select_own"
   ON public.notifications FOR SELECT
   TO authenticated
-  USING (auth.uid() = user_id OR public.is_admin_user());
+  USING (user_id::text = auth.uid()::text OR public.is_admin_user());
 
 DROP POLICY IF EXISTS "notifications_insert_own" ON public.notifications;
 CREATE POLICY "notifications_insert_own"
   ON public.notifications FOR INSERT
   TO authenticated
   WITH CHECK (
-    auth.uid() = sender_id
-    OR auth.uid() = user_id
+    sender_id::text = auth.uid()::text
+    OR user_id::text = auth.uid()::text
     OR public.is_admin_user()
   );
 
@@ -104,8 +112,8 @@ DROP POLICY IF EXISTS "notifications_update_own" ON public.notifications;
 CREATE POLICY "notifications_update_own"
   ON public.notifications FOR UPDATE
   TO authenticated
-  USING (auth.uid() = user_id OR public.is_admin_user())
-  WITH CHECK (auth.uid() = user_id OR public.is_admin_user());
+  USING (user_id::text = auth.uid()::text OR public.is_admin_user())
+  WITH CHECK (user_id::text = auth.uid()::text OR public.is_admin_user());
 
 GRANT SELECT, INSERT, UPDATE ON public.notifications TO authenticated;
 GRANT ALL ON public.notifications TO service_role;

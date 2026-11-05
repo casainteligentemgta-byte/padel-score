@@ -284,13 +284,23 @@ run('migración 078 cierra inscriptions_public_read y publica RPC sin PII', () =
   );
   assert.match(sql, /DROP POLICY IF EXISTS "inscriptions_public_read"/);
   assert.match(sql, /inscriptions_select_own_or_admin/);
+  assert.match(sql, /owner_id::text = auth\.uid\(\)::text/);
+  assert.match(sql, /user_id::text = auth\.uid\(\)::text/);
+  assert.match(sql, /participant_id::text = auth\.uid\(\)::text/);
+  assert.match(sql, /partner_id::text = auth\.uid\(\)::text/);
   assert.match(sql, /data->>'partnerId'/);
   assert.match(sql, /is_admin_user\(\)/);
   assert.match(sql, /list_tournament_inscriptions_public/);
+  assert.match(sql, /i\.id::uuid/);
+  assert.match(sql, /i\.tournament_id::uuid/);
+  assert.match(sql, /i\.category_key::text/);
+  assert.match(sql, /i\.tournament_id::text = p_tournament_id::text/);
+  assert.match(sql, /user_id::text = auth\.uid\(\)::text OR public\.is_admin_user\(\)/);
   assert.doesNotMatch(sql, /pizarra_cancha/);
   assert.doesNotMatch(sql, /participant_email/);
   assert.doesNotMatch(sql, /payment_status/);
   assert.doesNotMatch(sql, /receipt_url/);
+  assert.doesNotMatch(sql, /auth\.uid\(\) = owner_id(?!::)/);
 });
 
 run('roster público no filtra email ni pago', () => {
