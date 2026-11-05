@@ -1,4 +1,5 @@
 import { getScoringRules } from '@/lib/matchScoringRules';
+import { isAmericanoMatchComplete, isAmericanoPointsMode, resolveAmericanoPointsGoal } from '@/lib/americanoDupla';
 
 /**
  * Criterio alineado con winSet del marcador sala (score): sets >= a ganar el partido,
@@ -8,6 +9,15 @@ export function shouldAutoFinishBySetsReferee(match: any, tournament: any): bool
     if (!match) return false;
     const s = String(match?.status || '').trim().toUpperCase();
     if (s === 'FINISHED' || s === 'FINALIZADO' || s === 'COMPLETE' || s === 'COMPLETED') return false;
+
+    if (isAmericanoPointsMode(match, tournament)) {
+        const goal = resolveAmericanoPointsGoal(match?.pointsGoal ?? tournament?.pointsGoal);
+        return isAmericanoMatchComplete(
+            Number(match?.games?.t1 ?? 0),
+            Number(match?.games?.t2 ?? 0),
+            goal,
+        );
+    }
 
     const rules = getScoringRules(
         match?.matchFormat ||

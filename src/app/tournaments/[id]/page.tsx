@@ -60,6 +60,11 @@ import { getAuthHeaders } from '@/lib/apiAuth';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { formatPlayerFichaName } from '@/lib/playerFichaName';
 import { getFinishedMatchScoreLines } from '@/lib/matchFinishedScoreDisplay';
+import {
+    buildAmericanoDuplaStandings,
+    isAmericanoDuplaTournament,
+    isAmericanoPointsMode,
+} from '@/lib/americanoDupla';
 import { buildPizarraConceptHref } from '@/app/tournaments/event/components/MatchCards';
 import { sortTournamentMatchesForDisplay } from '@/lib/tournamentMatchSort';
 import { isCaracasInscriptionClosed } from '@/lib/caracasTime';
@@ -1262,8 +1267,24 @@ export default function TournamentDashboard() {
     };
 
     const calculateStandings = (matchesArray?: any[]) => {
-        const standings: { [key: string]: any } = {};
         const matchesToUse = matchesArray || matches;
+        if (isAmericanoDuplaTournament(tournament)) {
+            return buildAmericanoDuplaStandings(tournament, matchesToUse).map((row) => ({
+                id: row.id,
+                name: row.name,
+                photo: row.photo,
+                matchesPlayed: row.played,
+                matchesWon: row.wins,
+                gamesWon: row.pointsFor,
+                gamesLost: row.pointsAgainst,
+                setsWon: 0,
+                setsLost: 0,
+                pointsFor: row.pointsFor,
+                pointsAgainst: row.pointsAgainst,
+                pointDiff: row.pointDiff,
+            }));
+        }
+        const standings: { [key: string]: any } = {};
 
         matchesToUse.filter(m => m.status === MatchStatus.FINISHED).forEach(m => {
             const isIndividual = tournament?.type === TournamentType.AMERICANO_INDIVIDUAL;
@@ -1854,7 +1875,8 @@ export default function TournamentDashboard() {
             );
         }
         const isIndividual = tournament?.type === TournamentType.AMERICANO_INDIVIDUAL;
-        const typeLabel = isIndividual ? 'Clasificación Individual' : 'Clasificación por Parejas';
+        const isAmericanoDupla = isAmericanoDuplaTournament(tournament);
+        const typeLabel = isIndividual ? 'Clasificación Individual' : isAmericanoDupla ? 'Ranking Americano (dupla fija)' : 'Clasificación por Parejas';
         const entityLabel = isIndividual ? 'Jugador' : 'Pareja';
         const computed = calculateStandings();
         const computedMap: Record<string, any> = {};
@@ -1875,7 +1897,17 @@ export default function TournamentDashboard() {
                 if (!seenIds.has(tid)) extra.push({ id: tid, name: `${team.p1?.name || 'J1'} / ${team.p2?.name || 'J2'}`, photo: null, ...zeroStats });
             });
         }
-        const allEntries = [...computed, ...extra].sort((a: any, b: any) => {
+        const allEntries = isAmericanoDupla
+            ? [...computed, ...extra].sort((a: any, b: any) => {
+                if ((b.pointsFor ?? b.gamesWon) !== (a.pointsFor ?? a.gamesWon)) {
+                    return (b.pointsFor ?? b.gamesWon) - (a.pointsFor ?? a.gamesWon);
+                }
+                const dA = (a.pointDiff ?? ((a.gamesWon || 0) - (a.gamesLost || 0)));
+                const dB = (b.pointDiff ?? ((b.gamesWon || 0) - (b.gamesLost || 0)));
+                if (dB !== dA) return dB - dA;
+                return String(a.id).localeCompare(String(b.id));
+            })
+            : [...computed, ...extra].sort((a: any, b: any) => {
             if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;
             const dSA = a.setsWon - a.setsLost, dSB = b.setsWon - b.setsLost;
             if (dSB !== dSA) return dSB - dSA;
@@ -1883,7 +1915,7 @@ export default function TournamentDashboard() {
             if (dGB !== dGA) return dGB - dGA;
             return b.gamesWon - a.gamesWon;
         });
-        const getPoints = (s: any) => s.matchesWon * 3 + s.setsWon;
+        const getPoints = (s: any) => isAmericanoDupla ? (s.pointsFor ?? s.gamesWon ?? 0) : s.matchesWon * 3 + s.setsWon;
         if (allEntries.length === 0) {
             return (
                 <div className="py-20 text-center space-y-4 bg-white/5 rounded-[2.5rem] border border-dashed border-white/10">
@@ -1900,7 +1932,7 @@ export default function TournamentDashboard() {
                     <div className="bg-padel-primary px-8 py-5 flex justify-between items-center">
                         <div>
                             <h3 className="text-black font-black italic uppercase text-base tracking-tighter">{typeLabel}</h3>
-                            <p className="text-[9px] text-black/60 font-black uppercase tracking-widest mt-0.5">{allEntries.length} {isIndividual ? 'jugadores' : 'parejas'} · Puntos: PG×3 + Sets×1</p>
+                            <p className="text-[9px] text-black/60 font-black uppercase tracking-widest mt-0.5">{allEntries.length} {isIndividual ? 'jugadores' : 'parejas'} · {isAmericanoDupla ? 'Pts a favor → Diff → H2H' : 'Puntos: PG×3 + Sets×1'}</p>
                         </div>
                         <Trophy className="w-7 h-7 text-black opacity-20" />
                     </div>
@@ -1912,10 +1944,20 @@ export default function TournamentDashboard() {
                                         <th className="text-left py-3 px-2 w-8 text-[10px] font-black uppercase tracking-widest text-gray-400">#</th>
                                         <th className="text-left py-3 px-2 text-[10px] font-black uppercase tracking-widest text-gray-400">{entityLabel}</th>
                                         <th className="text-center py-2.5 px-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-amber-500/35 text-amber-50 border border-amber-400/45 rounded-lg shadow-sm">PJ</th>
+                                        {isAmericanoDupla ? (
+                                            <>
+                                        <th className="text-center py-2.5 px-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-emerald-500/35 text-emerald-50 border border-emerald-400/45 rounded-lg shadow-sm">PF</th>
+                                        <th className="text-center py-2.5 px-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-rose-500/35 text-rose-50 border border-rose-400/45 rounded-lg shadow-sm">PC</th>
+                                        <th className="text-center py-2.5 px-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-violet-500/35 text-violet-50 border border-violet-400/45 rounded-lg shadow-sm">Diff</th>
+                                            </>
+                                        ) : (
+                                            <>
                                         <th className="text-center py-2.5 px-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-emerald-500/35 text-emerald-50 border border-emerald-400/45 rounded-lg shadow-sm">PG</th>
                                         <th className="text-center py-2.5 px-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-rose-500/35 text-rose-50 border border-rose-400/45 rounded-lg shadow-sm">PP</th>
                                         <th className="text-center py-2.5 px-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-sky-500/35 text-sky-50 border border-sky-400/45 rounded-lg shadow-sm">Sets</th>
                                         <th className="text-center py-2.5 px-2 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-violet-500/35 text-violet-50 border border-violet-400/45 rounded-lg shadow-sm">Games</th>
+                                            </>
+                                        )}
                                         <th className="text-right py-2.5 px-3 whitespace-nowrap text-[11px] font-black uppercase tracking-wider bg-padel-primary/30 text-padel-primary border border-padel-primary/45 rounded-lg shadow-sm">Pts</th>
                                     </tr>
                                 </thead>
@@ -1937,10 +1979,20 @@ export default function TournamentDashboard() {
                                                     </div>
                                                 </td>
                                                 <td className="py-3 px-1.5 text-center text-[11px] font-black text-amber-100 tabular-nums">{entry.matchesPlayed}</td>
+                                                {isAmericanoDupla ? (
+                                                    <>
+                                                <td className="py-3 px-1.5 text-center text-[11px] font-black text-emerald-200 tabular-nums">{entry.pointsFor ?? entry.gamesWon}</td>
+                                                <td className="py-3 px-1.5 text-center text-[11px] font-black text-rose-200 tabular-nums">{entry.pointsAgainst ?? entry.gamesLost}</td>
+                                                <td className="py-3 px-1.5 text-center text-[11px] font-black text-violet-100 tabular-nums">{entry.pointDiff ?? ((entry.gamesWon || 0) - (entry.gamesLost || 0))}</td>
+                                                    </>
+                                                ) : (
+                                                    <>
                                                 <td className="py-3 px-1.5 text-center text-[11px] font-black text-emerald-200 tabular-nums">{entry.matchesWon}</td>
                                                 <td className="py-3 px-1.5 text-center text-[11px] font-black text-rose-200 tabular-nums">{pp}</td>
                                                 <td className="py-3 px-1.5 text-center"><span className="text-[11px] font-black text-sky-100 tabular-nums">{entry.setsWon}<span className="text-sky-400/70">-</span>{entry.setsLost}</span></td>
                                                 <td className="py-3 px-1.5 text-center"><span className="text-[11px] font-black text-violet-100 tabular-nums">{entry.gamesWon}<span className="text-violet-400/70">-</span>{entry.gamesLost}</span></td>
+                                                    </>
+                                                )}
                                                 <td className="py-3 px-3 text-right"><span className={`text-sm font-black italic tabular-nums ${pts > 0 ? 'text-padel-primary' : 'text-gray-600'}`}>{pts}</span></td>
                                             </tr>
                                         );
@@ -1954,11 +2006,22 @@ export default function TournamentDashboard() {
                     <p className="text-[11px] font-black uppercase tracking-widest text-gray-200">Leyenda de columnas</p>
                     <div className="flex flex-wrap gap-x-5 gap-y-2.5 text-[11px] leading-snug text-gray-200">
                         <span><span className="font-black text-amber-200">PJ</span> — Partidos jugados</span>
+                        {isAmericanoDupla ? (
+                            <>
+                        <span><span className="font-black text-emerald-300">PF</span> — Puntos a favor</span>
+                        <span><span className="font-black text-rose-300">PC</span> — Puntos en contra</span>
+                        <span><span className="font-black text-violet-200">Diff</span> — Diferencia de puntos</span>
+                        <span><span className="font-black text-padel-primary">Pts</span> — Puntos a favor (desempate: Diff → H2H)</span>
+                            </>
+                        ) : (
+                            <>
                         <span><span className="font-black text-emerald-300">PG</span> — Partidos ganados</span>
                         <span><span className="font-black text-rose-300">PP</span> — Partidos perdidos</span>
                         <span><span className="font-black text-sky-200">Sets</span> — Sets a favor / en contra (formato SF–SC)</span>
                         <span><span className="font-black text-violet-200">Games</span> — <span className="text-violet-300 font-black">JF</span> juegos a favor, <span className="text-violet-300 font-black">JC</span> juegos en contra</span>
                         <span><span className="font-black text-padel-primary">Pts</span> — Puntos (PG×3 + sets ganados)</span>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
@@ -2220,7 +2283,8 @@ export default function TournamentDashboard() {
                                     }
                                     const podium = resolveTournamentPodium();
                                     const standingsFull = calculateStandings();
-                                    const rankPoints = (e: any) => e.matchesWon * 3 + e.setsWon;
+                                    const americanoRank = isAmericanoDuplaTournament(tournament);
+                                    const rankPoints = (e: any) => americanoRank ? (e.pointsFor ?? e.gamesWon ?? 0) : e.matchesWon * 3 + e.setsWon;
 
                                     return (
                                         <>
@@ -2398,10 +2462,20 @@ export default function TournamentDashboard() {
                                                                     <th className="text-left py-2.5 px-1.5 text-[10px] font-black uppercase tracking-tighter text-white/90">Pos</th>
                                                                     <th className="text-left py-2.5 px-1.5 text-[10px] font-black uppercase tracking-tighter text-white/90">Jugador / Equipo</th>
                                                                     <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-amber-500/35 text-amber-50 border border-amber-400/40 rounded-lg shadow-sm">PJ</th>
+                                                                    {americanoRank ? (
+                                                                        <>
+                                                                    <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-emerald-500/35 text-emerald-50 border border-emerald-400/40 rounded-lg shadow-sm">PF</th>
+                                                                    <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-rose-500/35 text-rose-50 border border-rose-400/40 rounded-lg shadow-sm">PC</th>
+                                                                    <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-violet-500/35 text-violet-50 border border-violet-400/40 rounded-lg shadow-sm">Diff</th>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
                                                                     <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-emerald-500/35 text-emerald-50 border border-emerald-400/40 rounded-lg shadow-sm">PG</th>
                                                                     <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-rose-500/35 text-rose-50 border border-rose-400/40 rounded-lg shadow-sm">PP</th>
                                                                     <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-sky-500/35 text-sky-50 border border-sky-400/40 rounded-lg shadow-sm">Sets</th>
                                                                     <th className="text-center py-2.5 px-1 text-[11px] font-black uppercase tracking-wider bg-violet-500/35 text-violet-50 border border-violet-400/40 rounded-lg shadow-sm">Games</th>
+                                                                        </>
+                                                                    )}
                                                                     <th className="text-right py-2.5 px-1.5 text-[11px] font-black uppercase tracking-wider bg-padel-primary/35 text-padel-primary border border-padel-primary/45 rounded-lg shadow-sm">Pts</th>
                                                                 </tr>
                                                             </thead>
@@ -2451,6 +2525,20 @@ export default function TournamentDashboard() {
                                                                         <td className="py-2 px-0.5 text-center text-[11px] font-black text-amber-100 tabular-nums">
                                                                             {entry.matchesPlayed}
                                                                         </td>
+                                                                        {americanoRank ? (
+                                                                            <>
+                                                                        <td className="py-2 px-0.5 text-center text-[11px] font-black text-emerald-200 tabular-nums">
+                                                                            {entry.pointsFor ?? entry.gamesWon}
+                                                                        </td>
+                                                                        <td className="py-2 px-0.5 text-center text-[11px] font-black text-rose-200 tabular-nums">
+                                                                            {entry.pointsAgainst ?? entry.gamesLost}
+                                                                        </td>
+                                                                        <td className="py-2 px-0.5 text-center text-[11px] font-black text-violet-100 tabular-nums">
+                                                                            {entry.pointDiff ?? ((entry.gamesWon || 0) - (entry.gamesLost || 0))}
+                                                                        </td>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
                                                                         <td className="py-2 px-0.5 text-center text-[11px] font-black text-emerald-200 tabular-nums">
                                                                             {entry.matchesWon}
                                                                         </td>
@@ -2463,6 +2551,8 @@ export default function TournamentDashboard() {
                                                                         <td className="py-2 px-0.5 text-center text-[11px] font-black text-violet-100 tabular-nums">
                                                                             {entry.gamesWon}-{entry.gamesLost}
                                                                         </td>
+                                                                            </>
+                                                                        )}
                                                                         <td className="py-2 px-1.5 text-right">
                                                                             <span className="text-sm font-black italic text-padel-primary tabular-nums">
                                                                                 {rankPoints(entry)}
@@ -2480,11 +2570,22 @@ export default function TournamentDashboard() {
                                                 <p className="text-[11px] font-black uppercase tracking-widest text-gray-200">Leyenda de columnas</p>
                                                 <div className="flex flex-wrap gap-x-5 gap-y-2.5 text-[11px] leading-snug text-gray-200">
                                                     <span><span className="font-black text-amber-200">PJ</span> — Partidos jugados</span>
+                                                    {americanoRank ? (
+                                                        <>
+                                                    <span><span className="font-black text-emerald-300">PF</span> — Puntos a favor</span>
+                                                    <span><span className="font-black text-rose-300">PC</span> — Puntos en contra</span>
+                                                    <span><span className="font-black text-violet-200">Diff</span> — Diferencia</span>
+                                                    <span><span className="font-black text-padel-primary">Pts</span> — Puntos a favor (desempate Diff → H2H)</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
                                                     <span><span className="font-black text-emerald-300">PG</span> — Partidos ganados</span>
                                                     <span><span className="font-black text-rose-300">PP</span> — Partidos perdidos</span>
                                                     <span><span className="font-black text-sky-200">Sets</span> — Sets a favor / en contra (formato SF–SC)</span>
                                                     <span><span className="font-black text-violet-200">Games</span> — <span className="text-violet-300 font-black">JF</span> juegos a favor, <span className="text-violet-300 font-black">JC</span> juegos en contra</span>
                                                     <span><span className="font-black text-padel-primary">Pts</span> — Puntos (PG×3 + sets ganados)</span>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </div>
                                         </>
@@ -2762,8 +2863,10 @@ export default function TournamentDashboard() {
                                                                         const isActive =
                                                                             markerLiveMatchIds.has(String(match.id)) ||
                                                                             dataService.isMatchEnVivoStatus(match?.status);
-                                                                        const isSTB = liveMarker?.super_tiebreak === true || match.matchFormat === 'SUPER_TIEBREAK' || match.superTiebreak;
-                                                                        const isTB = !isSTB && (liveMarker?.modo_puntos === 'tiebreak' || match.matchFormat === 'TIEBREAK' || match.tiebreak);
+                                                                        const isAmericanoLive = isAmericanoPointsMode(match, tournament)
+                                                                            || liveMarker?.modo_puntos === 'americano_points';
+                                                                        const isSTB = !isAmericanoLive && (liveMarker?.super_tiebreak === true || match.matchFormat === 'SUPER_TIEBREAK' || match.superTiebreak);
+                                                                        const isTB = !isAmericanoLive && !isSTB && (liveMarker?.modo_puntos === 'tiebreak' || match.matchFormat === 'TIEBREAK' || match.tiebreak);
                                                                         const showExtra = isSTB || isTB;
                                                                         const extraLabel = isSTB ? 'STB' : 'TB';
 
@@ -2789,7 +2892,9 @@ export default function TournamentDashboard() {
                                                                         const COL_W_SCORE = 'w-8';
                                                                         const COL_W_POINTS = 'w-9';
                                                                         /** Dos columnas de nombres + P/G/S (+ TB opcional) */
-                                                                        const liveGridCols = showExtra
+                                                                        const liveGridCols = isAmericanoLive
+                                                                            ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.5rem]'
+                                                                            : showExtra
                                                                             ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem_2rem_2rem_2rem]'
                                                                             : 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem_2rem_2rem]';
                                                                         const fsNameSize = (nm: string) => {
@@ -2824,6 +2929,12 @@ export default function TournamentDashboard() {
                                                                                                 Jugadores
                                                                                             </span>
                                                                                         </div>
+                                                                                        {isAmericanoLive ? (
+                                                                                        <div className={`${COL_W_POINTS} flex items-center justify-center border-l border-white/[0.06] bg-black`}>
+                                                                                            <span className="text-[8px] font-black uppercase tracking-widest text-padel-primary/80">PTS</span>
+                                                                                        </div>
+                                                                                        ) : (
+                                                                                        <>
                                                                                         <div className={`${COL_W_POINTS} flex items-center justify-center border-l border-white/[0.06]`}>
                                                                                             <span className="text-[8px] font-black uppercase tracking-widest text-white/25">P</span>
                                                                                         </div>
@@ -2833,6 +2944,8 @@ export default function TournamentDashboard() {
                                                                                         <div className={`${COL_W_SCORE} flex items-center justify-center border-l border-white/[0.06] bg-black`}>
                                                                                             <span className="text-[8px] font-black uppercase tracking-widest text-white/60">S</span>
                                                                                         </div>
+                                                                                        </>
+                                                                                        )}
                                                                                         {showExtra && (
                                                                                             <div className={`${COL_W_SCORE} flex items-center justify-center border-l border-white/[0.06] bg-black`}>
                                                                                                 <span className="text-[8px] font-black uppercase tracking-widest text-white/60">{extraLabel}</span>
@@ -2915,6 +3028,18 @@ export default function TournamentDashboard() {
                                                                                                     )}
                                                                                                 </div>
                                                                                             </div>
+                                                                                            {isAmericanoLive ? (
+                                                                                            <div className={`${COL_W_POINTS} flex items-center justify-center border-l border-white/[0.06] bg-white`}>
+                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive
+                                                                                                        ? (liveMarker
+                                                                                                            ? Number(liveMarker?.puntos?.local ?? liveMarker?.games?.local ?? 0)
+                                                                                                            : Number(match.games?.t1 ?? match.points?.t1 ?? 0))
+                                                                                                        : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            ) : (
+                                                                                            <>
                                                                                             <div className={`${COL_W_POINTS} flex items-center justify-center border-l border-white/[0.06] bg-black`}>
                                                                                                 <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
                                                                                                     {isActive ? toTennisScore(gp1) : '–'}
@@ -2930,6 +3055,8 @@ export default function TournamentDashboard() {
                                                                                                     {isActive ? (liveMarker ? (liveMarker?.sets?.local ?? 0) : (match.sets?.t1 ?? 0)) : '–'}
                                                                                                 </span>
                                                                                             </div>
+                                                                                            </>
+                                                                                            )}
                                                                                             {showExtra && (
                                                                                                 <div className={`${COL_W_SCORE} flex items-center justify-center border-l border-white/[0.06] bg-white`}>
                                                                                                     <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
@@ -2983,6 +3110,18 @@ export default function TournamentDashboard() {
                                                                                                     )}
                                                                                                 </div>
                                                                                             </div>
+                                                                                            {isAmericanoLive ? (
+                                                                                            <div className={`${COL_W_POINTS} flex items-center justify-center border-l border-white/[0.06] bg-white`}>
+                                                                                                <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>
+                                                                                                    {isActive
+                                                                                                        ? (liveMarker
+                                                                                                            ? Number(liveMarker?.puntos?.visitante ?? liveMarker?.games?.visitante ?? 0)
+                                                                                                            : Number(match.games?.t2 ?? match.points?.t2 ?? 0))
+                                                                                                        : '–'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            ) : (
+                                                                                            <>
                                                                                             <div className={`${COL_W_POINTS} flex items-center justify-center border-l border-white/[0.06] bg-black`}>
                                                                                                 <span className={`font-black italic text-[13px] text-white ${!isActive ? 'opacity-20' : ''}`}>
                                                                                                     {isActive ? toTennisScore(gp2) : '–'}
@@ -2998,6 +3137,8 @@ export default function TournamentDashboard() {
                                                                                                     {isActive ? (liveMarker ? (liveMarker?.sets?.visitante ?? 0) : (match.sets?.t2 ?? 0)) : '–'}
                                                                                                 </span>
                                                                                             </div>
+                                                                                            </>
+                                                                                            )}
                                                                                             {showExtra && (
                                                                                                 <div className={`${COL_W_SCORE} flex items-center justify-center border-l border-white/[0.06] bg-white`}>
                                                                                                     <span className={`font-black italic text-base text-black ${!isActive ? 'opacity-20' : ''}`}>

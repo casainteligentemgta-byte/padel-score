@@ -7,6 +7,7 @@ import {
     LayoutGrid, Users, Award, TrendingUp, Calendar, Trophy, Zap
 } from 'lucide-react';
 import { MatchStatus } from '@/types/tournament';
+import { buildAmericanoDuplaStandings, isAmericanoDuplaTournament } from '@/lib/americanoDupla';
 import {
     formatCategory, formatHHMM, formatDateDDMM, resolveTeamNames, calcGroupStanding, formatDisplayName
 } from '../utils';
@@ -28,7 +29,31 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
     const teamIds: string[] = groupAssignments[gName] ?? [];
     const teams = activeTournament?.teams ?? [];
 
-    const rows = teamIds.map((tid, tIdx) => {
+    const americano = isAmericanoDuplaTournament(activeTournament);
+    const rows = americano
+        ? buildAmericanoDuplaStandings(activeTournament, allMatches).map((r) => {
+            const idx = Math.max(0, Number(String(r.id).replace('team-', '')) - 1);
+            const team = teams[idx];
+            const p1 = formatDisplayName((team?.p1Name || team?.p1?.name || '').trim());
+            const p2 = formatDisplayName((team?.p2Name || team?.p2?.name || '').trim());
+            return {
+                id: r.id,
+                name: r.name,
+                tNum: idx + 1,
+                p1Name: p1 || `Jugador ${idx * 2 + 1}`,
+                p2Name: p2 || `Jugador ${idx * 2 + 2}`,
+                player2Accepted: true,
+                PJ: r.played,
+                PG: r.wins,
+                PP: Math.max(0, r.played - r.wins),
+                JF: r.pointsFor,
+                JC: r.pointsAgainst,
+                Pts: r.pointsFor,
+                winRate: r.played > 0 ? (r.wins / r.played) * 100 : 0,
+                gameRate: (r.pointsFor + r.pointsAgainst) > 0 ? (r.pointsFor / (r.pointsFor + r.pointsAgainst)) * 100 : 0,
+            };
+        })
+        : teamIds.map((tid) => {
         const teamIdx = teams.findIndex((t: any) => String(t.id) === String(tid));
         const team = teamIdx >= 0 ? teams[teamIdx] : null;
         const tNum = teamIdx + 1;
@@ -101,7 +126,7 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
     const pct = groupMatchesTotal.length > 0 ? Math.round((groupMatchesDone / groupMatchesTotal.length) * 100) : 0;
 
     const isSimple = activeTournament?.type === 'AMERICANO_INDIVIDUAL';
-    const qualifyingSpots = Math.min(2, rows.length);
+    const qualifyingSpots = americano ? 0 : Math.min(2, rows.length);
     const groupLetter = gName.length === 1 ? gName : gName.replace('Grupo', '').trim();
     const rankCol = rows.length >= 10 ? 'minmax(30px,auto)' : '26px';
     const colStat = (isSimple ? 36 : 34) + 'px';
@@ -129,10 +154,12 @@ const StandingsTable = ({ activeTournament, gName, groupAssignments, allMatches 
                         </p>
                     </div>
                 </div>
+                {qualifyingSpots > 0 && (
                 <div className="flex items-center gap-1.5 bg-black/10 rounded-full px-2.5 py-1">
                     <Award className="w-3 h-3 text-black/70" />
                     <span className="text-[8px] font-black text-black/70 uppercase">Top {qualifyingSpots} clasifican</span>
                 </div>
+                )}
             </div>
 
             <div className="h-1 bg-black/20">
@@ -330,7 +357,10 @@ const GroupMatches = ({ gName, groupAssignments, activeTournament, allMatches }:
 
 export const GroupsView: React.FC<GroupsViewProps> = ({ tournaments, rankingOnly = false }) => {
     const tourList = Object.values(tournaments) as any[];
-    const withGroups = tourList.filter(t => t.groupAssignments && Object.keys(t.groupAssignments).length > 0);
+    const withGroups = tourList.filter(t =>
+        (t.groupAssignments && Object.keys(t.groupAssignments).length > 0) ||
+        isAmericanoDuplaTournament(t)
+    );
 
     // Estado para saber qué grupo está activo en cada categoría (usando un mapa id-torneo -> nombre-grupo)
     const [activeGroupsMap, setActiveGroupsMap] = useState<Record<string, string>>({});
@@ -348,7 +378,12 @@ export const GroupsView: React.FC<GroupsViewProps> = ({ tournaments, rankingOnly
     return (
         <div className="space-y-12">
             {withGroups.map((t, tIdx) => {
-                const groupAssignments: Record<string, string[]> = t.groupAssignments ?? {};
+                const groupAssignments: Record<string, string[]> =
+                    t.groupAssignments && Object.keys(t.groupAssignments).length > 0
+                        ? t.groupAssignments
+                        : isAmericanoDuplaTournament(t)
+                            ? { A: (t.teams || []).map((team: any, i: number) => String(team?.id || `team-${i + 1}`)) }
+                            : {};
                 const groupNames = Object.keys(groupAssignments).sort();
                 const currentGroupName = activeGroupsMap[t.id] ?? groupNames[0] ?? null;
                 const currentView = activeViewMap[t.id] ?? 'standings';

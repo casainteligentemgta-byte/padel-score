@@ -1,4 +1,5 @@
 import { MatchStatus, TournamentType } from '@/types/tournament';
+import { buildAmericanoDuplaStandings, isAmericanoDuplaTournament } from '@/lib/americanoDupla';
 
 /** Etiqueta de ronda del cuadro (alineado con el hub de categoría). */
 export function getBracketStageLabel(match: any): string {
@@ -28,8 +29,24 @@ function isMatchFinished(status: any): boolean {
 
 /** Standings por pareja o jugador (misma lógica que el hub de categoría). */
 export function calculateStandingsFromMatches(matches: any[], tournament: any): any[] {
-    const standings: { [key: string]: any } = {};
     if (!Array.isArray(matches) || !tournament) return [];
+    if (isAmericanoDuplaTournament(tournament)) {
+        return buildAmericanoDuplaStandings(tournament, matches).map((row) => ({
+            id: row.id,
+            name: row.name,
+            photo: row.photo,
+            matchesPlayed: row.played,
+            matchesWon: row.wins,
+            gamesWon: row.pointsFor,
+            gamesLost: row.pointsAgainst,
+            setsWon: 0,
+            setsLost: 0,
+            pointsFor: row.pointsFor,
+            pointsAgainst: row.pointsAgainst,
+            pointDiff: row.pointDiff,
+        }));
+    }
+    const standings: { [key: string]: any } = {};
 
     matches.filter((m) => isMatchFinished(m.status)).forEach((m) => {
         const isIndividual = tournament?.type === TournamentType.AMERICANO_INDIVIDUAL;

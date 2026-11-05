@@ -44,6 +44,12 @@ function matchHasSuperTiebreak(match: any): boolean {
 
 /** Líneas listas para mostrar (cada una puede ir en un renglón). */
 export function getFinishedMatchScoreLines(match: any): string[] {
+    const fmt = String(match?.matchFormat || match?.match_format || match?.rrMatchFormat || '').toUpperCase();
+    if (fmt === 'AMERICANO_POINTS' || fmt === 'AMERICANO_DUPLA') {
+        const t1 = Number(match?.games?.t1 ?? match?.points?.t1 ?? 0) || 0;
+        const t2 = Number(match?.games?.t2 ?? match?.points?.t2 ?? 0) || 0;
+        return [`${t1}-${t2}`];
+    }
     const setScores = Array.isArray(match?.setScores) ? match.setScores : [];
     const explicitStb = matchHasSuperTiebreak(match);
     const inferredStb = inferStbFromSetScoresOnly(match);

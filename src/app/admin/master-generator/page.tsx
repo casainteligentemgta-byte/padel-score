@@ -33,6 +33,12 @@ import {
 } from 'lucide-react';
 import { TournamentType, TournamentCategory, MatchStatus } from '@/types/tournament';
 import { MasterScheduleEngine, MasterScheduleConfig, CategoryConfig } from '@/services/MasterScheduleEngine';
+import {
+    AMERICANO_POINTS_FORMAT,
+    AMERICANO_POINTS_GOAL_OPTIONS,
+    isAmericanoDuplaType,
+    resolveAmericanoPointsGoal,
+} from '@/lib/americanoDupla';
 import { useAuth } from '@/lib/AuthContext';
 import { dataService } from '@/lib/dataService';
 import { getAuthHeaders } from '@/lib/apiAuth';
@@ -154,7 +160,16 @@ const INITIAL_EVENT_DATA: MasterScheduleConfig = {
 // ── Calcula el total de partidos de una categoría ────────────────────────────
 // Cuadro Consolación: 4 equipos → 6 partidos; 5-8 → 10 partidos
 // Resto: fase grupos (round-robin o 2 juegos garantizados) + eliminatoria
-function calcTotalMatchesForCategory(numTeams: number, groupSize?: number, quickQualification?: boolean, isCuadroConsolacion?: boolean, advanceCount?: number): number {
+function persistTypeFromUi(
+    uiType: 'AMERICANO' | 'DUPLA_FIJA' | 'ROUND_ROBIN' | 'ELIMINACION_DIRECTA' | 'COMBINADO' | 'CUADRO_CONSOLACION',
+): TournamentType {
+    if (uiType === 'CUADRO_CONSOLACION') return TournamentType.CUADRO_CONSOLACION;
+    if (uiType === 'DUPLA_FIJA') return TournamentType.AMERICANO_DUPLA;
+    return TournamentType.ROUND_ROBIN;
+}
+
+function calcTotalMatchesForCategory(numTeams: number, groupSize?: number, quickQualification?: boolean, isCuadroConsolacion?: boolean, advanceCount?: number, isAmericanoDupla?: boolean): number {
+    if (isAmericanoDupla) return numTeams < 2 ? 0 : (numTeams * (numTeams - 1)) / 2;
     if (isCuadroConsolacion) return numTeams <= 4 ? 6 : 10;
     const gs = (groupSize && groupSize >= 2) ? groupSize : 4;
     const numGroups = Math.max(1, Math.floor(numTeams / gs));
@@ -219,7 +234,7 @@ export default function MasterGeneratorPage() {
     const [pendingGroupSize, setPendingGroupSize] = useState<3 | 4>(4);
     // Tipo de torneo y puntos para Americano
     const [pendingTournamentType, setPendingTournamentType] = useState<'AMERICANO' | 'DUPLA_FIJA' | 'ROUND_ROBIN' | 'ELIMINACION_DIRECTA' | 'COMBINADO' | 'CUADRO_CONSOLACION'>('AMERICANO');
-    const [pendingPointsGoal, setPendingPointsGoal] = useState<number>(16);
+    const [pendingPointsGoal, setPendingPointsGoal] = useState<number>(24);
     // Formato de partido para Round Robin
     const [pendingRRFormat, setPendingRRFormat] = useState<'ONE_SET_6' | 'ONE_SET_9' | 'TWO_SHORT_SETS' | 'TWO_NORMAL_SETS'>('TWO_NORMAL_SETS');
     const [pendingAdvanceCount, setPendingAdvanceCount] = useState<1 | 2>(2);
@@ -268,7 +283,7 @@ export default function MasterGeneratorPage() {
         setPendingSetFormat('TIE_BREAK');
         setPendingMatchFormat('2SETS_STB');
         setPendingTournamentType('AMERICANO');
-        setPendingPointsGoal(16);
+        setPendingPointsGoal(24);
         setPendingRRFormat('TWO_NORMAL_SETS');
         setPendingPrice('');
         setPendingTieBreakRule('GAMES_DIFF');
@@ -429,7 +444,7 @@ export default function MasterGeneratorPage() {
         setPendingMatchFormat('2SETS_STB');
         setPendingGroupSize(4);
         setPendingTournamentType('AMERICANO');
-        setPendingPointsGoal(16);
+        setPendingPointsGoal(24);
         setPendingRRFormat('TWO_NORMAL_SETS');
         setPendingAdvanceCount(2);
         setPendingQuickQualification(false);
@@ -461,7 +476,7 @@ export default function MasterGeneratorPage() {
                         rrMatchFormat: pendingRRFormat,
                         advanceCount: pendingAdvanceCount,
                         quickQualification: pendingTournamentType === 'ROUND_ROBIN' && pendingAdvanceCount === 2 ? pendingQuickQualification : undefined,
-                        type: pendingTournamentType === 'CUADRO_CONSOLACION' ? TournamentType.CUADRO_CONSOLACION : TournamentType.ROUND_ROBIN,
+                        type: persistTypeFromUi(pendingTournamentType),
                         consolacionMatchFormat: pendingTournamentType === 'CUADRO_CONSOLACION' ? pendingConsolacionMatchFormat : undefined,
                         inscriptionPrice: Number(pendingPrice) || 0,
                         tieBreakRule: pendingTieBreakRule,
@@ -483,7 +498,7 @@ export default function MasterGeneratorPage() {
                     gender,
                     category,
                     numTeams: pendingNumTeams,
-                    type: pendingTournamentType === 'CUADRO_CONSOLACION' ? TournamentType.CUADRO_CONSOLACION : TournamentType.ROUND_ROBIN,
+                    type: persistTypeFromUi(pendingTournamentType),
                     goldenPoint: pendingTournamentType === 'CUADRO_CONSOLACION' ? true : pendingGolden,
                     setFormat: pendingSetFormat,
                     matchFormat: pendingMatchFormat,
@@ -659,7 +674,9 @@ export default function MasterGeneratorPage() {
 
                 const teamsFromCat = cat.teams ?? [];
                 // Replicate MasterScheduleEngine's logic for gs exactly
-                const gs: number = (cat.groupSize === 3 || cat.groupSize === 4) && cat.groupSize < teamsFromCat.length
+                const gs: number = isAmericanoDuplaType(cat.type)
+                    ? teamsFromCat.length
+                    : (cat.groupSize === 3 || cat.groupSize === 4) && cat.groupSize < teamsFromCat.length
                     ? cat.groupSize
                     : teamsFromCat.length;
 
@@ -676,7 +693,9 @@ export default function MasterGeneratorPage() {
                 try {
                     // Formato efectivo que consumen marker/display para reglas reales de scoring.
                     const effectiveMatchFormat =
-                        cat.type === TournamentType.CUADRO_CONSOLACION
+                        isAmericanoDuplaType(cat.type)
+                            ? AMERICANO_POINTS_FORMAT
+                            : cat.type === TournamentType.CUADRO_CONSOLACION
                             ? ((cat as any).consolacionMatchFormat ?? 'TWO_SHORT_SETS')
                             : ((cat as any).rrMatchFormat ?? 'ONE_SET_6');
                     const effectiveTieBreakType = cat.setFormat === 'SUPER_TIE_BREAK' ? 'STB' : 'TB';
@@ -706,6 +725,9 @@ export default function MasterGeneratorPage() {
                             orden: displayOrder,
                             ...(team1Index != null && { team1Index }),
                             ...(team2Index != null && { team2Index }),
+                            ...(isAmericanoDuplaType(cat.type) && {
+                                pointsGoal: resolveAmericanoPointsGoal((cat as any).pointsGoal),
+                            }),
                         };
                     });
 
@@ -725,9 +747,11 @@ export default function MasterGeneratorPage() {
                         bufferMinutes: eventData.bufferMinutes ?? 10,
                         teams: teamsFromCat,
                         groupAssignments: Object.keys(groupAssignments).length > 0 ? groupAssignments : undefined,
-                        groupSize: cat.groupSize,
-                        advanceCount: (cat as any).advanceCount ?? 2,
-                        pointsGoal: (cat as any).pointsGoal ?? 24,
+                        groupSize: isAmericanoDuplaType(cat.type) ? teamsFromCat.length : cat.groupSize,
+                        advanceCount: isAmericanoDuplaType(cat.type) ? 0 : ((cat as any).advanceCount ?? 2),
+                        pointsGoal: isAmericanoDuplaType(cat.type)
+                            ? resolveAmericanoPointsGoal((cat as any).pointsGoal)
+                            : ((cat as any).pointsGoal ?? 24),
                         matchFormat: effectiveMatchFormat,
                         scoringSystem: cat.goldenPoint ? 'GOLDEN_POINT' : 'TRADITIONAL',
                         tieBreakType: effectiveTieBreakType,
@@ -801,7 +825,8 @@ export default function MasterGeneratorPage() {
                 c.groupSize,
                 (c as any).quickQualification,
                 (c as any).type === TournamentType.CUADRO_CONSOLACION,
-                (c as any).advanceCount
+                (c as any).advanceCount,
+                isAmericanoDuplaType((c as any).type)
             ),
             0
         );
@@ -892,7 +917,7 @@ export default function MasterGeneratorPage() {
         eventData.matchDurationMinutes,
         eventData.bufferMinutes,
         eventData.categories.length,
-        eventData.categories.map(c => calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION, (c as any).advanceCount)).join(','),
+        eventData.categories.map(c => calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION, (c as any).advanceCount, isAmericanoDuplaType((c as any).type))).join(','),
         generatedMatches.length,
     ]);
 
@@ -1241,7 +1266,12 @@ export default function MasterGeneratorPage() {
                                                     <button
                                                         key={opt.val}
                                                         type="button"
-                                                        onClick={() => setPendingTournamentType(opt.val)}
+                                                        onClick={() => {
+                                                            setPendingTournamentType(opt.val);
+                                                            if (opt.val === 'DUPLA_FIJA' && ![16, 24, 32].includes(pendingPointsGoal)) {
+                                                                setPendingPointsGoal(24);
+                                                            }
+                                                        }}
                                                         className={`relative flex flex-col items-center text-center gap-1 rounded-lg p-1.5 border transition-all select-none touch-manipulation active:scale-[0.98] ${isSelected
                                                             ? 'bg-padel-primary/10 border-padel-primary text-white shadow-[0_0_15px_rgba(204,255,0,0.15)]'
                                                             : 'bg-zinc-900/80 border-zinc-800 text-zinc-300 hover:border-padel-primary/40 hover:bg-zinc-900'
@@ -1287,8 +1317,8 @@ export default function MasterGeneratorPage() {
                                                     <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
                                                         <Trophy className="w-3 h-3 text-yellow-400" /> Objetivo de Puntos
                                                     </label>
-                                                    <div className="grid grid-cols-6 gap-2">
-                                                        {[4, 8, 12, 16, 20, 24].map(pts => (
+                                                    <div className={`grid gap-2 ${pendingTournamentType === 'DUPLA_FIJA' ? 'grid-cols-3' : 'grid-cols-6'}`}>
+                                                        {(pendingTournamentType === 'DUPLA_FIJA' ? [...AMERICANO_POINTS_GOAL_OPTIONS] : [4, 8, 12, 16, 20, 24]).map(pts => (
                                                             <button
                                                                 key={pts}
                                                                 type="button"
@@ -1299,6 +1329,11 @@ export default function MasterGeneratorPage() {
                                                             </button>
                                                         ))}
                                                     </div>
+                                                    {pendingTournamentType === 'DUPLA_FIJA' && (
+                                                        <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">
+                                                            El partido termina cuando la suma de ambos lados llega a {resolveAmericanoPointsGoal(pendingPointsGoal)} (ej. 15-9). Duración recomendada: 30 min.
+                                                        </p>
+                                                    )}
                                                 </div>
 
                                                 {/* Precio de Inscripción */}
@@ -2108,7 +2143,15 @@ export default function MasterGeneratorPage() {
                                                                     setPendingGolden(cat.goldenPoint ?? false);
                                                                     setPendingSetFormat((cat.setFormat as any) ?? 'TIE_BREAK');
                                                                     setPendingGroupSize((cat.groupSize as 3 | 4) ?? 4);
-                                                                    setPendingTournamentType((cat as any).tournamentType ?? 'ROUND_ROBIN');
+                                                                    setPendingTournamentType(
+                                                                        (cat as any).tournamentType
+                                                                        ?? (isAmericanoDuplaType(cat.type) ? 'DUPLA_FIJA' : 'ROUND_ROBIN')
+                                                                    );
+                                                                    setPendingPointsGoal(
+                                                                        isAmericanoDuplaType(cat.type)
+                                                                            ? resolveAmericanoPointsGoal((cat as any).pointsGoal)
+                                                                            : ((cat as any).pointsGoal ?? 24)
+                                                                    );
                                                                     setPendingRRFormat((cat as any).rrMatchFormat ?? 'ONE_SET_6');
                                                                     setPendingAdvanceCount((cat as any).advanceCount ?? 2);
                                                                     setPendingQuickQualification(!!(cat as any).quickQualification);
@@ -2131,7 +2174,7 @@ export default function MasterGeneratorPage() {
                                                             {cat.numTeams} parejas
                                                         </span>
                                                         <span className="text-[10px] font-black uppercase bg-zinc-800 text-zinc-400 border border-zinc-700 px-2 py-0.5 rounded-md">
-                                                            {calcTotalMatchesForCategory(cat.numTeams, cat.groupSize, (cat as any).quickQualification, (cat as any).type === TournamentType.CUADRO_CONSOLACION, (cat as any).advanceCount)} partidos
+                                                            {calcTotalMatchesForCategory(cat.numTeams, cat.groupSize, (cat as any).quickQualification, (cat as any).type === TournamentType.CUADRO_CONSOLACION, (cat as any).advanceCount, isAmericanoDuplaType((cat as any).type))} partidos
                                                         </span>
                                                         <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${cat.goldenPoint ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 'bg-zinc-800 text-zinc-500 border-zinc-700'}`}>
                                                             {cat.goldenPoint ? '⭐ Punto de Oro' : '⚖️ Deuce'}
@@ -2243,7 +2286,7 @@ export default function MasterGeneratorPage() {
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div className="bg-black/30 rounded-2xl p-4 text-center">
                                                         <div className="text-2xl font-black text-white">
-                                                            {eventData.categories.reduce((acc, c) => acc + calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION, (c as any).advanceCount), 0)}
+                                                            {eventData.categories.reduce((acc, c) => acc + calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION, (c as any).advanceCount, isAmericanoDuplaType((c as any).type)), 0)}
                                                         </div>
                                                         <div className="text-[10px] text-zinc-500 uppercase font-bold mt-1">Partidos totales</div>
                                                     </div>
@@ -2264,7 +2307,7 @@ export default function MasterGeneratorPage() {
                                                     {eventData.categories.map((c, i) => (
                                                         <div key={c.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-black/20">
                                                             <span className="font-bold text-zinc-300">{c.gender === 'MALE' ? '♂' : c.gender === 'FEMALE' ? '♀' : '🚻'} {catLevelLabels[c.category] || c.category}</span>
-                                                            <span className="text-padel-primary font-black">{c.teams?.length || c.numTeams} parejas por inscribirse · {calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION, (c as any).advanceCount)} partidos</span>
+                                                            <span className="text-padel-primary font-black">{c.teams?.length || c.numTeams} parejas por inscribirse · {calcTotalMatchesForCategory(c.numTeams, c.groupSize, (c as any).quickQualification, (c as any).type === TournamentType.CUADRO_CONSOLACION, (c as any).advanceCount, isAmericanoDuplaType((c as any).type))} partidos</span>
                                                         </div>
                                                     ))}
                                                 </div>

@@ -3,6 +3,10 @@ import {
     MatchStatus,
     TournamentCategory
 } from '../types/tournament';
+import {
+    generateAmericanoDuplaPairings as buildAmericanoDuplaCirclePairings,
+    isAmericanoDuplaType,
+} from '../lib/americanoDupla';
 
 export interface CategoryConfig {
     id: string;
@@ -59,6 +63,8 @@ export class MasterScheduleEngine {
             bufferMinutes,
             categories
         } = config;
+        const allAmericanoDupla = categories.length > 0 && categories.every((c) => isAmericanoDuplaType(c.type));
+        const slotFloor = allAmericanoDupla ? 0 : undefined;
 
         if (!categories || categories.length === 0) {
             console.warn('[Engine] No hay categorías configuradas');
@@ -78,7 +84,9 @@ export class MasterScheduleEngine {
 
             const pairings = cat.type === TournamentType.CUADRO_CONSOLACION
                 ? this.generateConsolacionPairings(cat)
-                : this.generatePairings(cat);
+                : isAmericanoDuplaType(cat.type)
+                    ? this.generateAmericanoDuplaPairings(cat)
+                    : this.generatePairings(cat);
             const groupCount = pairings.filter((p: any) => p.roundName === 'Fase de Grupos').length;
             const semiCount = pairings.filter((p: any) => p.roundName === 'SEMIFINAL' || p.roundName === 'Principal SF').length;
             const finalCount = pairings.filter((p: any) => p.roundName === 'FINAL' || p.roundName === 'Principal FINAL').length;
@@ -101,6 +109,8 @@ export class MasterScheduleEngine {
                     categoryId: cat.id,
                     category: cat.category,
                     categoryName: `${cat.gender} - ${cat.category}`,
+                    categoryType: cat.type,
+                    categoryNumTeams: cat.teams?.length ?? cat.numTeams,
                     team1: pair.team1,
                     team2: pair.team2,
                     team1Name: resolveTeamName(pair.team1),
@@ -176,7 +186,7 @@ export class MasterScheduleEngine {
             while (pending.length > 0 && dayOffset < maxDays) {
                 const dayDate = new Date(startDate + 'T00:00:00');
                 dayDate.setDate(dayDate.getDate() + dayOffset);
-                const daySlots = this.generateTimeSlots(dayDate, dailyStartTime, dailyEndTime, matchDurationMinutes, bufferMinutes);
+                const daySlots = this.generateTimeSlots(dayDate, dailyStartTime, dailyEndTime, matchDurationMinutes, bufferMinutes, slotFloor);
 
                 if (daySlots.length === 0) {
                     dayOffset++;
@@ -199,7 +209,10 @@ export class MasterScheduleEngine {
                         break;
                     }
 
-                    for (let c = 0; c < numCourts; c++) {
+                    const courtsThisSlot = pending[0] && isAmericanoDuplaType(pending[0].categoryType)
+                        ? Math.max(1, Math.min(numCourts, Math.floor((pending[0].categoryNumTeams || 2) / 2)))
+                        : numCourts;
+                    for (let c = 0; c < courtsThisSlot; c++) {
                         if (pending.length === 0) break;
 
                         // Buscar partido elegible
@@ -210,7 +223,10 @@ export class MasterScheduleEngine {
                                 break;
                             }
                         }
-                        if (foundIdx === -1) foundIdx = 0;
+                        if (foundIdx === -1) {
+                            if (pending.some((p) => isAmericanoDuplaType(p.categoryType))) break;
+                            foundIdx = 0;
+                        }
 
                         const m = pending.splice(foundIdx, 1)[0];
                         const courtName = (config.courtNames[c] && config.courtNames[c].trim())
@@ -264,7 +280,7 @@ export class MasterScheduleEngine {
     /** Bloque horario mínimo por partido (minutos). Evita retrasos en cadena. */
     static readonly SLOT_MINUTES = 90;
 
-    private static generateTimeSlots(day: Date, startStr: string, endStr: string, duration: number, buffer: number): Date[] {
+    private static generateTimeSlots(day: Date, startStr: string, endStr: string, duration: number, buffer: number, minSlotMinutes?: number): Date[] {
         const slots: Date[] = [];
         const [startH, startM] = startStr.split(':').map(Number);
         const [endH, endM] = endStr.split(':').map(Number);
@@ -279,7 +295,7 @@ export class MasterScheduleEngine {
             limit.setDate(limit.getDate() + 1);
         }
 
-        const slotDuration = Math.max(MasterScheduleEngine.SLOT_MINUTES, duration + buffer);
+        const slotDuration = Math.max(minSlotMinutes ?? MasterScheduleEngine.SLOT_MINUTES, duration + buffer);
         while (current.getTime() + duration * 60000 <= limit.getTime()) {
             slots.push(new Date(current));
             current.setMinutes(current.getMinutes() + slotDuration);
@@ -338,6 +354,48 @@ export class MasterScheduleEngine {
             result.push({ team1: tbd('Gan. C1', 'c1w'), team2: tbd('Gan. C2', 'c2w'), roundName: 'Consolación FINAL', isKnockout: true, isFinal: true } as any);
         }
         return result;
+    }
+
+    /** Americano dupla fija: un solo grupo, todos vs todos, sin eliminatorias. */
+    private static generateAmericanoDuplaPairings(cat: CategoryConfig): Array<{
+        team1: any; team2: any;
+        roundName: 'Fase de Grupos';
+        isKnockout: boolean;
+        isFinal: boolean;
+        team1Index?: number;
+        team2Index?: number;
+    }> {
+        const teams = [...(cat.teams || [])];
+        let playerCounter = 1;
+        const hasRealName = (name?: string) =>
+            !!name && name.trim() !== '' && !name.startsWith('TBD') && !name.startsWith('Jugador');
+
+        for (const team of teams) {
+            if (!team.p1) {
+                team.p1 = { id: `auto_${cat.category}_${playerCounter}`, name: `Jugador ${playerCounter}` };
+                playerCounter++;
+            } else if (!hasRealName(team.p1.name)) {
+                team.p1.name = `Jugador ${playerCounter}`;
+                playerCounter++;
+            }
+            if (!team.p2) {
+                team.p2 = { id: `auto_${cat.category}_${playerCounter}`, name: `Jugador ${playerCounter}` };
+                playerCounter++;
+            } else if (!hasRealName(team.p2.name)) {
+                team.p2.name = `Jugador ${playerCounter}`;
+                playerCounter++;
+            }
+        }
+
+        return buildAmericanoDuplaCirclePairings(teams).map((pair) => ({
+            team1: pair.team1,
+            team2: pair.team2,
+            team1Index: pair.team1Index,
+            team2Index: pair.team2Index,
+            roundName: 'Fase de Grupos' as const,
+            isKnockout: false,
+            isFinal: false,
+        }));
     }
 
     /** Genera los emparejamientos respetando la estructura de grupos.

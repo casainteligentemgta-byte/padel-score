@@ -16,6 +16,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:tournament": "tsx scripts/test-tournament-engine.ts",
+    "test:americano": "tsx scripts/test-americano-dupla.ts",
     "test:express": "tsx scripts/test-express-scoring.ts",
     "test:security": "tsx scripts/test-security-guards.ts",
     "verify:ceo": "node scripts/verify-ceo.mjs",
